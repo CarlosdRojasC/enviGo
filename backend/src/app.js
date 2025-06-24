@@ -5,6 +5,7 @@ const helmet = require('helmet');
 const compression = require('compression');
 const rateLimit = require('express-rate-limit');
 const routes = require('./routes');
+const connectDB = require('./config/database');  // <-- Importa conexión MongoDB
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -62,38 +63,21 @@ app.use((req, res, next) => {
 // Manejo de errores global
 app.use((err, req, res, next) => {
   console.error('Error:', err);
-  
-  // Error de validación
   if (err.name === 'ValidationError') {
-    return res.status(400).json({
-      error: 'Error de validación',
-      details: err.errors
-    });
+    return res.status(400).json({ error: 'Error de validación', details: err.errors });
   }
-  
-  // Error de base de datos
-  if (err.code === '23505') {
-    return res.status(400).json({
-      error: 'El registro ya existe'
-    });
+  if (err.code === 11000) { // Mongo duplicate key error
+    return res.status(400).json({ error: 'El registro ya existe' });
   }
-  
-  // Error genérico
-  res.status(err.status || 500).json({
-    error: err.message || 'Error interno del servidor',
-    ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
-  });
+  res.status(err.status || 500).json({ error: err.message || 'Error interno del servidor', ...(process.env.NODE_ENV === 'development' && { stack: err.stack }) });
 });
 
+
 // Iniciar servidor
+
 const startServer = async () => {
   try {
-    // Verificar conexión a base de datos
-    const pool = require('./config/database');
-    await pool.query('SELECT NOW()');
-    console.log('✅ Base de datos conectada');
-    
-    // Iniciar servidor
+    await connectDB();  // <-- conecta a MongoDB
     app.listen(PORT, () => {
       console.log(`🚀 Servidor corriendo en http://localhost:${PORT}`);
       console.log(`📊 Ambiente: ${process.env.NODE_ENV}`);

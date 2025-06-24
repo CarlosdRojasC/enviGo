@@ -32,12 +32,12 @@ const mockUser = {
 }
 
 async function handleLogin() {
-  error.value = ''
-  try {
-    await auth.login(email.value, password.value)
-    router.push('/dashboard')
-  } catch (e) {
-    error.value = 'Credenciales incorrectas o error en el servidor'
+  error.value = '';
+  const success = await auth.login(email.value, password.value);
+  if (success) {
+    router.push('/dashboard');
+  } else {
+    error.value = 'Credenciales incorrectas o error del servidor';
   }
 }
 </script>
