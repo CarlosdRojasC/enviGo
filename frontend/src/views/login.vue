@@ -31,12 +31,13 @@ const mockUser = {
   password: '123456',
 }
 
-function handleLogin() {
-  if (email.value === mockUser.email && password.value === mockUser.password) {
-    auth.login({ email: email.value }, 'token-mock') // guarda user y token mock
+async function handleLogin() {
+  error.value = ''
+  try {
+    await auth.login(email.value, password.value)
     router.push('/dashboard')
-  } else {
-    error.value = 'Credenciales incorrectas'
+  } catch (e) {
+    error.value = 'Credenciales incorrectas o error en el servidor'
   }
 }
 </script>
