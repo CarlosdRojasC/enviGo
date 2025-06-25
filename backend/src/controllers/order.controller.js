@@ -3,6 +3,7 @@ const ExcelService = require('../services/excel.service');
 const Order = require('../models/Order');
 const Company = require('../models/Company');
 const Channel = require('../models/Channel');
+const mongoose = require('mongoose'); // Agregar esta línea
 
 class OrderController {
   async getAll(req, res) {
@@ -15,13 +16,17 @@ class OrderController {
       const filters = {};
 
       if (req.user.role === 'admin') {
-        if (company_id) filters.company_id = company_id;
+        if (company_id) {
+          filters.company_id = new mongoose.Types.ObjectId(company_id); // Usar new aquí
+        }
       } else {
-        filters.company_id = req.user.company_id;
+        if (req.user.company_id) {
+          filters.company_id = new mongoose.Types.ObjectId(req.user.company_id); // Usar new aquí
+        }
       }
 
       if (status) filters.status = status;
-      if (channel_id) filters.channel_id = channel_id;
+      if (channel_id) filters.channel_id = new mongoose.Types.ObjectId(channel_id); // Usar new aquí
 
       if (date_from || date_to) {
         filters.order_date = {};
@@ -41,10 +46,7 @@ class OrderController {
 
       const skip = (page - 1) * limit;
 
-  // --- AÑADE ESTOS CONSOLE.LOG PARA DEPURAR ---
-    console.log('Usuario que hace la petición:', req.user);
-    console.log('Filtros aplicados a la consulta:', filters);
-    // ---------------------------------------------
+      console.log('Filtros finales aplicados:', JSON.stringify(filters, null, 2));
 
       const [orders, totalCount] = await Promise.all([
         Order.find(filters)

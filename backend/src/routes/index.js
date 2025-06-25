@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-
+const mongoose = require('mongoose'); 
 // Importar middlewares
 const {
   authenticateToken,
@@ -113,7 +113,8 @@ router.patch('/orders/:id/status', authenticateToken, orderController.updateStat
 
 // ==================== DASHBOARD STATS (MONGO) ====================
 
-// backend/src/routes/index.js - Sección de estadísticas del dashboard
+
+// backend/src/routes/index.js - Actualizar la sección de estadísticas del dashboard
 router.get('/stats/dashboard', authenticateToken, async (req, res) => {
   try {
     let stats = {};
@@ -208,9 +209,12 @@ router.get('/stats/dashboard', authenticateToken, async (req, res) => {
         return res.status(400).json({ error: 'Usuario no asociado a ninguna empresa' });
       }
 
+      // Convertir a ObjectId usando new
+      const companyObjectId = new mongoose.Types.ObjectId(companyId);
+
       const [orderStats, company, channels] = await Promise.all([
         Order.aggregate([
-          { $match: { company_id: companyId } },
+          { $match: { company_id: companyObjectId } },
           {
             $group: {
               _id: null,
@@ -245,8 +249,8 @@ router.get('/stats/dashboard', authenticateToken, async (req, res) => {
             }
           }
         ]),
-        Company.findById(companyId).lean(),
-        Channel.countDocuments({ company_id: companyId, is_active: true })
+        Company.findById(companyObjectId).lean(),
+        Channel.countDocuments({ company_id: companyObjectId, is_active: true })
       ]);
 
       const orderData = orderStats[0] || {

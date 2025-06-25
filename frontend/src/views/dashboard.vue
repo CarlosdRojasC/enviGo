@@ -18,22 +18,22 @@
     <div v-else class="dashboard-content">
       
       <!-- Estadísticas principales -->
-      <div class="stats-grid">
+<div class="stats-grid">
         <div class="stat-card">
           <h3>Pedidos Hoy</h3>
-          <div class="stat-value">{{ stats.orders_today || 0 }}</div>
+          <div class="stat-value">{{ stats.orders?.orders_today || 0 }}</div>
           <div class="stat-change">📈 Últimas 24h</div>
         </div>
         
         <div class="stat-card">
           <h3>Pedidos Este Mes</h3>
-          <div class="stat-value">{{ stats.orders_this_month || 0 }}</div>
+          <div class="stat-value">{{ stats.orders?.orders_this_month || 0 }}</div>
           <div class="stat-change">📅 {{ currentMonth }}</div>
         </div>
         
         <div class="stat-card">
           <h3>Total Entregados</h3>
-          <div class="stat-value">{{ stats.delivered || 0 }}</div>
+          <div class="stat-value">{{ stats.orders?.delivered || 0 }}</div>
           <div class="stat-change">✅ Completados</div>
         </div>
         
@@ -44,29 +44,28 @@
         </div>
       </div>
 
-      <!-- Resumen de estados -->
+  <!-- Resumen de estados -->
       <div class="status-summary">
         <h2>Estado de Pedidos</h2>
         <div class="status-grid">
           <div class="status-item pending">
-            <span class="status-count">{{ stats.pending || 0 }}</span>
+            <span class="status-count">{{ stats.orders?.pending || 0 }}</span>
             <span class="status-label">Pendientes</span>
           </div>
           <div class="status-item processing">
-            <span class="status-count">{{ stats.processing || 0 }}</span>
+            <span class="status-count">{{ stats.orders?.processing || 0 }}</span>
             <span class="status-label">Procesando</span>
           </div>
           <div class="status-item shipped">
-            <span class="status-count">{{ stats.shipped || 0 }}</span>
+            <span class="status-count">{{ stats.orders?.shipped || 0 }}</span>
             <span class="status-label">Enviados</span>
           </div>
           <div class="status-item delivered">
-            <span class="status-count">{{ stats.delivered || 0 }}</span>
+            <span class="status-count">{{ stats.orders?.delivered || 0 }}</span>
             <span class="status-label">Entregados</span>
           </div>
         </div>
       </div>
-
       <!-- Canales conectados -->
       <div class="channels-section">
         <h2>Canales de Venta</h2>
@@ -336,6 +335,7 @@ const currentMonth = computed(() => {
   return date.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' })
 })
 
+
 // Funciones principales
 onMounted(async () => {
   await Promise.all([
@@ -349,6 +349,7 @@ onMounted(async () => {
 async function fetchStats() {
   try {
     const { data } = await api.get('/stats/dashboard')
+    console.log('Stats recibidas:', data) // Para debug
     stats.value = data
   } catch (error) {
     console.error('Error fetching stats:', error)
