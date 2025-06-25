@@ -2,7 +2,7 @@ require('dotenv').config();
 const mongoose = require('mongoose');
 const bcrypt = require('bcrypt');
 
-// Modelos (crea tus modelos si no están)
+// Modelos
 const CompanySchema = new mongoose.Schema({
   name: String,
   slug: String,
@@ -42,20 +42,36 @@ async function seed() {
     console.log('Empresa creada:', company);
 
     // Crear usuario admin
-    const password = 'admin1234';
-    const password_hash = await bcrypt.hash(password, 10);
+    const adminPassword = 'admin1234';
+    const adminPasswordHash = await bcrypt.hash(adminPassword, 10);
 
-    const user = new User({
+    const adminUser = new User({
       email: 'admin@liquo.com',
-      password_hash,
+      password_hash: adminPasswordHash,
       full_name: 'Admin Liquo',
       role: 'admin',
       company_id: company._id,
       is_active: true,
       last_login: new Date()
     });
-    await user.save();
-    console.log('Usuario admin creado:', user);
+    await adminUser.save();
+    console.log('Usuario admin creado:', adminUser);
+
+    // Crear usuario normal (empleado de la tienda)
+    const userPassword = 'user1234';
+    const userPasswordHash = await bcrypt.hash(userPassword, 10);
+
+    const normalUser = new User({
+      email: 'user@liquo.com',
+      password_hash: userPasswordHash,
+      full_name: 'Usuario Normal',
+      role: 'user',
+      company_id: company._id,
+      is_active: true,
+      last_login: new Date()
+    });
+    await normalUser.save();
+    console.log('Usuario normal creado:', normalUser);
 
     process.exit(0);
   } catch (error) {

@@ -2,18 +2,33 @@ import { createRouter, createWebHistory } from 'vue-router'
 import Login from '../views/login.vue'
 import StoreDashboard from '../views/dashboard.vue'
 import { useAuthStore } from '../store/auth'
+import AdminDashboard from '../views/AdminDashboard.vue'
 
 const routes = [
-  {
-    path: '/',
-    name: 'Login',
-    component: Login
-  },
+ {
+  path: '/',
+  redirect: to => {
+    // No uses useAuthStore() aquí directamente porque Pinia no está listo
+    // Mejor redirige siempre a /login o maneja esto en beforeEach
+    return '/login';
+  }
+},
+{
+  path: '/login',
+  name: 'Login',
+  component: Login
+},
   {
     path: '/dashboard',
     name: 'Dashboard',
     component: StoreDashboard,
-    meta: { requiresAuth: true }
+    meta: { requiresAuth: true, role: 'user' },
+  }, 
+  {
+    path: '/admin/dashboard',
+    name: 'AdminDashboard',
+    component: AdminDashboard,
+    meta: { requiresAuth: true, role: 'admin' },
   },
   // Rutas adicionales que podrías agregar después
   // {
@@ -46,17 +61,33 @@ const router = createRouter({
   routes
 })
 
+
 router.beforeEach((to, from, next) => {
   const auth = useAuthStore()
-  
-  if (to.meta.requiresAuth && !auth.isLoggedIn) { // Sin paréntesis ()
-    next({ name: 'Login' })
-  } else if (to.name === 'Login' && auth.isLoggedIn) { // Sin paréntesis ()
-    // Si ya está logueado y trata de ir al login, redirigir al dashboard
-    next({ name: 'Dashboard' })
-  } else {
-    next()
+  const isAuthenticated = auth.isLoggedIn
+  const userRole = auth.user?.role // 'admin' o 'user'
+
+  // 1. Si no está autenticado y la ruta requiere login
+  if (to.meta.requiresAuth && !isAuthenticated) {
+    return next({ name: 'Login' })
   }
+
+  // 2. Si intenta entrar al login estando logueado
+  if (to.name === 'Login' && isAuthenticated) {
+    if (userRole === 'admin') {
+      return next({ name: 'AdminDashboard' })
+    } else {
+      return next({ name: 'Dashboard' })
+    }
+  }
+
+  // 3. Si está autenticado pero entra a una ruta no permitida por su rol
+  if (to.meta.role && to.meta.role !== userRole) {
+    return next({ name: userRole === 'admin' ? 'AdminDashboard' : 'Dashboard' })
+  }
+
+  // 4. En cualquier otro caso
+  next()
 })
 
 export default router

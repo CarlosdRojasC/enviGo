@@ -12,41 +12,43 @@ export const useAuthStore = defineStore('auth', () => {
   // Computed properties
   const isLoggedIn = computed(() => !!token.value);
   const isAdmin = computed(() => user.value?.role === 'admin');
+  const isUser = computed(() => user.value?.role === 'user');
   const isCompanyOwner = computed(() => user.value?.role === 'company_owner');
-  const companyId = computed(() => user.value?.company?._id || user.value?.company_id);
+  const role = computed(() => user.value?.role || null);
+  const companyId = computed(() => user.value?.company?._id || user.value?.company_id || null);
 
   // Métodos
- async function login(email, password) {
-  loading.value = true;
-  error.value = null;
-  
-  console.log('Intentando login con:', { email, password })
-  
-  try {
-    const { data } = await apiService.auth.login(email, password);
-    console.log('Respuesta del servidor:', data)
-    
-    user.value = data.user;
-    token.value = data.token;
-    
-    // Persistir en localStorage
-    localStorage.setItem('user', JSON.stringify(data.user));
-    localStorage.setItem('token', data.token);
-    
-    return { success: true, user: data.user };
-  } catch (err) {
-    console.error('Error en login:', err.response || err)
-    error.value = err.response?.data?.message || err.message || 'Error al iniciar sesión';
-    return { success: false, error: error.value };
-  } finally {
-    loading.value = false;
+  async function login(email, password) {
+    loading.value = true;
+    error.value = null;
+
+    console.log('Intentando login con:', { email, password });
+
+    try {
+      const { data } = await apiService.auth.login(email, password);
+      console.log('Respuesta del servidor:', data);
+
+      user.value = data.user;
+      token.value = data.token;
+
+      // Persistir en localStorage
+      localStorage.setItem('user', JSON.stringify(data.user));
+      localStorage.setItem('token', data.token);
+
+      return { success: true, user: data.user };
+    } catch (err) {
+      console.error('Error en login:', err.response || err);
+      error.value = err.response?.data?.message || err.message || 'Error al iniciar sesión';
+      return { success: false, error: error.value };
+    } finally {
+      loading.value = false;
+    }
   }
-}
 
   async function register(userData) {
     loading.value = true;
     error.value = null;
-    
+
     try {
       const { data } = await apiService.auth.register(userData);
       return { success: true, data };
@@ -60,7 +62,7 @@ export const useAuthStore = defineStore('auth', () => {
 
   async function getProfile() {
     if (!token.value) return null;
-    
+
     try {
       const { data } = await apiService.auth.getProfile();
       user.value = data;
@@ -68,7 +70,6 @@ export const useAuthStore = defineStore('auth', () => {
       return data;
     } catch (err) {
       console.error('Error getting profile:', err);
-      // Si falla, probablemente el token es inválido
       logout();
       return null;
     }
@@ -77,7 +78,7 @@ export const useAuthStore = defineStore('auth', () => {
   async function changePassword(currentPassword, newPassword) {
     loading.value = true;
     error.value = null;
-    
+
     try {
       await apiService.auth.changePassword({
         current_password: currentPassword,
@@ -96,11 +97,10 @@ export const useAuthStore = defineStore('auth', () => {
     user.value = null;
     token.value = null;
     error.value = null;
-    
+
     localStorage.removeItem('user');
     localStorage.removeItem('token');
-    
-    // Limpiar cualquier dato cached
+
     apiService.auth.logout();
   }
 
@@ -113,13 +113,12 @@ export const useAuthStore = defineStore('auth', () => {
     error.value = null;
   }
 
-  // Verificar si el token sigue siendo válido al inicializar
   async function initializeAuth() {
     if (token.value && user.value) {
       try {
         await getProfile();
       } catch (err) {
-        console.log('Token expired, logging out');
+        console.log('Token expirado, cerrando sesión.');
         logout();
       }
     }
@@ -131,13 +130,15 @@ export const useAuthStore = defineStore('auth', () => {
     token,
     loading,
     error,
-    
+
     // Computed
     isLoggedIn,
     isAdmin,
+    isUser,
     isCompanyOwner,
     companyId,
-    
+    role,
+
     // Métodos
     login,
     register,

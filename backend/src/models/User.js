@@ -4,7 +4,7 @@ const userSchema = new mongoose.Schema({
   email: { type: String, required: true, unique: true, lowercase: true, trim: true },
   password_hash: { type: String, required: true },
   full_name: { type: String, required: true },
-  role: { type: String, enum: ['admin', 'company_employee'], default: 'company_employee' },
+  role: { type: String, enum: ['admin', 'company_employee', 'user'], default: 'company_employee' },
   company_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Company', default: null },
   is_active: { type: Boolean, default: true },
   last_login: { type: Date },
