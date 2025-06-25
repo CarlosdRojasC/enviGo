@@ -1,246 +1,271 @@
-const pool = require('../config/database');
 const bcrypt = require('bcrypt');
 const { ERRORS } = require('../config/constants');
+const Company = require('../models/Company');
+const User = require('../models/User');
+const Order = require('../models/Order');
+const Channel = require('../models/Channel'); // si no existe, crea uno básico
 
 class CompanyController {
   // Listar todas las empresas (admin)
   async getAll(req, res) {
     try {
-      const result = await pool.query(`
-        SELECT 
-          c.*,
-          COUNT(DISTINCT sc.id) as channels_count,
-          COUNT(DISTINCT o.id) as orders_count,
-          COUNT(DISTINCT u.id) as users_count
-        FROM companies c
-        LEFT JOIN sales_channels sc ON c.id = sc.company_id AND sc.is_active = true
-        LEFT JOIN orders o ON c.id = o.company_id
-        LEFT JOIN users u ON c.id = u.company_id AND u.is_active = true
-        GROUP BY c.id
-        ORDER BY c.name
-      `);
-      
-      res.json(result.rows);
+      if (req.user.role !== 'admin') {
+        return res.status(403).json({ error: ERRORS.FORBIDDEN });
+      }
+
+      // Traer todas las empresas
+      const companies = await Company.find({}).lean();
+
+      // Para cada empresa obtenemos los conteos (channels activos, orders y usuarios activos)
+      const companiesWithCounts = await Promise.all(
+        companies.map(async (company) => {
+          const channels_count = await Channel.countDocuments({ company_id: company._id, is_active: true });
+          const orders_count = await Order.countDocuments({ company_id: company._id });
+          const users_count = await User.countDocuments({ company_id: company._id, is_active: true });
+
+          return {
+            ...company,
+            channels_count,
+            orders_count,
+            users_count
+          };
+        })
+      );
+
+      res.json(companiesWithCounts);
     } catch (error) {
       console.error('Error obteniendo empresas:', error);
       res.status(500).json({ error: ERRORS.SERVER_ERROR });
     }
   }
-  
+
   // Obtener una empresa específica
   async getById(req, res) {
     try {
       const { id } = req.params;
-      
-      const result = await pool.query(`
-        SELECT 
-          c.*,
-          COUNT(DISTINCT sc.id) as channels_count,
-          COUNT(DISTINCT o.id) as orders_count,
-          COUNT(DISTINCT u.id) as users_count
-        FROM companies c
-        LEFT JOIN sales_channels sc ON c.id = sc.company_id AND sc.is_active = true
-        LEFT JOIN orders o ON c.id = o.company_id
-        LEFT JOIN users u ON c.id = u.company_id AND u.is_active = true
-        WHERE c.id = $1
-        GROUP BY c.id
-      `, [id]);
-      
-      if (result.rows.length === 0) {
-        return res.status(404).json({ error: 'Empresa no encontrada' });
+
+      const company = await Company.findById(id).lean();
+      if (!company) return res.status(404).json({ error: 'Empresa no encontrada' });
+
+      if (req.user.role !== 'admin' && req.user.company_id.toString() !== id) {
+        return res.status(403).json({ error: ERRORS.FORBIDDEN });
       }
-      
-      res.json(result.rows[0]);
+
+      // Conteos
+      const channels_count = await Channel.countDocuments({ company_id: id, is_active: true });
+      const orders_count = await Order.countDocuments({ company_id: id });
+      const users_count = await User.countDocuments({ company_id: id, is_active: true });
+
+      res.json({
+        ...company,
+        channels_count,
+        orders_count,
+        users_count
+      });
     } catch (error) {
       console.error('Error obteniendo empresa:', error);
       res.status(500).json({ error: ERRORS.SERVER_ERROR });
     }
   }
-  
+
   // Crear nueva empresa (admin)
   async create(req, res) {
-    const client = await pool.connect();
-    
     try {
-      await client.query('BEGIN');
-      
-      const { 
-        name, 
-        email, 
-        phone, 
-        address, 
+      if (req.user.role !== 'admin') {
+        return res.status(403).json({ error: ERRORS.FORBIDDEN });
+      }
+
+      const {
+        name,
+        email,
+        phone,
+        address,
         price_per_order,
         owner_email,
         owner_name,
         owner_password
       } = req.body;
-      
+
       // Generar slug
       const slug = name.toLowerCase()
         .replace(/\s+/g, '-')
         .replace(/[^\w-]/g, '')
         .substring(0, 100);
-      
-      // Crear empresa
-      const companyResult = await client.query(
-        `INSERT INTO companies (name, slug, email, phone, address, price_per_order) 
-         VALUES ($1, $2, $3, $4, $5, $6) 
-         RETURNING *`,
-        [name, slug, email, phone, address, price_per_order || 0]
-      );
-      
-      const company = companyResult.rows[0];
-      
-      // Si se proporcionaron datos del dueño, crear usuario
-      if (owner_email && owner_password) {
-        const password_hash = await bcrypt.hash(owner_password, 10);
-        
-        await client.query(
-          `INSERT INTO users (company_id, email, password_hash, full_name, role) 
-           VALUES ($1, $2, $3, $4, $5)`,
-          [company.id, owner_email, password_hash, owner_name || name, 'company_owner']
-        );
-      }
-      
-      await client.query('COMMIT');
-      
-      res.status(201).json({
-        message: 'Empresa creada exitosamente',
-        company: company
-      });
-    } catch (error) {
-      await client.query('ROLLBACK');
-      
-      if (error.code === '23505') { // Duplicate key
+
+      // Validar si ya existe empresa con mismo email o slug
+      const exists = await Company.findOne({ $or: [{ email }, { slug }] });
+      if (exists) {
         return res.status(400).json({ error: 'Ya existe una empresa con ese nombre o email' });
       }
-      
+
+      // Crear empresa
+      const company = new Company({
+        name,
+        slug,
+        email,
+        phone,
+        address,
+        price_per_order: price_per_order || 0
+      });
+      await company.save();
+
+      // Crear usuario dueño si datos completos
+      if (owner_email && owner_password) {
+        const password_hash = await bcrypt.hash(owner_password, 10);
+        const user = new User({
+          company_id: company._id,
+          email: owner_email,
+          password_hash,
+          full_name: owner_name || name,
+          role: 'company_owner',
+          is_active: true
+        });
+        await user.save();
+      }
+
+      res.status(201).json({
+        message: 'Empresa creada exitosamente',
+        company
+      });
+    } catch (error) {
       console.error('Error creando empresa:', error);
       res.status(500).json({ error: ERRORS.SERVER_ERROR });
-    } finally {
-      client.release();
     }
   }
-  
+
   // Actualizar empresa
   async update(req, res) {
     try {
       const { id } = req.params;
-      const { name, email, phone, address, is_active } = req.body;
-      
-      const result = await pool.query(
-        `UPDATE companies 
-         SET name = COALESCE($1, name),
-             email = COALESCE($2, email),
-             phone = COALESCE($3, phone),
-             address = COALESCE($4, address),
-             is_active = COALESCE($5, is_active),
-             updated_at = NOW()
-         WHERE id = $6
-         RETURNING *`,
-        [name, email, phone, address, is_active, id]
-      );
-      
-      if (result.rows.length === 0) {
-        return res.status(404).json({ error: 'Empresa no encontrada' });
+      const updates = req.body;
+
+      const company = await Company.findById(id);
+      if (!company) return res.status(404).json({ error: 'Empresa no encontrada' });
+
+      if (req.user.role !== 'admin' && req.user.company_id.toString() !== id) {
+        return res.status(403).json({ error: ERRORS.FORBIDDEN });
       }
-      
-      res.json(result.rows[0]);
+
+      Object.assign(company, updates);
+      company.updated_at = new Date();
+
+      await company.save();
+
+      res.json(company);
     } catch (error) {
       console.error('Error actualizando empresa:', error);
       res.status(500).json({ error: ERRORS.SERVER_ERROR });
     }
   }
-  
+
   // Actualizar precio por pedido (admin)
   async updatePrice(req, res) {
     try {
       const { id } = req.params;
       const { price_per_order } = req.body;
-      
+
       if (price_per_order < 0) {
         return res.status(400).json({ error: 'El precio no puede ser negativo' });
       }
-      
-      const result = await pool.query(
-        'UPDATE companies SET price_per_order = $1, updated_at = NOW() WHERE id = $2 RETURNING *',
-        [price_per_order, id]
-      );
-      
-      if (result.rows.length === 0) {
-        return res.status(404).json({ error: 'Empresa no encontrada' });
+
+      const company = await Company.findById(id);
+      if (!company) return res.status(404).json({ error: 'Empresa no encontrada' });
+
+      if (req.user.role !== 'admin') {
+        return res.status(403).json({ error: ERRORS.FORBIDDEN });
       }
-      
+
+      company.price_per_order = price_per_order;
+      company.updated_at = new Date();
+      await company.save();
+
       res.json({
         message: 'Precio actualizado exitosamente',
-        company: result.rows[0]
+        company
       });
     } catch (error) {
       console.error('Error actualizando precio:', error);
       res.status(500).json({ error: ERRORS.SERVER_ERROR });
     }
   }
-  
+
   // Obtener usuarios de una empresa
   async getUsers(req, res) {
     try {
       const { id } = req.params;
-      
-      const result = await pool.query(
-        `SELECT id, email, full_name, role, is_active, last_login, created_at
-         FROM users 
-         WHERE company_id = $1
-         ORDER BY full_name`,
-        [id]
-      );
-      
-      res.json(result.rows);
+
+      if (req.user.role !== 'admin' && req.user.company_id.toString() !== id) {
+        return res.status(403).json({ error: ERRORS.FORBIDDEN });
+      }
+
+      const users = await User.find({ company_id: id }).select('id email full_name role is_active last_login created_at').sort('full_name');
+
+      res.json(users);
     } catch (error) {
       console.error('Error obteniendo usuarios:', error);
       res.status(500).json({ error: ERRORS.SERVER_ERROR });
     }
   }
-  
+
   // Estadísticas de la empresa
   async getStats(req, res) {
     try {
       const { id } = req.params;
-      const { month, year } = req.query;
-      
-      // Si no se especifica mes/año, usar el actual
-      const targetMonth = month || new Date().getMonth() + 1;
-      const targetYear = year || new Date().getFullYear();
-      
-      const statsResult = await pool.query(`
-        SELECT 
-          COUNT(*) as total_orders,
-          COUNT(*) FILTER (WHERE status = 'pending') as pending_orders,
-          COUNT(*) FILTER (WHERE status = 'processing') as processing_orders,
-          COUNT(*) FILTER (WHERE status = 'shipped') as shipped_orders,
-          COUNT(*) FILTER (WHERE status = 'delivered') as delivered_orders,
-          COUNT(*) FILTER (WHERE status = 'cancelled') as cancelled_orders,
-          SUM(total_amount) as total_revenue,
-          AVG(total_amount) as average_order_value
-        FROM orders
-        WHERE company_id = $1
-          AND EXTRACT(MONTH FROM order_date) = $2
-          AND EXTRACT(YEAR FROM order_date) = $3
-      `, [id, targetMonth, targetYear]);
-      
-      const companyResult = await pool.query(
-        'SELECT price_per_order FROM companies WHERE id = $1',
-        [id]
-      );
-      
-      const stats = statsResult.rows[0];
-      const price_per_order = companyResult.rows[0].price_per_order;
-      
+      let { month, year } = req.query;
+
+      if (req.user.role !== 'admin' && req.user.company_id.toString() !== id) {
+        return res.status(403).json({ error: ERRORS.FORBIDDEN });
+      }
+
+      month = parseInt(month) || (new Date().getMonth() + 1);
+      year = parseInt(year) || new Date().getFullYear();
+
+      // Rango fechas para filtro
+      const startDate = new Date(year, month - 1, 1);
+      const endDate = new Date(year, month, 1);
+
+      // Agregamos el pipeline para obtener estadísticas agrupadas
+      const stats = await Order.aggregate([
+        {
+          $match: {
+            company_id: id,
+            order_date: { $gte: startDate, $lt: endDate }
+          }
+        },
+        {
+          $group: {
+            _id: null,
+            total_orders: { $sum: 1 },
+            pending_orders: { $sum: { $cond: [{ $eq: ['$status', 'pending'] }, 1, 0] } },
+            processing_orders: { $sum: { $cond: [{ $eq: ['$status', 'processing'] }, 1, 0] } },
+            shipped_orders: { $sum: { $cond: [{ $eq: ['$status', 'shipped'] }, 1, 0] } },
+            delivered_orders: { $sum: { $cond: [{ $eq: ['$status', 'delivered'] }, 1, 0] } },
+            cancelled_orders: { $sum: { $cond: [{ $eq: ['$status', 'cancelled'] }, 1, 0] } },
+            total_revenue: { $sum: '$total_amount' },
+            average_order_value: { $avg: '$total_amount' }
+          }
+        }
+      ]);
+
+      const company = await Company.findById(id);
+
+      const statsResult = stats[0] || {
+        total_orders: 0,
+        pending_orders: 0,
+        processing_orders: 0,
+        shipped_orders: 0,
+        delivered_orders: 0,
+        cancelled_orders: 0,
+        total_revenue: 0,
+        average_order_value: 0
+      };
+
       res.json({
-        month: targetMonth,
-        year: targetYear,
-        ...stats,
-        price_per_order: price_per_order,
-        estimated_invoice: stats.delivered_orders * price_per_order
+        month,
+        year,
+        ...statsResult,
+        price_per_order: company.price_per_order,
+        estimated_invoice: statsResult.delivered_orders * company.price_per_order
       });
     } catch (error) {
       console.error('Error obteniendo estadísticas:', error);
