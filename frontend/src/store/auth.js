@@ -1,3 +1,4 @@
+// frontend/src/store/auth.js
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import { apiService } from '../services/api';
@@ -12,10 +13,11 @@ export const useAuthStore = defineStore('auth', () => {
   // Computed properties
   const isLoggedIn = computed(() => !!token.value);
   const isAdmin = computed(() => user.value?.role === 'admin');
-  const isUser = computed(() => user.value?.role === 'user');
   const isCompanyOwner = computed(() => user.value?.role === 'company_owner');
+  const isCompanyEmployee = computed(() => user.value?.role === 'company_employee');
   const role = computed(() => user.value?.role || null);
   const companyId = computed(() => user.value?.company?._id || user.value?.company_id || null);
+  const hasCompany = computed(() => !!companyId.value);
 
   // Métodos
   async function login(email, password) {
@@ -38,7 +40,7 @@ export const useAuthStore = defineStore('auth', () => {
       return { success: true, user: data.user };
     } catch (err) {
       console.error('Error en login:', err.response || err);
-      error.value = err.response?.data?.message || err.message || 'Error al iniciar sesión';
+      error.value = err.response?.data?.error || err.message || 'Error al iniciar sesión';
       return { success: false, error: error.value };
     } finally {
       loading.value = false;
@@ -124,6 +126,23 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  // Función helper para verificar permisos
+  function canAccessCompany(targetCompanyId) {
+    if (isAdmin.value) return true;
+    if (!hasCompany.value) return false;
+    return companyId.value === targetCompanyId;
+  }
+
+  // Función helper para obtener rutas permitidas
+  function getAllowedRoutes() {
+    if (isAdmin.value) {
+      return ['AdminDashboard', 'Companies', 'Users', 'Orders', 'Channels'];
+    } else if (isCompanyOwner.value || isCompanyEmployee.value) {
+      return ['Dashboard', 'Orders', 'Channels', 'Profile'];
+    }
+    return [];
+  }
+
   return {
     // Estado
     user,
@@ -134,10 +153,11 @@ export const useAuthStore = defineStore('auth', () => {
     // Computed
     isLoggedIn,
     isAdmin,
-    isUser,
     isCompanyOwner,
+    isCompanyEmployee,
     companyId,
     role,
+    hasCompany,
 
     // Métodos
     login,
@@ -147,6 +167,8 @@ export const useAuthStore = defineStore('auth', () => {
     changePassword,
     updateUser,
     clearError,
-    initializeAuth
+    initializeAuth,
+    canAccessCompany,
+    getAllowedRoutes
   };
 });

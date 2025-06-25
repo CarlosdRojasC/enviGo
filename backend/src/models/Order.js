@@ -1,66 +1,61 @@
+// backend/src/models/Order.js
 const mongoose = require('mongoose');
+
 const orderSchema = new mongoose.Schema({
-  // Datos del origen
-  source: {
-    platform: { type: String, enum: ['shopify', 'woocommerce', 'mercadolibre', 'falabella'] },
-    order_id: String, // ID original en la plataforma
-    order_number: String,
-    store_url: String
-  },
+  // Relaciones
+  company_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Company', required: true },
+  channel_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Channel', required: true },
   
-  // Cliente que recibe
-  customer: {
-    name: String,
-    email: String,
-    phone: String
-  },
+  // Identificación del pedido
+  external_order_id: { type: String, required: true }, // ID del pedido en la plataforma externa
+  order_number: { type: String, required: true }, // Número de pedido visible
+  
+  // Información del cliente
+  customer_name: { type: String, required: true },
+  customer_email: { type: String },
+  customer_phone: { type: String },
+  customer_document: { type: String }, // RUT u otro documento
   
   // Dirección de entrega
-  delivery_address: {
-    street: String,
-    number: String,
-    apartment: String,
-    city: String,
-    state: String,
-    postal_code: String,
-    coordinates: {
-      lat: Number,
-      lng: Number
-    },
-    delivery_notes: String
-  },
+  shipping_address: { type: String, required: true },
+  shipping_city: { type: String },
+  shipping_state: { type: String },
+  shipping_zip: { type: String },
   
-  // Información del paquete
-  package_info: {
-    items_count: Number,
-    weight: Number, // en kg
-    dimensions: {
-      length: Number,
-      width: Number,
-      height: Number
-    },
-    fragile: Boolean,
-    value: Number // valor declarado
-  },
+  // Información del pedido
+  total_amount: { type: Number, required: true, default: 0 },
+  shipping_cost: { type: Number, default: 0 },
+  currency: { type: String, default: 'CLP' },
+  items_count: { type: Number, default: 0 },
   
-  // Estados de última milla
-  status: {
-    type: String,
-    enum: [
-      'pending_sync',      // Recién capturado
-      'ready_for_pickup',  // Listo para recolectar
-      'in_transit',        // En ruta
-      'delivered',         // Entregado
-      'failed_delivery',   // Intento fallido
-      'returned'          // Devuelto al origen
-    ]
+  // Estados y fechas
+  status: { 
+    type: String, 
+    enum: ['pending', 'processing', 'shipped', 'delivered', 'cancelled'],
+    default: 'pending' 
   },
+  order_date: { type: Date, required: true },
+  delivery_date: { type: Date },
   
-  // Para facturación
-  billing: {
-    price_per_order: Number, // Lo que cobras por este pedido
-    billed: { type: Boolean, default: false },
-    billed_date: Date
-  }
+  // Datos adicionales
+  notes: { type: String },
+  raw_data: { type: mongoose.Schema.Types.Mixed }, // Datos completos de la plataforma
+  
+  // Metadatos
+  created_at: { type: Date, default: Date.now },
+  updated_at: { type: Date, default: Date.now }
 });
+
+// Middleware para actualizar updated_at
+orderSchema.pre('save', function(next) {
+  this.updated_at = Date.now();
+  next();
+});
+
+// Índices para mejorar rendimiento
+orderSchema.index({ company_id: 1, status: 1 });
+orderSchema.index({ channel_id: 1, external_order_id: 1 }, { unique: true });
+orderSchema.index({ order_date: -1 });
+orderSchema.index({ customer_email: 1 });
+
 module.exports = mongoose.model('Order', orderSchema);

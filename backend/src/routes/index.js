@@ -113,12 +113,14 @@ router.patch('/orders/:id/status', authenticateToken, orderController.updateStat
 
 // ==================== DASHBOARD STATS (MONGO) ====================
 
+// backend/src/routes/index.js - Sección de estadísticas del dashboard
 router.get('/stats/dashboard', authenticateToken, async (req, res) => {
   try {
     let stats = {};
 
     if (req.user.role === 'admin') {
-      const [totalCompanies, orders, revenue] = await Promise.all([
+      // Estadísticas para admin - vista global
+      const [totalCompanies, orderStats, revenue] = await Promise.all([
         Company.countDocuments({ is_active: true }),
         Order.aggregate([
           {
@@ -129,14 +131,12 @@ router.get('/stats/dashboard', authenticateToken, async (req, res) => {
               processing: { $sum: { $cond: [{ $eq: ['$status', 'processing'] }, 1, 0] } },
               shipped: { $sum: { $cond: [{ $eq: ['$status', 'shipped'] }, 1, 0] } },
               delivered: { $sum: { $cond: [{ $eq: ['$status', 'delivered'] }, 1, 0] } },
+              cancelled: { $sum: { $cond: [{ $eq: ['$status', 'cancelled'] }, 1, 0] } },
               orders_today: {
                 $sum: {
                   $cond: [
                     {
-                      $eq: [
-                        { $dateToString: { date: '$order_date', format: '%Y-%m-%d' } },
-                        new Date().toISOString().split('T')[0]
-                      ]
+                      $gte: ['$order_date', new Date(new Date().setHours(0, 0, 0, 0))]
                     },
                     1,
                     0
@@ -147,10 +147,7 @@ router.get('/stats/dashboard', authenticateToken, async (req, res) => {
                 $sum: {
                   $cond: [
                     {
-                      $eq: [
-                        { $dateToString: { date: '$order_date', format: '%Y-%m' } },
-                        new Date().toISOString().substring(0, 7)
-                      ]
+                      $gte: ['$order_date', new Date(new Date().getFullYear(), new Date().getMonth(), 1)]
                     },
                     1,
                     0
@@ -160,6 +157,7 @@ router.get('/stats/dashboard', authenticateToken, async (req, res) => {
             }
           }
         ]),
+        // Calcular ingresos estimados del mes actual
         Order.aggregate([
           {
             $match: {
@@ -189,14 +187,28 @@ router.get('/stats/dashboard', authenticateToken, async (req, res) => {
 
       stats = {
         companies: totalCompanies,
-        orders: orders[0] || {},
+        orders: orderStats[0] || {
+          total_orders: 0,
+          pending: 0,
+          processing: 0,
+          shipped: 0,
+          delivered: 0,
+          cancelled: 0,
+          orders_today: 0,
+          orders_this_month: 0
+        },
         monthly_revenue: revenue[0]?.total_revenue || 0
       };
 
     } else {
+      // Estadísticas para usuarios de empresa
       const companyId = req.user.company_id;
 
-      const [orders, company, channels] = await Promise.all([
+      if (!companyId) {
+        return res.status(400).json({ error: 'Usuario no asociado a ninguna empresa' });
+      }
+
+      const [orderStats, company, channels] = await Promise.all([
         Order.aggregate([
           { $match: { company_id: companyId } },
           {
@@ -207,14 +219,12 @@ router.get('/stats/dashboard', authenticateToken, async (req, res) => {
               processing: { $sum: { $cond: [{ $eq: ['$status', 'processing'] }, 1, 0] } },
               shipped: { $sum: { $cond: [{ $eq: ['$status', 'shipped'] }, 1, 0] } },
               delivered: { $sum: { $cond: [{ $eq: ['$status', 'delivered'] }, 1, 0] } },
+              cancelled: { $sum: { $cond: [{ $eq: ['$status', 'cancelled'] }, 1, 0] } },
               orders_today: {
                 $sum: {
                   $cond: [
                     {
-                      $eq: [
-                        { $dateToString: { date: '$order_date', format: '%Y-%m-%d' } },
-                        new Date().toISOString().split('T')[0]
-                      ]
+                      $gte: ['$order_date', new Date(new Date().setHours(0, 0, 0, 0))]
                     },
                     1,
                     0
@@ -225,10 +235,7 @@ router.get('/stats/dashboard', authenticateToken, async (req, res) => {
                 $sum: {
                   $cond: [
                     {
-                      $eq: [
-                        { $dateToString: { date: '$order_date', format: '%Y-%m' } },
-                        new Date().toISOString().substring(0, 7)
-                      ]
+                      $gte: ['$order_date', new Date(new Date().getFullYear(), new Date().getMonth(), 1)]
                     },
                     1,
                     0
@@ -242,11 +249,22 @@ router.get('/stats/dashboard', authenticateToken, async (req, res) => {
         Channel.countDocuments({ company_id: companyId, is_active: true })
       ]);
 
-      const delivered = orders[0]?.delivered || 0;
+      const orderData = orderStats[0] || {
+        total_orders: 0,
+        pending: 0,
+        processing: 0,
+        shipped: 0,
+        delivered: 0,
+        cancelled: 0,
+        orders_today: 0,
+        orders_this_month: 0
+      };
+
+      const delivered = orderData.delivered || 0;
       const price_per_order = company?.price_per_order || 0;
 
       stats = {
-        orders: orders[0] || {},
+        orders: orderData,
         channels,
         price_per_order,
         monthly_cost: delivered * price_per_order

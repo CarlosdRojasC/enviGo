@@ -1,3 +1,4 @@
+// backend/src/middlewares/auth.middleware.js
 const jwt = require('jsonwebtoken');
 const { ROLES, ERRORS } = require('../config/constants');
 
@@ -41,7 +42,7 @@ const isCompanyOwner = (req, res, next) => {
 
 // Verificar acceso a empresa específica
 const hasCompanyAccess = (req, res, next) => {
-  const companyId = parseInt(req.params.companyId || req.query.company_id);
+  const companyId = req.params.companyId || req.query.company_id;
   
   // Admin tiene acceso a todo
   if (req.user.role === ROLES.ADMIN) {
@@ -49,10 +50,20 @@ const hasCompanyAccess = (req, res, next) => {
   }
   
   // Usuarios de empresa solo a su propia empresa
-  if (req.user.company_id !== companyId) {
+  if (!req.user.company_id || req.user.company_id.toString() !== companyId) {
     return res.status(403).json({ error: ERRORS.FORBIDDEN });
   }
   
+  next();
+};
+
+// Verificar que pertenece a alguna empresa (para empleados y owners)
+const requiresCompany = (req, res, next) => {
+  if (req.user.role !== ROLES.ADMIN && !req.user.company_id) {
+    return res.status(403).json({ 
+      error: 'Usuario no asociado a ninguna empresa' 
+    });
+  }
   next();
 };
 
@@ -60,5 +71,6 @@ module.exports = {
   authenticateToken,
   isAdmin,
   isCompanyOwner,
-  hasCompanyAccess
+  hasCompanyAccess,
+  requiresCompany
 };

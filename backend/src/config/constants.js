@@ -1,3 +1,4 @@
+// backend/src/config/constants.js
 module.exports = {
   // Roles de usuario
   ROLES: {

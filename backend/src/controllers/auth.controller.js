@@ -1,8 +1,9 @@
+// backend/src/controllers/auth.controller.js
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const Company = require('../models/Company');
-const { ERRORS } = require('../config/constants');
+const { ERRORS, ROLES } = require('../config/constants');
 
 class AuthController {
   // Login
@@ -20,7 +21,12 @@ class AuthController {
       await user.save();
 
       const token = jwt.sign(
-        { id: user._id, email: user.email, role: user.role, company_id: user.company_id },
+        { 
+          id: user._id, 
+          email: user.email, 
+          role: user.role, 
+          company_id: user.company_id?._id || null
+        },
         process.env.JWT_SECRET,
         { expiresIn: process.env.JWT_EXPIRE || '7d' }
       );
@@ -44,11 +50,23 @@ class AuthController {
   // Registro de usuario
   async register(req, res) {
     try {
-      const { email, password, full_name, company_id } = req.body;
+      const { email, password, full_name, company_id, role = ROLES.COMPANY_EMPLOYEE } = req.body;
 
-      const company = await Company.findById(company_id);
-      if (!company || !company.is_active) {
-        return res.status(400).json({ error: 'Empresa no válida' });
+      // Validar que el rol sea permitido
+      if (!Object.values(ROLES).includes(role)) {
+        return res.status(400).json({ error: 'Rol no válido' });
+      }
+
+      // Si no es admin, debe tener una empresa
+      if (role !== ROLES.ADMIN) {
+        if (!company_id) {
+          return res.status(400).json({ error: 'Se requiere empresa para este rol' });
+        }
+
+        const company = await Company.findById(company_id);
+        if (!company || !company.is_active) {
+          return res.status(400).json({ error: 'Empresa no válida' });
+        }
       }
 
       const password_hash = await bcrypt.hash(password, 10);
@@ -57,18 +75,29 @@ class AuthController {
         email,
         password_hash,
         full_name,
-        role: 'company_employee',
-        company_id,
+        role,
+        company_id: role === ROLES.ADMIN ? null : company_id,
       });
 
       await newUser.save();
 
       res.status(201).json({
         message: 'Usuario creado exitosamente',
-        user: newUser,
+        user: {
+          id: newUser._id,
+          email: newUser.email,
+          full_name: newUser.full_name,
+          role: newUser.role,
+          company_id: newUser.company_id
+        },
       });
     } catch (error) {
       console.error('Error en registro:', error);
+      
+      if (error.code === 11000) {
+        return res.status(400).json({ error: 'El email ya está registrado' });
+      }
+      
       res.status(500).json({ error: ERRORS.SERVER_ERROR });
     }
   }

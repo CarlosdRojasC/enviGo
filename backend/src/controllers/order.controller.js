@@ -41,6 +41,11 @@ class OrderController {
 
       const skip = (page - 1) * limit;
 
+  // --- AÑADE ESTOS CONSOLE.LOG PARA DEPURAR ---
+    console.log('Usuario que hace la petición:', req.user);
+    console.log('Filtros aplicados a la consulta:', filters);
+    // ---------------------------------------------
+
       const [orders, totalCount] = await Promise.all([
         Order.find(filters)
           .populate('company_id', 'name price_per_order')
