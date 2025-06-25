@@ -18,26 +18,32 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../store/auth'
-const auth = useAuthStore()
+
+const router = useRouter()
+const authStore = useAuthStore()
 
 const email = ref('')
 const password = ref('')
+const loading = ref(false)
 const error = ref('')
-const router = useRouter()
-
-// Datos mock de usuario
-const mockUser = {
-  email: 'admin@tienda.com',
-  password: '123456',
-}
 
 async function handleLogin() {
-  error.value = '';
-  const success = await auth.login(email.value, password.value);
-  if (success) {
-    router.push('/dashboard');
-  } else {
-    error.value = 'Credenciales incorrectas o error del servidor';
+  loading.value = true
+  error.value = ''
+  
+  try {
+    const result = await authStore.login(email.value, password.value)
+    
+    if (result.success) {
+      router.push('/dashboard')
+    } else {
+      error.value = result.error || 'Error al iniciar sesión'
+    }
+  } catch (err) {
+    error.value = 'Error de conexión con el servidor'
+    console.error('Login error:', err)
+  } finally {
+    loading.value = false
   }
 }
 </script>
