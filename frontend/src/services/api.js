@@ -25,13 +25,20 @@ api.interceptors.response.use(
     return response;
   },
   error => {
+    // ---- INICIO DE LA CORRECCIÓN ----
+    // Si la respuesta de error es un archivo (Blob), lo dejamos pasar
+    // para que la lógica del componente se encargue de leerlo.
+    if (error.response && error.response.data instanceof Blob) {
+      return Promise.reject(error);
+    }
+    // ---- FIN DE LA CORRECCIÓN ----
+
     if (error.response) {
-      // Error del servidor
+      // Error del servidor (Lógica original para errores JSON)
       const { status, data } = error.response;
       
       switch (status) {
         case 401:
-          // Token expirado o inválido
           localStorage.removeItem('token');
           localStorage.removeItem('user');
           window.location.href = '/';
@@ -54,9 +61,9 @@ api.interceptors.response.use(
       
       // Crear error personalizado con mensaje
       const customError = new Error(data.error || 'Error en la petición');
-      customError.status = status;
-      customError.data = data;
+      customError.response = error.response; // Adjuntar la respuesta para más detalles si es necesario
       return Promise.reject(customError);
+
     } else if (error.request) {
       // Error de red
       console.error('Error de conexión:', error.message);
@@ -139,8 +146,8 @@ export const apiService = {
   // Usuarios
   users: {
     getByCompany: (companyId) => api.get(`/companies/${companyId}/users`),
-    create: (userData) => api.post('/auth/register', userData),
-    update: (id, data) => api.put(`/users/${id}`, data),
+    create: (userData) => api.post('/users', userData), // La ruta ahora es /users
+    update: (id, data) => api.patch(`/users/${id}`, data),
     delete: (id) => api.delete(`/users/${id}`)
   }
 };

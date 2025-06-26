@@ -17,16 +17,16 @@ class OrderController {
 
       if (req.user.role === 'admin') {
         if (company_id) {
-          filters.company_id = new mongoose.Types.ObjectId(company_id); // Usar new aquí
+          filters.company_id = company_id;  
         }
       } else {
         if (req.user.company_id) {
-          filters.company_id = new mongoose.Types.ObjectId(req.user.company_id); // Usar new aquí
+          filters.company_id = req.user.company_id;  // Usar new aquí
         }
       }
 
       if (status) filters.status = status;
-      if (channel_id) filters.channel_id = new mongoose.Types.ObjectId(channel_id); // Usar new aquí
+      if (channel_id) filters.channel_id = channel_id; // Usar new aquí
 
       if (date_from || date_to) {
         filters.order_date = {};
@@ -192,11 +192,18 @@ class OrderController {
     }
   }
 
-  async exportForOptiRoute(req, res) {
+async exportForOptiRoute(req, res) {
     try {
-      const { date_from, date_to, company_id, status = 'pending' } = req.query;
+      // 1. Quitamos el valor por defecto para 'status'
+      const { date_from, date_to, company_id, status } = req.query;
 
-      const filters = { status };
+      // 2. Empezamos con un objeto de filtros VACÍO
+      const filters = {};
+
+      // 3. AÑADIMOS EL FILTRO DE ESTADO SÓLO SI EXISTE
+      if (status) {
+        filters.status = status;
+      }
 
       if (req.user.role !== 'admin') {
         filters.company_id = req.user.company_id;
@@ -210,14 +217,14 @@ class OrderController {
         if (date_to) filters.order_date.$lte = new Date(date_to);
       }
 
-      const orders = await Order.find(filters)
+      const orders = await Order.find(filters) // Ahora 'filters' estará vacío si no se envían parámetros
         .populate('company_id', 'name')
         .populate('channel_id', 'channel_name')
         .sort({ shipping_city: 1, shipping_address: 1 })
         .lean();
 
       if (orders.length === 0) {
-        return res.status(404).json({ error: 'No hay pedidos para exportar' });
+        return res.status(404).json({ error: 'No se encontraron pedidos para los filtros seleccionados' });
       }
 
       const excelBuffer = await ExcelService.generateOptiRouteExport(orders);
@@ -234,10 +241,9 @@ class OrderController {
       res.send(excelBuffer);
     } catch (error) {
       console.error('Error exportando para OptiRoute:', error);
-      res.status(500).json({ error: ERRORS.SERVER_ERROR });
+      res.status(500).json({ error: 'Error interno del servidor' });
     }
-  }
-
+}
   async getStats(req, res) {
     try {
       const { company_id, date_from, date_to } = req.query;

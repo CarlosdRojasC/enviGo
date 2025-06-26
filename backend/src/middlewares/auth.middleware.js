@@ -1,6 +1,7 @@
 // backend/src/middlewares/auth.middleware.js
 const jwt = require('jsonwebtoken');
 const { ROLES, ERRORS } = require('../config/constants');
+const crypto = require('crypto');
 
 // Verificar token JWT
 const authenticateToken = (req, res, next) => {
@@ -67,10 +68,33 @@ const requiresCompany = (req, res, next) => {
   next();
 };
 
+const verifyShopifyWebhook = (req, res, next) => {
+  const hmac = req.get('X-Shopify-Hmac-Sha256');
+  const body = req.rawBody; // Necesitarás el body en formato raw
+  const secret = process.env.SHOPIFY_WEBHOOK_SECRET; // Debes guardar este secreto
+
+  if (!hmac || !body) {
+    return res.status(401).send('No autorizado');
+  }
+
+  const hash = crypto
+    .createHmac('sha256', secret)
+    .update(body, 'utf8')
+    .digest('base64');
+
+  if (hash === hmac) {
+    next();
+  } else {
+    res.status(401).send('No autorizado');
+  }
+};
+
+
 module.exports = {
   authenticateToken,
   isAdmin,
   isCompanyOwner,
   hasCompanyAccess,
-  requiresCompany
+  requiresCompany,
+  verifyShopifyWebhook
 };

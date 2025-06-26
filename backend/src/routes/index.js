@@ -9,11 +9,21 @@ const {
   hasCompanyAccess
 } = require('../middlewares/auth.middleware');
 
+
+// Importar validadores
+const { validateMongoId } = require('../middlewares/validators/generic.validator'); // <-- AÑADIR IMPORT
+const { validateRegistration } = require('../middlewares/validators/user.validator'); // <-- AÑADIR IMPORT
+
+
+
 // Importar controladores
 const authController = require('../controllers/auth.controller');
 const companyController = require('../controllers/company.controller');
 const orderController = require('../controllers/order.controller');
 const channelController = require('../controllers/channel.controller');
+const userController = require('../controllers/user.controller'); // <-- AÑADIR IMPORT
+const { validateOrderCreation, validateStatusUpdate } = require('../middlewares/validators/order.validator.js');
+
 
 // Importar modelos para dashboard
 const Company = require('../models/Company');
@@ -23,7 +33,7 @@ const Channel = require('../models/Channel');
 // ==================== RUTAS PÚBLICAS ====================
 
 router.post('/auth/login', authController.login);
-router.post('/auth/register', authController.register);
+router.post('/auth/register', validateRegistration, authController.register);
 
 // Webhooks (no requieren autenticación)
 router.post('/webhooks/:channel_type/:channel_id', async (req, res) => {
@@ -60,21 +70,28 @@ router.get('/companies', authenticateToken, isAdmin, companyController.getAll);
 router.post('/companies', authenticateToken, isAdmin, companyController.create);
 router.patch('/companies/:id/price', authenticateToken, isAdmin, companyController.updatePrice);
 
-router.get('/companies/:id', authenticateToken, hasCompanyAccess, companyController.getById);
-router.put('/companies/:id', authenticateToken, hasCompanyAccess, companyController.update);
-router.get('/companies/:id/users', authenticateToken, hasCompanyAccess, companyController.getUsers);
-router.get('/companies/:id/stats', authenticateToken, hasCompanyAccess, companyController.getStats);
-
+router.get('/companies/:id', authenticateToken, validateMongoId('id'), companyController.getById); // <-- USAR MIDDLEWARE
+router.put('/companies/:id', authenticateToken, validateMongoId('id'), companyController.update); // <-- USAR MIDDLEWARE
+router.get('/companies/:id/users', authenticateToken, validateMongoId('id'), companyController.getUsers); // <-- USAR MIDDLEWARE
+router.get('/companies/:id/stats', authenticateToken, validateMongoId('id'), companyController.getStats); // <-- USAR MIDDLEWARE
 // ==================== CANALES DE VENTA ====================
 
-router.get('/companies/:companyId/channels', authenticateToken, hasCompanyAccess, channelController.getByCompany);
-router.post('/companies/:companyId/channels', authenticateToken, hasCompanyAccess, channelController.create);
+router.get('/companies/:companyId/channels', authenticateToken, validateMongoId('companyId'), channelController.getByCompany); // <-- USAR MIDDLEWARE
+router.post('/companies/:companyId/channels', authenticateToken, validateMongoId('companyId'), channelController.create); // <-- USAR MIDDLEWARE
 
-router.get('/channels/:id', authenticateToken, channelController.getById);
-router.put('/channels/:id', authenticateToken, channelController.update);
-router.delete('/channels/:id', authenticateToken, channelController.delete);
-router.post('/channels/:id/sync', authenticateToken, channelController.syncOrders);
-router.post('/channels/:id/test', authenticateToken, channelController.testConnection);
+router.get('/channels/:id', authenticateToken, validateMongoId('id'), channelController.getById); // <-- USAR MIDDLEWARE
+router.put('/channels/:id', authenticateToken, validateMongoId('id'), channelController.update); // <-- USAR MIDDLEWARE
+router.delete('/channels/:id', authenticateToken, validateMongoId('id'), channelController.delete); // <-- USAR MIDDLEWARE
+router.post('/channels/:id/sync', authenticateToken, validateMongoId('id'), channelController.syncOrders); // <-- USAR MIDDLEWARE
+router.post('/channels/:id/test', authenticateToken, validateMongoId('id'), channelController.testConnection); // <-- USAR MIDDLEWARE
+
+
+// ==================== USUARIOS ====================
+// La creación de usuarios por parte de un admin
+router.post('/users', authenticateToken, isAdmin, authController.register);
+
+// Ruta para actualizar (activar/desactivar)
+router.patch('/users/:id', authenticateToken, isAdmin, userController.updateUser);
 
 // OAuth MercadoLibre
 router.get('/channels/mercadolibre/auth', authenticateToken, async (req, res) => {
@@ -107,9 +124,9 @@ router.get('/channels/mercadolibre/callback', async (req, res) => {
 router.get('/orders', authenticateToken, orderController.getAll);
 router.get('/orders/stats', authenticateToken, orderController.getStats);
 router.get('/orders/export', authenticateToken, orderController.exportForOptiRoute);
-router.post('/orders', authenticateToken, orderController.create);
-router.get('/orders/:id', authenticateToken, orderController.getById);
-router.patch('/orders/:id/status', authenticateToken, orderController.updateStatus);
+router.post('/orders', authenticateToken, validateOrderCreation, orderController.create);
+router.get('/orders/:id', authenticateToken, validateMongoId('id'), orderController.getById); // <-- USAR MIDDLEWARE
+router.patch('/orders/:id/status', authenticateToken, validateMongoId('id'), isAdmin, orderController.updateStatus); // <-- USAR MIDDLEWARE
 
 // ==================== DASHBOARD STATS (MONGO) ====================
 
@@ -210,11 +227,11 @@ router.get('/stats/dashboard', authenticateToken, async (req, res) => {
       }
 
       // Convertir a ObjectId usando new
-      const companyObjectId = new mongoose.Types.ObjectId(companyId);
+      const companyObjectId = companyId;
 
       const [orderStats, company, channels] = await Promise.all([
         Order.aggregate([
-          { $match: { company_id: companyObjectId } },
+          { $match: { company_id: new mongoose.Types.ObjectId(companyObjectId) } },
           {
             $group: {
               _id: null,

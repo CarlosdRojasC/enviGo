@@ -204,7 +204,6 @@
                 <td class="order-date">{{ formatDate(order.order_date) }}</td>
                 <td class="order-actions">
                   <button @click="viewOrder(order)" class="action-btn view">👁️</button>
-                  <button @click="updateOrderStatus(order)" class="action-btn edit">✏️</button>
                 </td>
               </tr>
             </tbody>
@@ -280,6 +279,9 @@
         </form>
       </div>
     </div>
+    <Modal v-model="showOrderDetailsModal" title="Detalles del Pedido" width="700px">
+      <OrderDetails :order="selectedOrder" />
+    </Modal>
   </div>
 </template>
 
@@ -287,7 +289,12 @@
 import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../store/auth'
-import api from '../services/api'
+import api, { apiService } from '../services/api'
+
+// Importar los nuevos componentes
+import Modal from '../components/Modal.vue';
+import OrderDetails from '../components/OrderDetails.vue';
+
 
 const auth = useAuthStore()
 const router = useRouter()
@@ -325,6 +332,11 @@ const newChannel = ref({
   api_secret: '',
   store_url: ''
 })
+// NUEVAS REFS PARA EL MODAL
+const showOrderDetailsModal = ref(false);
+const selectedOrder = ref(null);
+const loadingOrderDetails = ref(false);
+
 
 // Usuario actual
 const user = computed(() => auth.user)
@@ -440,28 +452,41 @@ async function addChannel() {
   }
 }
 
+// Reemplaza tu función actual con esta
 async function exportOrders() {
+  const exportButton = document.querySelector('.export-btn');
+  if (exportButton) {
+      exportButton.disabled = true;
+      exportButton.textContent = 'Exportando...';
+  }
+
   try {
-    const params = new URLSearchParams()
-    Object.entries(filters.value).forEach(([key, value]) => {
-      if (value) params.append(key, value)
-    })
-    
-    const response = await api.get(`/orders/export?${params}`, {
+    // 1. Llamamos a la API SIN enviar ningún parámetro de filtro.
+    //    El backend está programado para devolver todos los pedidos de la tienda si no se especifican filtros.
+    const response = await api.get('/orders/export', {
       responseType: 'blob'
-    })
+    });
+
+    // 2. Crear el enlace de descarga (esta parte no cambia)
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `TODOS_LOS_PEDIDOS_${Date.now()}.xlsx`);
+    document.body.appendChild(link);
+    link.click();
     
-    // Crear link de descarga
-    const url = window.URL.createObjectURL(new Blob([response.data]))
-    const link = document.createElement('a')
-    link.href = url
-    link.setAttribute('download', `optiroute_export_${Date.now()}.xlsx`)
-    document.body.appendChild(link)
-    link.click()
-    link.remove()
+    // 3. Limpiar
+    link.remove();
+    window.URL.revokeObjectURL(url);
+
   } catch (error) {
-    console.error('Error exporting orders:', error)
-    alert('Error al exportar pedidos')
+    console.error('Error al exportar pedidos:', error);
+    alert('Ocurrió un error al intentar exportar los pedidos.');
+  } finally {
+    if (exportButton) {
+        exportButton.disabled = false;
+        exportButton.textContent = '📄 Exportar OptiRoute';
+    }
   }
 }
 
@@ -520,15 +545,23 @@ function getStatusName(status) {
   return names[status] || status
 }
 
-function viewOrder(order) {
-  // TODO: Implementar modal de detalles del pedido
-  alert(`Ver detalles del pedido ${order.order_number}`)
+async function viewOrder(order) {
+  selectedOrder.value = null; // Limpiar datos previos
+  loadingOrderDetails.value = true;
+  showOrderDetailsModal.value = true;
+  try {
+    const response = await apiService.orders.getById(order._id);
+    selectedOrder.value = response.data;
+  } catch (error) {
+    console.error("Error al obtener detalles del pedido:", error);
+    alert('No se pudieron cargar los detalles del pedido.');
+    showOrderDetailsModal.value = false;
+  } finally {
+    loadingOrderDetails.value = false;
+  }
 }
 
-function updateOrderStatus(order) {
-  // TODO: Implementar modal para cambiar estado
-  alert(`Cambiar estado del pedido ${order.order_number}`)
-}
+
 
 function showChannelDetails(channel) {
   // TODO: Implementar modal de detalles del canal

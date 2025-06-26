@@ -31,7 +31,9 @@ const limiter = rateLimit({
 app.use('/api/', limiter);
 
 // Body parser
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json({ limit: '10mb',verify: (req, res, buf) => {
+    req.rawBody = buf; // Guarda el buffer del body
+  } }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Logging en desarrollo
