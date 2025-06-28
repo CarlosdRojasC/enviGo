@@ -42,3 +42,6 @@ coverage/
 .vscode/
 .idea/
 .D
+backend/backend.zip
+.gitignore
+frontend/frontend.zip
