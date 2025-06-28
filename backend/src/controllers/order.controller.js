@@ -193,21 +193,18 @@ class OrderController {
   }
 
 async exportForOptiRoute(req, res) {
+    // Esta ruta ahora es solo para administradores
     try {
-      // 1. Quitamos el valor por defecto para 'status'
       const { date_from, date_to, company_id, status } = req.query;
 
-      // 2. Empezamos con un objeto de filtros VACÍO
       const filters = {};
 
-      // 3. AÑADIMOS EL FILTRO DE ESTADO SÓLO SI EXISTE
       if (status) {
         filters.status = status;
       }
-
-      if (req.user.role !== 'admin') {
-        filters.company_id = req.user.company_id;
-      } else if (company_id) {
+      
+      // El admin puede filtrar por una empresa específica
+      if (company_id) {
         filters.company_id = company_id;
       }
 
@@ -217,14 +214,14 @@ async exportForOptiRoute(req, res) {
         if (date_to) filters.order_date.$lte = new Date(date_to);
       }
 
-      const orders = await Order.find(filters) // Ahora 'filters' estará vacío si no se envían parámetros
+      const orders = await Order.find(filters)
         .populate('company_id', 'name')
         .populate('channel_id', 'channel_name')
         .sort({ shipping_city: 1, shipping_address: 1 })
         .lean();
 
       if (orders.length === 0) {
-        return res.status(404).json({ error: 'No se encontraron pedidos para los filtros seleccionados' });
+        return res.status(404).json({ error: 'No se encontraron pedidos para exportar con los filtros aplicados' });
       }
 
       const excelBuffer = await ExcelService.generateOptiRouteExport(orders);
@@ -242,8 +239,7 @@ async exportForOptiRoute(req, res) {
     } catch (error) {
       console.error('Error exportando para OptiRoute:', error);
       res.status(500).json({ error: 'Error interno del servidor' });
-    }
-}
+    }}
   async getStats(req, res) {
     try {
       const { company_id, date_from, date_to } = req.query;

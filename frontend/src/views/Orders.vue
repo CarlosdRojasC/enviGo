@@ -30,10 +30,7 @@
           placeholder="Buscar por cliente, email o #pedido"
           class="search-input"
         />
-        
-        <button @click="exportOrders" class="export-btn" :disabled="isExporting">
-          {{ isExporting ? 'Exportando...' : '📄 Exportar OptiRoute' }}
-        </button>
+
       </div>
     </div>
 
@@ -119,7 +116,7 @@ const channels = ref([]);
 const pagination = ref({ page: 1, limit: 10, total: 0, totalPages: 1 });
 const filters = ref({ status: '', channel_id: '', date_from: '', date_to: '', search: '' });
 const loadingOrders = ref(true);
-const isExporting = ref(false);
+
 
 // Estado para el modal
 const selectedOrder = ref(null);
@@ -161,25 +158,7 @@ async function fetchChannels() {
     }
 }
 
-async function exportOrders() {
-    isExporting.value = true;
-    try {
-        const response = await apiService.orders.export(filters.value);
-        const url = window.URL.createObjectURL(new Blob([response.data]));
-        const link = document.createElement('a');
-        link.href = url;
-        link.setAttribute('download', `pedidos_export_${Date.now()}.xlsx`);
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
-        window.URL.revokeObjectURL(url);
-    } catch (error) {
-        console.error('Error exporting orders:', error);
-        alert('No se encontraron pedidos para exportar con los filtros seleccionados.');
-    } finally {
-        isExporting.value = false;
-    }
-}
+
 
 async function openOrderDetailsModal(order) {
     selectedOrder.value = null;

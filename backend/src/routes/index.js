@@ -123,7 +123,7 @@ router.get('/channels/mercadolibre/callback', async (req, res) => {
 
 router.get('/orders', authenticateToken, orderController.getAll);
 router.get('/orders/stats', authenticateToken, orderController.getStats);
-router.get('/orders/export', authenticateToken, orderController.exportForOptiRoute);
+router.get('/orders/export', authenticateToken, isAdmin, orderController.exportForOptiRoute);
 router.post('/orders', authenticateToken, validateOrderCreation, orderController.create);
 router.get('/orders/:id', authenticateToken, validateMongoId('id'), orderController.getById); // <-- USAR MIDDLEWARE
 router.patch('/orders/:id/status', authenticateToken, validateMongoId('id'), isAdmin, orderController.updateStatus); // <-- USAR MIDDLEWARE
