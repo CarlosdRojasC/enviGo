@@ -34,12 +34,24 @@ const routes = [
         component: () => import('../views/AdminDashboard.vue'),
         meta: { roles: ['admin'] }
       },
+   // Rutas de facturas para empresas
       {
-      path: '/billing',
-      name: 'Billing',
-      component: () => import('../views/Billing.vue'),
-      meta: { requiresAuth: true }
-    },
+        path: 'Billing',
+        name: 'Billing',
+        component: () => import('../views/Billing.vue'),
+        meta: { 
+          roles: ['company_owner', 'company_employee'], 
+          requiresCompany: true 
+        }
+      },
+
+      // Rutas de facturas para admin
+      {
+        path: 'admin/billing',
+        name: 'AdminBilling',
+        component: () => import('../views/Billing.vue'),
+        meta: { roles: ['admin'] }
+      },
       {
     path: 'admin/companies',
     name: 'AdminCompanies',
