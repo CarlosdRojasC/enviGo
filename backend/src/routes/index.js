@@ -23,12 +23,14 @@ const orderController = require('../controllers/order.controller');
 const channelController = require('../controllers/channel.controller');
 const userController = require('../controllers/user.controller'); // <-- AÑADIR IMPORT
 const { validateOrderCreation, validateStatusUpdate } = require('../middlewares/validators/order.validator.js');
+const billingController = require('../controllers/billing.controller')
 
 
 // Importar modelos para dashboard
 const Company = require('../models/Company');
 const Order = require('../models/Order');
 const Channel = require('../models/Channel');
+const Invoice = require('../models/Invoice');
 
 // ==================== RUTAS PÚBLICAS ====================
 
@@ -128,6 +130,19 @@ router.post('/orders', authenticateToken, validateOrderCreation, orderController
 router.get('/orders/:id', authenticateToken, validateMongoId('id'), orderController.getById); // <-- USAR MIDDLEWARE
 router.patch('/orders/:id/status', authenticateToken, validateMongoId('id'), isAdmin, orderController.updateStatus); // <-- USAR MIDDLEWARE
 
+
+// ==================== FACTURACIÓN (BILLING) ====================
+// Obtener facturas (admin ve todas, empresa ve las suyas)
+router.get('/billing/invoices', authenticateToken, billingController.getInvoices);
+
+// Descargar una factura específica en PDF
+router.get('/billing/invoices/:id/download', authenticateToken, validateMongoId('id'), billingController.downloadInvoice);
+
+// Marcar una factura como pagada (solo admin)
+router.post('/billing/invoices/:id/mark-as-paid', authenticateToken, isAdmin, validateMongoId('id'), billingController.markAsPaid);
+// AÑADE ESTA NUEVA RUTA
+// Disparar la generación manual de facturas (solo admin)
+router.post('/billing/generate', authenticateToken, isAdmin, billingController.manualGenerateInvoices);
 // ==================== DASHBOARD STATS (MONGO) ====================
 
 

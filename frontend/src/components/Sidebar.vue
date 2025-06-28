@@ -7,10 +7,12 @@
       <router-link v-if="auth.isAdmin" to="/admin/dashboard" class="nav-item">📊 Dashboard</router-link>
       <router-link v-if="auth.isAdmin" to="/admin/companies" class="nav-item">🏢 Empresas</router-link>
       <router-link v-if="auth.isAdmin" to="/admin/orders" class="nav-item">📦 Pedidos Globales</router-link>
+      <router-link v-if="auth.isAdmin" to="/billing" class="nav-item">🧾 Facturación</router-link>
       
       <router-link v-if="!auth.isAdmin" to="/dashboard" class="nav-item">📊 Dashboard</router-link>
       <router-link v-if="!auth.isAdmin" to="/orders" class="nav-item">📦 Mis Pedidos</router-link>
       <router-link v-if="!auth.isAdmin" to="/channels" class="nav-item">📡 Mis Canales</router-link>
+      <router-link v-if="!auth.isAdmin" to="/billing" class="nav-item">🧾 Facturación</router-link>
     </nav>
     <div class="sidebar-footer">
         <div class="user-profile">

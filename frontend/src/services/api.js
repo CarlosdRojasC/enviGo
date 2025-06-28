@@ -123,7 +123,23 @@ export const apiService = {
     sync: (id, params = {}) => api.post(`/channels/${id}/sync`, params),
     testConnection: (id) => api.post(`/channels/${id}/test`)
   },
-
+  // Facturación
+    billing: {
+        getInvoices() {
+            return api.get('/billing/invoices');
+        },
+        downloadInvoice(invoiceId) {
+            return api.get(`/billing/invoices/${invoiceId}/download`, {
+                responseType: 'blob', // Importante para manejar la descarga de archivos PDF
+            });
+        },
+        markAsPaid(invoiceId) {
+            return api.post(`/billing/invoices/${invoiceId}/mark-as-paid`);
+        },
+        generateInvoices() {
+      return api.post('/billing/generate');
+    }
+    },
   // Pedidos
   orders: {
     getAll: (params = {}) => {
