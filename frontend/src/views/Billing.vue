@@ -1,17 +1,18 @@
 <template>
   <div class="page-container">
     <div class="page-header">
-      <h1 class="page-title">
-        {{ isAdmin ? 'Facturas del Sistema' : 'Mis Facturas' }}
-      </h1>
+      <h1 class="page-title">Mis Facturas</h1>
       <div class="header-actions">
-        <button @click="generateInvoice" class="btn-primary" :disabled="generating">
-          {{ generating ? 'Generando...' : '📄 Generar Factura' }}
+        <button @click="requestInvoice" class="btn-secondary">
+          📄 Solicitar Factura
+        </button>
+        <button @click="exportInvoices" class="btn-primary" :disabled="loading">
+          📊 Exportar Facturas
         </button>
       </div>
     </div>
 
-    <!-- Filtros -->
+    <!-- Filtros Simples para Company -->
     <div class="filters-section">
       <div class="filters-grid">
         <select v-model="filters.status" @change="fetchInvoices">
@@ -20,14 +21,6 @@
           <option value="sent">Enviada</option>
           <option value="paid">Pagada</option>
           <option value="overdue">Vencida</option>
-          <option value="cancelled">Cancelada</option>
-        </select>
-        
-        <select v-if="isAdmin" v-model="filters.company_id" @change="fetchInvoices">
-          <option value="">Todas las empresas</option>
-          <option v-for="company in companies" :key="company._id" :value="company._id">
-            {{ company.name }}
-          </option>
         </select>
         
         <select v-model="filters.period" @change="fetchInvoices">
@@ -42,40 +35,108 @@
           type="text" 
           v-model="filters.search" 
           @input="debounceSearch"
-          placeholder="Buscar por número o empresa..."
+          placeholder="Buscar por número de factura..."
           class="search-input"
         />
       </div>
     </div>
 
-    <!-- Resumen de Facturación -->
+    <!-- Resumen de Facturación para Company -->
     <div class="billing-summary">
-      <div class="summary-card">
-        <div class="summary-icon">📄</div>
-        <div class="summary-info">
-          <div class="summary-value">{{ invoiceSummary.total }}</div>
-          <div class="summary-label">Total Facturas</div>
-        </div>
-      </div>
-      <div class="summary-card">
-        <div class="summary-icon">💰</div>
-        <div class="summary-info">
-          <div class="summary-value">${{ formatCurrency(invoiceSummary.totalAmount) }}</div>
-          <div class="summary-label">Monto Total</div>
-        </div>
-      </div>
-      <div class="summary-card">
-        <div class="summary-icon">✅</div>
-        <div class="summary-info">
-          <div class="summary-value">{{ invoiceSummary.paid }}</div>
-          <div class="summary-label">Pagadas</div>
-        </div>
-      </div>
-      <div class="summary-card">
+      <div class="summary-card pending">
         <div class="summary-icon">⏰</div>
         <div class="summary-info">
-          <div class="summary-value">{{ invoiceSummary.pending }}</div>
-          <div class="summary-label">Pendientes</div>
+          <div class="summary-value">${{ formatCurrency(invoiceSummary.pendingAmount) }}</div>
+          <div class="summary-label">Monto Pendiente</div>
+          <div class="summary-detail">{{ invoiceSummary.pendingCount }} factura{{ invoiceSummary.pendingCount !== 1 ? 's' : '' }}</div>
+        </div>
+      </div>
+      
+      <div class="summary-card paid">
+        <div class="summary-icon">✅</div>
+        <div class="summary-info">
+          <div class="summary-value">${{ formatCurrency(invoiceSummary.paidAmount) }}</div>
+          <div class="summary-label">Total Pagado</div>
+          <div class="summary-detail">{{ invoiceSummary.paidCount }} factura{{ invoiceSummary.paidCount !== 1 ? 's' : '' }}</div>
+        </div>
+      </div>
+      
+      <div class="summary-card orders">
+        <div class="summary-icon">📦</div>
+        <div class="summary-info">
+          <div class="summary-value">{{ invoiceSummary.totalOrders }}</div>
+          <div class="summary-label">Pedidos Facturados</div>
+          <div class="summary-detail">Este mes: {{ invoiceSummary.ordersThisMonth }}</div>
+        </div>
+      </div>
+      
+      <div class="summary-card rate">
+        <div class="summary-icon">💰</div>
+        <div class="summary-info">
+          <div class="summary-value">${{ formatCurrency(currentPricing.pricePerOrder) }}</div>
+          <div class="summary-label">Precio por Pedido</div>
+          <div class="summary-detail">+ IVA: ${{ formatCurrency(currentPricing.ivaPerOrder) }}</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Información de Facturación Actual -->
+    <div class="current-billing-info">
+      <div class="billing-info-card">
+        <h3>Información de Facturación</h3>
+        <div class="billing-details">
+          <div class="billing-row">
+            <span class="label">Plan Actual:</span>
+            <span class="value">
+              <span class="plan-badge" :class="currentPricing.planType">
+                {{ getPlanName(currentPricing.planType) }}
+              </span>
+            </span>
+          </div>
+          <div class="billing-row">
+            <span class="label">Precio Base por Pedido:</span>
+            <span class="value">${{ formatCurrency(currentPricing.pricePerOrder) }}</span>
+          </div>
+          <div class="billing-row">
+            <span class="label">IVA por Pedido (19%):</span>
+            <span class="value">${{ formatCurrency(currentPricing.ivaPerOrder) }}</span>
+          </div>
+          <div class="billing-row total">
+            <span class="label">Total por Pedido:</span>
+            <span class="value">${{ formatCurrency(currentPricing.totalPerOrder) }}</span>
+          </div>
+          <div class="billing-row">
+            <span class="label">Ciclo de Facturación:</span>
+            <span class="value">{{ getBillingCycleName(currentPricing.billingCycle) }}</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="next-invoice-preview">
+        <h3>Próxima Factura Estimada</h3>
+        <div class="preview-content">
+          <div class="preview-period">
+            <span class="period-label">Período:</span>
+            <span class="period-value">{{ nextInvoicePeriod }}</span>
+          </div>
+          <div class="preview-orders">
+            <span class="orders-label">Pedidos hasta ahora:</span>
+            <span class="orders-value">{{ nextInvoiceEstimate.ordersCount }} pedidos</span>
+          </div>
+          <div class="preview-amounts">
+            <div class="amount-row">
+              <span>Subtotal:</span>
+              <span>${{ formatCurrency(nextInvoiceEstimate.subtotal) }}</span>
+            </div>
+            <div class="amount-row">
+              <span>IVA:</span>
+              <span>${{ formatCurrency(nextInvoiceEstimate.iva) }}</span>
+            </div>
+            <div class="amount-row total">
+              <span>Total Estimado:</span>
+              <span>${{ formatCurrency(nextInvoiceEstimate.total) }}</span>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -83,35 +144,33 @@
     <div v-if="loading" class="loading">Cargando facturas...</div>
 
     <div v-else class="content-section">
+      <!-- Tabla de Facturas Simplificada para Company -->
       <div class="table-wrapper">
         <table class="invoices-table">
           <thead>
             <tr>
               <th>Número</th>
-              <th v-if="isAdmin">Empresa</th>
               <th>Período</th>
               <th>Pedidos</th>
               <th>Subtotal</th>
               <th>IVA</th>
               <th>Total</th>
               <th>Estado</th>
-              <th>Fecha Emisión</th>
               <th>Vencimiento</th>
               <th>Acciones</th>
             </tr>
           </thead>
           <tbody>
             <tr v-if="invoices.length === 0">
-              <td :colspan="isAdmin ? 11 : 10" class="empty-row">
-                No se encontraron facturas.
+              <td colspan="9" class="empty-row">
+                No tienes facturas aún. Las facturas se generan automáticamente al final de cada mes.
               </td>
             </tr>
             <tr v-else v-for="invoice in invoices" :key="invoice._id" class="invoice-row">
               <td class="invoice-number">
                 <div class="invoice-id">{{ invoice.invoice_number }}</div>
-                <div class="invoice-type">{{ getInvoiceType(invoice.type) }}</div>
+                <div class="invoice-date">{{ formatDate(invoice.issue_date) }}</div>
               </td>
-              <td v-if="isAdmin" class="company-name">{{ invoice.company?.name || 'N/A' }}</td>
               <td class="invoice-period">
                 <div class="period-text">{{ formatPeriod(invoice.period_start, invoice.period_end) }}</div>
                 <div class="period-duration">{{ calculateDays(invoice.period_start, invoice.period_end) }} días</div>
@@ -130,7 +189,6 @@
                   {{ getStatusText(invoice.status) }}
                 </span>
               </td>
-              <td class="issue-date">{{ formatDate(invoice.issue_date) }}</td>
               <td class="due-date">
                 <div class="due-date-text">{{ formatDate(invoice.due_date) }}</div>
                 <div class="due-indicator" :class="getDueStatus(invoice.due_date, invoice.status)">
@@ -146,28 +204,12 @@
                     📥
                   </button>
                   <button 
-                    v-if="invoice.status === 'draft'" 
-                    @click="sendInvoice(invoice)" 
-                    class="btn-action send" 
-                    title="Enviar Factura"
-                  >
-                    📧
-                  </button>
-                  <button 
-                    v-if="invoice.status !== 'paid' && invoice.status !== 'cancelled'"
-                    @click="markAsPaid(invoice)" 
+                    v-if="invoice.status === 'sent' || invoice.status === 'overdue'"
+                    @click="reportPayment(invoice)" 
                     class="btn-action pay" 
-                    title="Marcar como Pagada"
+                    title="Reportar Pago"
                   >
-                    ✅
-                  </button>
-                  <button 
-                    v-if="isAdmin && invoice.status === 'draft'"
-                    @click="cancelInvoice(invoice)" 
-                    class="btn-action cancel" 
-                    title="Cancelar Factura"
-                  >
-                    ❌
+                    💳
                   </button>
                 </div>
               </td>
@@ -191,7 +233,7 @@
     </div>
 
     <!-- Modal de Vista de Factura -->
-    <Modal v-model="showInvoiceModal" :title="`Factura ${selectedInvoice?.invoice_number}`" width="800px">
+    <Modal v-model="showInvoiceModal" :title="`Factura ${selectedInvoice?.invoice_number}`" width="700px">
       <div v-if="selectedInvoice" class="invoice-preview">
         <!-- Encabezado de la Factura -->
         <div class="invoice-header">
@@ -202,7 +244,7 @@
             <p>Dirección: Santiago, Chile</p>
           </div>
           <div class="invoice-details">
-            <h2>{{ getInvoiceType(selectedInvoice.type) }}</h2>
+            <h2>Factura</h2>
             <p><strong>Número:</strong> {{ selectedInvoice.invoice_number }}</p>
             <p><strong>Fecha:</strong> {{ formatDate(selectedInvoice.issue_date) }}</p>
             <p><strong>Vencimiento:</strong> {{ formatDate(selectedInvoice.due_date) }}</p>
@@ -213,10 +255,10 @@
         <div class="invoice-client">
           <h4>Facturar a:</h4>
           <div class="client-info">
-            <p><strong>{{ selectedInvoice.company?.name }}</strong></p>
-            <p>RUT: {{ selectedInvoice.company?.rut || 'No disponible' }}</p>
-            <p>{{ selectedInvoice.company?.address || 'Dirección no disponible' }}</p>
-            <p>{{ selectedInvoice.company?.contact_email || 'Email no disponible' }}</p>
+            <p><strong>{{ companyInfo.name }}</strong></p>
+            <p>RUT: {{ companyInfo.rut || 'No disponible' }}</p>
+            <p>{{ companyInfo.address || 'Dirección no disponible' }}</p>
+            <p>{{ companyInfo.contactEmail || 'Email no disponible' }}</p>
           </div>
         </div>
 
@@ -278,91 +320,123 @@
             📥 Descargar PDF
           </button>
           <button 
-            v-if="selectedInvoice.status === 'draft'" 
-            @click="sendInvoice(selectedInvoice)" 
+            v-if="selectedInvoice.status === 'sent' || selectedInvoice.status === 'overdue'"
+            @click="reportPayment(selectedInvoice)" 
             class="btn-primary"
           >
-            📧 Enviar por Email
-          </button>
-          <button 
-            v-if="selectedInvoice.status !== 'paid' && selectedInvoice.status !== 'cancelled'"
-            @click="markAsPaid(selectedInvoice)" 
-            class="btn-success"
-          >
-            ✅ Marcar como Pagada
+            💳 Reportar Pago
           </button>
         </div>
       </div>
     </Modal>
 
-    <!-- Modal de Generar Factura -->
-    <Modal v-model="showGenerateModal" title="Generar Nueva Factura" width="600px">
-      <div class="generate-invoice-form">
-        <div class="form-group" v-if="isAdmin">
-          <label for="invoice-company">Empresa</label>
-          <select id="invoice-company" v-model="generateForm.company_id" required>
-            <option value="">Seleccionar empresa...</option>
-            <option v-for="company in companies" :key="company._id" :value="company._id">
-              {{ company.name }}
-            </option>
-          </select>
-        </div>
-
-        <div class="form-row">
-          <div class="form-group">
-            <label for="period-start">Período Desde</label>
-            <input id="period-start" type="date" v-model="generateForm.period_start" required>
+    <!-- Modal de Solicitar Factura -->
+    <Modal v-model="showRequestModal" title="Solicitar Nueva Factura" width="500px">
+      <div class="request-invoice-form">
+        <div class="form-section">
+          <h4>Período a Facturar</h4>
+          <p class="form-description">
+            Solicita una factura para un período específico de pedidos.
+          </p>
+          
+          <div class="form-row">
+            <div class="form-group">
+              <label for="request-period-start">Período Desde</label>
+              <input id="request-period-start" type="date" v-model="requestForm.period_start" required>
+            </div>
+            <div class="form-group">
+              <label for="request-period-end">Período Hasta</label>
+              <input id="request-period-end" type="date" v-model="requestForm.period_end" required>
+            </div>
           </div>
+
           <div class="form-group">
-            <label for="period-end">Período Hasta</label>
-            <input id="period-end" type="date" v-model="generateForm.period_end" required>
+            <label for="request-notes">Notas Adicionales (Opcional)</label>
+            <textarea 
+              id="request-notes"
+              v-model="requestForm.notes"
+              placeholder="Especifica cualquier detalle adicional para la factura..."
+              rows="3"
+            ></textarea>
           </div>
         </div>
 
-        <div class="form-group">
-          <label for="invoice-type">Tipo de Documento</label>
-          <select id="invoice-type" v-model="generateForm.type">
-            <option value="invoice">Factura</option>
-            <option value="proforma">Factura Proforma</option>
-            <option value="credit_note">Nota de Crédito</option>
-          </select>
-        </div>
-
-        <!-- Preview de la factura a generar -->
-        <div v-if="generatePreview" class="generate-preview">
-          <h4>Vista Previa</h4>
+        <!-- Preview de la solicitud -->
+        <div v-if="requestPreview" class="request-preview">
+          <h4>Vista Previa de Solicitud</h4>
           <div class="preview-content">
             <div class="preview-row">
-              <span>Empresa:</span>
-              <span>{{ getSelectedCompanyName() }}</span>
-            </div>
-            <div class="preview-row">
               <span>Período:</span>
-              <span>{{ formatPeriod(generateForm.period_start, generateForm.period_end) }}</span>
+              <span>{{ formatPeriod(requestForm.period_start, requestForm.period_end) }}</span>
             </div>
             <div class="preview-row">
               <span>Pedidos estimados:</span>
-              <span>{{ generatePreview.estimated_orders }} pedidos</span>
+              <span>{{ requestPreview.estimatedOrders }} pedidos</span>
             </div>
             <div class="preview-row">
-              <span>Subtotal:</span>
-              <span>${{ formatCurrency(generatePreview.subtotal) }}</span>
-            </div>
-            <div class="preview-row">
-              <span>IVA:</span>
-              <span>${{ formatCurrency(generatePreview.tax) }}</span>
-            </div>
-            <div class="preview-row total">
-              <span>Total:</span>
-              <span>${{ formatCurrency(generatePreview.total) }}</span>
+              <span>Monto estimado:</span>
+              <span>${{ formatCurrency(requestPreview.estimatedAmount) }}</span>
             </div>
           </div>
         </div>
 
         <div class="modal-actions">
-          <button @click="showGenerateModal = false" class="btn-cancel">Cancelar</button>
-          <button @click="confirmGenerateInvoice" :disabled="!canGenerate" class="btn-save">
-            Generar Factura
+          <button @click="showRequestModal = false" class="btn-cancel">Cancelar</button>
+          <button @click="submitInvoiceRequest" :disabled="!canRequest || requesting" class="btn-save">
+            {{ requesting ? 'Enviando...' : 'Enviar Solicitud' }}
+          </button>
+        </div>
+      </div>
+    </Modal>
+
+    <!-- Modal de Reportar Pago -->
+    <Modal v-model="showPaymentModal" title="Reportar Pago de Factura" width="500px">
+      <div v-if="selectedInvoice" class="payment-report-form">
+        <div class="payment-info-section">
+          <h4>Factura: {{ selectedInvoice.invoice_number }}</h4>
+          <p>Monto Total: ${{ formatCurrency(selectedInvoice.total_amount) }}</p>
+        </div>
+
+        <div class="form-group">
+          <label for="payment-date">Fecha de Pago</label>
+          <input id="payment-date" type="date" v-model="paymentForm.payment_date" required>
+        </div>
+
+        <div class="form-group">
+          <label for="payment-method">Método de Pago</label>
+          <select id="payment-method" v-model="paymentForm.payment_method" required>
+            <option value="">Seleccionar método...</option>
+            <option value="bank_transfer">Transferencia Bancaria</option>
+            <option value="check">Cheque</option>
+            <option value="cash">Efectivo</option>
+            <option value="credit_card">Tarjeta de Crédito</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="payment-reference">Referencia de Pago</label>
+          <input 
+            id="payment-reference"
+            type="text" 
+            v-model="paymentForm.payment_reference"
+            placeholder="Número de transferencia, cheque, etc."
+          >
+        </div>
+
+        <div class="form-group">
+          <label for="payment-notes">Notas Adicionales</label>
+          <textarea 
+            id="payment-notes"
+            v-model="paymentForm.notes"
+            placeholder="Información adicional sobre el pago..."
+            rows="3"
+          ></textarea>
+        </div>
+
+        <div class="modal-actions">
+          <button @click="showPaymentModal = false" class="btn-cancel">Cancelar</button>
+          <button @click="submitPaymentReport" :disabled="!canReportPayment || reportingPayment" class="btn-save">
+            {{ reportingPayment ? 'Reportando...' : 'Reportar Pago' }}
           </button>
         </div>
       </div>
@@ -380,19 +454,21 @@ const auth = useAuthStore()
 
 // Estado principal
 const invoices = ref([])
-const companies = ref([])
 const loading = ref(true)
-const generating = ref(false)
 
 // Modales
 const showInvoiceModal = ref(false)
-const showGenerateModal = ref(false)
+const showRequestModal = ref(false)
+const showPaymentModal = ref(false)
 const selectedInvoice = ref(null)
+
+// Estado de acciones
+const requesting = ref(false)
+const reportingPayment = ref(false)
 
 // Filtros
 const filters = ref({
   status: '',
-  company_id: '',
   period: '',
   search: ''
 })
@@ -405,82 +481,130 @@ const pagination = ref({
   totalPages: 1
 })
 
-// Formulario de generación
-const generateForm = ref({
-  company_id: '',
+// Formularios
+const requestForm = ref({
   period_start: '',
   period_end: '',
-  type: 'invoice'
+  notes: ''
+})
+
+const paymentForm = ref({
+  payment_date: '',
+  payment_method: '',
+  payment_reference: '',
+  notes: ''
+})
+
+// Información de la empresa y precios
+const companyInfo = ref({
+  name: '',
+  rut: '',
+  address: '',
+  contactEmail: ''
+})
+
+const currentPricing = ref({
+  planType: 'basic',
+  pricePerOrder: 500,
+  ivaPerOrder: 95,
+  totalPerOrder: 595,
+  billingCycle: 'monthly'
 })
 
 // Computed properties
-const isAdmin = computed(() => auth.user?.role === 'admin')
-
 const invoiceSummary = computed(() => {
   const summary = {
-    total: invoices.value.length,
-    totalAmount: 0,
-    paid: 0,
-    pending: 0
+    pendingAmount: 0,
+    pendingCount: 0,
+    paidAmount: 0,
+    paidCount: 0,
+    totalOrders: 0,
+    ordersThisMonth: 0
   }
   
   invoices.value.forEach(invoice => {
-    summary.totalAmount += invoice.total_amount || 0
-    if (invoice.status === 'paid') summary.paid++
-    if (['sent', 'overdue'].includes(invoice.status)) summary.pending++
+    if (['sent', 'overdue'].includes(invoice.status)) {
+      summary.pendingAmount += invoice.total_amount || 0
+      summary.pendingCount++
+    }
+    if (invoice.status === 'paid') {
+      summary.paidAmount += invoice.total_amount || 0
+      summary.paidCount++
+    }
+    summary.totalOrders += invoice.orders_count || 0
   })
+  
+  // Calcular pedidos de este mes
+  const currentMonth = new Date().getMonth()
+  const currentYear = new Date().getFullYear()
+  
+  summary.ordersThisMonth = invoices.value
+    .filter(invoice => {
+      const invoiceDate = new Date(invoice.period_end)
+      return invoiceDate.getMonth() === currentMonth && invoiceDate.getFullYear() === currentYear
+    })
+    .reduce((total, invoice) => total + (invoice.orders_count || 0), 0)
   
   return summary
 })
 
-const generatePreview = computed(() => {
-  if (!generateForm.value.company_id || !generateForm.value.period_start || !generateForm.value.period_end) {
-    return null
-  }
+const nextInvoicePeriod = computed(() => {
+  const now = new Date()
+  const start = new Date(now.getFullYear(), now.getMonth(), 1)
+  const end = new Date(now.getFullYear(), now.getMonth() + 1, 0)
   
-  const company = companies.value.find(c => c._id === generateForm.value.company_id)
-  if (!company) return null
-  
-  // Calcular días del período
-  const startDate = new Date(generateForm.value.period_start)
-  const endDate = new Date(generateForm.value.period_end)
-  const days = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24))
-  
-  // Estimar pedidos basado en el promedio diario
-  const avgOrdersPerDay = (company.orders_this_month || 10) / 30
-  const estimated_orders = Math.round(avgOrdersPerDay * days)
-  
-  const subtotal = estimated_orders * (company.price_per_order || 0)
-  const tax = Math.round(subtotal * 0.19)
-  const total = subtotal + tax
+  return formatPeriod(start.toISOString(), end.toISOString())
+})
+
+const nextInvoiceEstimate = computed(() => {
+  // Simular pedidos del mes actual
+  const ordersCount = Math.floor(Math.random() * 50) + 10
+  const subtotal = ordersCount * currentPricing.value.pricePerOrder
+  const iva = Math.round(subtotal * 0.19)
+  const total = subtotal + iva
   
   return {
-    estimated_orders,
+    ordersCount,
     subtotal,
-    tax,
+    iva,
     total
   }
 })
 
-const canGenerate = computed(() => {
-  return generateForm.value.period_start && 
-         generateForm.value.period_end && 
-         (isAdmin.value ? generateForm.value.company_id : true)
+const requestPreview = computed(() => {
+  if (!requestForm.value.period_start || !requestForm.value.period_end) {
+    return null
+  }
+  
+  // Estimar pedidos basado en el período
+  const startDate = new Date(requestForm.value.period_start)
+  const endDate = new Date(requestForm.value.period_end)
+  const days = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24))
+  
+  const estimatedOrders = Math.round((invoiceSummary.value.ordersThisMonth / 30) * days)
+  const estimatedAmount = estimatedOrders * currentPricing.value.totalPerOrder
+  
+  return {
+    estimatedOrders,
+    estimatedAmount
+  }
+})
+
+const canRequest = computed(() => {
+  return requestForm.value.period_start && requestForm.value.period_end
+})
+
+const canReportPayment = computed(() => {
+  return paymentForm.value.payment_date && paymentForm.value.payment_method
 })
 
 // Lifecycle
 onMounted(async () => {
   await Promise.all([
     fetchInvoices(),
-    isAdmin.value ? fetchCompanies() : null
+    fetchCompanyInfo(),
+    fetchCurrentPricing()
   ])
-})
-
-// Watchers
-watch(() => generateForm.value.company_id, () => {
-  // Reset fechas cuando cambia la empresa
-  generateForm.value.period_start = ''
-  generateForm.value.period_end = ''
 })
 
 // Funciones principales
@@ -490,44 +614,213 @@ async function fetchInvoices() {
     const params = {
       page: pagination.value.page,
       limit: pagination.value.limit,
+      company_id: auth.user?.company_id || auth.user?.company?._id,
       ...filters.value
     }
     
-    // Si no es admin, solo sus facturas
-    if (!isAdmin.value) {
-      params.company_id = auth.user?.company_id || auth.user?.company?._id
-    }
-    
-    const { data } = await apiService.invoices?.getAll(params) || { data: generateMockInvoices() }
+    const { data } = await apiService.billing?.getInvoices(params) || { data: generateMockInvoicesCompany() }
     
     invoices.value = data.invoices || data
     pagination.value = data.pagination || { page: 1, limit: 15, total: data.length, totalPages: 1 }
     
   } catch (error) {
     console.error('Error fetching invoices:', error)
-    // Generar datos mock para demo
-    invoices.value = generateMockInvoices()
+    invoices.value = generateMockInvoicesCompany()
   } finally {
     loading.value = false
   }
 }
 
-async function fetchCompanies() {
-  if (!isAdmin.value) return
-  
+async function fetchCompanyInfo() {
   try {
-    const { data } = await apiService.companies.getAll()
-    companies.value = data
+    const companyId = auth.user?.company_id || auth.user?.company?._id
+    if (companyId) {
+      const { data } = await apiService.companies.getById(companyId)
+      companyInfo.value = {
+        name: data.name,
+        rut: data.rut,
+        address: data.address,
+        contactEmail: data.contact_email
+      }
+    }
   } catch (error) {
-    console.error('Error fetching companies:', error)
+    console.error('Error fetching company info:', error)
+    // Usar datos del usuario
+    companyInfo.value = {
+      name: auth.user?.company?.name || 'Mi Empresa',
+      rut: '12.345.678-9',
+      address: 'Santiago, Chile',
+      contactEmail: auth.user?.email || 'contacto@empresa.cl'
+    }
   }
 }
 
-function generateMockInvoices() {
-  const mockInvoices = []
-  const currentCompany = auth.user?.company_id || 'company1'
+async function fetchCurrentPricing() {
+  try {
+    const companyId = auth.user?.company_id || auth.user?.company?._id
+    if (companyId) {
+      const { data } = await apiService.companies.getById(companyId)
+      const pricePerOrder = data.price_per_order || 500
+      currentPricing.value = {
+        planType: data.plan_type || 'basic',
+        pricePerOrder: pricePerOrder,
+        ivaPerOrder: Math.round(pricePerOrder * 0.19),
+        totalPerOrder: pricePerOrder + Math.round(pricePerOrder * 0.19),
+        billingCycle: data.billing_cycle || 'monthly'
+      }
+    }
+  } catch (error) {
+    console.error('Error fetching pricing:', error)
+  }
+}
+
+// Funciones de acciones
+async function requestInvoice() {
+  // Sugerir período del mes anterior
+  const now = new Date()
+  const startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+  const endDate = new Date(now.getFullYear(), now.getMonth(), 0)
   
-  for (let i = 1; i <= 10; i++) {
+  requestForm.value = {
+    period_start: startDate.toISOString().split('T')[0],
+    period_end: endDate.toISOString().split('T')[0],
+    notes: ''
+  }
+  
+  showRequestModal.value = true
+}
+
+async function submitInvoiceRequest() {
+  requesting.value = true
+  try {
+    const requestData = {
+      company_id: auth.user?.company_id || auth.user?.company?._id,
+      period_start: requestForm.value.period_start,
+      period_end: requestForm.value.period_end,
+      notes: requestForm.value.notes,
+      estimated_orders: requestPreview.value?.estimatedOrders || 0,
+      estimated_amount: requestPreview.value?.estimatedAmount || 0
+    }
+    
+    // En producción sería:
+    // await apiService.billing.requestInvoice(requestData)
+    
+    alert('Solicitud de factura enviada exitosamente. Recibirás la factura en 1-2 días hábiles.')
+    showRequestModal.value = false
+    resetRequestForm()
+    
+  } catch (error) {
+    alert(`Error al enviar solicitud: ${error.message}`)
+  } finally {
+    requesting.value = false
+  }
+}
+
+function resetRequestForm() {
+  requestForm.value = {
+    period_start: '',
+    period_end: '',
+    notes: ''
+  }
+}
+
+async function reportPayment(invoice) {
+  selectedInvoice.value = invoice
+  paymentForm.value = {
+    payment_date: new Date().toISOString().split('T')[0],
+    payment_method: '',
+    payment_reference: '',
+    notes: ''
+  }
+  showPaymentModal.value = true
+}
+
+async function submitPaymentReport() {
+  reportingPayment.value = true
+  try {
+    const paymentData = {
+      invoice_id: selectedInvoice.value._id,
+      payment_date: paymentForm.value.payment_date,
+      payment_method: paymentForm.value.payment_method,
+      payment_reference: paymentForm.value.payment_reference,
+      notes: paymentForm.value.notes,
+      amount: selectedInvoice.value.total_amount
+    }
+    
+    // En producción sería:
+    // await apiService.billing.reportPayment(paymentData)
+    
+    alert('Reporte de pago enviado exitosamente. Validaremos el pago y actualizaremos el estado de la factura.')
+    showPaymentModal.value = false
+    
+    // Actualizar estado local
+    selectedInvoice.value.status = 'paid'
+    const invoiceIndex = invoices.value.findIndex(inv => inv._id === selectedInvoice.value._id)
+    if (invoiceIndex !== -1) {
+      invoices.value[invoiceIndex].status = 'paid'
+    }
+    
+  } catch (error) {
+    alert(`Error al reportar pago: ${error.message}`)
+  } finally {
+    reportingPayment.value = false
+  }
+}
+
+async function exportInvoices() {
+  try {
+    // Crear CSV con facturas de la empresa
+    const csvData = invoices.value.map(invoice => ({
+      'Número Factura': invoice.invoice_number,
+      'Fecha Emisión': formatDate(invoice.issue_date),
+      'Período Inicio': formatDate(invoice.period_start),
+      'Período Fin': formatDate(invoice.period_end),
+      'Pedidos': invoice.orders_count || 0,
+      'Subtotal': invoice.subtotal || 0,
+      'IVA': invoice.tax_amount || 0,
+      'Total': invoice.total_amount || 0,
+      'Estado': getStatusText(invoice.status),
+      'Fecha Vencimiento': formatDate(invoice.due_date)
+    }))
+    
+    const csv = convertToCSV(csvData)
+    downloadCSV(csv, `facturas_${companyInfo.value.name.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.csv`)
+    
+  } catch (error) {
+    alert('Error al exportar facturas')
+  }
+}
+
+// Funciones de vista
+async function viewInvoice(invoice) {
+  selectedInvoice.value = invoice
+  showInvoiceModal.value = true
+}
+
+async function downloadInvoice(invoice) {
+  try {
+    // En producción sería:
+    // const response = await apiService.billing.downloadInvoice(invoice._id)
+    // const blob = new Blob([response.data], { type: 'application/pdf' })
+    // const url = window.URL.createObjectURL(blob)
+    // const link = document.createElement('a')
+    // link.href = url
+    // link.download = `${invoice.invoice_number}.pdf`
+    // link.click()
+    
+    alert(`Descargando factura ${invoice.invoice_number}`)
+    
+  } catch (error) {
+    alert(`Error al descargar factura: ${error.message}`)
+  }
+}
+
+// Funciones auxiliares
+function generateMockInvoicesCompany() {
+  const mockInvoices = []
+  const companyId = auth.user?.company_id || 'company1'
+  
+  for (let i = 1; i <= 8; i++) {
     const startDate = new Date()
     startDate.setMonth(startDate.getMonth() - i)
     startDate.setDate(1)
@@ -537,23 +830,17 @@ function generateMockInvoices() {
     endDate.setDate(0)
     
     const ordersCount = Math.floor(Math.random() * 50) + 10
-    const pricePerOrder = 400 + Math.floor(Math.random() * 300)
+    const pricePerOrder = currentPricing.value.pricePerOrder
     const subtotal = ordersCount * pricePerOrder
     const taxAmount = Math.round(subtotal * 0.19)
     
-    const statuses = ['paid', 'sent', 'overdue', 'draft']
+    const statuses = ['paid', 'sent', 'overdue', 'paid', 'paid'] // Más facturas pagadas
     const status = statuses[Math.floor(Math.random() * statuses.length)]
     
     mockInvoices.push({
       _id: `invoice_${i}`,
       invoice_number: `INV-2024-${String(i).padStart(4, '0')}`,
-      company: {
-        _id: isAdmin.value ? `company_${i % 3 + 1}` : currentCompany,
-        name: isAdmin.value ? [`TechStore ${i}`, `E-commerce Plus ${i}`, `Digital Sales ${i}`][i % 3] : 'Mi Empresa',
-        rut: `12.345.67${i}-K`,
-        address: 'Las Condes, Santiago',
-        contact_email: `contacto${i}@empresa.cl`
-      },
+      company_id: companyId,
       type: 'invoice',
       period_start: startDate.toISOString(),
       period_end: endDate.toISOString(),
@@ -571,147 +858,23 @@ function generateMockInvoices() {
   return mockInvoices.reverse()
 }
 
-// Funciones de acciones
-async function generateInvoice() {
-  if (isAdmin.value) {
-    // Admin puede elegir empresa
-    showGenerateModal.value = true
-  } else {
-    // Company owner genera para su empresa
-    generateForm.value.company_id = auth.user?.company_id || auth.user?.company?._id
-    
-    // Sugerir período del mes anterior
-    const now = new Date()
-    const startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1)
-    const endDate = new Date(now.getFullYear(), now.getMonth(), 0)
-    
-    generateForm.value.period_start = startDate.toISOString().split('T')[0]
-    generateForm.value.period_end = endDate.toISOString().split('T')[0]
-    
-    showGenerateModal.value = true
-  }
-}
-
-async function confirmGenerateInvoice() {
-  generating.value = true
-  try {
-    const invoiceData = {
-      ...generateForm.value,
-      orders_count: generatePreview.value?.estimated_orders || 0,
-      subtotal: generatePreview.value?.subtotal || 0,
-      tax_amount: generatePreview.value?.tax || 0,
-      total_amount: generatePreview.value?.total || 0
-    }
-    
-    // Simular creación de factura
-    await new Promise(resolve => setTimeout(resolve, 2000))
-    
-    // En producción sería:
-    // await apiService.invoices.create(invoiceData)
-    
-    alert('Factura generada exitosamente')
-    showGenerateModal.value = false
-    resetGenerateForm()
-    await fetchInvoices()
-    
-  } catch (error) {
-    alert(`Error al generar factura: ${error.message}`)
-  } finally {
-    generating.value = false
-  }
-}
-
-function resetGenerateForm() {
-  generateForm.value = {
-    company_id: '',
-    period_start: '',
-    period_end: '',
-    type: 'invoice'
-  }
-}
-
-async function viewInvoice(invoice) {
-  selectedInvoice.value = invoice
-  showInvoiceModal.value = true
-}
-
-async function downloadInvoice(invoice) {
-  try {
-    // Simular descarga de PDF
-    const link = document.createElement('a')
-    link.href = '#'
-    link.download = `${invoice.invoice_number}.pdf`
-    
-    // En producción sería:
-    // const response = await apiService.invoices.downloadPDF(invoice._id)
-    // const blob = new Blob([response.data], { type: 'application/pdf' })
-    // const url = window.URL.createObjectURL(blob)
-    // link.href = url
-    
-    alert(`Descargando factura ${invoice.invoice_number}`)
-    // link.click()
-    
-  } catch (error) {
-    alert(`Error al descargar factura: ${error.message}`)
-  }
-}
-
-async function sendInvoice(invoice) {
-  const confirmation = confirm(`¿Enviar la factura ${invoice.invoice_number} por email?`)
-  if (!confirmation) return
-  
-  try {
-    // await apiService.invoices.send(invoice._id)
-    
-    // Simular envío
-    invoice.status = 'sent'
-    alert('Factura enviada por email exitosamente')
-    
-  } catch (error) {
-    alert(`Error al enviar factura: ${error.message}`)
-  }
-}
-
-async function markAsPaid(invoice) {
-  const confirmation = confirm(`¿Marcar la factura ${invoice.invoice_number} como pagada?`)
-  if (!confirmation) return
-  
-  try {
-    // await apiService.invoices.markAsPaid(invoice._id)
-    
-    // Simular pago
-    invoice.status = 'paid'
-    alert('Factura marcada como pagada')
-    
-  } catch (error) {
-    alert(`Error al marcar factura como pagada: ${error.message}`)
-  }
-}
-
-async function cancelInvoice(invoice) {
-  const confirmation = confirm(`¿Cancelar la factura ${invoice.invoice_number}? Esta acción no se puede deshacer.`)
-  if (!confirmation) return
-  
-  try {
-    // await apiService.invoices.cancel(invoice._id)
-    
-    // Simular cancelación
-    invoice.status = 'cancelled'
-    alert('Factura cancelada')
-    
-  } catch (error) {
-    alert(`Error al cancelar factura: ${error.message}`)
-  }
-}
-
 // Funciones de utilidad
-function getInvoiceType(type) {
-  const types = {
-    invoice: 'Factura',
-    proforma: 'Factura Proforma',
-    credit_note: 'Nota de Crédito'
+function getPlanName(planType) {
+  const plans = {
+    basic: 'Básico',
+    pro: 'Pro',
+    enterprise: 'Enterprise'
   }
-  return types[type] || 'Factura'
+  return plans[planType] || 'Básico'
+}
+
+function getBillingCycleName(cycle) {
+  const cycles = {
+    monthly: 'Mensual',
+    quarterly: 'Trimestral',
+    annual: 'Anual'
+  }
+  return cycles[cycle] || 'Mensual'
 }
 
 function getStatusText(status) {
@@ -780,12 +943,6 @@ function formatCurrency(amount) {
   return new Intl.NumberFormat('es-CL').format(amount || 0)
 }
 
-function getSelectedCompanyName() {
-  if (!generateForm.value.company_id) return 'Seleccionar empresa'
-  const company = companies.value.find(c => c._id === generateForm.value.company_id)
-  return company?.name || 'Empresa no encontrada'
-}
-
 // Funciones de navegación y filtros
 function goToPage(page) {
   if (page >= 1 && page <= pagination.value.totalPages) {
@@ -801,6 +958,41 @@ function debounceSearch() {
     pagination.value.page = 1
     fetchInvoices()
   }, 500)
+}
+
+// Funciones de exportación
+function convertToCSV(data) {
+  if (!data || data.length === 0) return ''
+  
+  const headers = Object.keys(data[0])
+  const csvContent = [
+    headers.join(','),
+    ...data.map(row => 
+      headers.map(header => {
+        const value = row[header]
+        return typeof value === 'string' && value.includes(',') 
+          ? `"${value.replace(/"/g, '""')}"` 
+          : value
+      }).join(',')
+    )
+  ].join('\n')
+  
+  return csvContent
+}
+
+function downloadCSV(csv, filename) {
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+  const link = document.createElement('a')
+  
+  if (link.download !== undefined) {
+    const url = URL.createObjectURL(blob)
+    link.setAttribute('href', url)
+    link.setAttribute('download', filename)
+    link.style.visibility = 'hidden'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
 }
 </script>
 
@@ -830,7 +1022,7 @@ function debounceSearch() {
   gap: 12px;
 }
 
-.btn-primary, .btn-secondary, .btn-success {
+.btn-primary, .btn-secondary {
   padding: 10px 20px;
   border-radius: 6px;
   border: none;
@@ -857,15 +1049,6 @@ function debounceSearch() {
 
 .btn-secondary:hover {
   background-color: #e5e7eb;
-}
-
-.btn-success {
-  background-color: #10b981;
-  color: white;
-}
-
-.btn-success:hover {
-  background-color: #059669;
 }
 
 .btn-primary:disabled, .btn-secondary:disabled {
@@ -905,30 +1088,57 @@ function debounceSearch() {
 /* Resumen de Facturación */
 .billing-summary {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 16px;
-  margin-bottom: 24px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 20px;
+  margin-bottom: 30px;
 }
 
 .summary-card {
   background: white;
-  padding: 20px;
+  padding: 24px;
   border-radius: 12px;
   border: 1px solid #e5e7eb;
   box-shadow: 0 1px 3px rgba(0,0,0,0.05);
   display: flex;
   align-items: center;
-  gap: 16px;
-  transition: transform 0.2s ease;
+  gap: 20px;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.summary-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+}
+
+.summary-card.pending::before {
+  background: linear-gradient(90deg, #f59e0b, #d97706);
+}
+
+.summary-card.paid::before {
+  background: linear-gradient(90deg, #10b981, #059669);
+}
+
+.summary-card.orders::before {
+  background: linear-gradient(90deg, #3b82f6, #2563eb);
+}
+
+.summary-card.rate::before {
+  background: linear-gradient(90deg, #8b5cf6, #7c3aed);
 }
 
 .summary-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  transform: translateY(-4px);
+  box-shadow: 0 8px 25px rgba(0,0,0,0.15);
 }
 
 .summary-icon {
-  font-size: 32px;
+  font-size: 36px;
   opacity: 0.8;
 }
 
@@ -937,19 +1147,162 @@ function debounceSearch() {
 }
 
 .summary-value {
-  font-size: 24px;
+  font-size: 26px;
   font-weight: 700;
   color: #1f2937;
   line-height: 1;
+  margin-bottom: 4px;
 }
 
 .summary-label {
-  font-size: 12px;
+  font-size: 14px;
   color: #6b7280;
-  margin-top: 4px;
+  font-weight: 500;
+  margin-bottom: 4px;
 }
 
-/* Tabla de Facturas */
+.summary-detail {
+  font-size: 12px;
+  color: #9ca3af;
+}
+
+/* Información de Facturación Actual */
+.current-billing-info {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  margin-bottom: 30px;
+}
+
+.billing-info-card,
+.next-invoice-preview {
+  background: white;
+  padding: 24px;
+  border-radius: 12px;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+
+.billing-info-card h3,
+.next-invoice-preview h3 {
+  margin: 0 0 20px 0;
+  color: #1f2937;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.billing-details {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.billing-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+  font-size: 14px;
+}
+
+.billing-row:not(:last-child) {
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.billing-row.total {
+  border-top: 2px solid #e5e7eb;
+  margin-top: 8px;
+  padding-top: 12px;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.billing-row .label {
+  color: #6b7280;
+  font-weight: 500;
+}
+
+.billing-row .value {
+  color: #1f2937;
+  font-weight: 500;
+}
+
+.plan-badge {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 8px;
+  border-radius: 12px;
+  text-transform: uppercase;
+}
+
+.plan-badge.basic {
+  background: #f3f4f6;
+  color: #374151;
+}
+
+.plan-badge.pro {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.plan-badge.enterprise {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+/* Preview de Próxima Factura */
+.preview-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.preview-period,
+.preview-orders {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px;
+  background: #f9fafb;
+  border-radius: 8px;
+}
+
+.period-label,
+.orders-label {
+  color: #6b7280;
+  font-weight: 500;
+}
+
+.period-value,
+.orders-value {
+  color: #1f2937;
+  font-weight: 600;
+}
+
+.preview-amounts {
+  background: #f0f9ff;
+  border: 1px solid #bae6fd;
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.amount-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 4px 0;
+  font-size: 14px;
+  color: #3b82f6;
+}
+
+.amount-row.total {
+  border-top: 1px solid #bae6fd;
+  margin-top: 8px;
+  padding-top: 8px;
+  font-weight: 600;
+  color: #1e40af;
+}
+
+/* Tabla */
 .content-section {
   background: white;
   border-radius: 12px;
@@ -965,7 +1318,7 @@ function debounceSearch() {
 .invoices-table {
   width: 100%;
   border-collapse: collapse;
-  min-width: 1200px;
+  min-width: 1000px;
 }
 
 .invoices-table th,
@@ -991,7 +1344,7 @@ function debounceSearch() {
 
 /* Estilos específicos por columna */
 .invoice-number {
-  min-width: 120px;
+  min-width: 140px;
 }
 
 .invoice-id {
@@ -1000,16 +1353,9 @@ function debounceSearch() {
   margin-bottom: 2px;
 }
 
-.invoice-type {
+.invoice-date {
   font-size: 11px;
   color: #6b7280;
-  text-transform: uppercase;
-}
-
-.company-name {
-  font-weight: 500;
-  color: #1f2937;
-  min-width: 150px;
 }
 
 .invoice-period {
@@ -1097,7 +1443,6 @@ function debounceSearch() {
   color: #6b7280;
 }
 
-.issue-date,
 .due-date {
   min-width: 120px;
   font-size: 13px;
@@ -1137,7 +1482,7 @@ function debounceSearch() {
 
 /* Acciones */
 .invoice-actions {
-  min-width: 150px;
+  min-width: 120px;
 }
 
 .action-buttons {
@@ -1170,19 +1515,9 @@ function debounceSearch() {
   color: #065f46;
 }
 
-.btn-action.send {
+.btn-action.pay {
   background: #fef3c7;
   color: #92400e;
-}
-
-.btn-action.pay {
-  background: #d1fae5;
-  color: #065f46;
-}
-
-.btn-action.cancel {
-  background: #fee2e2;
-  color: #991b1b;
 }
 
 .btn-action:hover {
@@ -1377,10 +1712,55 @@ function debounceSearch() {
   border-top: 1px solid #e5e7eb;
 }
 
-/* Modal de Generar Factura */
-.generate-invoice-form {
+/* Formularios de Modal */
+.request-invoice-form,
+.payment-report-form {
   max-height: 70vh;
   overflow-y: auto;
+}
+
+.form-section {
+  margin-bottom: 24px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.form-section:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
+  padding-bottom: 0;
+}
+
+.form-section h4 {
+  margin: 0 0 16px 0;
+  color: #1f2937;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.form-description {
+  margin: 0 0 16px 0;
+  color: #6b7280;
+  font-size: 14px;
+}
+
+.payment-info-section {
+  background: #f0f9ff;
+  padding: 16px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  border: 1px solid #bae6fd;
+}
+
+.payment-info-section h4 {
+  margin: 0 0 8px 0;
+  color: #1e40af;
+}
+
+.payment-info-section p {
+  margin: 0;
+  color: #3b82f6;
+  font-weight: 500;
 }
 
 .form-group {
@@ -1395,7 +1775,8 @@ function debounceSearch() {
 }
 
 .form-group input,
-.form-group select {
+.form-group select,
+.form-group textarea {
   width: 100%;
   padding: 10px 12px;
   border: 1px solid #d1d5db;
@@ -1404,13 +1785,19 @@ function debounceSearch() {
   font-size: 14px;
 }
 
+.form-group textarea {
+  resize: vertical;
+  min-height: 80px;
+}
+
 .form-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 16px;
 }
 
-.generate-preview {
+/* Vista Previa */
+.request-preview {
   background: #f0f9ff;
   border: 1px solid #bae6fd;
   border-radius: 8px;
@@ -1418,7 +1805,7 @@ function debounceSearch() {
   margin: 20px 0;
 }
 
-.generate-preview h4 {
+.request-preview h4 {
   margin: 0 0 12px 0;
   color: #0369a1;
 }
@@ -1434,16 +1821,10 @@ function debounceSearch() {
   justify-content: space-between;
   padding: 4px 0;
   font-size: 14px;
+  color: #3b82f6;
 }
 
-.preview-row.total {
-  border-top: 1px solid #bae6fd;
-  margin-top: 8px;
-  padding-top: 12px;
-  font-weight: 600;
-  color: #0369a1;
-}
-
+/* Acciones del Modal */
 .modal-actions {
   display: flex;
   justify-content: flex-end;
@@ -1497,22 +1878,16 @@ function debounceSearch() {
 
 /* Responsive */
 @media (max-width: 1200px) {
+  .current-billing-info {
+    grid-template-columns: 1fr;
+  }
+  
   .search-input {
     grid-column: span 1;
   }
   
   .billing-summary {
     grid-template-columns: repeat(2, 1fr);
-  }
-  
-  .invoice-header {
-    grid-template-columns: 1fr;
-    text-align: left;
-  }
-  
-  .invoice-details {
-    text-align: left;
-    margin-top: 20px;
   }
 }
 
@@ -1537,6 +1912,16 @@ function debounceSearch() {
   
   .form-row {
     grid-template-columns: 1fr;
+  }
+  
+  .invoice-header {
+    grid-template-columns: 1fr;
+    text-align: left;
+  }
+  
+  .invoice-details {
+    text-align: left;
+    margin-top: 20px;
   }
   
   .invoices-table {
@@ -1571,10 +1956,15 @@ function debounceSearch() {
   .summary-card {
     flex-direction: column;
     text-align: center;
+    gap: 12px;
   }
   
   .summary-icon {
-    font-size: 24px;
+    font-size: 28px;
+  }
+  
+  .summary-value {
+    font-size: 22px;
   }
   
   .invoice-preview {

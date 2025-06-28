@@ -45,11 +45,11 @@ const routes = [
         }
       },
 
-      // Rutas de facturas para admin
+// Facturación para administradores
       {
         path: 'admin/billing',
         name: 'AdminBilling',
-        component: () => import('../views/Billing.vue'),
+        component: () => import('../views/AdminBilling.vue'), // Versión para admin
         meta: { roles: ['admin'] }
       },
       {
