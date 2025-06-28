@@ -135,6 +135,10 @@ router.patch('/orders/:id/status', authenticateToken, validateMongoId('id'), isA
 // Obtener facturas (admin ve todas, empresa ve las suyas)
 router.get('/billing/invoices', authenticateToken, billingController.getInvoices);
 
+// Obtener estadísticas de facturación
+router.get('/billing/stats', authenticateToken, billingController.getBillingStats);
+
+
 // Descargar una factura específica en PDF
 router.get('/billing/invoices/:id/download', authenticateToken, validateMongoId('id'), billingController.downloadInvoice);
 

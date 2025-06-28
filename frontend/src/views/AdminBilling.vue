@@ -618,7 +618,11 @@ async function fetchInvoices() {
     
   } catch (error) {
     console.error('Error fetching invoices:', error)
-    invoices.value = generateMockInvoicesAdmin()
+    //invoices.value = generateMockInvoicesAdmin()
+
+    // AÑADE UN MANEJO DE ERROR REAL:
+    invoices.value = [] // Vacía las facturas
+    alert('Error al cargar las facturas desde el servidor.')
   } finally {
     loading.value = false
   }
@@ -1009,9 +1013,56 @@ async function viewInvoice(invoice) {
 
 async function downloadInvoice(invoice) {
   try {
-    alert(`Descargando factura ${invoice.invoice_number}`)
+    // Mostrar indicador de carga
+    const downloadingMessage = `Generando PDF de factura ${invoice.invoice_number}...`
+    console.log(downloadingMessage)
+    
+    // Llamar al API para descargar la factura
+    const response = await apiService.billing.downloadInvoice(invoice._id)
+    
+    // Crear blob y descargar
+    const blob = new Blob([response.data], { type: 'application/pdf' })
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `factura-${invoice.invoice_number}.pdf`
+    
+    // Agregar al DOM, hacer click y remover
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    
+    // Limpiar URL del objeto
+    window.URL.revokeObjectURL(url)
+    
+    console.log(`✅ Factura ${invoice.invoice_number} descargada exitosamente`)
+    
   } catch (error) {
-    alert(`Error al descargar factura: ${error.message}`)
+    console.error('Error al descargar factura:', error)
+    
+    let errorMessage = 'Error al descargar la factura'
+    
+    if (error.response) {
+      // El servidor respondió con un código de error
+      if (error.response.status === 404) {
+        errorMessage = 'Factura no encontrada'
+      } else if (error.response.status === 403) {
+        errorMessage = 'No tienes permisos para descargar esta factura'
+      } else if (error.response.data instanceof Blob) {
+        // Leer el error del blob
+        try {
+          const errorText = await error.response.data.text()
+          const errorData = JSON.parse(errorText)
+          errorMessage = errorData.error || errorMessage
+        } catch (parseError) {
+          console.error('Error parsing error response:', parseError)
+        }
+      }
+    } else if (error.request) {
+      errorMessage = 'Error de conexión. Verifica tu internet.'
+    }
+    
+    alert(`${errorMessage}: ${invoice.invoice_number}`)
   }
 }
 

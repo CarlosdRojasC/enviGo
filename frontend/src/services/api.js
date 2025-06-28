@@ -125,8 +125,9 @@ export const apiService = {
   },
   // Facturación
     billing: {
-        getInvoices() {
-            return api.get('/billing/invoices');
+        getInvoices(params = {}) {
+            const queryString = new URLSearchParams(params).toString();
+            return api.get(`/billing/invoices?${queryString}`);
         },
         downloadInvoice(invoiceId) {
             return api.get(`/billing/invoices/${invoiceId}/download`, {
@@ -137,8 +138,14 @@ export const apiService = {
             return api.post(`/billing/invoices/${invoiceId}/mark-as-paid`);
         },
         generateInvoices() {
-      return api.post('/billing/generate');
-    }
+            return api.post('/billing/generate');
+        },
+        requestInvoice(requestData) {
+            return api.post('/billing/request', requestData);
+        },
+        reportPayment(paymentData) {
+            return api.post('/billing/report-payment', paymentData);
+        }
     },
   // Pedidos
   orders: {
