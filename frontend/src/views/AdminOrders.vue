@@ -121,7 +121,6 @@
           <div class="form-group"><label>Email del Cliente</label><input v-model="newOrder.customer_email" type="email" /></div>
           <div class="form-group full-width"><label>Dirección de Envío *</label><input v-model="newOrder.shipping_address" type="text" required /></div>
           <div class="form-group"><label>Ciudad</label><input v-model="newOrder.shipping_city" type="text" /></div>
-          <div class="form-group"><label>Monto Total del Pedido (Venta) *</label><input v-model.number="newOrder.total_amount" type="number" required /></div>
           <div class="form-group"><label>Costo de Envío</label><input v-model.number="newOrder.shipping_cost" type="number" /></div>
           
           <div class="form-group full-width section-header"><h4>Datos para Logística (OptiRoute)</h4></div>

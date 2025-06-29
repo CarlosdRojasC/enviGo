@@ -9,7 +9,7 @@ const PDFDocument = require('pdfkit');
 
 class BillingController {
   
-  async generateMonthlyInvoices() {
+ async generateMonthlyInvoices() {
     console.log('Ejecutando tarea de generación de facturas mensuales...');
     const today = new Date();
     const firstDayOfCurrentMonth = new Date(today.getFullYear(), today.getMonth(), 1);
@@ -28,17 +28,29 @@ class BillingController {
           continue;
         }
 
-        const deliveredOrders = await Order.countDocuments({
-          company_id: company._id,
-          status: 'delivered',
-          delivery_date: {
-            $gte: new Date(year, month - 1, 1),
-            $lt: new Date(year, month, 1)
+        // --- LÓGICA DE FACTURACIÓN CORREGIDA ---
+        const aggregationResult = await Order.aggregate([
+          {
+            $match: {
+              company_id: company._id,
+              status: 'delivered',
+              delivery_date: {
+                $gte: new Date(year, month - 1, 1),
+                $lt: new Date(year, month, 1)
+              }
+            }
+          },
+          {
+            $group: {
+              _id: null,
+              totalShippingCost: { $sum: "$shipping_cost" },
+              totalOrders: { $sum: 1 }
+            }
           }
-        });
+        ]);
 
-        if (deliveredOrders > 0) {
-          const amount_due = deliveredOrders * company.price_per_order;
+        if (aggregationResult.length > 0 && aggregationResult[0].totalOrders > 0) {
+          const { totalShippingCost, totalOrders } = aggregationResult[0];
           const invoiceCount = await Invoice.countDocuments({}) + 1;
           const invoice_number = `INV-${year}${String(month).padStart(2, '0')}-${String(invoiceCount).padStart(4, '0')}`;
 
@@ -47,9 +59,8 @@ class BillingController {
             invoice_number,
             month,
             year,
-            total_orders: deliveredOrders,
-            price_per_order: company.price_per_order,
-            amount_due,
+            total_orders: totalOrders,
+            total_amount_billed: totalShippingCost, // El total ahora es la suma de costos de envío
             due_date: new Date(today.getFullYear(), today.getMonth() + 1, 15)
           });
 
