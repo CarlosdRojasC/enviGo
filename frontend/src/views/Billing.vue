@@ -565,14 +565,18 @@ const nextInvoiceEstimate = ref({
 
 async function fetchNextInvoiceEstimate() {
   try {
-    const { data } = await apiService.billing.getNextInvoiceEstimate();
-    nextInvoiceEstimate.value = data;
+    console.log('Fetching next invoice estimate...')
+    const response = await apiService.billing.getNextInvoiceEstimate()
+    console.log('Next invoice estimate response:', response)
+    
+    nextInvoiceEstimate.value = response.data
   } catch (error) {
-    console.error("Error fetching next invoice estimate:", error);
-    // Opcional: resetear en caso de error
-    nextInvoiceEstimate.value = { ordersCount: 0, subtotal: 0, iva: 0, total: 0 };
+    console.error("Error fetching next invoice estimate:", error)
+    // No mostrar alert para este error, solo log
+    nextInvoiceEstimate.value = { ordersCount: 0, subtotal: 0, iva: 0, total: 0 }
   }
 }
+
 const requestPreview = computed(() => {
   if (!requestForm.value.period_start || !requestForm.value.period_end) {
     return null
@@ -617,22 +621,53 @@ async function fetchInvoices() {
     const params = {
       page: pagination.value.page,
       limit: pagination.value.limit,
-      company_id: auth.user?.company_id || auth.user?.company?._id,
       ...filters.value
     }
     
-    const { data } = await apiService.billing?.getInvoices(params) || { data: generateMockInvoicesCompany() }
+    console.log('Fetching invoices with params:', params)
     
-    invoices.value = data.invoices || data
-    pagination.value = data.pagination || { page: 1, limit: 15, total: data.length, totalPages: 1 }
+    const response = await apiService.billing.getInvoices(params)
+    console.log('API Response:', response)
+    
+    const data = response.data
+    
+    if (data.invoices) {
+      invoices.value = data.invoices
+      pagination.value = data.pagination
+    } else if (Array.isArray(data)) {
+      // Manejar respuesta directa como array
+      invoices.value = data
+      pagination.value = { page: 1, limit: 15, total: data.length, totalPages: 1 }
+    } else {
+      console.warn('Formato de respuesta inesperado:', data)
+      invoices.value = []
+    }
+    
+    console.log('Invoices loaded:', invoices.value.length)
     
   } catch (error) {
     console.error('Error fetching invoices:', error)
-    // invoices.value = generateMockInvoicesCompany()
-
-    // AÑADE UN MANEJO DE ERROR REAL:
+    
+    // Mostrar mensaje de error específico
+    if (error.response) {
+      const statusCode = error.response.status
+      if (statusCode === 401) {
+        alert('Sesión expirada. Por favor, inicia sesión nuevamente.')
+        // Redirigir al login si es necesario
+      } else if (statusCode === 403) {
+        alert('No tienes permisos para ver estas facturas.')
+      } else if (statusCode === 500) {
+        alert('Error del servidor. Por favor, inténtalo más tarde.')
+      } else {
+        alert(`Error ${statusCode}: ${error.response.data?.error || 'Error desconocido'}`)
+      }
+    } else if (error.request) {
+      alert('Error de conexión. Verifica tu internet y vuelve a intentar.')
+    } else {
+      alert(`Error: ${error.message}`)
+    }
+    
     invoices.value = []
-    alert('Error al cargar tus facturas desde el servidor.')
   } finally {
     loading.value = false
   }
@@ -642,17 +677,22 @@ async function fetchCompanyInfo() {
   try {
     const companyId = auth.user?.company_id || auth.user?.company?._id
     if (companyId) {
-      const { data } = await apiService.companies.getById(companyId)
+      console.log('Fetching company info for:', companyId)
+      const response = await apiService.companies.getById(companyId)
+      const data = response.data
+      
       companyInfo.value = {
         name: data.name,
         rut: data.rut,
         address: data.address,
-        contactEmail: data.contact_email
+        contactEmail: data.contact_email || data.email
       }
+      
+      console.log('Company info loaded:', companyInfo.value)
     }
   } catch (error) {
     console.error('Error fetching company info:', error)
-    // Usar datos del usuario
+    // Usar datos del usuario autenticado como fallback
     companyInfo.value = {
       name: auth.user?.company?.name || 'Mi Empresa',
       rut: '12.345.678-9',
@@ -666,7 +706,10 @@ async function fetchCurrentPricing() {
   try {
     const companyId = auth.user?.company_id || auth.user?.company?._id
     if (companyId) {
-      const { data } = await apiService.companies.getById(companyId)
+      console.log('Fetching company pricing for:', companyId)
+      const response = await apiService.companies.getById(companyId)
+      const data = response.data
+      
       const pricePerOrder = data.price_per_order || 500
       currentPricing.value = {
         planType: data.plan_type || 'basic',
@@ -675,9 +718,19 @@ async function fetchCurrentPricing() {
         totalPerOrder: pricePerOrder + Math.round(pricePerOrder * 0.19),
         billingCycle: data.billing_cycle || 'monthly'
       }
+      
+      console.log('Current pricing loaded:', currentPricing.value)
     }
   } catch (error) {
     console.error('Error fetching pricing:', error)
+    // Usar valores por defecto
+    currentPricing.value = {
+      planType: 'basic',
+      pricePerOrder: 500,
+      ivaPerOrder: 95,
+      totalPerOrder: 595,
+      billingCycle: 'monthly'
+    }
   }
 }
 
@@ -806,11 +859,8 @@ async function viewInvoice(invoice) {
 
 async function downloadInvoice(invoice) {
   try {
-    // Mostrar indicador de carga
-    const downloadingMessage = `Generando PDF de factura ${invoice.invoice_number}...`
-    console.log(downloadingMessage)
+    console.log(`Downloading invoice ${invoice.invoice_number}...`)
     
-    // Llamar al API para descargar la factura
     const response = await apiService.billing.downloadInvoice(invoice._id)
     
     // Crear blob y descargar
@@ -836,20 +886,15 @@ async function downloadInvoice(invoice) {
     let errorMessage = 'Error al descargar la factura'
     
     if (error.response) {
-      // El servidor respondió con un código de error
-      if (error.response.status === 404) {
+      const statusCode = error.response.status
+      if (statusCode === 404) {
         errorMessage = 'Factura no encontrada'
-      } else if (error.response.status === 403) {
+      } else if (statusCode === 403) {
         errorMessage = 'No tienes permisos para descargar esta factura'
-      } else if (error.response.data instanceof Blob) {
-        // Leer el error del blob
-        try {
-          const errorText = await error.response.data.text()
-          const errorData = JSON.parse(errorText)
-          errorMessage = errorData.error || errorMessage
-        } catch (parseError) {
-          console.error('Error parsing error response:', parseError)
-        }
+      } else if (statusCode === 500) {
+        errorMessage = 'Error del servidor al generar el PDF'
+      } else {
+        errorMessage = `Error ${statusCode}: ${error.response.data?.error || 'Error desconocido'}`
       }
     } else if (error.request) {
       errorMessage = 'Error de conexión. Verifica tu internet.'

@@ -124,32 +124,67 @@ export const apiService = {
     testConnection: (id) => api.post(`/channels/${id}/test`)
   },
   // Facturación
-    billing: {
-        getInvoices(params = {}) {
-            const queryString = new URLSearchParams(params).toString();
-            return api.get(`/billing/invoices?${queryString}`);
-        },
-        downloadInvoice(invoiceId) {
-            return api.get(`/billing/invoices/${invoiceId}/download`, {
-                responseType: 'blob', // Importante para manejar la descarga de archivos PDF
-            });
-        },
-        markAsPaid(invoiceId) {
-            return api.post(`/billing/invoices/${invoiceId}/mark-as-paid`);
-        },
-        generateInvoices() {
-            return api.post('/billing/generate');
-        },
-         getNextInvoiceEstimate() {
-        return api.get('/billing/next-estimate');
-    },
-        requestInvoice(requestData) {
-            return api.post('/billing/request', requestData);
-        },
-        reportPayment(paymentData) {
-            return api.post('/billing/report-payment', paymentData);
-        }
-    },
+     // Obtener facturas con filtros
+  getInvoices: (params = {}) => {
+    const queryString = new URLSearchParams(params).toString();
+    return api.get(`/billing/invoices${queryString ? `?${queryString}` : ''}`);
+  },
+
+  // Descargar PDF de factura
+  downloadInvoice: (invoiceId) => {
+    return api.get(`/billing/invoices/${invoiceId}/download`, {
+      responseType: 'blob', // Importante para PDFs
+      headers: {
+        'Accept': 'application/pdf'
+      }
+    });
+  },
+
+  // Marcar factura como pagada (admin)
+  markAsPaid: (invoiceId) => {
+    return api.post(`/billing/invoices/${invoiceId}/mark-as-paid`);
+  },
+
+  // Obtener estadísticas de facturación
+  getBillingStats: (companyId = null) => {
+    const params = companyId ? { company_id: companyId } : {};
+    const queryString = new URLSearchParams(params).toString();
+    return api.get(`/billing/stats${queryString ? `?${queryString}` : ''}`);
+  },
+
+  // Obtener estimación de próxima factura
+  getNextInvoiceEstimate: () => {
+    return api.get('/billing/next-invoice-estimate');
+  },
+
+  // Generar facturas manualmente (admin)
+  generateManualInvoices: () => {
+    return api.post('/billing/generate-manual');
+  },
+
+  // Para futuras funcionalidades
+  requestInvoice: (requestData) => {
+    return api.post('/billing/request-invoice', requestData);
+  },
+
+  reportPayment: (paymentData) => {
+    return api.post('/billing/report-payment', paymentData);
+  },
+
+  // Funcionalidades masivas para admin
+  bulkSendInvoices: (invoiceIds) => {
+    return api.post('/billing/bulk-send', { invoice_ids: invoiceIds });
+  },
+
+  bulkMarkAsPaid: (invoiceIds) => {
+    return api.post('/billing/bulk-mark-paid', { invoice_ids: invoiceIds });
+  },
+
+  bulkDownload: (invoiceIds) => {
+    return api.post('/billing/bulk-download', { invoice_ids: invoiceIds }, {
+      responseType: 'blob'
+    });
+  },
   // Pedidos
   orders: {
     getAll: (params = {}) => {

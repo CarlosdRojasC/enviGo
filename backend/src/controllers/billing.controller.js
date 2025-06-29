@@ -1,4 +1,4 @@
-// backend/src/controllers/billing.controller.js - VERSION CORREGIDA
+// backend/src/controllers/billing.controller.js - VERSIÓN FINAL CORREGIDA
 
 const Invoice = require('../models/Invoice');
 const Order = require('../models/Order');
@@ -6,6 +6,7 @@ const Company = require('../models/Company');
 const { ERRORS } = require('../config/constants');
 const cron = require('node-cron');
 const PDFDocument = require('pdfkit');
+const mongoose = require('mongoose');
 
 class BillingController {
   
@@ -32,7 +33,7 @@ class BillingController {
         const aggregationResult = await Order.aggregate([
           {
             $match: {
-              company_id: company._id,
+              company_id: new mongoose.Types.ObjectId(company._id),
               status: 'delivered',
               delivery_date: {
                 $gte: new Date(year, month - 1, 1),
@@ -67,9 +68,10 @@ class BillingController {
             month,
             year,
             total_orders: totalOrders,
-            subtotal: subtotal,           // ✅ Corregido
-            tax_amount: taxAmount,        // ✅ Corregido  
-            total_amount: totalAmount,    // ✅ Corregido
+            amount_due: subtotal,           // Campo requerido por el modelo
+            subtotal: subtotal,             // Campo para el frontend
+            tax_amount: taxAmount,          // Campo para el frontend  
+            total_amount: totalAmount,      // Campo para el frontend
             due_date: new Date(today.getFullYear(), today.getMonth() + 1, 15),
             period_start: new Date(year, month - 1, 1),
             period_end: new Date(year, month, 0)
@@ -109,14 +111,20 @@ class BillingController {
     try {
       const { page = 1, limit = 15, status, company_id, period, search } = req.query;
       
+      console.log('🔍 Usuario:', {
+        id: req.user.id,
+        role: req.user.role,
+        company_id: req.user.company_id
+      });
+
       // Construir filtros
       const filters = {};
       
       // Si no es admin, filtrar por company
       if (req.user.role !== 'admin') {
-        filters.company_id = req.user.company_id;
+        filters.company_id = new mongoose.Types.ObjectId(req.user.company_id);
       } else if (company_id) {
-        filters.company_id = company_id;
+        filters.company_id = new mongoose.Types.ObjectId(company_id);
       }
 
       // Filtro por estado
@@ -171,9 +179,22 @@ class BillingController {
 
       console.log(`📊 Encontradas ${invoices.length} facturas de ${total} totales`);
 
+      // Transformar datos para el frontend
+      const transformedInvoices = invoices.map(invoice => {
+        const invoiceObj = invoice.toObject();
+        return {
+          ...invoiceObj,
+          company: invoiceObj.company_id, // El frontend espera 'company'
+          orders_count: invoiceObj.total_orders,
+          price_per_order: invoiceObj.subtotal && invoiceObj.total_orders 
+            ? Math.round(invoiceObj.subtotal / invoiceObj.total_orders) 
+            : 0
+        };
+      });
+
       res.json({
         success: true,
-        invoices,
+        invoices: transformedInvoices,
         pagination: {
           page: parseInt(page),
           limit: parseInt(limit),
@@ -308,23 +329,26 @@ class BillingController {
         doc.text('FACTURAR A:', 50, 170);
         doc.fontSize(10).font('Helvetica');
         doc.text(invoice.company_id.name, 50, 190);
+        if (invoice.company_id.rut) {
+          doc.text(`RUT: ${invoice.company_id.rut}`, 50, 205);
+        }
         if (invoice.company_id.email) {
-          doc.text(`Email: ${invoice.company_id.email}`, 50, 205);
+          doc.text(`Email: ${invoice.company_id.email}`, 50, 220);
         }
         if (invoice.company_id.phone) {
-          doc.text(`Teléfono: ${invoice.company_id.phone}`, 50, 220);
+          doc.text(`Teléfono: ${invoice.company_id.phone}`, 50, 235);
         }
         if (invoice.company_id.address) {
-          doc.text(`Dirección: ${invoice.company_id.address}`, 50, 235);
+          doc.text(`Dirección: ${invoice.company_id.address}`, 50, 250);
         }
 
         // Período de facturación
         const startDate = new Date(invoice.period_start);
         const endDate = new Date(invoice.period_end);
-        doc.text(`Período: ${startDate.toLocaleDateString('es-ES')} - ${endDate.toLocaleDateString('es-ES')}`, 50, 260);
+        doc.text(`Período: ${startDate.toLocaleDateString('es-ES')} - ${endDate.toLocaleDateString('es-ES')}`, 50, 275);
 
         // Tabla de servicios
-        let yPosition = 300;
+        let yPosition = 310;
         
         // Header de la tabla
         doc.fontSize(10).font('Helvetica-Bold');
@@ -418,7 +442,7 @@ class BillingController {
       const invoiceStats = await this.getInvoiceStatistics(companyId);
       
       // Obtener estimación de próxima factura
-      const nextInvoiceEstimate = await this.getNextInvoiceEstimate(companyId, company.price_per_order);
+      const nextInvoiceEstimate = await this.calculateNextInvoiceEstimate(companyId, company.price_per_order);
       
       // Obtener información de precios actual
       const currentPricing = await this.getCurrentPricing(company);
@@ -446,10 +470,47 @@ class BillingController {
     }
   }
 
+  // CORREGIR: Esta función debe ser un endpoint HTTP
+  async getNextInvoiceEstimate(req, res) {
+    try {
+      const companyId = req.user.company_id;
+      
+      if (!companyId) {
+        return res.status(400).json({ 
+          success: false,
+          error: 'Company ID requerido' 
+        });
+      }
+
+      const company = await Company.findById(companyId);
+      if (!company) {
+        return res.status(404).json({ 
+          success: false,
+          error: 'Empresa no encontrada' 
+        });
+      }
+
+      const estimate = await this.calculateNextInvoiceEstimate(companyId, company.price_per_order || 500);
+      
+      res.json({
+        success: true,
+        ...estimate
+      });
+    } catch (error) {
+      console.error('Error obteniendo estimación de próxima factura:', error);
+      res.status(500).json({ 
+        success: false,
+        error: ERRORS.SERVER_ERROR,
+        details: error.message 
+      });
+    }
+  }
+
   // Obtener estadísticas de facturas existentes
   async getInvoiceStatistics(companyId) {
     try {
-      const invoices = await Invoice.find({ company_id: companyId });
+      const companyObjectId = new mongoose.Types.ObjectId(companyId);
+      const invoices = await Invoice.find({ company_id: companyObjectId });
       
       let pendingAmount = 0;
       let pendingCount = 0;
@@ -476,7 +537,7 @@ class BillingController {
       const currentYear = new Date().getFullYear();
       
       const ordersThisMonth = await Order.countDocuments({
-        company_id: companyId,
+        company_id: companyObjectId,
         order_date: {
           $gte: new Date(currentYear, currentMonth - 1, 1),
           $lt: new Date(currentYear, currentMonth, 1)
@@ -506,15 +567,16 @@ class BillingController {
   }
 
   // Estimar próxima factura basada en pedidos del mes actual
-  async getNextInvoiceEstimate(companyId, pricePerOrder) {
+  async calculateNextInvoiceEstimate(companyId, pricePerOrder) {
     try {
+      const companyObjectId = new mongoose.Types.ObjectId(companyId);
       const now = new Date();
       const currentMonth = now.getMonth() + 1;
       const currentYear = now.getFullYear();
       
       // Obtener pedidos entregados del mes actual
       const deliveredOrdersThisMonth = await Order.countDocuments({
-        company_id: companyId,
+        company_id: companyObjectId,
         status: 'delivered',
         delivery_date: {
           $gte: new Date(currentYear, currentMonth - 1, 1),
@@ -524,7 +586,7 @@ class BillingController {
 
       // Obtener todos los pedidos del mes actual para estimar total
       const totalOrdersThisMonth = await Order.countDocuments({
-        company_id: companyId,
+        company_id: companyObjectId,
         order_date: {
           $gte: new Date(currentYear, currentMonth - 1, 1),
           $lt: new Date(currentYear, currentMonth, 1)
@@ -544,12 +606,12 @@ class BillingController {
         estimatedTotalOrders = Math.round(totalOrdersThisMonth / monthProgress);
       } else {
         // Si es muy temprano en el mes, usar promedio de meses anteriores
-        const avgOrdersFromPreviousMonths = await this.getAverageOrdersFromPreviousMonths(companyId, 3);
+        const avgOrdersFromPreviousMonths = await this.getAverageOrdersFromPreviousMonths(companyObjectId, 3);
         estimatedTotalOrders = avgOrdersFromPreviousMonths;
       }
 
       // Estimar pedidos entregados basado en la tasa de entrega histórica
-      const deliveryRate = await this.getHistoricalDeliveryRate(companyId);
+      const deliveryRate = await this.getHistoricalDeliveryRate(companyObjectId);
       const estimatedDeliveredOrders = Math.round(estimatedTotalOrders * deliveryRate);
 
       // Calcular montos

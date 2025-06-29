@@ -23,8 +23,9 @@ const orderController = require('../controllers/order.controller');
 const channelController = require('../controllers/channel.controller');
 const userController = require('../controllers/user.controller'); // <-- AÑADIR IMPORT
 const { validateOrderCreation, validateStatusUpdate } = require('../middlewares/validators/order.validator.js');
-const billingController = require('../controllers/billing.controller')
 
+// IMPORTAR RUTAS DE BILLING
+const billingRoutes = require('./billing');
 
 // Importar modelos para dashboard
 const Company = require('../models/Company');
@@ -76,6 +77,7 @@ router.get('/companies/:id', authenticateToken, validateMongoId('id'), companyCo
 router.put('/companies/:id', authenticateToken, validateMongoId('id'), companyController.update); // <-- USAR MIDDLEWARE
 router.get('/companies/:id/users', authenticateToken, validateMongoId('id'), companyController.getUsers); // <-- USAR MIDDLEWARE
 router.get('/companies/:id/stats', authenticateToken, validateMongoId('id'), companyController.getStats); // <-- USAR MIDDLEWARE
+
 // ==================== CANALES DE VENTA ====================
 
 router.get('/companies/:companyId/channels', authenticateToken, validateMongoId('companyId'), channelController.getByCompany); // <-- USAR MIDDLEWARE
@@ -131,26 +133,11 @@ router.post('/orders', authenticateToken, validateOrderCreation, orderController
 router.get('/orders/:id', authenticateToken, validateMongoId('id'), orderController.getById); // <-- USAR MIDDLEWARE
 router.patch('/orders/:id/status', authenticateToken, validateMongoId('id'), isAdmin, orderController.updateStatus); // <-- USAR MIDDLEWARE
 
-
 // ==================== FACTURACIÓN (BILLING) ====================
-// Obtener facturas (admin ve todas, empresa ve las suyas)
-router.get('/billing/invoices', authenticateToken, billingController.getInvoices);
+// USAR LAS RUTAS DE BILLING DEDICADAS
+router.use('/billing', billingRoutes);
 
-// Obtener estadísticas de facturación
-router.get('/billing/stats', authenticateToken, billingController.getBillingStats);
-
-router.get('/billing/next-estimate', authenticateToken, billingController.getNextInvoiceEstimate);
-
-// Descargar una factura específica en PDF
-router.get('/billing/invoices/:id/download', authenticateToken, validateMongoId('id'), billingController.downloadInvoice);
-
-// Marcar una factura como pagada (solo admin)
-router.post('/billing/invoices/:id/mark-as-paid', authenticateToken, isAdmin, validateMongoId('id'), billingController.markAsPaid);
-// AÑADE ESTA NUEVA RUTA
-// Disparar la generación manual de facturas (solo admin)
-router.post('/billing/generate', authenticateToken, isAdmin, billingController.manualGenerateInvoices);
 // ==================== DASHBOARD STATS (MONGO) ====================
-
 
 // backend/src/routes/index.js - Actualizar la sección de estadísticas del dashboard
 router.get('/stats/dashboard', authenticateToken, async (req, res) => {
