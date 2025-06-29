@@ -10,23 +10,30 @@ const orderSchema = new mongoose.Schema({
   external_order_id: { type: String, required: true }, // ID del pedido en la plataforma externa
   order_number: { type: String, required: true }, // Número de pedido visible
   
-  // Información del cliente
+ // Información del cliente (Existente)
   customer_name: { type: String, required: true },
   customer_email: { type: String },
   customer_phone: { type: String },
-  customer_document: { type: String }, // RUT u otro documento
+  customer_document: { type: String },
   
-  // Dirección de entrega
+  // Dirección de entrega (Existente)
   shipping_address: { type: String, required: true },
   shipping_city: { type: String },
   shipping_state: { type: String },
   shipping_zip: { type: String },
   
-  // Información del pedido
+  // Información del pedido (Existente)
   total_amount: { type: Number, required: true, default: 0 },
   shipping_cost: { type: Number, default: 0 },
-  currency: { type: String, default: 'CLP' },
-  items_count: { type: Number, default: 0 },
+  
+  // --- CAMPOS DE OPTIROUTE AÑADIDOS ---
+  priority: { type: String, default: 'Normal' },
+  serviceTime: { type: Number, default: 5 }, // En minutos
+  timeWindowStart: { type: String, default: '09:00' },
+  timeWindowEnd: { type: String, default: '18:00' },
+  load1Packages: { type: Number, default: 1 }, // Carga 1 (ej: N° de paquetes)
+  load2WeightKg: { type: Number, default: 1 }, // Carga 2 (ej: Peso en KG)
+  
   
   // Estados y fechas
   status: { 

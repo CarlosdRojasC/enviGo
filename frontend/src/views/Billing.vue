@@ -556,21 +556,23 @@ const nextInvoicePeriod = computed(() => {
   return formatPeriod(start.toISOString(), end.toISOString())
 })
 
-const nextInvoiceEstimate = computed(() => {
-  // Simular pedidos del mes actual
-  const ordersCount = Math.floor(Math.random() * 50) + 10
-  const subtotal = ordersCount * currentPricing.value.pricePerOrder
-  const iva = Math.round(subtotal * 0.19)
-  const total = subtotal + iva
-  
-  return {
-    ordersCount,
-    subtotal,
-    iva,
-    total
-  }
-})
+const nextInvoiceEstimate = ref({
+  ordersCount: 0,
+  subtotal: 0,
+  iva: 0,
+  total: 0
+});
 
+async function fetchNextInvoiceEstimate() {
+  try {
+    const { data } = await apiService.billing.getNextInvoiceEstimate();
+    nextInvoiceEstimate.value = data;
+  } catch (error) {
+    console.error("Error fetching next invoice estimate:", error);
+    // Opcional: resetear en caso de error
+    nextInvoiceEstimate.value = { ordersCount: 0, subtotal: 0, iva: 0, total: 0 };
+  }
+}
 const requestPreview = computed(() => {
   if (!requestForm.value.period_start || !requestForm.value.period_end) {
     return null
@@ -603,7 +605,8 @@ onMounted(async () => {
   await Promise.all([
     fetchInvoices(),
     fetchCompanyInfo(),
-    fetchCurrentPricing()
+    fetchCurrentPricing(),
+    fetchNextInvoiceEstimate()
   ])
 })
 

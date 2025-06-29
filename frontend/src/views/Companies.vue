@@ -135,6 +135,9 @@
                   <button @click="openUsersModal(company)" class="btn-action users" title="Gestionar Usuarios">
                     👥
                   </button>
+                    <button @click="exportCompanyOrders(company)" class="btn-action stats" title="Exportar Pedidos (OptiRoute)">
+      🚚
+    </button>
                   <button @click="openStatsModal(company)" class="btn-action stats" title="Ver Estadísticas">
                     📊
                   </button>
@@ -582,6 +585,31 @@ async function savePricingConfig() {
     alert(`Error al guardar configuración: ${error.message}`)
   } finally {
     savingPricing.value = false
+  }
+}
+async function exportCompanyOrders(company) {
+  const confirmation = confirm(`¿Deseas exportar todos los pedidos para OptiRoute de la empresa "${company.name}"?`);
+  if (!confirmation) return;
+
+  isExporting.value = true;
+  try {
+    const params = { company_id: company._id };
+    const response = await apiService.orders.export(params);
+    
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `pedidos_optiroute_${company.slug}_${Date.now()}.xlsx`);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+    
+  } catch (error) {
+    console.error('Error exporting company orders:', error);
+    alert('No se encontraron pedidos para exportar para esta empresa.');
+  } finally {
+    isExporting.value = false;
   }
 }
 

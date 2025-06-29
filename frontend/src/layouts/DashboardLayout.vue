@@ -13,13 +13,15 @@ import Sidebar from '../components/Sidebar.vue';
 
 <style scoped>
 .dashboard-layout {
-  display: flex;
+ display: flex;
+  height: 100vh; /* Fija la altura a la de la pantalla */
+  width: 100%;
   background-color: #f3f4f6;
-  min-height: 100vh;
+  overflow: hidden; /* Evita que el layout principal se desborde y genere un scroll global */
 }
 .main-content {
   flex-grow: 1;
-  padding: 24px;
+  padding: 32px;
   overflow-y: auto;
 }
 </style>

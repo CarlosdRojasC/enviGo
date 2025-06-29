@@ -6,7 +6,7 @@ class ExcelService {
     try {
       // Preparar datos para OptiRoute
       const data = orders.map((order, index) => ({
-        'Order ID': order.order_number,
+          'Order ID': order.order_number,
         'Customer Name': order.customer_name,
         'Phone': order.customer_phone || '',
         'Email': order.customer_email || '',
@@ -15,17 +15,18 @@ class ExcelService {
         'State': order.shipping_state || '',
         'Zip Code': order.shipping_zip || '',
         'Notes': order.notes || '',
-        'Priority': 'Normal',
-        'Service Time': 5, // minutos
-        'Time Window Start': '09:00',
-        'Time Window End': '18:00',
-        'Skills Required': '',
-        'Vehicle Type': 'Any',
-        'Load 1 (Packages)': 1,
-        'Load 2 (Weight kg)': 1,
-        'Revenue': order.total_amount || 0,
-        'Company': order.company_name || '',
-        'Channel': order.channel_name || ''
+        // --- USANDO LOS NUEVOS CAMPOS DEL MODELO ---
+        'Priority': order.priority,
+        'Service Time': order.serviceTime,
+        'Time Window Start': order.timeWindowStart,
+        'Time Window End': order.timeWindowEnd,
+        'Skills Required': '', // Puedes añadir este campo al modelo si lo necesitas
+        'Vehicle Type': 'Any', // Puedes añadir este campo al modelo si lo necesitas
+        'Load 1 (Packages)': order.load1Packages,
+        'Load 2 (Weight kg)': order.load2WeightKg,
+        'Revenue': order.total_amount || 0, // El valor de la venta
+        'Company': order.company_id.name || '',
+        'Channel': order.channel_id.channel_name || ''
       }));
       
       // Crear libro de Excel

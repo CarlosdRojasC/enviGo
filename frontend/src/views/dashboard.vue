@@ -156,7 +156,8 @@ const fetchStats = async () => {
     stats.value = data
     
     // Generar datos para el gráfico basado en stats
-    generateChartData()
+    fetchChartData()
+    
     
     // Transformar pedidos recientes para el componente
     transformRecentOrders(data.recent_orders || [])
@@ -167,29 +168,18 @@ const fetchStats = async () => {
   }
 }
 
-const generateChartData = () => {
-  // Generar datos de ejemplo para el gráfico
-  // En una implementación real, esto vendría del backend
-  const days = 30
-  const data = []
-  
-  for (let i = days - 1; i >= 0; i--) {
-    const date = new Date()
-    date.setDate(date.getDate() - i)
-    
-    // Simular datos basados en las estadísticas reales
-    const baseOrders = (stats.value.orders?.orders_this_month || 100) / 30
-    const variation = Math.random() * 0.5 + 0.75 // 75% - 125% del promedio
-    
-    data.push({
-      date: date.toISOString(),
-      orders: Math.round(baseOrders * variation)
-    })
+const fetchChartData = async (period = '30d') => {
+  loadingChart.value = true;
+  try {
+    const { data } = await apiService.orders.getOrdersTrend({ period });
+    chartData.value = data;
+  } catch (error) {
+    console.error("Error fetching chart data:", error);
+    chartData.value = []; // En caso de error, el gráfico aparecerá vacío
+  } finally {
+    loadingChart.value = false;
   }
-  
-  chartData.value = data
-}
-
+};
 const transformRecentOrders = (orders) => {
   recentOrders.value = orders.map(order => ({
     id: order._id,
@@ -228,7 +218,7 @@ const handlePeriodChange = (period) => {
   
   // Simular recarga de datos del gráfico
   setTimeout(() => {
-    generateChartData()
+    fetchChartData()
     loadingChart.value = false
   }, 1000)
 }
@@ -267,6 +257,7 @@ function formatCurrency(amount) {
 // Lifecycle (mantenemos la lógica original)
 onMounted(() => {
   fetchStats()
+  fetchChartData(); // Llama a la nueva función al montar el componente
 })
 </script>
 

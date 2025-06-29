@@ -370,7 +370,7 @@ const fetchStats = async () => {
     processAdminData(data)
     
     // Generar datos para el gráfico
-    generateChartData()
+    fetchChartData()
     
     // Transformar actividad del sistema
     generateSystemActivity()
@@ -411,29 +411,19 @@ const processAdminData = (data) => {
   }
 }
 
-const generateChartData = () => {
-  // Generar datos del gráfico basado en estadísticas globales
-  const days = 30
-  const data = []
-  
-  const baseOrders = (stats.value.orders?.total_orders || 1000) / 30
-  
-  for (let i = days - 1; i >= 0; i--) {
-    const date = new Date()
-    date.setDate(date.getDate() - i)
-    
-    // Añadir algo de tendencia realista
-    const trendFactor = 1 + (i / days) * 0.3 // Crecimiento gradual
-    const randomVariation = Math.random() * 0.6 + 0.7 // 70% - 130%
-    
-    data.push({
-      date: date.toISOString(),
-      orders: Math.round(baseOrders * trendFactor * randomVariation)
-    })
+const fetchChartData = async (period = '30d') => {
+  loadingChart.value = true;
+  try {
+    // Para el admin, la API devolverá los datos de todas las empresas
+    const { data } = await apiService.orders.getOrdersTrend({ period });
+    chartData.value = data;
+  } catch (error) {
+    console.error("Error fetching admin chart data:", error);
+    chartData.value = [];
+  } finally {
+    loadingChart.value = false;
   }
-  
-  chartData.value = data
-}
+};
 
 const generateSystemActivity = () => {
   const currentTime = new Date()
@@ -576,7 +566,7 @@ const handlePeriodChange = (period) => {
   
   // Simular recarga de datos del gráfico
   setTimeout(() => {
-    generateChartData()
+    fetchChartData()
     loadingChart.value = false
   }, 1000)
 }
@@ -686,7 +676,7 @@ function formatCurrency(amount) {
 // Lifecycle (mantenemos la lógica original)
 onMounted(() => {
   fetchStats()
-  
+  fetchChartData()
   // Actualizar métricas del sistema cada 30 segundos
   setInterval(() => {
     systemHealth.value = {

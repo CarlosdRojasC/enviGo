@@ -140,6 +140,9 @@ export const apiService = {
         generateInvoices() {
             return api.post('/billing/generate');
         },
+         getNextInvoiceEstimate() {
+        return api.get('/billing/next-estimate');
+    },
         requestInvoice(requestData) {
             return api.post('/billing/request', requestData);
         },
@@ -154,6 +157,10 @@ export const apiService = {
       return api.get(`/orders?${queryString}`);
     },
     getById: (id) => api.get(`/orders/${id}`),
+    getOrdersTrend: (params = {}) => {
+      const queryString = new URLSearchParams(params).toString();
+      return api.get(`/orders/trend?${queryString}`);
+    },
     create: (data) => api.post('/orders', data),
     updateStatus: (id, status) => api.patch(`/orders/${id}/status`, { status }),
     getStats: (params = {}) => {

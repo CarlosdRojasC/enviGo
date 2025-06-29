@@ -76,16 +76,7 @@ const defaultActions = [
     route: '/channels',
     roles: ['company_owner', 'company_employee']
   },
-  {
-    id: 'export-optiroute',
-    title: 'Exportar OptiRoute',
-    description: 'Descargar para rutas',
-    icon: '🗺️',
-    route: '/orders?export=optiroute',
-    roles: ['company_owner', 'company_employee'],
-    external: false
-  },
-  
+
   // Acciones para Admin
   {
     id: 'manage-companies',

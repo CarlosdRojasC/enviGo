@@ -125,6 +125,7 @@ router.get('/channels/mercadolibre/callback', async (req, res) => {
 
 router.get('/orders', authenticateToken, orderController.getAll);
 router.get('/orders/stats', authenticateToken, orderController.getStats);
+router.get('/orders/trend', authenticateToken, orderController.getOrdersTrend);
 router.get('/orders/export', authenticateToken, isAdmin, orderController.exportForOptiRoute);
 router.post('/orders', authenticateToken, validateOrderCreation, orderController.create);
 router.get('/orders/:id', authenticateToken, validateMongoId('id'), orderController.getById); // <-- USAR MIDDLEWARE
@@ -138,6 +139,7 @@ router.get('/billing/invoices', authenticateToken, billingController.getInvoices
 // Obtener estadísticas de facturación
 router.get('/billing/stats', authenticateToken, billingController.getBillingStats);
 
+router.get('/billing/next-estimate', authenticateToken, billingController.getNextInvoiceEstimate);
 
 // Descargar una factura específica en PDF
 router.get('/billing/invoices/:id/download', authenticateToken, validateMongoId('id'), billingController.downloadInvoice);

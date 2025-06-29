@@ -75,6 +75,12 @@ const routes = [
         name: 'Channels',
         component: () => import('../views/Channels.vue'),
         meta: { roles: ['company_owner', 'company_employee'], requiresCompany: true }
+      },
+       {
+        path: 'admin/channels',
+        name: 'AdminChannels',
+        component: () => import('../views/Channels.vue'), // Reutilizamos la misma vista
+        meta: { roles: ['admin'] }
       }
     ]
   },

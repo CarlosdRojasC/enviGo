@@ -1,9 +1,32 @@
 <template>
   <div class="page-container">
-    <h1 class="page-title">Mis Canales de Venta</h1>
+    <div class="page-header">
+      <h1 class="page-title">{{ isAdminView ? 'Gestionar Canales de Venta' : 'Mis Canales de Venta' }}</h1>
+      <button v-if="canAddChannel" @click="openAddChannelModal" class="btn-primary add-channel-btn-header">
+        + Agregar Canal
+      </button>
+    </div>
+
+    <div v-if="isAdminView" class="admin-controls-section">
+      <div class="form-group">
+        <label for="company-select">Seleccione una Empresa para ver sus canales:</label>
+        <select id="company-select" v-model="selectedCompanyId" @change="fetchChannels">
+          <option :value="null" disabled>-- Elija una empresa --</option>
+          <option v-for="company in companies" :key="company._id" :value="company._id">
+            {{ company.name }}
+          </option>
+        </select>
+      </div>
+    </div>
     
     <div class="channels-section">
       <div v-if="loading" class="loading"><p>Cargando canales...</p></div>
+      <div v-else-if="isAdminView && !selectedCompanyId" class="empty-state">
+          <p>Por favor, seleccione una empresa para continuar.</p>
+      </div>
+      <div v-else-if="channels.length === 0" class="empty-state">
+          <p>No se encontraron canales de venta. ¡Añade el primero!</p>
+      </div>
       <div v-else class="channels-grid">
         <div 
           v-for="channel in channels" 
@@ -26,20 +49,15 @@
             </div>
           </div>
           <div class="channel-actions">
-            <button 
-              @click="syncChannel(channel._id)" 
-              :disabled="syncingChannels.includes(channel._id)"
-              class="sync-btn"
-            >
+            <button @click="openEditChannelModal(channel)" class="action-btn edit">Editar</button>
+            <button @click="syncChannel(channel._id)" :disabled="syncingChannels.includes(channel._id)" class="action-btn sync">
               {{ syncingChannels.includes(channel._id) ? 'Sincronizando...' : 'Sincronizar' }}
             </button>
-            <button @click="showChannelDetails(channel)" class="details-btn">
-              Ver Detalles
-            </button>
+            <button @click="deleteChannel(channel)" class="action-btn delete">Eliminar</button>
           </div>
         </div>
         
-        <div class="add-channel-card">
+        <div v-if="channels.length > 0 && canAddChannel" class="add-channel-card">
           <button @click="openAddChannelModal" class="add-channel-btn">
             <span class="plus">+</span>
             <span>Agregar Canal</span>
@@ -58,33 +76,59 @@
               <option value="woocommerce">WooCommerce</option>
             </select>
           </div>
-          
           <div v-if="newChannel.channel_type">
             <div class="form-group">
               <label>Nombre del Canal:</label>
               <input v-model="newChannel.channel_name" type="text" required placeholder="Mi Tienda Shopify">
             </div>
-            
             <div class="form-group">
               <label>URL de la Tienda:</label>
               <input v-model="newChannel.store_url" type="text" required placeholder="ejemplo.myshopify.com">
             </div>
-
             <div class="form-group">
               <label>{{ newChannel.channel_type === 'shopify' ? 'Token de Acceso (API Secret)' : 'Consumer Key' }}</label>
               <input v-model="newChannel.api_key" type="text" required>
             </div>
-            
             <div class="form-group">
               <label>{{ newChannel.channel_type === 'shopify' ? 'API Key' : 'Consumer Secret' }}</label>
               <input v-model="newChannel.api_secret" type="password" required>
             </div>
           </div>
-          
           <div class="modal-actions">
             <button type="button" @click="showAddChannelModal = false" class="btn-cancel">Cancelar</button>
             <button type="submit" :disabled="addingChannel || !newChannel.channel_type" class="btn-save">
               {{ addingChannel ? 'Agregando...' : 'Agregar' }}
+            </button>
+          </div>
+        </form>
+    </Modal>
+
+    <Modal v-model="showEditChannelModal" title="Editar Canal de Venta" width="500px">
+        <form @submit.prevent="updateChannel" v-if="editingChannel">
+          <div class="form-group">
+            <label>Tipo de Canal:</label>
+            <input :value="getChannelTypeName(editingChannel.channel_type)" type="text" disabled class="disabled-input">
+          </div>
+          <div class="form-group">
+            <label>Nombre del Canal:</label>
+            <input v-model="editingChannel.channel_name" type="text" required>
+          </div>
+          <div class="form-group">
+            <label>URL de la Tienda:</label>
+            <input v-model="editingChannel.store_url" type="text" required>
+          </div>
+          <div class="form-group">
+            <label>{{ editingChannel.channel_type === 'shopify' ? 'Token de Acceso (API Secret)' : 'Consumer Key' }}</label>
+            <input v-model="editingChannel.api_key" type="text">
+          </div>
+          <div class="form-group">
+            <label>{{ editingChannel.channel_type === 'shopify' ? 'API Key' : 'Consumer Secret' }}</label>
+            <input v-model="editingChannel.api_secret" type="password" placeholder="Dejar en blanco para no cambiar">
+          </div>
+          <div class="modal-actions">
+            <button type="button" @click="showEditChannelModal = false" class="btn-cancel">Cancelar</button>
+            <button type="submit" :disabled="isUpdatingChannel" class="btn-save">
+              {{ isUpdatingChannel ? 'Guardando...' : 'Guardar Cambios' }}
             </button>
           </div>
         </form>
@@ -97,42 +141,80 @@ import { ref, onMounted, computed } from 'vue';
 import { useAuthStore } from '../store/auth';
 import { apiService } from '../services/api';
 import Modal from '../components/Modal.vue';
+import { useRoute } from 'vue-router';
 
 const auth = useAuthStore();
+const route = useRoute();
 const user = computed(() => auth.user);
 
 const channels = ref([]);
+const companies = ref([]);
+const selectedCompanyId = ref(null);
 const loading = ref(true);
 const syncingChannels = ref([]);
 
-// Estado del modal
 const showAddChannelModal = ref(false);
 const addingChannel = ref(false);
-const newChannel = ref({
-  channel_type: '',
-  channel_name: '',
-  api_key: '',
-  api_secret: '',
-  store_url: ''
+const newChannel = ref({});
+
+const showEditChannelModal = ref(false);
+const isUpdatingChannel = ref(false);
+const editingChannel = ref(null);
+
+const isAdminView = computed(() => route.path.startsWith('/admin'));
+
+const canAddChannel = computed(() => {
+    if (isAdminView.value) {
+        return !!selectedCompanyId.value;
+    }
+    return true;
 });
 
-onMounted(fetchChannels);
+onMounted(() => {
+  if (isAdminView.value) {
+    fetchCompanies();
+    loading.value = false;
+  } else {
+    fetchChannels();
+  }
+});
+
+async function fetchCompanies() {
+  try {
+    const { data } = await apiService.companies.getAll();
+    companies.value = data;
+  } catch (error) {
+    console.error("Error fetching companies:", error);
+  }
+}
 
 async function fetchChannels() {
+  const companyId = isAdminView.value 
+    ? selectedCompanyId.value 
+    : (user.value?.company_id || user.value?.company?._id);
+  
+  if (!companyId) {
+    channels.value = [];
+    return;
+  }
+  
   loading.value = true;
   try {
-    const companyId = user.value?.company_id || user.value?.company?._id;
-    if (!companyId) return;
     const { data } = await apiService.channels.getByCompany(companyId);
     channels.value = data;
   } catch (error) {
     console.error('Error fetching channels:', error);
+    channels.value = [];
   } finally {
     loading.value = false;
   }
 }
 
 function openAddChannelModal() {
+    if (!canAddChannel.value) {
+        alert("Por favor, seleccione una empresa primero.");
+        return;
+    }
     newChannel.value = { channel_type: '', channel_name: '', api_key: '', api_secret: '', store_url: '' };
     showAddChannelModal.value = true;
 }
@@ -140,7 +222,10 @@ function openAddChannelModal() {
 async function addChannel() {
     addingChannel.value = true;
     try {
-        const companyId = user.value?.company_id || user.value?.company?._id;
+        const companyId = isAdminView.value 
+          ? selectedCompanyId.value 
+          : (user.value?.company_id || user.value?.company?._id);
+
         const { data } = await apiService.channels.create(companyId, newChannel.value);
         
         showAddChannelModal.value = false;
@@ -161,6 +246,49 @@ async function addChannel() {
     }
 }
 
+function openEditChannelModal(channel) {
+  editingChannel.value = { ...channel, api_secret: '' };
+  showEditChannelModal.value = true;
+}
+
+async function updateChannel() {
+  if (!editingChannel.value) return;
+  isUpdatingChannel.value = true;
+  try {
+    const channelId = editingChannel.value._id;
+    const updateData = {
+      channel_name: editingChannel.value.channel_name,
+      store_url: editingChannel.value.store_url,
+      api_key: editingChannel.value.api_key,
+    };
+    if (editingChannel.value.api_secret) {
+      updateData.api_secret = editingChannel.value.api_secret;
+    }
+
+    await apiService.channels.update(channelId, updateData);
+    alert('Canal actualizado con éxito.');
+    showEditChannelModal.value = false;
+    await fetchChannels();
+  } catch (error) {
+    alert(`Error al actualizar el canal: ${error.message}`);
+  } finally {
+    isUpdatingChannel.value = false;
+  }
+}
+
+async function deleteChannel(channel) {
+  const confirmation = confirm(`¿Estás seguro de que quieres eliminar el canal "${channel.channel_name}"? Esta acción es irreversible.`);
+  if (!confirmation) return;
+
+  try {
+    await apiService.channels.delete(channel._id);
+    alert('Canal eliminado con éxito.');
+    await fetchChannels();
+  } catch (error) {
+    alert(`Error al eliminar el canal: ${error.message}`);
+  }
+}
+
 async function syncChannel(channelId) {
     if (syncingChannels.value.includes(channelId)) return;
     syncingChannels.value.push(channelId);
@@ -170,7 +298,7 @@ async function syncChannel(channelId) {
             date_to: new Date().toISOString()
         });
         alert('Sincronización iniciada. Los pedidos aparecerán en la sección "Mis Pedidos" en unos momentos.');
-        await fetchChannels(); // Actualizar datos como total de pedidos
+        await fetchChannels();
     } catch (error) {
         alert(`Error en la sincronización: ${error.message}`);
     } finally {
@@ -196,7 +324,7 @@ function formatDate(dateStr) {
 </script>
 
 <style scoped>
-/* Estilos extraídos del dashboard para consistencia */
+/* ESTILOS ORIGINALES (NO SE HAN QUITADO) */
 .page-container {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
@@ -224,6 +352,8 @@ function formatDate(dateStr) {
   border-radius: 8px;
   padding: 20px;
   background: #f9fafb;
+  display: flex;
+  flex-direction: column;
 }
 .channel-card.inactive {
   opacity: 0.6;
@@ -237,23 +367,10 @@ function formatDate(dateStr) {
 }
 .channel-header h3 { margin: 0; color: #1f2937; }
 .channel-type { background: #3b82f6; color: white; padding: 4px 8px; border-radius: 4px; font-size: 12px; }
-.channel-stats { margin-bottom: 15px; }
+.channel-stats { margin-bottom: 15px; flex-grow: 1; }
 .channel-stat { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 14px; }
 .channel-stat .label { color: #6b7280; }
 .channel-stat .value { color: #1f2937; font-weight: 500; }
-.channel-actions { display: flex; gap: 10px; }
-.sync-btn, .details-btn {
-  flex: 1;
-  padding: 8px 12px;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
-  background: white;
-  cursor: pointer;
-  font-size: 12px;
-  transition: background-color 0.2s;
-}
-.sync-btn:hover, .details-btn:hover { background: #f3f4f6; }
-.sync-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .add-channel-card {
   border: 2px dashed #d1d5db;
   border-radius: 8px;
@@ -283,4 +400,61 @@ function formatDate(dateStr) {
 .btn-cancel { background-color: #e5e7eb; }
 .btn-save { background-color: #4f46e5; color: white; }
 .btn-save:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ESTILOS AÑADIDOS Y MEJORADOS */
+.page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.btn-primary.add-channel-btn-header {
+    background-color: #4f46e5;
+    color: white;
+    padding: 10px 20px;
+    border-radius: 6px;
+    border: none;
+    cursor: pointer;
+    font-weight: 500;
+}
+.admin-controls-section {
+    background: white;
+    padding: 24px;
+    border-radius: 12px;
+    margin-bottom: 24px;
+    border: 1px solid #e5e7eb;
+}
+.empty-state {
+    text-align: center;
+    padding: 40px;
+    font-size: 16px;
+    color: #6b7280;
+}
+.channel-actions { 
+    display: grid; 
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px; 
+    margin-top: auto; 
+    padding-top: 15px;
+    border-top: 1px solid #e5e7eb;
+}
+.action-btn {
+  padding: 8px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: white;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+.action-btn.edit { color: #3b82f6; border-color: #bfdbfe; }
+.action-btn.edit:hover { background-color: #3b82f6; color: white; }
+.action-btn.sync { color: #16a34a; border-color: #86efac; }
+.action-btn.sync:hover { background-color: #16a34a; color: white; }
+.action-btn.delete { color: #ef4444; border-color: #fecaca; }
+.action-btn.delete:hover { background-color: #ef4444; color: white; }
+.disabled-input {
+    background-color: #f3f4f6;
+    cursor: not-allowed;
+}
 </style>

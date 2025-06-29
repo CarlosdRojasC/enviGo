@@ -145,7 +145,9 @@ class OrderController {
         shipping_zip,
         total_amount,
         shipping_cost,
-        notes
+        notes,
+        priority, serviceTime, timeWindowStart, timeWindowEnd, 
+        load1Packages, load2WeightKg
       } = req.body;
 
       const channel = await Channel.findOne({ _id: channel_id, is_active: true });
@@ -178,6 +180,12 @@ class OrderController {
         items_count: 0,
         order_date: new Date(),
         notes,
+        priority,
+        serviceTime,
+        timeWindowStart,
+        timeWindowEnd,
+        load1Packages,
+        load2WeightKg,
         status: 'pending',
         created_at: new Date(),
         updated_at: new Date()
@@ -307,6 +315,62 @@ async exportForOptiRoute(req, res) {
       });
     } catch (error) {
       console.error('Error obteniendo estadísticas:', error);
+      res.status(500).json({ error: ERRORS.SERVER_ERROR });
+    }
+  }
+  // AÑADE ESTE NUEVO MÉTODO AL FINAL DE LA CLASE
+  async getOrdersTrend(req, res) {
+    try {
+      const { period = '30d' } = req.query;
+      const filters = {};
+
+      // Filtrar por empresa para usuarios no administradores
+      if (req.user.role !== 'admin') {
+        filters.company_id = new mongoose.Types.ObjectId(req.user.company_id);
+      }
+
+      // Definir el rango de fechas basado en el período
+      const now = new Date();
+      let startDate;
+      switch (period) {
+        case '7d':
+          startDate = new Date(now.setDate(now.getDate() - 7));
+          break;
+        case '90d':
+          startDate = new Date(now.setMonth(now.getMonth() - 3));
+          break;
+        case '1y':
+          startDate = new Date(now.setFullYear(now.getFullYear() - 1));
+          break;
+        case '30d':
+        default:
+          startDate = new Date(now.setDate(now.getDate() - 30));
+          break;
+      }
+      
+      filters.order_date = { $gte: startDate };
+
+      const trendData = await Order.aggregate([
+        { $match: filters },
+        {
+          $group: {
+            _id: { $dateToString: { format: '%Y-%m-%d', date: '$order_date' } },
+            orders: { $sum: 1 }
+          }
+        },
+        {
+          $project: {
+            _id: 0,
+            date: '$_id',
+            orders: '$orders'
+          }
+        },
+        { $sort: { date: 1 } }
+      ]);
+      
+      res.json(trendData);
+    } catch (error) {
+      console.error('Error obteniendo tendencia de pedidos:', error);
       res.status(500).json({ error: ERRORS.SERVER_ERROR });
     }
   }
