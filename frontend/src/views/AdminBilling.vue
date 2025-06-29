@@ -3,8 +3,8 @@
     <div class="page-header">
       <h1 class="page-title">Gestión de Facturación - Admin</h1>
       <div class="header-actions">
-        <button @click="openBulkGenerateModal" class="btn-secondary">
-          📄 Generar Facturas Masivas
+        <button @click="triggerBulkGeneration" class="btn-secondary" :disabled="generating">
+          📄 {{ generating ? 'Generando...' : 'Generar Facturas Mes Anterior' }}
         </button>
         <button @click="openGenerateModal" class="btn-primary">
           ➕ Nueva Factura
@@ -12,12 +12,12 @@
       </div>
     </div>
 
-    <!-- Filtros Avanzados para Admin -->
     <div class="filters-section">
       <div class="filters-grid">
         <select v-model="filters.status" @change="fetchInvoices">
           <option value="">Todos los estados</option>
           <option value="draft">Borrador</option>
+          <option value="pending">Pendiente</option> <option value="sent">Enviada</option>
           <option value="sent">Enviada</option>
           <option value="paid">Pagada</option>
           <option value="overdue">Vencida</option>
@@ -49,7 +49,6 @@
       </div>
     </div>
 
-    <!-- Resumen Financiero para Admin -->
     <div class="financial-overview">
       <div class="overview-card revenue">
         <div class="overview-icon">💰</div>
@@ -88,7 +87,6 @@
     <div v-if="loading" class="loading">Cargando facturas...</div>
 
     <div v-else class="content-section">
-      <!-- Tabla de Facturas con columnas específicas para Admin -->
       <div class="table-wrapper">
         <table class="invoices-table">
           <thead>
@@ -194,7 +192,6 @@
         </table>
       </div>
 
-      <!-- Acciones en lote -->
       <div v-if="selectedInvoices.length > 0" class="bulk-actions">
         <div class="bulk-actions-info">
           {{ selectedInvoices.length }} factura{{ selectedInvoices.length > 1 ? 's' : '' }} seleccionada{{ selectedInvoices.length > 1 ? 's' : '' }}
@@ -207,7 +204,6 @@
         </div>
       </div>
 
-      <!-- Paginación -->
       <div v-if="pagination.totalPages > 1" class="pagination">
         <button @click="goToPage(pagination.page - 1)" :disabled="pagination.page <= 1" class="page-btn">
           ← Anterior
@@ -221,7 +217,6 @@
       </div>
     </div>
 
-    <!-- Modal de Generar Factura Individual -->
     <Modal v-model="showGenerateModal" title="Generar Nueva Factura" width="800px">
       <div class="generate-invoice-form">
         <div class="form-section">
@@ -251,7 +246,6 @@
           </div>
         </div>
 
-        <!-- Selección de Pedidos -->
         <div v-if="availableOrders.length > 0" class="form-section">
           <h4>Seleccionar Pedidos</h4>
           <div class="orders-selection">
@@ -290,7 +284,6 @@
           </div>
         </div>
 
-        <!-- Preview de la factura -->
         <div v-if="generatePreview && selectedOrders.length > 0" class="generate-preview">
           <h4>Vista Previa de Factura</h4>
           <div class="preview-content">
@@ -334,7 +327,6 @@
       </div>
     </Modal>
 
-    <!-- Modal de Generación Masiva -->
     <Modal v-model="showBulkGenerateModal" title="Generar Facturas Masivas" width="700px">
       <div class="bulk-generate-form">
         <div class="form-section">
@@ -393,10 +385,8 @@
       </div>
     </Modal>
 
-    <!-- Modal de Vista de Factura -->
     <Modal v-model="showInvoiceModal" :title="`Factura ${selectedInvoice?.invoice_number}`" width="800px">
       <div v-if="selectedInvoice" class="invoice-preview">
-        <!-- Contenido del modal de vista de factura (igual al original) -->
         <div class="invoice-header">
           <div class="invoice-company-info">
             <h3>enviGo</h3>
@@ -567,6 +557,22 @@ const financialSummary = ref({
   activeCompanies: 0,
   companiesWithPendingPayments: 0
 })
+
+async function triggerBulkGeneration() {
+  const confirmation = confirm('¿Estás seguro de que quieres generar las facturas para todas las empresas correspondientes al mes anterior? Este proceso puede tardar unos momentos.');
+  if (!confirmation) return;
+
+  generating.value = true;
+  try {
+    const { data } = await apiService.billing.generateInvoices();
+    alert(data.message || 'Proceso de generación iniciado.');
+    await fetchInvoices(); // Refrescar la lista para ver las nuevas facturas en borrador
+  } catch (error) {
+    alert(`Error al generar facturas: ${error.message}`);
+  } finally {
+    generating.value = false;
+  }
+}
 
 // Computed properties
 const generatePreview = computed(() => {

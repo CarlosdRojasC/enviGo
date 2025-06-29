@@ -24,26 +24,26 @@ const invoiceSchema = new mongoose.Schema({
     type: Number, 
     required: true 
   },
-  // 'subtotal' ahora es el campo principal que almacena la suma de los shipping_cost
+  // Este es el monto base a facturar (antes de impuestos). 
+  // El controlador debe establecer este valor.
+  amount_due: { 
+    type: Number, 
+    required: true 
+  },
+  // Los siguientes campos se calcularán automáticamente.
   subtotal: {
-    type: Number,
-    required: true,
-    default: 0
+    type: Number
   },
-  // 'tax_amount' se calcula a partir del subtotal
   tax_amount: {
-    type: Number,
-    required: true
+    type: Number
   },
-  // 'total_amount' es la suma de subtotal + impuestos
   total_amount: {
-    type: Number,
-    required: true
+    type: Number
   },
   status: { 
     type: String, 
-    enum: ['pending', 'sent', 'paid', 'overdue', 'cancelled'], 
-    default: 'pending' 
+    enum: ['draft', 'pending', 'sent', 'paid', 'overdue', 'cancelled'], 
+    default: 'draft' 
   },
   due_date: { 
     type: Date 
@@ -77,9 +77,16 @@ const invoiceSchema = new mongoose.Schema({
   }
 });
 
-// Pre-save middleware para establecer fechas y actualizar 'updated_at'
+// Pre-save middleware para calcular campos y establecer fechas
 invoiceSchema.pre('save', function(next) {
   this.updated_at = Date.now();
+  
+  // Si el monto a cobrar cambia o es una nueva factura, recalcula todo.
+  if (this.isModified('amount_due') || this.isNew) {
+    this.subtotal = this.amount_due;
+    this.tax_amount = Math.round(this.subtotal * 0.19); // Asume IVA del 19%
+    this.total_amount = this.subtotal + this.tax_amount;
+  }
   
   // Establecer fechas del período si no están definidas
   if (!this.period_start) {
