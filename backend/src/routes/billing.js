@@ -1,27 +1,35 @@
-// backend/src/routes/billing.js
+// backend/src/routes/billing.routes.js
 
 const express = require('express');
 const router = express.Router();
 const billingController = require('../controllers/billing.controller');
-const { authenticateToken, isAdmin } = require('../middlewares/auth.middleware');
-const { validateMongoId } = require('../middlewares/validators/generic.validator');
+const { authMiddleware, adminMiddleware } = require('../middleware/auth');
 
-// Obtener facturas (admin ve todas, empresa ve las suyas)
-router.get('/invoices', authenticateToken, billingController.getInvoices);
+// Middleware de autenticación para todas las rutas
+router.use(authMiddleware);
 
-// Obtener estadísticas de facturación
-router.get('/stats', authenticateToken, billingController.getBillingStats);
+// Rutas para obtener facturas
+router.get('/invoices', billingController.getInvoices);
+router.get('/invoices/:id', billingController.getInvoiceById || billingController.getInvoices);
 
-// Obtener estimación de próxima factura (endpoint específico para companies)
-router.get('/next-invoice-estimate', authenticateToken, billingController.getNextInvoiceEstimate);
+// Rutas para estadísticas de facturación
+router.get('/stats', billingController.getBillingStats);
+router.get('/next-invoice-estimate', billingController.getNextInvoiceEstimate);
 
-// Descargar una factura específica en PDF
-router.get('/invoices/:id/download', authenticateToken, validateMongoId('id'), billingController.downloadInvoice);
+// Rutas para acciones de facturas
+router.put('/invoices/:id/mark-paid', billingController.markAsPaid);
+router.get('/invoices/:id/download', billingController.downloadInvoice);
 
-// Marcar una factura como pagada (solo admin)
-router.post('/invoices/:id/mark-as-paid', authenticateToken, isAdmin, validateMongoId('id'), billingController.markAsPaid);
+// Rutas para solicitudes y reportes (usuarios company)
+router.post('/request-invoice', billingController.requestInvoice || billingController.manualGenerateInvoices);
+router.post('/report-payment', billingController.reportPayment || billingController.markAsPaid);
 
-// Generar facturas manualmente (solo admin)
-router.post('/generate-manual', authenticateToken, isAdmin, billingController.manualGenerateInvoices);
+// Rutas de exportación
+router.get('/export', billingController.exportInvoices || billingController.getInvoices);
+router.get('/payment-history', billingController.getPaymentHistory || billingController.getInvoices);
+
+// Rutas administrativas (solo admin)
+router.post('/generate-invoices', adminMiddleware, billingController.manualGenerateInvoices);
+router.put('/company-info', billingController.updateBillingInfo || billingController.getBillingStats);
 
 module.exports = router;

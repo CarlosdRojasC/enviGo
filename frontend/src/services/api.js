@@ -1,3 +1,4 @@
+// frontend/src/services/api.js
 import axios from 'axios';
 
 const api = axios.create({
@@ -25,16 +26,13 @@ api.interceptors.response.use(
     return response;
   },
   error => {
-    // ---- INICIO DE LA CORRECCIÓN ----
     // Si la respuesta de error es un archivo (Blob), lo dejamos pasar
-    // para que la lógica del componente se encargue de leerlo.
     if (error.response && error.response.data instanceof Blob) {
       return Promise.reject(error);
     }
-    // ---- FIN DE LA CORRECCIÓN ----
 
     if (error.response) {
-      // Error del servidor (Lógica original para errores JSON)
+      // Error del servidor
       const { status, data } = error.response;
       
       switch (status) {
@@ -61,7 +59,7 @@ api.interceptors.response.use(
       
       // Crear error personalizado con mensaje
       const customError = new Error(data.error || 'Error en la petición');
-      customError.response = error.response; // Adjuntar la respuesta para más detalles si es necesario
+      customError.response = error.response;
       return Promise.reject(customError);
 
     } else if (error.request) {
@@ -123,68 +121,84 @@ export const apiService = {
     sync: (id, params = {}) => api.post(`/channels/${id}/sync`, params),
     testConnection: (id) => api.post(`/channels/${id}/test`)
   },
-  // Facturación
-     // Obtener facturas con filtros
-  getInvoices: (params = {}) => {
-    const queryString = new URLSearchParams(params).toString();
-    return api.get(`/billing/invoices${queryString ? `?${queryString}` : ''}`);
+
+  // ✅ FACTURACIÓN - AHORA CORRECTAMENTE ORGANIZADA
+  billing: {
+    // Obtener facturas con filtros
+    getInvoices: (params = {}) => {
+      const queryString = new URLSearchParams(params).toString();
+      return api.get(`/billing/invoices${queryString ? `?${queryString}` : ''}`);
+    },
+
+    // Obtener una factura específica por ID
+    getInvoiceById: (id) => api.get(`/billing/invoices/${id}`),
+
+    // Descargar PDF de factura
+    downloadInvoice: (invoiceId) => {
+      return api.get(`/billing/invoices/${invoiceId}/download`, {
+        responseType: 'blob',
+        headers: {
+          'Accept': 'application/pdf'
+        }
+      });
+    },
+
+    // Marcar factura como pagada (admin)
+    markAsPaid: (invoiceId) => {
+      return api.post(`/billing/invoices/${invoiceId}/mark-as-paid`);
+    },
+
+    // Obtener estadísticas de facturación
+    getBillingStats: (companyId = null) => {
+      const params = companyId ? { company_id: companyId } : {};
+      const queryString = new URLSearchParams(params).toString();
+      return api.get(`/billing/stats${queryString ? `?${queryString}` : ''}`);
+    },
+
+    // Obtener estimación de próxima factura
+    getNextInvoiceEstimate: () => {
+      return api.get('/billing/next-invoice-estimate');
+    },
+
+    // Generar facturas manualmente (admin)
+    generateManualInvoices: () => {
+      return api.post('/billing/generate-manual');
+    },
+
+    // Solicitar nueva factura
+    requestInvoice: (requestData) => {
+      return api.post('/billing/request-invoice', requestData);
+    },
+
+    // Reportar pago
+    reportPayment: (paymentData) => {
+      return api.post('/billing/report-payment', paymentData);
+    },
+
+    // Exportar facturas
+    exportInvoices: (params = {}) => {
+      const queryString = new URLSearchParams(params).toString();
+      return api.get(`/billing/export${queryString ? `?${queryString}` : ''}`, {
+        responseType: 'blob'
+      });
+    },
+
+    // Funcionalidades masivas para admin
+    bulkSendInvoices: (invoiceIds) => {
+      return api.post('/billing/bulk-send', { invoice_ids: invoiceIds });
+    },
+
+    bulkMarkAsPaid: (invoiceIds) => {
+      return api.post('/billing/bulk-mark-paid', { invoice_ids: invoiceIds });
+    },
+
+    bulkDownload: (invoiceIds) => {
+      return api.post('/billing/bulk-download', { invoice_ids: invoiceIds }, {
+        responseType: 'blob'
+      });
+    }
   },
 
-  // Descargar PDF de factura
-  downloadInvoice: (invoiceId) => {
-    return api.get(`/billing/invoices/${invoiceId}/download`, {
-      responseType: 'blob', // Importante para PDFs
-      headers: {
-        'Accept': 'application/pdf'
-      }
-    });
-  },
-
-  // Marcar factura como pagada (admin)
-  markAsPaid: (invoiceId) => {
-    return api.post(`/billing/invoices/${invoiceId}/mark-as-paid`);
-  },
-
-  // Obtener estadísticas de facturación
-  getBillingStats: (companyId = null) => {
-    const params = companyId ? { company_id: companyId } : {};
-    const queryString = new URLSearchParams(params).toString();
-    return api.get(`/billing/stats${queryString ? `?${queryString}` : ''}`);
-  },
-
-  // Obtener estimación de próxima factura
-  getNextInvoiceEstimate: () => {
-    return api.get('/billing/next-invoice-estimate');
-  },
-
-  // Generar facturas manualmente (admin)
-  generateManualInvoices: () => {
-    return api.post('/billing/generate-manual');
-  },
-
-  // Para futuras funcionalidades
-  requestInvoice: (requestData) => {
-    return api.post('/billing/request-invoice', requestData);
-  },
-
-  reportPayment: (paymentData) => {
-    return api.post('/billing/report-payment', paymentData);
-  },
-
-  // Funcionalidades masivas para admin
-  bulkSendInvoices: (invoiceIds) => {
-    return api.post('/billing/bulk-send', { invoice_ids: invoiceIds });
-  },
-
-  bulkMarkAsPaid: (invoiceIds) => {
-    return api.post('/billing/bulk-mark-paid', { invoice_ids: invoiceIds });
-  },
-
-  bulkDownload: (invoiceIds) => {
-    return api.post('/billing/bulk-download', { invoice_ids: invoiceIds }, {
-      responseType: 'blob'
-    });
-  },
   // Pedidos
   orders: {
     getAll: (params = {}) => {
@@ -211,7 +225,7 @@ export const apiService = {
   // Usuarios
   users: {
     getByCompany: (companyId) => api.get(`/companies/${companyId}/users`),
-    create: (userData) => api.post('/users', userData), // La ruta ahora es /users
+    create: (userData) => api.post('/users', userData),
     update: (id, data) => api.patch(`/users/${id}`, data),
     delete: (id) => api.delete(`/users/${id}`)
   }

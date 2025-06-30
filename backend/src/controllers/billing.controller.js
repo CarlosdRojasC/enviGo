@@ -727,11 +727,280 @@ class BillingController {
       billingCycle: company.billing_cycle || 'monthly'
     };
   }
+    // Obtener una factura específica por ID
+  async getInvoiceById(req, res) {
+    try {
+      const { id } = req.params;
+      
+      const invoice = await Invoice.findById(id).populate('company_id', 'name email phone address rut');
+      
+      if (!invoice) {
+        return res.status(404).json({ 
+          success: false,
+          error: 'Factura no encontrada' 
+        });
+      }
+      
+      // Verificar permisos
+      if (req.user.role !== 'admin' && req.user.company_id.toString() !== invoice.company_id._id.toString()) {
+        return res.status(403).json({ 
+          success: false,
+          error: ERRORS.FORBIDDEN 
+        });
+      }
+      
+      const transformedInvoice = {
+        ...invoice.toObject(),
+        company: invoice.company_id,
+        orders_count: invoice.total_orders,
+        price_per_order: invoice.subtotal && invoice.total_orders 
+          ? Math.round(invoice.subtotal / invoice.total_orders) 
+          : 0
+      };
+      
+      res.json({
+        success: true,
+        invoice: transformedInvoice
+      });
+      
+    } catch (error) {
+      console.error('Error fetching invoice by ID:', error);
+      res.status(500).json({ 
+        success: false,
+        error: ERRORS.SERVER_ERROR,
+        details: error.message 
+      });
+    }
+  }
+
+  // Solicitar nueva factura
+  async requestInvoice(req, res) {
+    try {
+      const { period_start, period_end, notes, estimated_orders, estimated_amount } = req.body;
+      const companyId = req.user.company_id;
+      
+      if (!companyId) {
+        return res.status(400).json({ 
+          success: false,
+          error: 'Company ID requerido' 
+        });
+      }
+      
+      if (!period_start || !period_end) {
+        return res.status(400).json({ 
+          success: false,
+          error: 'Período de inicio y fin son requeridos' 
+        });
+      }
+      
+      // Crear solicitud (en una implementación real, esto podría ser una tabla separada)
+      const requestData = {
+        company_id: companyId,
+        period_start: new Date(period_start),
+        period_end: new Date(period_end),
+        notes: notes || '',
+        estimated_orders: estimated_orders || 0,
+        estimated_amount: estimated_amount || 0,
+        status: 'pending',
+        requested_at: new Date(),
+        requested_by: req.user.id
+      };
+      
+      // Por ahora, simplemente loggeamos la solicitud
+      console.log('📋 Nueva solicitud de factura:', requestData);
+      
+      // Aquí podrías enviar un email o notificación al equipo de facturación
+      
+      res.json({ 
+        success: true,
+        message: 'Solicitud de factura enviada exitosamente. Recibirás la factura en 1-2 días hábiles.',
+        request: requestData
+      });
+      
+    } catch (error) {
+      console.error('Error procesando solicitud de factura:', error);
+      res.status(500).json({ 
+        success: false,
+        error: ERRORS.SERVER_ERROR,
+        details: error.message 
+      });
+    }
+  }
+
+  // Reportar pago de factura
+  async reportPayment(req, res) {
+    try {
+      const { invoice_id, payment_date, payment_method, payment_reference, notes, amount } = req.body;
+      
+      if (!invoice_id || !payment_date || !payment_method) {
+        return res.status(400).json({ 
+          success: false,
+          error: 'ID de factura, fecha de pago y método de pago son requeridos' 
+        });
+      }
+      
+      const invoice = await Invoice.findById(invoice_id);
+      
+      if (!invoice) {
+        return res.status(404).json({ 
+          success: false,
+          error: 'Factura no encontrada' 
+        });
+      }
+      
+      // Verificar permisos
+      if (req.user.role !== 'admin' && req.user.company_id.toString() !== invoice.company_id.toString()) {
+        return res.status(403).json({ 
+          success: false,
+          error: ERRORS.FORBIDDEN 
+        });
+      }
+      
+      // Crear reporte de pago (en una implementación real, esto podría ser una tabla separada)
+      const paymentReport = {
+        invoice_id: invoice_id,
+        company_id: invoice.company_id,
+        amount: amount || invoice.total_amount,
+        payment_date: new Date(payment_date),
+        payment_method: payment_method,
+        payment_reference: payment_reference || '',
+        notes: notes || '',
+        reported_at: new Date(),
+        reported_by: req.user.id,
+        status: 'pending_verification'
+      };
+      
+      // Por ahora, simplemente loggeamos el reporte
+      console.log('💳 Nuevo reporte de pago:', paymentReport);
+      
+      // En una implementación real, aquí:
+      // 1. Guardarías el reporte en una tabla de pagos
+      // 2. Enviarías notificación al equipo de finanzas
+      // 3. Podrías marcar la factura como "pago reportado" hasta verificación
+      
+      res.json({ 
+        success: true,
+        message: 'Reporte de pago enviado exitosamente. Validaremos el pago y actualizaremos el estado de la factura.',
+        report: paymentReport
+      });
+      
+    } catch (error) {
+      console.error('Error procesando reporte de pago:', error);
+      res.status(500).json({ 
+        success: false,
+        error: ERRORS.SERVER_ERROR,
+        details: error.message 
+      });
+    }
+  }
+
+  // Exportar facturas
+  async exportInvoices(req, res) {
+    try {
+      const { format = 'csv', ...filters } = req.query;
+      
+      // Obtener facturas con los mismos filtros que getInvoices
+      const invoiceFilters = {};
+      
+      if (req.user.role !== 'admin') {
+        invoiceFilters.company_id = new mongoose.Types.ObjectId(req.user.company_id);
+      } else if (filters.company_id) {
+        invoiceFilters.company_id = new mongoose.Types.ObjectId(filters.company_id);
+      }
+      
+      if (filters.status) {
+        invoiceFilters.status = filters.status;
+      }
+      
+      if (filters.period) {
+        const now = new Date();
+        switch (filters.period) {
+          case 'current':
+            invoiceFilters.month = now.getMonth() + 1;
+            invoiceFilters.year = now.getFullYear();
+            break;
+          case 'last':
+            const lastMonth = now.getMonth() === 0 ? 12 : now.getMonth();
+            const lastYear = now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear();
+            invoiceFilters.month = lastMonth;
+            invoiceFilters.year = lastYear;
+            break;
+          case 'year':
+            invoiceFilters.year = now.getFullYear();
+            break;
+        }
+      }
+      
+      const invoices = await Invoice.find(invoiceFilters)
+        .populate('company_id', 'name email phone address rut')
+        .sort({ created_at: -1 });
+      
+      if (format === 'csv') {
+        // Generar CSV
+        const csvHeaders = [
+          'Número Factura',
+          'Empresa',
+          'RUT',
+          'Fecha Emisión',
+          'Período Inicio',
+          'Período Fin',
+          'Pedidos',
+          'Subtotal',
+          'IVA',
+          'Total',
+          'Estado',
+          'Fecha Vencimiento'
+        ];
+        
+        const csvRows = invoices.map(invoice => [
+          invoice.invoice_number,
+          invoice.company_id.name,
+          invoice.company_id.rut || '',
+          new Date(invoice.created_at).toLocaleDateString('es-ES'),
+          new Date(invoice.period_start).toLocaleDateString('es-ES'),
+          new Date(invoice.period_end).toLocaleDateString('es-ES'),
+          invoice.total_orders || 0,
+          invoice.subtotal || 0,
+          invoice.tax_amount || 0,
+          invoice.total_amount || 0,
+          invoice.status,
+          new Date(invoice.due_date).toLocaleDateString('es-ES')
+        ]);
+        
+        const csvContent = [csvHeaders.join(','), ...csvRows.map(row => row.join(','))].join('\n');
+        
+        res.setHeader('Content-Type', 'text/csv');
+        res.setHeader('Content-Disposition', 'attachment; filename=facturas.csv');
+        res.send(csvContent);
+        
+      } else {
+        // Formato JSON por defecto
+        res.json({
+          success: true,
+          invoices: invoices.map(invoice => ({
+            ...invoice.toObject(),
+            company: invoice.company_id,
+            orders_count: invoice.total_orders
+          }))
+        });
+      }
+      
+    } catch (error) {
+      console.error('Error exportando facturas:', error);
+      res.status(500).json({ 
+        success: false,
+        error: ERRORS.SERVER_ERROR,
+        details: error.message 
+      });
+    }
+  }
 
   formatCurrency(amount) {
     return new Intl.NumberFormat('es-CL').format(amount || 0);
   }
 }
+
+
 
 const billingControllerInstance = new BillingController();
 
