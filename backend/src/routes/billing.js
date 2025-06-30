@@ -3,7 +3,7 @@
 const express = require('express');
 const router = express.Router();
 const billingController = require('../controllers/billing.controller');
-const { authMiddleware, adminMiddleware } = require('../middleware/auth');
+const { authMiddleware, adminMiddleware } = require('../middleware/auth.middleware');
 
 // Middleware de autenticación para todas las rutas
 router.use(authMiddleware);
