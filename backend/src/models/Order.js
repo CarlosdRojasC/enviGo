@@ -25,6 +25,7 @@ const orderSchema = new mongoose.Schema({
   shipping_city: { type: String },
   shipping_state: { type: String },
   shipping_zip: { type: String },
+  shipping_commune: { type: String },
   
   // Información del pedido (Existente)
   total_amount: { type: Number, required: true, default: 0 },

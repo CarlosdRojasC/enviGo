@@ -121,7 +121,7 @@
           <div class="form-group"><label>Email del Cliente</label><input v-model="newOrder.customer_email" type="email" /></div>
           <div class="form-group full-width"><label>Dirección de Envío *</label><input v-model="newOrder.shipping_address" type="text" required /></div>
           <div class="form-group"><label>Ciudad</label><input v-model="newOrder.shipping_city" type="text" /></div>
-          <div class="form-group"><label>Monto Total del Pedido (Venta) *</label><input v-model.number="newOrder.total_amount" type="number" required /></div>
+          <div class="form-group"><label>Comuna</label><input v-model="newOrder.shipping_commune" type="text" /></div>
           <div class="form-group"><label>Costo de Envío</label><input v-model.number="newOrder.shipping_cost" type="number" /></div>
           
           <div class="form-group full-width section-header"><h4>Datos para Logística (OptiRoute)</h4></div>
@@ -201,7 +201,7 @@ async function handleStatusUpdate({ orderId, newStatus }) { try { await apiServi
 let searchTimeout;
 function debounceSearch() { clearTimeout(searchTimeout); searchTimeout = setTimeout(() => { pagination.value.page = 1; fetchOrders(); }, 500); }
 function goToPage(page) { if (page >= 1 && page <= pagination.value.totalPages) { pagination.value.page = page; fetchOrders(); } }
-function openCreateOrderModal() { newOrder.value = { company_id: '', customer_name: '', customer_email: '', shipping_address: '', shipping_city: '', total_amount: null, shipping_cost: 0, priority: 'Normal', serviceTime: 5, timeWindowStart: '09:00', timeWindowEnd: '18:00', load1Packages: 1, load2WeightKg: 1 }; showCreateOrderModal.value = true; }
+function openCreateOrderModal() { newOrder.value = { company_id: '', customer_name: '', customer_email: '', shipping_address: '',shipping_commune: '', shipping_city: '', total_amount: null, shipping_cost: 0, priority: 'Normal', serviceTime: 5, timeWindowStart: '09:00', timeWindowEnd: '18:00', load1Packages: 1, load2WeightKg: 1 }; showCreateOrderModal.value = true; }
 async function handleCreateOrder() { if (!newOrder.value.company_id) { alert("Por favor, seleccione una empresa."); return; } const channelsResponse = await apiService.channels.getByCompany(newOrder.value.company_id); if (!channelsResponse.data || channelsResponse.data.length === 0) { alert("La empresa seleccionada no tiene canales. Configure uno primero."); return; } isCreatingOrder.value = true; try { const orderData = { ...newOrder.value, channel_id: channelsResponse.data[0]._id, order_number: `MANUAL-${Date.now()}`, external_order_id: `manual-admin-${Date.now()}` }; await apiService.orders.create(orderData); alert('Pedido manual creado con éxito.'); showCreateOrderModal.value = false; await fetchOrders(); } catch (error) { alert(`No se pudo crear el pedido: ${error.message}`); } finally { isCreatingOrder.value = false; } }
 function openBulkUploadModal() { selectedFile.value = null; uploadFeedback.value = ''; uploadStatus.value = ''; showBulkUploadModal.value = true; }
 function handleFileSelect(event) { selectedFile.value = event.target.files[0]; uploadFeedback.value = ''; uploadStatus.value = ''; }
