@@ -17,16 +17,16 @@ class OrderController {
 
       if (req.user.role === 'admin') {
         if (company_id) {
-          filters.company_id = company_id;  
+            filters.company_id = new mongoose.Types.ObjectId(company_id);
         }
       } else {
         if (req.user.company_id) {
-          filters.company_id = req.user.company_id;  // Usar new aquí
+          filters.company_id = new mongoose.Types.ObjectId(req.user.company_id);
         }
       }
 
       if (status) filters.status = status;
-      if (channel_id) filters.channel_id = channel_id; // Usar new aquí
+      if (channel_id) filters.channel_id = new mongoose.Types.ObjectId(channel_id);
 
       if (date_from || date_to) {
         filters.order_date = {};
@@ -318,62 +318,64 @@ async exportForOptiRoute(req, res) {
       res.status(500).json({ error: ERRORS.SERVER_ERROR });
     }
   }
-  // AÑADE ESTE NUEVO MÉTODO AL FINAL DE LA CLASE
-  async getOrdersTrend(req, res) {
-    try {
-      const { period = '30d' } = req.query;
-      const filters = {};
+async getOrdersTrend(req, res) {
+  try {
+    const { period = '30d' } = req.query;
+    const filters = {};
 
-      // Filtrar por empresa para usuarios no administradores
-      if (req.user.role !== 'admin') {
-        filters.company_id = new mongoose.Types.ObjectId(req.user.company_id);
-      }
-
-      // Definir el rango de fechas basado en el período
-      const now = new Date();
-      let startDate;
-      switch (period) {
-        case '7d':
-          startDate = new Date(now.setDate(now.getDate() - 7));
-          break;
-        case '90d':
-          startDate = new Date(now.setMonth(now.getMonth() - 3));
-          break;
-        case '1y':
-          startDate = new Date(now.setFullYear(now.getFullYear() - 1));
-          break;
-        case '30d':
-        default:
-          startDate = new Date(now.setDate(now.getDate() - 30));
-          break;
-      }
-      
-      filters.order_date = { $gte: startDate };
-
-      const trendData = await Order.aggregate([
-        { $match: filters },
-        {
-          $group: {
-            _id: { $dateToString: { format: '%Y-%m-%d', date: '$order_date' } },
-            orders: { $sum: 1 }
-          }
-        },
-        {
-          $project: {
-            _id: 0,
-            date: '$_id',
-            orders: '$orders'
-          }
-        },
-        { $sort: { date: 1 } }
-      ]);
-      
-      res.json(trendData);
-    } catch (error) {
-      console.error('Error obteniendo tendencia de pedidos:', error);
-      res.status(500).json({ error: ERRORS.SERVER_ERROR });
+    if (req.user.role !== 'admin') {
+      filters.company_id = new mongoose.Types.ObjectId(req.user.company_id);
     }
+
+    // ✅ CORRECCIÓN: Se crea una nueva fecha en cada cálculo para evitar modificar la original.
+    const now = new Date();
+    let startDate = new Date(); // Inicializamos con la fecha actual
+
+    switch (period) {
+      case '7d':
+        startDate.setDate(now.getDate() - 7);
+        break;
+      case '90d':
+        startDate.setMonth(now.getMonth() - 3);
+        break;
+      case '1y':
+        startDate.setFullYear(now.getFullYear() - 1);
+        break;
+      case '30d':
+      default:
+        startDate.setDate(now.getDate() - 30);
+        break;
+    }
+    
+    // Aseguramos que la hora se vaya al inicio del día para incluir todos los pedidos de ese día
+    startDate.setHours(0, 0, 0, 0);
+
+    filters.order_date = { $gte: startDate };
+
+    const trendData = await Order.aggregate([
+      { $match: filters },
+      {
+        $group: {
+          _id: { $dateToString: { format: '%Y-%m-%d', date: '$order_date' } },
+          orders: { $sum: 1 }
+        }
+      },
+      {
+        $project: {
+          _id: 0,
+          date: '$_id',
+          orders: '$orders'
+        }
+      },
+      { $sort: { date: 1 } }
+    ]);
+    
+    res.json(trendData);
+  } catch (error) {
+    console.error('Error obteniendo tendencia de pedidos:', error);
+    res.status(500).json({ error: ERRORS.SERVER_ERROR });
   }
+}
 }
 
 module.exports = new OrderController();
