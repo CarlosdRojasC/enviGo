@@ -43,7 +43,6 @@
           <div class="kpi-content">
             <div class="kpi-value">${{ formatCurrency(stats.monthly_revenue || 0) }}</div>
             <div class="kpi-label">Costos de Envío Totales</div>
-            <div class="kpi-subtitle">Suma de shipping_cost</div>
           </div>
         </div>
       </div>
@@ -289,7 +288,7 @@ const fetchRevenueData = async () => {
   try {
     console.log('🔍 FRONTEND: Solicitando datos de costos mensuales...');
     
-    const response = await apiService.dashboard.getMonthlyRevenue();
+    const response = await apiService.billing.getFinancialSummary();
     
     console.log('✅ FRONTEND: Datos de costos mensuales recibidos:', response.data);
     

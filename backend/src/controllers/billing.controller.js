@@ -1101,227 +1101,73 @@ async deleteAllInvoices(req, res) {
 
 async getFinancialSummary(req, res) {
   try {
-    console.log('📊 Obteniendo resumen financiero...');
-
-    // Solo admin puede ver resumen global
+    // 1. Verificar que sea un administrador
     if (req.user.role !== 'admin') {
       return res.status(403).json({ error: ERRORS.FORBIDDEN });
     }
 
-    const now = new Date();
-    const currentMonth = now.getMonth() + 1;
-    const currentYear = now.getFullYear();
-    const lastMonth = currentMonth === 1 ? 12 : currentMonth - 1;
-    const lastMonthYear = currentMonth === 1 ? currentYear - 1 : currentYear;
+    // 2. Calcular la fecha de hace 6 meses
+    const sixMonthsAgo = new Date();
+    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+    sixMonthsAgo.setHours(0, 0, 0, 0);
 
-    // 1. Revenue total y del mes actual
-    const revenueStats = await Invoice.aggregate([
+    // 3. Usar una agregación de MongoDB para agrupar por mes
+    const monthlyRevenueData = await Order.aggregate([
       {
-        $match: { status: 'paid' }
-      },
-      {
-        $group: {
-          _id: null,
-          totalRevenue: { $sum: '$total_amount' },
-          currentMonthRevenue: {
-            $sum: {
-              $cond: [
-                {
-                  $and: [
-                    { $eq: ['$month', currentMonth] },
-                    { $eq: ['$year', currentYear] }
-                  ]
-                },
-                '$total_amount',
-                0
-              ]
-            }
-          },
-          lastMonthRevenue: {
-            $sum: {
-              $cond: [
-                {
-                  $and: [
-                    { $eq: ['$month', lastMonth] },
-                    { $eq: ['$year', lastMonthYear] }
-                  ]
-                },
-                '$total_amount',
-                0
-              ]
-            }
-          }
-        }
-      }
-    ]);
-
-    const revenue = revenueStats[0] || { totalRevenue: 0, currentMonthRevenue: 0, lastMonthRevenue: 0 };
-
-    // Calcular crecimiento del revenue
-    const revenueGrowth = revenue.lastMonthRevenue > 0 
-      ? Math.round(((revenue.currentMonthRevenue - revenue.lastMonthRevenue) / revenue.lastMonthRevenue) * 100)
-      : 0;
-
-    // 2. Estadísticas de facturas
-    const invoiceStats = await Invoice.aggregate([
-      {
-        $group: {
-          _id: null,
-          totalInvoices: { $sum: 1 },
-          pendingInvoices: {
-            $sum: {
-              $cond: [
-                { $in: ['$status', ['pending', 'sent', 'overdue']] },
-                1,
-                0
-              ]
-            }
-          },
-          paidInvoices: {
-            $sum: {
-              $cond: [{ $eq: ['$status', 'paid'] }, 1, 0]
-            }
-          },
-          draftInvoices: {
-            $sum: {
-              $cond: [{ $eq: ['$status', 'draft'] }, 1, 0]
-            }
-          }
-        }
-      }
-    ]);
-
-    const invoices = invoiceStats[0] || { 
-      totalInvoices: 0, 
-      pendingInvoices: 0, 
-      paidInvoices: 0, 
-      draftInvoices: 0 
-    };
-
-    // 3. Estadísticas de pedidos
-    const orderStats = await Order.aggregate([
-      {
-        $group: {
-          _id: null,
-          totalOrders: { $sum: 1 },
-          billedOrders: {
-            $sum: {
-              $cond: [{ $eq: ['$billed', true] }, 1, 0]
-            }
-          },
-          unbilledOrders: {
-            $sum: {
-              $cond: [{ $ne: ['$billed', true] }, 1, 0]
-            }
-          },
-          deliveredOrders: {
-            $sum: {
-              $cond: [{ $eq: ['$status', 'delivered'] }, 1, 0]
-            }
-          }
-        }
-      }
-    ]);
-
-    const orders = orderStats[0] || { 
-      totalOrders: 0, 
-      billedOrders: 0, 
-      unbilledOrders: 0, 
-      deliveredOrders: 0 
-    };
-
-    // 4. Estadísticas de empresas
-    const companyStats = await Company.aggregate([
-      {
-        $group: {
-          _id: null,
-          activeCompanies: {
-            $sum: {
-              $cond: [{ $eq: ['$is_active', true] }, 1, 0]
-            }
-          },
-          totalCompanies: { $sum: 1 }
-        }
-      }
-    ]);
-
-    const companies = companyStats[0] || { activeCompanies: 0, totalCompanies: 0 };
-
-    // 5. Empresas con pagos pendientes
-    const companiesWithPendingPayments = await Invoice.distinct('company_id', {
-      status: { $in: ['pending', 'sent', 'overdue'] }
-    });
-
-    // 6. Revenue estimado del mes actual (pedidos entregados sin facturar)
-    const unbilledDeliveredOrders = await Order.aggregate([
-      {
+        // Filtrar solo pedidos entregados en los últimos 6 meses
         $match: {
           status: 'delivered',
-          billed: { $ne: true },
-          delivery_date: {
-            $gte: new Date(currentYear, currentMonth - 1, 1),
-            $lt: new Date(currentYear, currentMonth, 1)
-          }
+          delivery_date: { $gte: sixMonthsAgo }
         }
       },
       {
-        $lookup: {
-          from: 'companies',
-          localField: 'company_id',
-          foreignField: '_id',
-          as: 'company'
-        }
-      },
-      { $unwind: '$company' },
-      {
+        // Agrupar por año y mes
         $group: {
-          _id: null,
-          estimatedRevenue: { $sum: '$company.price_per_order' },
-          orderCount: { $sum: 1 }
+          _id: {
+            year: { $year: "$delivery_date" },
+            month: { $month: "$delivery_date" }
+          },
+          // Sumar el costo de envío de cada pedido en el grupo
+          totalRevenue: { $sum: "$shipping_cost" }
+        }
+      },
+      {
+        // Ordenar los resultados por fecha para que el gráfico se vea bien
+        $sort: {
+          "_id.year": 1,
+          "_id.month": 1
+        }
+      },
+      {
+        // Formatear la salida para que coincida con lo que el frontend espera
+        $project: {
+          _id: 0, // No incluir el campo _id
+          month: {
+            // Formatear la fecha como "ene 2025", "feb 2025", etc.
+            $let: {
+              vars: {
+                monthsInSpanish: ['', 'ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
+              },
+              in: {
+                $concat: [
+                  { $arrayElemAt: ['$$monthsInSpanish', '$_id.month'] },
+                  ' ',
+                  { $toString: '$_id.year' }
+                ]
+              }
+            }
+          },
+          revenue: "$totalRevenue" // Renombrar el campo a "revenue"
         }
       }
     ]);
 
-    const estimatedRevenue = unbilledDeliveredOrders[0] || { estimatedRevenue: 0, orderCount: 0 };
-
-    const summary = {
-      // Revenue
-      totalRevenue: revenue.totalRevenue,
-      currentMonthRevenue: revenue.currentMonthRevenue,
-      lastMonthRevenue: revenue.lastMonthRevenue,
-      revenueGrowth: revenueGrowth,
-      estimatedRevenue: estimatedRevenue.estimatedRevenue,
-
-      // Facturas
-      totalInvoices: invoices.totalInvoices,
-      pendingInvoices: invoices.pendingInvoices,
-      paidInvoices: invoices.paidInvoices,
-      draftInvoices: invoices.draftInvoices,
-
-      // Pedidos
-      totalOrders: orders.totalOrders,
-      billedOrders: orders.billedOrders,
-      unbilledOrders: orders.unbilledOrders,
-      deliveredOrders: orders.deliveredOrders,
-      unfactoredOrders: orders.unbilledOrders, // Alias para compatibilidad
-
-      // Empresas
-      activeCompanies: companies.activeCompanies,
-      totalCompanies: companies.totalCompanies,
-      companiesWithPendingPayments: companiesWithPendingPayments.length,
-
-      // Métricas adicionales
-      averageInvoiceAmount: invoices.totalInvoices > 0 ? Math.round(revenue.totalRevenue / invoices.totalInvoices) : 0,
-      billingRate: orders.totalOrders > 0 ? Math.round((orders.billedOrders / orders.totalOrders) * 100) : 0
-    };
-
-    console.log('✅ Resumen financiero calculado:', summary);
-
-    res.json(summary);
+    // 4. Enviar el arreglo de datos al frontend
+    res.json(monthlyRevenueData);
 
   } catch (error) {
-    console.error('❌ Error obteniendo resumen financiero:', error);
-    res.status(500).json({ error: ERRORS.SERVER_ERROR });
+    console.error('Error en getFinancialSummary:', error);
+    res.status(500).json({ error: 'Error al obtener el resumen financiero' });
   }
 }
 }
