@@ -6,6 +6,10 @@ const orderSchema = new mongoose.Schema({
   company_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Company', required: true },
   channel_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Channel', required: true },
   
+  // NUEVO: Relación con factura
+  invoice_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Invoice', default: null },
+  billed: { type: Boolean, default: false },
+  
   // Identificación del pedido
   external_order_id: { type: String, required: true }, // ID del pedido en la plataforma externa
   order_number: { type: String, required: true }, // Número de pedido visible
@@ -64,5 +68,7 @@ orderSchema.index({ company_id: 1, status: 1 });
 orderSchema.index({ channel_id: 1, external_order_id: 1 }, { unique: true });
 orderSchema.index({ order_date: -1 });
 orderSchema.index({ customer_email: 1 });
+orderSchema.index({ invoice_id: 1 }); // NUEVO: Índice para facturación
+orderSchema.index({ billed: 1 }); // NUEVO: Índice para facturación
 
 module.exports = mongoose.model('Order', orderSchema);

@@ -133,22 +133,46 @@ router.patch('/orders/:id/status', authenticateToken, validateMongoId('id'), isA
 
 
 // ==================== FACTURACIÓN (BILLING) ====================
+
 // Obtener facturas (admin ve todas, empresa ve las suyas)
 router.get('/billing/invoices', authenticateToken, billingController.getInvoices);
 
 // Obtener estadísticas de facturación
 router.get('/billing/stats', authenticateToken, billingController.getBillingStats);
 
+// Obtener estimación de próxima factura
 router.get('/billing/next-estimate', authenticateToken, billingController.getNextInvoiceEstimate);
+
+// NUEVAS RUTAS QUE FALTAN:
+// Generar factura individual (solo admin) - ESTA ES LA QUE FALTA
+router.post('/billing/invoices/generate', authenticateToken, isAdmin, billingController.generateInvoice);
+
+// Vista previa de generación masiva (solo admin)
+router.get('/billing/invoices/bulk-preview', authenticateToken, isAdmin, billingController.previewBulkGeneration);
+
+// Generar facturas masivas (solo admin) 
+router.post('/billing/invoices/generate-bulk', authenticateToken, isAdmin, billingController.generateBulkInvoices);
 
 // Descargar una factura específica en PDF
 router.get('/billing/invoices/:id/download', authenticateToken, validateMongoId('id'), billingController.downloadInvoice);
 
 // Marcar una factura como pagada (solo admin)
 router.post('/billing/invoices/:id/mark-as-paid', authenticateToken, isAdmin, validateMongoId('id'), billingController.markAsPaid);
-// AÑADE ESTA NUEVA RUTA
-// Disparar la generación manual de facturas (solo admin)
+
+// Disparar la generación manual de facturas mensuales (solo admin)
 router.post('/billing/generate', authenticateToken, isAdmin, billingController.manualGenerateInvoices);
+
+router.get('/billing/financial-summary', authenticateToken, isAdmin, billingController.getFinancialSummary);
+
+// Borrar una factura individual (solo admin)
+router.delete('/billing/invoices/:id', authenticateToken, isAdmin, validateMongoId('id'), billingController.deleteInvoice);
+
+// Borrar múltiples facturas (solo admin)
+router.delete('/billing/invoices', authenticateToken, isAdmin, billingController.deleteBulkInvoices);
+
+// Borrar todas las facturas (solo desarrollo)
+router.delete('/billing/invoices/all/development', authenticateToken, isAdmin, billingController.deleteAllInvoices);
+
 // ==================== DASHBOARD STATS (MONGO) ====================
 
 
@@ -197,31 +221,22 @@ router.get('/stats/dashboard', authenticateToken, async (req, res) => {
           }
         ]),
         // Calcular ingresos estimados del mes actual
-        Order.aggregate([
-          {
-            $match: {
-              status: 'delivered',
-              order_date: {
-                $gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1)
-              }
-            }
-          },
-          {
-            $lookup: {
-              from: 'companies',
-              localField: 'company_id',
-              foreignField: '_id',
-              as: 'company'
-            }
-          },
-          { $unwind: '$company' },
-          {
-            $group: {
-              _id: null,
-              total_revenue: { $sum: '$company.price_per_order' }
-            }
-          }
-        ])
+Order.aggregate([
+  {
+    $match: {
+      status: 'delivered',
+      order_date: {
+        $gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1)
+      }
+    }
+  },
+  {
+    $group: {
+      _id: null,
+      total_revenue: { $sum: '$shipping_cost' } // ✅ CORRECCIÓN
+    }
+  }
+])
       ]);
 
       stats = {

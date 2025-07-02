@@ -56,7 +56,10 @@
         <div class="overview-info">
           <div class="overview-value">${{ formatCurrency(financialSummary.totalRevenue) }}</div>
           <div class="overview-label">Revenue Total</div>
-          <div class="overview-change">+{{ financialSummary.revenueGrowth }}% este mes</div>
+          <div class="overview-change" :class="{ positive: financialSummary.revenueGrowth >= 0, negative: financialSummary.revenueGrowth < 0 }">
+            {{ financialSummary.revenueGrowth >= 0 ? '+' : '' }}{{ financialSummary.revenueGrowth }}% vs mes anterior
+          </div>
+          <div class="overview-detail">Este mes: ${{ formatCurrency(financialSummary.currentMonthRevenue) }}</div>
         </div>
       </div>
       <div class="overview-card invoices">
@@ -65,14 +68,16 @@
           <div class="overview-value">{{ financialSummary.totalInvoices }}</div>
           <div class="overview-label">Facturas Totales</div>
           <div class="overview-change">{{ financialSummary.pendingInvoices }} pendientes</div>
+          <div class="overview-detail">Promedio: ${{ formatCurrency(financialSummary.averageInvoiceAmount) }}</div>
         </div>
       </div>
       <div class="overview-card orders">
         <div class="overview-icon">📦</div>
         <div class="overview-info">
           <div class="overview-value">{{ financialSummary.totalOrders }}</div>
-          <div class="overview-label">Pedidos Facturados</div>
+          <div class="overview-label">Pedidos Totales</div>
           <div class="overview-change">{{ financialSummary.unfactoredOrders }} sin facturar</div>
+          <div class="overview-detail">{{ financialSummary.billingRate }}% facturado</div>
         </div>
       </div>
       <div class="overview-card companies">
@@ -81,6 +86,7 @@
           <div class="overview-value">{{ financialSummary.activeCompanies }}</div>
           <div class="overview-label">Empresas Activas</div>
           <div class="overview-change">{{ financialSummary.companiesWithPendingPayments }} con pagos pendientes</div>
+          <div class="overview-detail">Revenue estimado: ${{ formatCurrency(financialSummary.estimatedRevenue) }}</div>
         </div>
       </div>
     </div>
@@ -129,15 +135,15 @@
                 <div class="invoice-type">{{ getInvoiceType(invoice.type) }}</div>
               </td>
               <td class="company-cell">
-                <div class="company-name">{{ invoice.company?.name || 'N/A' }}</div>
-                <div class="company-plan">{{ getPlanName(invoice.company?.plan_type) }}</div>
+                <div class="company-name">{{ invoice.company_id?.name || 'N/A' }}</div>
+                <div class="company-plan">{{ getPlanName(invoice.company_id?.plan_type) }}</div>
               </td>
               <td class="invoice-period">
                 <div class="period-text">{{ formatPeriod(invoice.period_start, invoice.period_end) }}</div>
                 <div class="period-duration">{{ calculateDays(invoice.period_start, invoice.period_end) }} días</div>
               </td>
               <td class="orders-count">
-                <div class="orders-total">{{ invoice.orders_count || 0 }}</div>
+                <div class="orders-total">{{ invoice.total_orders || 0 }}</div>
                 <div class="orders-detail">pedidos</div>
               </td>
               <td class="amount-subtotal">${{ formatCurrency(invoice.subtotal) }}</td>
@@ -187,6 +193,14 @@
                   >
                     ✏️
                   </button>
+                  <button 
+                    @click="deleteInvoice(invoice)" 
+                    class="btn-action delete" 
+                    title="Borrar Factura"
+                    :disabled="invoice.status === 'paid'"
+                  >
+                    🗑️
+                  </button>
                 </div>
               </td>
             </tr>
@@ -203,6 +217,7 @@
           <button @click="bulkSendInvoices" class="btn-bulk send">📧 Enviar Seleccionadas</button>
           <button @click="bulkMarkAsPaid" class="btn-bulk pay">✅ Marcar como Pagadas</button>
           <button @click="bulkDownload" class="btn-bulk download">📥 Descargar ZIP</button>
+          <button @click="bulkDeleteInvoices" class="btn-bulk delete">🗑️ Borrar Seleccionadas</button>
           <button @click="selectedInvoices = []" class="btn-bulk cancel">❌ Cancelar Selección</button>
         </div>
       </div>
@@ -256,14 +271,15 @@
           <h4>Seleccionar Pedidos</h4>
           <div class="orders-selection">
             <div class="orders-selection-header">
-              <label class="checkbox-label">
-                <input type="checkbox" v-model="selectAllOrders" @change="toggleSelectAllOrders">
-                Seleccionar todos ({{ availableOrders.length }} pedidos)
-              </label>
-              <div class="orders-summary">
-                Total seleccionado: ${{ formatCurrency(selectedOrdersTotal) }}
-              </div>
-            </div>
+  <label class="checkbox-label">
+    <input type="checkbox" v-model="selectAllOrders" @change="toggleSelectAllOrders">
+    Seleccionar todos ({{ availableOrders.length }} pedidos)
+  </label>
+  <div class="orders-summary">
+    <div class="summary-line">Valor productos: ${{ formatCurrency(selectedOrdersTotal) }}</div>
+    <div class="summary-line service-cost">Costo servicios: ${{ formatCurrency(selectedOrders.length * getSelectedCompanyPrice()) }}</div>
+  </div>
+</div>
             
             <div class="orders-list">
               <div 
@@ -291,36 +307,42 @@
         </div>
 
         <!-- Preview de la factura -->
-        <div v-if="generatePreview && selectedOrders.length > 0" class="generate-preview">
-          <h4>Vista Previa de Factura</h4>
-          <div class="preview-content">
-            <div class="preview-row">
-              <span>Empresa:</span>
-              <span>{{ getSelectedCompanyName() }}</span>
-            </div>
-            <div class="preview-row">
-              <span>Período:</span>
-              <span>{{ formatPeriod(generateForm.period_start, generateForm.period_end) }}</span>
-            </div>
-            <div class="preview-row">
-              <span>Pedidos seleccionados:</span>
-              <span>{{ selectedOrders.length }} de {{ availableOrders.length }}</span>
-            </div>
-            <div class="preview-row">
-              <span>Subtotal:</span>
-              <span>${{ formatCurrency(generatePreview.subtotal) }}</span>
-            </div>
-            <div class="preview-row">
-              <span>IVA (19%):</span>
-              <span>${{ formatCurrency(generatePreview.tax) }}</span>
-            </div>
-            <div class="preview-row total">
-              <span>Total:</span>
-              <span>${{ formatCurrency(generatePreview.total) }}</span>
-            </div>
-          </div>
-        </div>
-
+     <div v-if="generatePreview && selectedOrders.length > 0" class="generate-preview">
+  <h4>Vista Previa de Factura de Servicios</h4>
+  <div class="preview-content">
+    <div class="preview-row">
+      <span>Empresa:</span>
+      <span>{{ getSelectedCompanyName() }}</span>
+    </div>
+    <div class="preview-row">
+      <span>Período:</span>
+      <span>{{ formatPeriod(generateForm.period_start, generateForm.period_end) }}</span>
+    </div>
+    <div class="preview-row">
+      <span>Pedidos seleccionados:</span>
+      <span>{{ selectedOrders.length }} de {{ availableOrders.length }}</span>
+    </div>
+    <div class="preview-row">
+      <span>Costo por servicio de envío:</span>
+      <span>${{ formatCurrency(getSelectedCompanyPrice()) }} por pedido</span>
+    </div>
+    <div class="preview-row">
+      <span>Subtotal servicios:</span>
+      <span>${{ formatCurrency(generatePreview.subtotal) }}</span>
+    </div>
+    <div class="preview-row">
+      <span>IVA (19%):</span>
+      <span>${{ formatCurrency(generatePreview.tax) }}</span>
+    </div>
+    <div class="preview-row total">
+      <span>Total a facturar:</span>
+      <span>${{ formatCurrency(generatePreview.total) }}</span>
+    </div>
+  </div>
+  <div class="preview-note">
+    <small>⚠️ Esta factura es por los <strong>servicios de envío</strong>, no por el valor de los productos vendidos.</small>
+  </div>
+</div>
         <div class="modal-actions">
           <button @click="showGenerateModal = false" class="btn-cancel">Cancelar</button>
           <button 
@@ -415,10 +437,10 @@
         <div class="invoice-client">
           <h4>Facturar a:</h4>
           <div class="client-info">
-            <p><strong>{{ selectedInvoice.company?.name }}</strong></p>
-            <p>RUT: {{ selectedInvoice.company?.rut || 'No disponible' }}</p>
-            <p>{{ selectedInvoice.company?.address || 'Dirección no disponible' }}</p>
-            <p>{{ selectedInvoice.company?.contact_email || 'Email no disponible' }}</p>
+            <p><strong>{{ selectedInvoice.company_id?.name }}</strong></p>
+            <p>RUT: {{ selectedInvoice.company_id?.rut || 'No disponible' }}</p>
+            <p>{{ selectedInvoice.company_id?.address || 'Dirección no disponible' }}</p>
+            <p>{{ selectedInvoice.company_id?.contact_email || 'Email no disponible' }}</p>
           </div>
         </div>
 
@@ -438,7 +460,7 @@
               <tr>
                 <td>Procesamiento de Pedidos</td>
                 <td>{{ formatPeriod(selectedInvoice.period_start, selectedInvoice.period_end) }}</td>
-                <td>{{ selectedInvoice.orders_count }} pedidos</td>
+                <td>{{ selectedInvoice.total_orders }} pedidos</td>
                 <td>${{ formatCurrency(selectedInvoice.price_per_order) }}</td>
                 <td>${{ formatCurrency(selectedInvoice.subtotal) }}</td>
               </tr>
@@ -497,8 +519,11 @@
 
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
+import { useAuthStore } from '../store/auth'
 import { apiService } from '../services/api'
 import Modal from '../components/Modal.vue'
+
+const auth = useAuthStore()
 
 // Estado principal
 const invoices = ref([])
@@ -570,13 +595,16 @@ const financialSummary = ref({
 
 // Computed properties
 const generatePreview = computed(() => {
-  if (selectedOrders.value.length === 0) return null
+  if (selectedOrders.value.length === 0 || !generateForm.value.company_id) return null
   
-  const subtotal = selectedOrdersTotal.value
+  const selectedCompany = companies.value.find(c => c._id === generateForm.value.company_id)
+  const pricePerOrder = selectedCompany?.price_per_order || 0
+  
+  const subtotal = selectedOrders.value.length * pricePerOrder // Precio del servicio por pedido
   const tax = Math.round(subtotal * 0.19)
   const total = subtotal + tax
   
-  return { subtotal, tax, total }
+  return { subtotal, tax, total, pricePerOrder }
 })
 
 const selectedOrdersTotal = computed(() => {
@@ -594,6 +622,32 @@ const canGenerate = computed(() => {
 
 // Lifecycle
 onMounted(async () => {
+  console.log('🚀 Iniciando AdminBilling...')
+  console.log('👤 Usuario actual:', auth.user)
+  console.log('🔑 Es admin:', auth.isAdmin)
+  console.log('🏢 Company ID:', auth.user?.company_id)
+  
+  // Verificar que el usuario sea admin
+  if (!auth.isAdmin) {
+    console.error('❌ Usuario no es administrador')
+    alert('No tienes permisos de administrador para acceder a esta sección.')
+    return
+  }
+  
+  // Verificar conexión con backend
+  try {
+    const { checkConnection } = await import('../services/api')
+    const connectionTest = await checkConnection()
+    if (!connectionTest.success) {
+      console.error('🔴 No hay conexión con el backend:', connectionTest.error)
+      alert('No se puede conectar con el servidor. Verifica que el backend esté ejecutándose.')
+      return
+    }
+    console.log('🟢 Conexión con backend verificada')
+  } catch (error) {
+    console.error('🔴 Error verificando conexión:', error)
+  }
+
   await Promise.all([
     fetchInvoices(),
     fetchCompanies(),
@@ -605,24 +659,68 @@ onMounted(async () => {
 async function fetchInvoices() {
   loading.value = true
   try {
+    console.log('📄 Obteniendo facturas (Admin)...')
+    console.log('👤 Usuario actual:', auth.user)
+    console.log('🔑 Es admin:', auth.isAdmin)
+    
     const params = {
       page: pagination.value.page,
       limit: pagination.value.limit,
       ...filters.value
     }
     
-    const { data } = await apiService.billing?.getInvoices(params) || { data: generateMockInvoicesAdmin() }
+    console.log('📋 Parámetros de consulta:', params)
     
-    invoices.value = data.invoices || data
-    pagination.value = data.pagination || { page: 1, limit: 15, total: data.length, totalPages: 1 }
+    const { data } = await apiService.billing.getInvoices(params)
+    
+    console.log('✅ Facturas recibidas:', data)
+    
+    invoices.value = data.invoices || []
+    pagination.value = data.pagination || { page: 1, limit: 15, total: 0, totalPages: 1 }
+    
+    console.log('📊 Estado actualizado:', {
+      invoicesCount: invoices.value.length,
+      pagination: pagination.value
+    })
     
   } catch (error) {
-    console.error('Error fetching invoices:', error)
-    //invoices.value = generateMockInvoicesAdmin()
-
-    // AÑADE UN MANEJO DE ERROR REAL:
-    invoices.value = [] // Vacía las facturas
-    alert('Error al cargar las facturas desde el servidor.')
+    console.error('❌ Error completo al obtener facturas:', {
+      message: error.message,
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      data: error.response?.data,
+      config: {
+        url: error.config?.url,
+        method: error.config?.method,
+        baseURL: error.config?.baseURL
+      }
+    })
+    
+    invoices.value = []
+    
+    // Mensaje más específico según el tipo de error
+    let errorMessage = 'Error al cargar las facturas'
+    
+    if (error.response) {
+      const status = error.response.status
+      if (status === 401) {
+        errorMessage = 'No estás autorizado. Por favor, inicia sesión nuevamente.'
+      } else if (status === 403) {
+        errorMessage = 'No tienes permisos de administrador para ver estas facturas.'
+      } else if (status === 404) {
+        errorMessage = 'Endpoint de facturas no encontrado. Verifica la configuración del backend.'
+      } else if (status >= 500) {
+        errorMessage = 'Error del servidor. Contacta al administrador.'
+      } else {
+        errorMessage = `Error del servidor (${status}): ${error.response.data?.error || 'Error desconocido'}`
+      }
+    } else if (error.request) {
+      errorMessage = 'No se puede conectar con el servidor. Verifica que el backend esté ejecutándose en http://localhost:3001'
+    } else {
+      errorMessage = `Error de configuración: ${error.message}`
+    }
+    
+    alert(errorMessage)
   } finally {
     loading.value = false
   }
@@ -639,19 +737,42 @@ async function fetchCompanies() {
 
 async function fetchFinancialSummary() {
   try {
-    // En producción vendría del backend
+    console.log('📊 Obteniendo resumen financiero real...')
+    const { data } = await apiService.billing.getFinancialSummary()
+    
     financialSummary.value = {
-      totalRevenue: 15750000,
-      revenueGrowth: 12,
-      totalInvoices: 45,
-      pendingInvoices: 8,
-      totalOrders: 1250,
-      unfactoredOrders: 150,
-      activeCompanies: 12,
-      companiesWithPendingPayments: 3
+      totalRevenue: data.totalRevenue || 0,
+      revenueGrowth: data.revenueGrowth || 0,
+      totalInvoices: data.totalInvoices || 0,
+      pendingInvoices: data.pendingInvoices || 0,
+      totalOrders: data.totalOrders || 0,
+      unfactoredOrders: data.unfactoredOrders || 0,
+      activeCompanies: data.activeCompanies || 0,
+      companiesWithPendingPayments: data.companiesWithPendingPayments || 0,
+      
+      // Métricas adicionales
+      currentMonthRevenue: data.currentMonthRevenue || 0,
+      estimatedRevenue: data.estimatedRevenue || 0,
+      billedOrders: data.billedOrders || 0,
+      deliveredOrders: data.deliveredOrders || 0,
+      averageInvoiceAmount: data.averageInvoiceAmount || 0,
+      billingRate: data.billingRate || 0
     }
+    
+    console.log('✅ Resumen financiero actualizado:', financialSummary.value)
   } catch (error) {
-    console.error('Error fetching financial summary:', error)
+    console.error('❌ Error obteniendo resumen financiero:', error)
+    // Mantener valores por defecto en caso de error
+    financialSummary.value = {
+      totalRevenue: 0,
+      revenueGrowth: 0,
+      totalInvoices: 0,
+      pendingInvoices: 0,
+      totalOrders: 0,
+      unfactoredOrders: 0,
+      activeCompanies: 0,
+      companiesWithPendingPayments: 0
+    }
   }
 }
 
@@ -678,22 +799,40 @@ async function loadOrdersForPeriod() {
   }
   
   try {
+    console.log('📦 Cargando pedidos para el período...')
+    
     const params = {
       company_id: generateForm.value.company_id,
       date_from: generateForm.value.period_start,
       date_to: generateForm.value.period_end,
-      status_not: 'cancelled',
+      status: ['pending', 'processing', 'shipped', 'delivered'], // Excluir cancelados
       limit: 1000 // Obtener todos los pedidos del período
     }
     
+    console.log('📋 Parámetros de búsqueda de pedidos:', params)
+    
     const { data } = await apiService.orders.getAll(params)
+    
+    console.log('✅ Pedidos recibidos:', data)
+    
     availableOrders.value = data.orders || []
     selectedOrders.value = [] // Reset selection
     selectAllOrders.value = false
     
+    console.log(`📊 Se encontraron ${availableOrders.value.length} pedidos para el período`)
+    
   } catch (error) {
-    console.error('Error loading orders:', error)
+    console.error('❌ Error cargando pedidos:', error)
     availableOrders.value = []
+    
+    let errorMessage = 'Error cargando pedidos para el período'
+    if (error.response?.status === 403) {
+      errorMessage = 'No tienes permisos para ver los pedidos de esta empresa'
+    } else if (error.response?.status === 404) {
+      errorMessage = 'No se encontraron pedidos para el período especificado'
+    }
+    
+    alert(errorMessage)
   }
 }
 
@@ -718,22 +857,19 @@ async function confirmGenerateInvoice() {
       period_start: generateForm.value.period_start,
       period_end: generateForm.value.period_end,
       order_ids: selectedOrders.value,
-      type: generateForm.value.type,
-      subtotal: generatePreview.value.subtotal,
-      tax_amount: generatePreview.value.tax,
-      total_amount: generatePreview.value.total
+      type: generateForm.value.type
     }
     
-    // En producción sería:
-    // await apiService.billing.generateInvoice(invoiceData)
+    const { data } = await apiService.billing.generateInvoice(invoiceData)
     
-    alert(`Factura generada exitosamente para ${selectedOrders.value.length} pedidos`)
+    alert(`Factura ${data.invoice.invoice_number} generada exitosamente para ${selectedOrders.value.length} pedidos`)
     showGenerateModal.value = false
     resetGenerateForm()
     await fetchInvoices()
     
   } catch (error) {
-    alert(`Error al generar factura: ${error.message}`)
+    console.error('Error generando factura:', error)
+    alert(`Error al generar factura: ${error.response?.data?.error || error.message}`)
   } finally {
     generating.value = false
   }
@@ -748,40 +884,28 @@ async function previewBulkGeneration() {
       exclude_existing: bulkGenerateForm.value.exclude_existing
     }
     
-    // En producción sería:
-    // const { data } = await apiService.billing.previewBulkGeneration(params)
-    
-    // Mock data
-    bulkPreview.value = companies.value
-      .filter(company => company.orders_count > 0)
-      .slice(0, 5)
-      .map(company => ({
-        company_id: company._id,
-        company_name: company.name,
-        orders_count: company.orders_this_month || 10,
-        total_amount: (company.orders_this_month || 10) * (company.price_per_order || 500) * 1.19
-      }))
+    const { data } = await apiService.billing.previewBulkGeneration(params)
+    bulkPreview.value = data
       
   } catch (error) {
     console.error('Error previewing bulk generation:', error)
+    alert(`Error en vista previa: ${error.response?.data?.error || error.message}`)
   }
 }
 
 async function confirmBulkGeneration() {
   generating.value = true
   try {
-    // En producción sería:
-    // await apiService.billing.generateBulkInvoices(bulkGenerateForm.value)
+    const { data } = await apiService.billing.generateBulkInvoices(bulkGenerateForm.value)
     
-    await new Promise(resolve => setTimeout(resolve, 3000))
-    
-    alert(`${bulkPreview.value.length} facturas generadas exitosamente`)
+    alert(`${data.generated_invoices.length} facturas generadas exitosamente`)
     showBulkGenerateModal.value = false
     bulkPreview.value = []
     await fetchInvoices()
     
   } catch (error) {
-    alert(`Error al generar facturas: ${error.message}`)
+    console.error('Error generando facturas masivas:', error)
+    alert(`Error al generar facturas: ${error.response?.data?.error || error.message}`)
   } finally {
     generating.value = false
   }
@@ -848,53 +972,6 @@ function resetGenerateForm() {
   }
   selectedOrders.value = []
   availableOrders.value = []
-}
-
-function generateMockInvoicesAdmin() {
-  const mockInvoices = []
-  
-  for (let i = 1; i <= 20; i++) {
-    const company = companies.value[i % companies.value.length] || {
-      _id: `company_${i}`,
-      name: `Empresa ${i}`,
-      plan_type: ['basic', 'pro', 'enterprise'][i % 3]
-    }
-    
-    const startDate = new Date()
-    startDate.setMonth(startDate.getMonth() - i)
-    startDate.setDate(1)
-    
-    const endDate = new Date(startDate)
-    endDate.setMonth(endDate.getMonth() + 1)
-    endDate.setDate(0)
-    
-    const ordersCount = Math.floor(Math.random() * 100) + 10
-    const pricePerOrder = 400 + Math.floor(Math.random() * 300)
-    const subtotal = ordersCount * pricePerOrder
-    const taxAmount = Math.round(subtotal * 0.19)
-    
-    const statuses = ['paid', 'sent', 'overdue', 'draft']
-    const status = statuses[Math.floor(Math.random() * statuses.length)]
-    
-    mockInvoices.push({
-      _id: `invoice_${i}`,
-      invoice_number: `INV-2024-${String(i).padStart(4, '0')}`,
-      company: company,
-      type: 'invoice',
-      period_start: startDate.toISOString(),
-      period_end: endDate.toISOString(),
-      orders_count: ordersCount,
-      price_per_order: pricePerOrder,
-      subtotal: subtotal,
-      tax_amount: taxAmount,
-      total_amount: subtotal + taxAmount,
-      status: status,
-      issue_date: new Date(endDate.getTime() + 24 * 60 * 60 * 1000).toISOString(),
-      due_date: new Date(endDate.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString()
-    })
-  }
-  
-  return mockInvoices.reverse()
 }
 
 // Funciones de utilidad
@@ -986,6 +1063,12 @@ function getSelectedCompanyName() {
   if (!generateForm.value.company_id) return 'Seleccionar empresa'
   const company = companies.value.find(c => c._id === generateForm.value.company_id)
   return company?.name || 'Empresa no encontrada'
+}
+
+function getSelectedCompanyPrice() {
+  if (!generateForm.value.company_id) return 0
+  const company = companies.value.find(c => c._id === generateForm.value.company_id)
+  return company?.price_per_order || 0
 }
 
 // Funciones de navegación y filtros
@@ -1083,10 +1166,85 @@ async function markAsPaid(invoice) {
   if (!confirmation) return
   
   try {
+    await apiService.billing.markAsPaid(invoice._id)
     invoice.status = 'paid'
     alert('Factura marcada como pagada')
+    await fetchInvoices()
   } catch (error) {
-    alert(`Error al marcar factura como pagada: ${error.message}`)
+    alert(`Error al marcar factura como pagada: ${error.response?.data?.error || error.message}`)
+  }
+}
+
+async function deleteInvoice(invoice) {
+  const confirmation = confirm(
+    `¿Estás seguro de que quieres borrar la factura ${invoice.invoice_number}?\n\n` +
+    `Esta acción no se puede deshacer y los pedidos asociados se desmarcarán como facturados.`
+  )
+  
+  if (!confirmation) return
+  
+  try {
+    await apiService.billing.deleteInvoice(invoice._id)
+    
+    // Remover de la lista local
+    const index = invoices.value.findIndex(inv => inv._id === invoice._id)
+    if (index !== -1) {
+      invoices.value.splice(index, 1)
+    }
+    
+    // Actualizar resumen financiero
+    await fetchFinancialSummary()
+    
+    alert(`Factura ${invoice.invoice_number} borrada exitosamente`)
+    
+  } catch (error) {
+    console.error('Error borrando factura:', error)
+    
+    let errorMessage = 'Error al borrar la factura'
+    if (error.response?.status === 400) {
+      errorMessage = error.response.data.error || 'No se puede borrar esta factura'
+    }
+    
+    alert(`${errorMessage}: ${invoice.invoice_number}`)
+  }
+}
+
+async function bulkDeleteInvoices() {
+  if (selectedInvoices.value.length === 0) return
+  
+  const confirmation = confirm(
+    `¿Estás seguro de que quieres borrar ${selectedInvoices.value.length} facturas?\n\n` +
+    `Esta acción no se puede deshacer y todos los pedidos asociados se desmarcarán como facturados.`
+  )
+  
+  if (!confirmation) return
+  
+  try {
+    const { data } = await apiService.billing.deleteBulkInvoices(selectedInvoices.value)
+    
+    // Remover de la lista local
+    invoices.value = invoices.value.filter(invoice => 
+      !selectedInvoices.value.includes(invoice._id)
+    )
+    
+    // Reset selección
+    selectedInvoices.value = []
+    selectAll.value = false
+    
+    // Actualizar resumen financiero
+    await fetchFinancialSummary()
+    
+    alert(`${data.deleted_count} facturas borradas exitosamente`)
+    
+  } catch (error) {
+    console.error('Error borrando facturas en lote:', error)
+    
+    let errorMessage = 'Error al borrar las facturas'
+    if (error.response?.status === 400) {
+      errorMessage = error.response.data.error || 'No se pueden borrar algunas facturas'
+    }
+    
+    alert(errorMessage)
   }
 }
 
@@ -1111,6 +1269,7 @@ function openBulkGenerateModal() {
 }
 </script>
 <style scoped>
+
 .page-container {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   max-width: 1600px;
@@ -2158,5 +2317,46 @@ function openBulkGenerateModal() {
   .totals-section {
     min-width: auto;
   }
+}
+/* Agregar al final del <style> en AdminBilling.vue */
+.overview-change {
+  font-size: 12px;
+  font-weight: 500;
+  margin-bottom: 4px;
+}
+
+.overview-change.positive {
+  color: #10b981;
+}
+
+.overview-change.negative {
+  color: #ef4444;
+}
+
+.overview-detail {
+  font-size: 11px;
+  color: #9ca3af;
+}
+
+/* Agregar al final del <style> */
+.summary-line {
+  font-size: 12px;
+  color: #6b7280;
+  margin-bottom: 2px;
+}
+
+.summary-line.service-cost {
+  font-weight: 600;
+  color: #1f2937;
+  font-size: 13px;
+}
+
+.preview-note {
+  margin-top: 12px;
+  padding: 8px 12px;
+  background: #fef3c7;
+  border: 1px solid #f59e0b;
+  border-radius: 6px;
+  color: #92400e;
 }
 </style>

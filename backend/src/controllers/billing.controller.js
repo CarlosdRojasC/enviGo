@@ -6,6 +6,7 @@ const Company = require('../models/Company');
 const { ERRORS } = require('../config/constants');
 const cron = require('node-cron');
 const PDFDocument = require('pdfkit');
+const mongoose = require('mongoose');
 
 class BillingController {
   
@@ -63,6 +64,336 @@ class BillingController {
     }
   }
 
+// NUEVO: Generar factura individual
+async generateInvoice(req, res) {
+  try {
+    const {
+      company_id,
+      period_start,
+      period_end,
+      order_ids,
+      type = 'invoice'
+    } = req.body;
+
+    console.log('📄 Generando factura individual:', req.body);
+
+    // Validar permisos
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ error: ERRORS.FORBIDDEN });
+    }
+
+    // Validar datos requeridos
+    if (!company_id || !period_start || !period_end) {
+      return res.status(400).json({ 
+        error: 'Se requieren company_id, period_start y period_end' 
+      });
+    }
+
+    // Obtener empresa
+    const company = await Company.findById(company_id);
+    if (!company) {
+      return res.status(404).json({ error: 'Empresa no encontrada' });
+    }
+
+    console.log('🏢 Empresa encontrada:', company.name);
+
+    // Obtener pedidos del período
+    let orderFilter = {
+      company_id: new mongoose.Types.ObjectId(company_id),
+      order_date: {
+        $gte: new Date(period_start),
+        $lte: new Date(period_end)
+      }
+    };
+
+    // Si se especificaron order_ids, filtrar solo esos
+    if (order_ids && order_ids.length > 0) {
+      orderFilter._id = { $in: order_ids.map(id => new mongoose.Types.ObjectId(id)) };
+    }
+
+    console.log('🔍 Filtro de pedidos:', orderFilter);
+
+    const orders = await Order.find(orderFilter);
+
+    console.log('📦 Pedidos encontrados:', orders.length);
+
+    if (orders.length === 0) {
+      return res.status(400).json({ 
+        error: 'No se encontraron pedidos para el período especificado' 
+      });
+    }
+
+    // Calcular totales
+    const total_orders = orders.length;
+    const price_per_order = company.price_per_order || 0;
+    const subtotal = total_orders * price_per_order;
+    const tax_amount = Math.round(subtotal * 0.19); // IVA 19%
+    const total_amount = subtotal + tax_amount;
+
+    console.log('💰 Cálculos:', {
+      total_orders,
+      price_per_order,
+      subtotal,
+      tax_amount,
+      total_amount
+    });
+
+    // Generar número de factura
+    const invoiceCount = await Invoice.countDocuments({}) + 1;
+    const now = new Date();
+    const invoice_number = `INV-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}-${String(invoiceCount).padStart(4, '0')}`;
+
+    console.log('🔢 Número de factura:', invoice_number);
+
+    // Crear factura
+    const invoice = new Invoice({
+      company_id,
+      invoice_number,
+      month: new Date(period_end).getMonth() + 1,
+      year: new Date(period_end).getFullYear(),
+      total_orders,
+      price_per_order,
+      amount_due: subtotal,
+      subtotal,
+      tax_amount,
+      total_amount,
+      period_start: new Date(period_start),
+      period_end: new Date(period_end),
+      due_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 días
+      status: 'draft'
+    });
+
+    await invoice.save();
+
+    console.log('✅ Factura guardada:', invoice._id);
+
+    // Actualizar pedidos para marcarlos como facturados
+    const updateResult = await Order.updateMany(
+      { _id: { $in: orders.map(o => o._id) } },
+      { 
+        $set: { 
+          invoice_id: invoice._id,
+          billed: true,
+          updated_at: new Date()
+        }
+      }
+    );
+
+    console.log('📦 Pedidos actualizados:', updateResult.modifiedCount);
+
+    // Retornar factura con información de la empresa
+    const invoiceWithCompany = await Invoice.findById(invoice._id).populate('company_id', 'name email');
+
+    res.status(201).json({
+      message: 'Factura generada exitosamente',
+      invoice: invoiceWithCompany
+    });
+
+  } catch (error) {
+    console.error('❌ Error generando factura:', error);
+    res.status(500).json({ error: ERRORS.SERVER_ERROR });
+  }
+}
+
+  // NUEVO: Generar facturas masivas
+  async generateBulkInvoices(req, res) {
+    try {
+      const {
+        period_start,
+        period_end,
+        only_with_orders = true,
+        exclude_existing = true
+      } = req.body;
+
+      if (req.user.role !== 'admin') {
+        return res.status(403).json({ error: ERRORS.FORBIDDEN });
+      }
+
+      if (!period_start || !period_end) {
+        return res.status(400).json({ 
+          error: 'Se requieren period_start y period_end' 
+        });
+      }
+
+      const companies = await Company.find({ is_active: true });
+      const generatedInvoices = [];
+      const errors = [];
+
+      for (const company of companies) {
+        try {
+          // Si exclude_existing está activado, verificar si ya existe factura
+          if (exclude_existing) {
+            const existingInvoice = await Invoice.findOne({
+              company_id: company._id,
+              period_start: { $gte: new Date(period_start) },
+              period_end: { $lte: new Date(period_end) }
+            });
+
+            if (existingInvoice) {
+              continue;
+            }
+          }
+
+          // Obtener pedidos del período
+          const orders = await Order.find({
+            company_id: company._id,
+            order_date: {
+              $gte: new Date(period_start),
+              $lte: new Date(period_end)
+            }
+          });
+
+          // Si only_with_orders está activado, saltar empresas sin pedidos
+          if (only_with_orders && orders.length === 0) {
+            continue;
+          }
+
+          // Generar factura para esta empresa
+          const total_orders = orders.length;
+          const price_per_order = company.price_per_order || 0;
+          const subtotal = total_orders * price_per_order;
+          const tax_amount = Math.round(subtotal * 0.19);
+          const total_amount = subtotal + tax_amount;
+
+          const invoiceCount = await Invoice.countDocuments({}) + generatedInvoices.length + 1;
+          const now = new Date();
+          const invoice_number = `INV-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}-${String(invoiceCount).padStart(4, '0')}`;
+
+          const invoice = new Invoice({
+            company_id: company._id,
+            invoice_number,
+            month: new Date(period_end).getMonth() + 1,
+            year: new Date(period_end).getFullYear(),
+            total_orders,
+            price_per_order,
+            amount_due: subtotal,
+            subtotal,
+            tax_amount,
+            total_amount,
+            period_start: new Date(period_start),
+            period_end: new Date(period_end),
+            due_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+            status: 'draft'
+          });
+
+          await invoice.save();
+
+          // Marcar pedidos como facturados
+          if (orders.length > 0) {
+            await Order.updateMany(
+              { _id: { $in: orders.map(o => o._id) } },
+              { 
+                $set: { 
+                  invoice_id: invoice._id,
+                  billed: true,
+                  updated_at: new Date()
+                }
+              }
+            );
+          }
+
+          generatedInvoices.push({
+            company_name: company.name,
+            invoice_number,
+            total_orders,
+            total_amount
+          });
+
+        } catch (companyError) {
+          errors.push({
+            company_name: company.name,
+            error: companyError.message
+          });
+        }
+      }
+
+      res.json({
+        message: `Generadas ${generatedInvoices.length} facturas exitosamente`,
+        generated_invoices: generatedInvoices,
+        errors: errors.length > 0 ? errors : undefined
+      });
+
+    } catch (error) {
+      console.error('Error generando facturas masivas:', error);
+      res.status(500).json({ error: ERRORS.SERVER_ERROR });
+    }
+  }
+
+  // NUEVO: Vista previa de generación masiva
+  async previewBulkGeneration(req, res) {
+    try {
+      const {
+        period_start,
+        period_end,
+        only_with_orders = true,
+        exclude_existing = true
+      } = req.query;
+
+      if (req.user.role !== 'admin') {
+        return res.status(403).json({ error: ERRORS.FORBIDDEN });
+      }
+
+      if (!period_start || !period_end) {
+        return res.status(400).json({ 
+          error: 'Se requieren period_start y period_end' 
+        });
+      }
+
+      const companies = await Company.find({ is_active: true });
+      const preview = [];
+
+      for (const company of companies) {
+        // Si exclude_existing está activado, verificar si ya existe factura
+        if (exclude_existing) {
+          const existingInvoice = await Invoice.findOne({
+            company_id: company._id,
+            period_start: { $gte: new Date(period_start) },
+            period_end: { $lte: new Date(period_end) }
+          });
+
+          if (existingInvoice) {
+            continue;
+          }
+        }
+
+        // Contar pedidos del período
+        const ordersCount = await Order.countDocuments({
+          company_id: company._id,
+          order_date: {
+            $gte: new Date(period_start),
+            $lte: new Date(period_end)
+          }
+        });
+
+        // Si only_with_orders está activado, saltar empresas sin pedidos
+        if (only_with_orders && ordersCount === 0) {
+          continue;
+        }
+
+        const price_per_order = company.price_per_order || 0;
+        const subtotal = ordersCount * price_per_order;
+        const tax_amount = Math.round(subtotal * 0.19);
+        const total_amount = subtotal + tax_amount;
+
+        preview.push({
+          company_id: company._id,
+          company_name: company.name,
+          orders_count: ordersCount,
+          price_per_order,
+          subtotal,
+          tax_amount,
+          total_amount
+        });
+      }
+
+      res.json(preview);
+
+    } catch (error) {
+      console.error('Error en vista previa:', error);
+      res.status(500).json({ error: ERRORS.SERVER_ERROR });
+    }
+  }
+
   async manualGenerateInvoices(req, res) {
     console.log('Solicitud manual para generar facturas recibida.');
     await this.generateMonthlyInvoices(); 
@@ -71,17 +402,77 @@ class BillingController {
 
   async getInvoices(req, res) {
     try {
+      const { page = 1, limit = 15, status, company_id, period, search } = req.query;
+      
       const filters = {};
+      
+      // Filtros según rol
       if (req.user.role !== 'admin') {
         filters.company_id = req.user.company_id;
+      } else if (company_id) {
+        filters.company_id = company_id;
       }
 
-      const invoices = await Invoice.find(filters)
-        .populate('company_id', 'name email phone address')
-        .sort({ year: -1, month: -1 });
-        
-      res.json(invoices);
+      // Filtro por estado
+      if (status) {
+        filters.status = status;
+      }
+
+      // Filtro por período
+      if (period) {
+        const now = new Date();
+        switch (period) {
+          case 'current':
+            filters.month = now.getMonth() + 1;
+            filters.year = now.getFullYear();
+            break;
+          case 'last':
+            const lastMonth = now.getMonth() === 0 ? 12 : now.getMonth();
+            const lastYear = now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear();
+            filters.month = lastMonth;
+            filters.year = lastYear;
+            break;
+          case 'quarter':
+            filters.period_start = { 
+              $gte: new Date(now.getFullYear(), now.getMonth() - 3, 1) 
+            };
+            break;
+          case 'year':
+            filters.year = now.getFullYear();
+            break;
+        }
+      }
+
+      // Filtro por búsqueda
+      if (search) {
+        filters.$or = [
+          { invoice_number: new RegExp(search, 'i') }
+        ];
+      }
+
+      const skip = (page - 1) * limit;
+
+      const [invoices, totalCount] = await Promise.all([
+        Invoice.find(filters)
+          .populate('company_id', 'name email phone address rut')
+          .sort({ created_at: -1 })
+          .skip(skip)
+          .limit(parseInt(limit))
+          .lean(),
+        Invoice.countDocuments(filters)
+      ]);
+
+      res.json({
+        invoices,
+        pagination: {
+          page: parseInt(page),
+          limit: parseInt(limit),
+          total: totalCount,
+          totalPages: Math.ceil(totalCount / limit)
+        }
+      });
     } catch (error) {
+      console.error('Error obteniendo facturas:', error);
       res.status(500).json({ error: ERRORS.SERVER_ERROR });
     }
   }
@@ -95,12 +486,18 @@ class BillingController {
         return res.status(404).json({ error: 'Factura no encontrada' });
       }
 
+      // Verificar permisos
+      if (req.user.role !== 'admin') {
+        return res.status(403).json({ error: ERRORS.FORBIDDEN });
+      }
+
       invoice.status = 'paid';
       invoice.paid_date = new Date();
       await invoice.save();
 
       res.json({ message: 'Factura marcada como pagada.', invoice });
     } catch (error) {
+      console.error('Error marcando factura como pagada:', error);
       res.status(500).json({ error: ERRORS.SERVER_ERROR });
     }
   }
@@ -108,7 +505,7 @@ class BillingController {
   async downloadInvoice(req, res) {
     try {
       const { id } = req.params;
-      const invoice = await Invoice.findById(id).populate('company_id', 'name email phone address');
+      const invoice = await Invoice.findById(id).populate('company_id', 'name email phone address rut');
 
       if (!invoice) {
         return res.status(404).json({ error: 'Factura no encontrada' });
@@ -180,8 +577,8 @@ class BillingController {
         }
 
         // Período de facturación
-        const startDate = new Date(invoice.year, invoice.month - 1, 1);
-        const endDate = new Date(invoice.year, invoice.month, 0);
+        const startDate = new Date(invoice.period_start);
+        const endDate = new Date(invoice.period_end);
         doc.text(`Período: ${startDate.toLocaleDateString('es-ES')} - ${endDate.toLocaleDateString('es-ES')}`, 50, 260);
 
         // Tabla de servicios
@@ -203,7 +600,7 @@ class BillingController {
         doc.text('Procesamiento de Pedidos', 60, yPosition);
         doc.text(`${invoice.total_orders} pedidos`, 250, yPosition);
         doc.text(`$${this.formatCurrency(invoice.price_per_order)}`, 350, yPosition);
-        doc.text(`$${this.formatCurrency(invoice.amount_due)}`, 450, yPosition);
+        doc.text(`$${this.formatCurrency(invoice.subtotal)}`, 450, yPosition);
 
         yPosition += 30;
 
@@ -212,9 +609,9 @@ class BillingController {
 
         // Totales
         yPosition += 20;
-        const subtotal = invoice.amount_due;
-        const iva = Math.round(subtotal * 0.19);
-        const total = subtotal + iva;
+        const subtotal = invoice.subtotal;
+        const iva = invoice.tax_amount;
+        const total = invoice.total_amount;
 
         doc.fontSize(10).font('Helvetica');
         doc.text('Subtotal:', 400, yPosition);
@@ -254,7 +651,8 @@ class BillingController {
       }
     });
   }
-   // Obtener estadísticas de facturación para una empresa
+
+  // Obtener estadísticas de facturación para una empresa
   async getBillingStats(req, res) {
     try {
       const companyId = req.user.role === 'admin' ? req.query.company_id : req.user.company_id;
@@ -291,6 +689,30 @@ class BillingController {
 
     } catch (error) {
       console.error('Error obteniendo estadísticas de facturación:', error);
+      res.status(500).json({ error: ERRORS.SERVER_ERROR });
+    }
+  }
+
+  // Obtener estimación de próxima factura
+  async getNextInvoiceEstimate(req, res) {
+    try {
+      const companyId = req.user.role === 'admin' ? req.query.company_id : req.user.company_id;
+      
+      if (!companyId) {
+        return res.status(400).json({ error: 'Company ID requerido' });
+      }
+
+      const company = await Company.findById(companyId);
+      if (!company) {
+        return res.status(404).json({ error: 'Empresa no encontrada' });
+      }
+
+      const estimate = await this.getNextInvoiceEstimate(companyId, company.price_per_order);
+      
+      res.json(estimate);
+
+    } catch (error) {
+      console.error('Error obteniendo estimación de próxima factura:', error);
       res.status(500).json({ error: ERRORS.SERVER_ERROR });
     }
   }
@@ -516,10 +938,392 @@ class BillingController {
       billingCycle: company.billing_cycle || 'monthly'
     };
   }
+  // Borrar una factura individual
+async deleteInvoice(req, res) {
+  try {
+    const { id } = req.params;
+
+    // Solo admin puede borrar facturas
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ error: ERRORS.FORBIDDEN });
+    }
+
+    // Buscar la factura
+    const invoice = await Invoice.findById(id);
+    if (!invoice) {
+      return res.status(404).json({ error: 'Factura no encontrada' });
+    }
+
+    console.log('🗑️ Borrando factura:', invoice.invoice_number);
+
+    // No permitir borrar facturas pagadas (opcional, según tu lógica de negocio)
+    if (invoice.status === 'paid') {
+      return res.status(400).json({ 
+        error: 'No se puede borrar una factura que ya está pagada' 
+      });
+    }
+
+    // Desmarcar pedidos como facturados antes de borrar la factura
+    await Order.updateMany(
+      { invoice_id: invoice._id },
+      { 
+        $set: { 
+          invoice_id: null,
+          billed: false,
+          updated_at: new Date()
+        }
+      }
+    );
+
+    console.log('📦 Pedidos desmarcados como facturados');
+
+    // Borrar la factura
+    await Invoice.findByIdAndDelete(id);
+
+    console.log('✅ Factura borrada exitosamente');
+
+    res.json({ 
+      message: `Factura ${invoice.invoice_number} borrada exitosamente`
+    });
+
+  } catch (error) {
+    console.error('❌ Error borrando factura:', error);
+    res.status(500).json({ error: ERRORS.SERVER_ERROR });
+  }
+}
+
+// Borrar múltiples facturas
+async deleteBulkInvoices(req, res) {
+  try {
+    const { invoice_ids } = req.body;
+
+    // Solo admin puede borrar facturas
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ error: ERRORS.FORBIDDEN });
+    }
+
+    if (!invoice_ids || !Array.isArray(invoice_ids) || invoice_ids.length === 0) {
+      return res.status(400).json({ error: 'Se requiere un array de IDs de facturas' });
+    }
+
+    console.log('🗑️ Borrando facturas en lote:', invoice_ids.length);
+
+    // Buscar todas las facturas
+    const invoices = await Invoice.find({ _id: { $in: invoice_ids } });
+    
+    if (invoices.length === 0) {
+      return res.status(404).json({ error: 'No se encontraron facturas para borrar' });
+    }
+
+    // Verificar si hay facturas pagadas (opcional)
+    const paidInvoices = invoices.filter(inv => inv.status === 'paid');
+    if (paidInvoices.length > 0) {
+      return res.status(400).json({ 
+        error: `No se pueden borrar ${paidInvoices.length} facturas que ya están pagadas`,
+        paid_invoices: paidInvoices.map(inv => inv.invoice_number)
+      });
+    }
+
+    // Desmarcar todos los pedidos relacionados
+    await Order.updateMany(
+      { invoice_id: { $in: invoice_ids } },
+      { 
+        $set: { 
+          invoice_id: null,
+          billed: false,
+          updated_at: new Date()
+        }
+      }
+    );
+
+    console.log('📦 Pedidos desmarcados como facturados');
+
+    // Borrar todas las facturas
+    const deleteResult = await Invoice.deleteMany({ _id: { $in: invoice_ids } });
+
+    console.log('✅ Facturas borradas:', deleteResult.deletedCount);
+
+    res.json({ 
+      message: `${deleteResult.deletedCount} facturas borradas exitosamente`,
+      deleted_count: deleteResult.deletedCount,
+      invoice_numbers: invoices.map(inv => inv.invoice_number)
+    });
+
+  } catch (error) {
+    console.error('❌ Error borrando facturas en lote:', error);
+    res.status(500).json({ error: ERRORS.SERVER_ERROR });
+  }
+}
+
+// Método para borrar facturas de prueba/desarrollo (opcional)
+async deleteAllInvoices(req, res) {
+  try {
+    // Solo en desarrollo y solo admin
+    if (process.env.NODE_ENV !== 'development' || req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Esta acción solo está disponible en desarrollo' });
+    }
+
+    console.log('🧹 Borrando TODAS las facturas (modo desarrollo)');
+
+    // Desmarcar todos los pedidos
+    await Order.updateMany(
+      {},
+      { 
+        $set: { 
+          invoice_id: null,
+          billed: false,
+          updated_at: new Date()
+        }
+      }
+    );
+
+    // Borrar todas las facturas
+    const deleteResult = await Invoice.deleteMany({});
+
+    console.log('✅ Todas las facturas borradas:', deleteResult.deletedCount);
+
+    res.json({ 
+      message: `Todas las facturas borradas (${deleteResult.deletedCount})`,
+      deleted_count: deleteResult.deletedCount
+    });
+
+  } catch (error) {
+    console.error('❌ Error borrando todas las facturas:', error);
+    res.status(500).json({ error: ERRORS.SERVER_ERROR });
+  }
+}
 
   formatCurrency(amount) {
     return new Intl.NumberFormat('es-CL').format(amount || 0);
   }
+
+  // Agregar este método en backend/src/controllers/billing.controller.js
+
+async getFinancialSummary(req, res) {
+  try {
+    console.log('📊 Obteniendo resumen financiero...');
+
+    // Solo admin puede ver resumen global
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ error: ERRORS.FORBIDDEN });
+    }
+
+    const now = new Date();
+    const currentMonth = now.getMonth() + 1;
+    const currentYear = now.getFullYear();
+    const lastMonth = currentMonth === 1 ? 12 : currentMonth - 1;
+    const lastMonthYear = currentMonth === 1 ? currentYear - 1 : currentYear;
+
+    // 1. Revenue total y del mes actual
+    const revenueStats = await Invoice.aggregate([
+      {
+        $match: { status: 'paid' }
+      },
+      {
+        $group: {
+          _id: null,
+          totalRevenue: { $sum: '$total_amount' },
+          currentMonthRevenue: {
+            $sum: {
+              $cond: [
+                {
+                  $and: [
+                    { $eq: ['$month', currentMonth] },
+                    { $eq: ['$year', currentYear] }
+                  ]
+                },
+                '$total_amount',
+                0
+              ]
+            }
+          },
+          lastMonthRevenue: {
+            $sum: {
+              $cond: [
+                {
+                  $and: [
+                    { $eq: ['$month', lastMonth] },
+                    { $eq: ['$year', lastMonthYear] }
+                  ]
+                },
+                '$total_amount',
+                0
+              ]
+            }
+          }
+        }
+      }
+    ]);
+
+    const revenue = revenueStats[0] || { totalRevenue: 0, currentMonthRevenue: 0, lastMonthRevenue: 0 };
+
+    // Calcular crecimiento del revenue
+    const revenueGrowth = revenue.lastMonthRevenue > 0 
+      ? Math.round(((revenue.currentMonthRevenue - revenue.lastMonthRevenue) / revenue.lastMonthRevenue) * 100)
+      : 0;
+
+    // 2. Estadísticas de facturas
+    const invoiceStats = await Invoice.aggregate([
+      {
+        $group: {
+          _id: null,
+          totalInvoices: { $sum: 1 },
+          pendingInvoices: {
+            $sum: {
+              $cond: [
+                { $in: ['$status', ['pending', 'sent', 'overdue']] },
+                1,
+                0
+              ]
+            }
+          },
+          paidInvoices: {
+            $sum: {
+              $cond: [{ $eq: ['$status', 'paid'] }, 1, 0]
+            }
+          },
+          draftInvoices: {
+            $sum: {
+              $cond: [{ $eq: ['$status', 'draft'] }, 1, 0]
+            }
+          }
+        }
+      }
+    ]);
+
+    const invoices = invoiceStats[0] || { 
+      totalInvoices: 0, 
+      pendingInvoices: 0, 
+      paidInvoices: 0, 
+      draftInvoices: 0 
+    };
+
+    // 3. Estadísticas de pedidos
+    const orderStats = await Order.aggregate([
+      {
+        $group: {
+          _id: null,
+          totalOrders: { $sum: 1 },
+          billedOrders: {
+            $sum: {
+              $cond: [{ $eq: ['$billed', true] }, 1, 0]
+            }
+          },
+          unbilledOrders: {
+            $sum: {
+              $cond: [{ $ne: ['$billed', true] }, 1, 0]
+            }
+          },
+          deliveredOrders: {
+            $sum: {
+              $cond: [{ $eq: ['$status', 'delivered'] }, 1, 0]
+            }
+          }
+        }
+      }
+    ]);
+
+    const orders = orderStats[0] || { 
+      totalOrders: 0, 
+      billedOrders: 0, 
+      unbilledOrders: 0, 
+      deliveredOrders: 0 
+    };
+
+    // 4. Estadísticas de empresas
+    const companyStats = await Company.aggregate([
+      {
+        $group: {
+          _id: null,
+          activeCompanies: {
+            $sum: {
+              $cond: [{ $eq: ['$is_active', true] }, 1, 0]
+            }
+          },
+          totalCompanies: { $sum: 1 }
+        }
+      }
+    ]);
+
+    const companies = companyStats[0] || { activeCompanies: 0, totalCompanies: 0 };
+
+    // 5. Empresas con pagos pendientes
+    const companiesWithPendingPayments = await Invoice.distinct('company_id', {
+      status: { $in: ['pending', 'sent', 'overdue'] }
+    });
+
+    // 6. Revenue estimado del mes actual (pedidos entregados sin facturar)
+    const unbilledDeliveredOrders = await Order.aggregate([
+      {
+        $match: {
+          status: 'delivered',
+          billed: { $ne: true },
+          delivery_date: {
+            $gte: new Date(currentYear, currentMonth - 1, 1),
+            $lt: new Date(currentYear, currentMonth, 1)
+          }
+        }
+      },
+      {
+        $lookup: {
+          from: 'companies',
+          localField: 'company_id',
+          foreignField: '_id',
+          as: 'company'
+        }
+      },
+      { $unwind: '$company' },
+      {
+        $group: {
+          _id: null,
+          estimatedRevenue: { $sum: '$company.price_per_order' },
+          orderCount: { $sum: 1 }
+        }
+      }
+    ]);
+
+    const estimatedRevenue = unbilledDeliveredOrders[0] || { estimatedRevenue: 0, orderCount: 0 };
+
+    const summary = {
+      // Revenue
+      totalRevenue: revenue.totalRevenue,
+      currentMonthRevenue: revenue.currentMonthRevenue,
+      lastMonthRevenue: revenue.lastMonthRevenue,
+      revenueGrowth: revenueGrowth,
+      estimatedRevenue: estimatedRevenue.estimatedRevenue,
+
+      // Facturas
+      totalInvoices: invoices.totalInvoices,
+      pendingInvoices: invoices.pendingInvoices,
+      paidInvoices: invoices.paidInvoices,
+      draftInvoices: invoices.draftInvoices,
+
+      // Pedidos
+      totalOrders: orders.totalOrders,
+      billedOrders: orders.billedOrders,
+      unbilledOrders: orders.unbilledOrders,
+      deliveredOrders: orders.deliveredOrders,
+      unfactoredOrders: orders.unbilledOrders, // Alias para compatibilidad
+
+      // Empresas
+      activeCompanies: companies.activeCompanies,
+      totalCompanies: companies.totalCompanies,
+      companiesWithPendingPayments: companiesWithPendingPayments.length,
+
+      // Métricas adicionales
+      averageInvoiceAmount: invoices.totalInvoices > 0 ? Math.round(revenue.totalRevenue / invoices.totalInvoices) : 0,
+      billingRate: orders.totalOrders > 0 ? Math.round((orders.billedOrders / orders.totalOrders) * 100) : 0
+    };
+
+    console.log('✅ Resumen financiero calculado:', summary);
+
+    res.json(summary);
+
+  } catch (error) {
+    console.error('❌ Error obteniendo resumen financiero:', error);
+    res.status(500).json({ error: ERRORS.SERVER_ERROR });
+  }
+}
 }
 
 const billingControllerInstance = new BillingController();
@@ -539,5 +1343,7 @@ cron.schedule('0 1 1 * *', () => {
 });
 
 console.log('✅ Tarea programada de facturación configurada para ejecutarse el día 1 de cada mes.');
+
+
 
 module.exports = billingControllerInstance;
