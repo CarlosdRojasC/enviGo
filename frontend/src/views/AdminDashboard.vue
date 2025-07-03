@@ -72,13 +72,13 @@
               <div class="action-description">Gestionar facturas</div>
             </div>
           </router-link>
-          <button @click="exportOrders" class="action-card clickable" :disabled="isExporting">
+           <router-link to="/admin/orders" class="action-card">
             <div class="action-icon">📊</div>
             <div class="action-content">
-              <div class="action-title">{{ isExporting ? 'Exportando...' : 'Exportar Pedidos' }}</div>
+              <div class="action-title">Exportar Pedidos</div>
               <div class="action-description">Descargar para OptiRoute</div>
             </div>
-          </button>
+          </router-link>
         </div>
       </div>
 
@@ -163,7 +163,7 @@ Chart.register(...registerables);
 // Estado básico
 const loading = ref(true);
 const stats = ref({});
-const isExporting = ref(false);
+//const isExporting = ref(false);
 
 // Estado para charts
 const loadingTrend = ref(true);

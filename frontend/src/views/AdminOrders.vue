@@ -194,7 +194,27 @@ onMounted(() => {
 
 async function fetchCompanies() { try { const { data } = await apiService.companies.getAll(); companies.value = data; } catch (error) { console.error("Error fetching companies:", error); } }
 async function fetchOrders() { loadingOrders.value = true; try { const params = { page: pagination.value.page, limit: pagination.value.limit, ...filters.value }; const { data } = await apiService.orders.getAll(params); orders.value = data.orders; pagination.value = data.pagination; } catch (error) { console.error('Error fetching orders:', error); } finally { loadingOrders.value = false; } }
-async function exportOrders() { isExporting.value = true; try { const response = await apiService.orders.export(filters.value); const url = window.URL.createObjectURL(new Blob([response.data])); const link = document.createElement('a'); link.href = url; link.setAttribute('download', `pedidos_optiroute_${Date.now()}.xlsx`); document.body.appendChild(link); link.click(); link.remove(); window.URL.revokeObjectURL(url); } catch (error) { alert('No se encontraron pedidos para exportar.'); } finally { isExporting.value = false; } }
+async function exportOrders() {
+  isExporting.value = true;
+  try {
+    // CAMBIO REALIZADO AQUÍ: Se corrigió la llamada a la función de la API
+    const response = await apiService.orders.exportForOptiRoute(filters.value);
+    
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `pedidos_optiroute_${Date.now()}.xlsx`);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  } catch (error) {
+    // Mensaje de alerta mejorado
+    alert('No se encontraron pedidos para exportar con los filtros aplicados.');
+  } finally {
+    isExporting.value = false;
+  }
+}
 function openUpdateStatusModal(order) { selectedOrder.value = order; showUpdateStatusModal.value = true; }
 function openOrderDetailsModal(order) { selectedOrder.value = order; showOrderDetailsModal.value = true; }
 async function handleStatusUpdate({ orderId, newStatus }) { try { await apiService.orders.updateStatus(orderId, newStatus); const index = orders.value.findIndex(o => o._id === orderId); if (index !== -1) { orders.value[index].status = newStatus; } showUpdateStatusModal.value = false; alert('Estado actualizado con éxito.'); } catch (error) { alert(`Error al actualizar estado: ${error.message}`); } }
