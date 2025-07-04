@@ -7,7 +7,6 @@ const {
   authenticateToken,
   isAdmin} = require('../middlewares/auth.middleware');
 
-const billingController = require('../controllers/billing.controller');
 
 // ==================== FACTURACIÓN (BILLING) ====================
 

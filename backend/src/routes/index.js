@@ -255,20 +255,19 @@ Order.aggregate([
       };
 
     } else {
-      // Estadísticas para usuarios de empresa
-      const recent_orders = await Order.find({ company_id: companyObjectId }).sort({ order_date: -1 }).limit(5).lean();
+          // Estadísticas para usuarios de empresa
       const companyId = req.user.company_id;
 
       if (!companyId) {
         return res.status(400).json({ error: 'Usuario no asociado a ninguna empresa' });
       }
 
-      // Convertir a ObjectId usando new
-      const companyObjectId = companyId;
+      // Convertir a ObjectId directamente para usar en las consultas
+      const companyObjectId = new mongoose.Types.ObjectId(companyId);
 
-      const [orderStats, company, channels] = await Promise.all([
+      const [orderStats, company, channels, recent_orders] = await Promise.all([
         Order.aggregate([
-          { $match: { company_id: new mongoose.Types.ObjectId(companyObjectId) } },
+          { $match: { company_id: companyObjectId } },
           {
             $group: {
               _id: null,
@@ -304,7 +303,8 @@ Order.aggregate([
           }
         ]),
         Company.findById(companyObjectId).lean(),
-        Channel.countDocuments({ company_id: companyObjectId, is_active: true })
+        Channel.countDocuments({ company_id: companyObjectId, is_active: true }),
+        Order.find({ company_id: companyObjectId }).sort({ order_date: -1 }).limit(5).lean() // <-- Consulta de pedidos recientes
       ]);
 
       const orderData = orderStats[0] || {
@@ -326,8 +326,8 @@ Order.aggregate([
         channels,
         price_per_order,
         monthly_cost: delivered * price_per_order,
-        recent_orders // <-- AÑADIR ESTA LÍNEA
-      };
+        recent_orders // <-- Añadido aquí
+      }
     }
 
     res.json(stats);
