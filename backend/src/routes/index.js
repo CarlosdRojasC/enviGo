@@ -256,6 +256,7 @@ Order.aggregate([
 
     } else {
       // Estadísticas para usuarios de empresa
+      const recent_orders = await Order.find({ company_id: companyObjectId }).sort({ order_date: -1 }).limit(5).lean();
       const companyId = req.user.company_id;
 
       if (!companyId) {
@@ -324,7 +325,8 @@ Order.aggregate([
         orders: orderData,
         channels,
         price_per_order,
-        monthly_cost: delivered * price_per_order
+        monthly_cost: delivered * price_per_order,
+        recent_orders // <-- AÑADIR ESTA LÍNEA
       };
     }
 

@@ -171,7 +171,7 @@ const fetchStats = async () => {
 const fetchChartData = async (period = '30d') => {
   loadingChart.value = true;
   try {
-    const { data } = await apiService.orders.getOrdersTrend({ period });
+const { data } = await apiService.orders.getTrend({ period });
     chartData.value = data;
   } catch (error) {
     console.error("Error fetching chart data:", error);
