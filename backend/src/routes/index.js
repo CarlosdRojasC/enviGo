@@ -345,9 +345,22 @@ Order.aggregate([
 // --- NUEVA RUTA PARA WEBHOOKS DE SHIPDAY ---
 router.post('/webhooks/shipday', async (req, res) => {
   try {
-    // Aquí puedes añadir una verificación del webhook si Shipday lo permite (ej. un secret)
+    // 1. Extraer el token del encabezado de la petición
+    // Shipday envía el token en el header 'Authorization'
+    const receivedToken = req.headers['authorization'];
+    const expectedToken = process.env.SHIPDAY_WEBHOOK_SECRET;
+
+    // 2. Verificar que el token sea el correcto
+    if (!receivedToken || receivedToken !== expectedToken) {
+      console.warn('Intento de webhook recibido con token inválido.');
+      return res.status(403).json({ error: 'Token de webhook no válido.' });
+    }
+
+    // 3. Si el token es válido, procesar el webhook
+    console.log('Webhook de Shipday recibido y verificado.');
     await ShipdayService.processWebhook(req.body);
     res.status(200).json({ received: true });
+    
   } catch (error) {
     console.error('Error procesando webhook de Shipday:', error);
     res.status(500).json({ error: 'Error procesando webhook' });
