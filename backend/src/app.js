@@ -19,16 +19,23 @@ const allowedOrigins = [
   'http://localhost:5173' // si usas desarrollo también
 ];
 
-app.use(cors({
+const corsOptions = {
   origin: function (origin, callback) {
-    if (!origin || allowedOrigins.includes(origin)) {
+    // Permite peticiones sin 'origin' (como apps móviles o Postman) y las de la lista
+    if (!origin || allowedOrigins.indexOf(origin) !== -1) {
       callback(null, true);
     } else {
-      callback(new Error('Not allowed by CORS'));
+      callback(new Error('No permitido por CORS'));
     }
   },
-  credentials: true
-}));
+  credentials: true // Permite que el frontend envíe cookies o tokens de autorización
+};
+
+app.use(cors(corsOptions));
+
+app.set('trust proxy', 1); // Esto es para que express-rate-limit funcione correctamente en Render
+
+
 // Rate limiting
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutos
