@@ -8,53 +8,33 @@ class DriverController {
   /**
    * Crea un conductor global. Solo para administradores.
    */
-  async createDriver(req, res) {
-    if (req.user.role !== 'admin') {
-      return res.status(403).json({ error: ERRORS.FORBIDDEN });
-    }
-
+ async createDriver(driverInfo) {
     try {
-      // Ya no necesitamos company_id en el body
-      const { full_name, email, phone, password } = req.body;
+      const payload = {
+        name: driverInfo.name,
+        email: driverInfo.email,
+        phoneNumber: driverInfo.phone
+      };
 
-      // 1. Crear el conductor en Shipday
-      const shipdayDriver = await ShipdayService.createDriver({
-        name: full_name,
-        email,
-        phone,
-      });
+      console.log('Enviando payload a Shipday:', JSON.stringify(payload, null, 2));
+      const response = await this.api.post('/drivers', payload);
 
-      // 2. Crear el usuario en la base de datos local sin asociarlo a una empresa
-      const password_hash = await bcrypt.hash(password, 10);
-      const newDriverUser = new User({
-        full_name,
-        email,
-        phone,
-        password_hash,
-        company_id: null, // El conductor no pertenece a ninguna empresa
-        role: 'driver',
-        shipday_driver_id: shipdayDriver.id,
-        is_active: true,
-      });
-
-      await newDriverUser.save();
-
-      res.status(201).json({
-        message: 'Conductor creado exitosamente.',
-        driver: {
-          id: newDriverUser._id,
-          full_name: newDriverUser.full_name,
-          email: newDriverUser.email,
-          shipday_driver_id: newDriverUser.shipday_driver_id,
-        },
-      });
+      console.log('Conductor creado en Shipday:', response.data);
+      return response.data;
 
     } catch (error) {
-      console.error('Error en la creación del conductor:', error);
-      if (error.code === 11000) {
-        return res.status(409).json({ error: 'El email o teléfono ya está registrado.' });
+      // --- BLOQUE DE ERROR MEJORADO ---
+      console.error('❌ Error detallado de la API de Shipday:', error.response?.data);
+      
+      let errorMessage = 'Error al crear conductor en Shipday.';
+      if (error.response?.data?.message) {
+        // Usar el mensaje específico de Shipday si existe
+        errorMessage = error.response.data.message;
+      } else if (error.response?.status === 401) {
+        errorMessage = "Error de autenticación. Verifica que tu API Key de Shipday sea correcta.";
       }
-      res.status(500).json({ error: error.message || ERRORS.SERVER_ERROR });
+      
+      throw new Error(errorMessage);
     }
   }
 

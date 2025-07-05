@@ -24,11 +24,8 @@ export const useAuthStore = defineStore('auth', () => {
     loading.value = true;
     error.value = null;
 
-    console.log('Intentando login con:', { email, password });
-
     try {
       const { data } = await apiService.auth.login(email, password);
-      console.log('Respuesta del servidor:', data);
 
       user.value = data.user;
       token.value = data.token;
