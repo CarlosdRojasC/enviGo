@@ -1,6 +1,6 @@
 // frontend/src/services/shipday.js
 
-import api from './api'
+import { api } from './api'
 
 export const shipdayService = {
   // ==================== CONEXIÓN ====================
