@@ -223,7 +223,7 @@
 
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
-import DriverForm from './DriverForm.vue' // Tu componente existente
+import DriverForm from './DriverForm.vue'
 import { shipdayService } from '../services/shipday'
 
 // Estado
