@@ -169,9 +169,9 @@ onMounted(() => {
     const driverData = {
       name: props.driver.name || '',
       email: props.driver.email || '',
-      phone: props.driver.phone || props.driver.phoneNumber || '',
+      phone: props.driver.phoneNumber || props.driver.phone || '',
       company_name: props.driver.company_name || '',
-      vehicle_type: props.driver.vehicle_type || props.driver.vehicleType || 'car',
+      vehicle_type: props.driver.vehicleType || props.driver.vehicle_type || 'car',
       vehicle_plate: props.driver.vehicle_plate || '',
       driver_license: props.driver.driver_license || '',
       is_active: props.driver.is_active !== undefined ? props.driver.is_active : true
@@ -200,8 +200,8 @@ const handleSubmit = async () => {
     
     let result
     if (isEditing.value) {
-      // Usar el carrierId o email como identificador
-      const driverId = props.driver.carrierId || props.driver.email
+      // Usar el email como identificador
+      const driverId = props.driver.email
       result = await shipdayService.updateDriver(driverId, driverData)
     } else {
       result = await shipdayService.createDriver(driverData)

@@ -99,7 +99,7 @@
     <div v-else class="drivers-grid">
       <div
         v-for="driver in filteredDrivers"
-        :key="driver.carrierId || driver.email"
+        :key="driver.email"
         class="driver-card"
         :class="{ 
           'driver-active': driver.is_active && driver.status === 'available',
@@ -122,11 +122,11 @@
           <div class="driver-details">
             <h3 class="driver-name">{{ driver.name }}</h3>
             <p class="driver-email">{{ driver.email }}</p>
-            <p class="driver-phone">{{ driver.phone || driver.phoneNumber }}</p>
+            <p class="driver-phone">{{ driver.phoneNumber || driver.phone }}</p>
             
             <div class="driver-meta">
-              <span v-if="driver.vehicle_type" class="vehicle-badge">
-                {{ getVehicleIcon(driver.vehicle_type) }} {{ driver.vehicle_type }}
+              <span v-if="driver.vehicleType || driver.vehicle_type" class="vehicle-badge">
+                {{ getVehicleIcon(driver.vehicleType || driver.vehicle_type) }} {{ driver.vehicleType || driver.vehicle_type }}
               </span>
               <span v-if="driver.vehicle_plate" class="plate-badge">
                 🏷️ {{ driver.vehicle_plate }}
@@ -156,9 +156,9 @@
               'btn-status',
               driver.is_active ? 'btn-deactivate' : 'btn-activate'
             ]"
-            :disabled="updatingStatus === (driver.carrierId || driver.email)"
+            :disabled="updatingStatus === driver.email"
           >
-            {{ updatingStatus === (driver.carrierId || driver.email) ? '...' : (driver.is_active ? 'Desactivar' : 'Activar') }}
+            {{ updatingStatus === driver.email ? '...' : (driver.is_active ? 'Desactivar' : 'Activar') }}
           </button>
           
           <!-- Edit -->
@@ -323,12 +323,10 @@ const deleteDriver = async () => {
 
   deleting.value = true
   try {
-    await shipdayService.deleteDriver(driverToDelete.value.carrierId || driverToDelete.value.email)
+    await shipdayService.deleteDriver(driverToDelete.value.email)
     
     // Remover de la lista local
-    drivers.value = drivers.value.filter(d => 
-      (d.carrierId !== driverToDelete.value.carrierId) && (d.email !== driverToDelete.value.email)
-    )
+    drivers.value = drivers.value.filter(d => d.email !== driverToDelete.value.email)
     
     showNotification('Conductor eliminado exitosamente', 'success')
     closeDeleteModal()
@@ -341,18 +339,16 @@ const deleteDriver = async () => {
 }
 
 const toggleDriverStatus = async (driver) => {
-  updatingStatus.value = driver.carrierId || driver.email
+  updatingStatus.value = driver.email
   try {
     const newStatus = !driver.is_active
-    await shipdayService.updateDriver(driver.carrierId || driver.email, {
+    await shipdayService.updateDriver(driver.email, {
       ...driver,
       is_active: newStatus
     })
     
     // Actualizar en la lista local
-    const index = drivers.value.findIndex(d => 
-      (d.carrierId === driver.carrierId) || (d.email === driver.email)
-    )
+    const index = drivers.value.findIndex(d => d.email === driver.email)
     if (index !== -1) {
       drivers.value[index].is_active = newStatus
       drivers.value[index].status = newStatus ? 'available' : 'inactive'
@@ -379,9 +375,7 @@ const assignOrder = (driver) => {
 const handleDriverSuccess = (event) => {
   if (editingDriver.value) {
     // Actualizar conductor existente
-    const index = drivers.value.findIndex(d => 
-      (d.carrierId === editingDriver.value.carrierId) || (d.email === editingDriver.value.email)
-    )
+    const index = drivers.value.findIndex(d => d.email === editingDriver.value.email)
     if (index !== -1) {
       drivers.value[index] = { ...event.driver }
     }
