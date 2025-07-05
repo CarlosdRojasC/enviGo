@@ -24,6 +24,10 @@ const channelController = require('../controllers/channel.controller');
 const userController = require('../controllers/user.controller'); // <-- AÑADIR IMPORT
 const { validateOrderCreation, validateStatusUpdate } = require('../middlewares/validators/order.validator.js');
 const billingController = require('../controllers/billing.controller')
+const driverController = require('../controllers/driver.controller');
+
+
+const ShipdayService = require('../services/shipday.service.js');
 
 
 // Importar modelos para dashboard
@@ -130,6 +134,8 @@ router.get('/orders/export', authenticateToken, isAdmin, orderController.exportF
 router.post('/orders', authenticateToken, validateOrderCreation, orderController.create);
 router.get('/orders/:id', authenticateToken, validateMongoId('id'), orderController.getById); // <-- USAR MIDDLEWARE
 router.patch('/orders/:id/status', authenticateToken, validateMongoId('id'), isAdmin, orderController.updateStatus); // <-- USAR MIDDLEWARE
+router.post('/orders/:orderId/assign-driver', authenticateToken, orderController.assignToDriver);
+
 
 
 // ==================== FACTURACIÓN (BILLING) ====================
@@ -336,5 +342,22 @@ Order.aggregate([
     res.status(500).json({ error: 'Error obteniendo estadísticas' });
   }
 });
+// --- NUEVA RUTA PARA WEBHOOKS DE SHIPDAY ---
+router.post('/webhooks/shipday', async (req, res) => {
+  try {
+    // Aquí puedes añadir una verificación del webhook si Shipday lo permite (ej. un secret)
+    await ShipdayService.processWebhook(req.body);
+    res.status(200).json({ received: true });
+  } catch (error) {
+    console.error('Error procesando webhook de Shipday:', error);
+    res.status(500).json({ error: 'Error procesando webhook' });
+  }
+});
+
+
+// ==================== CONDUCTORES (DRIVERS) ====================
+router.post('/drivers', authenticateToken, driverController.createDriver);
+router.get('/drivers', authenticateToken, driverController.getAllDrivers);
+
 
 module.exports = router;

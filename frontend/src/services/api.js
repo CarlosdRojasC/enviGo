@@ -279,6 +279,15 @@ const dashboard = {
   getStats: () => api.get('/stats/dashboard')
 }
 
+const drivers = {
+  create: (driverData) => api.post('/drivers', driverData),
+  // MÉTODO MODIFICADO/AÑADIDO
+  getAll: () => api.get('/drivers'),
+  // El método getByCompany sigue siendo útil si en alguna otra parte un admin
+  // necesita ver los conductores de una sola empresa, pero no es necesario para Drivers.vue
+  getByCompany: (companyId) => api.get(`/companies/${companyId}/drivers`)
+};
+
 // Helper para verificar conectividad
 export const checkConnection = async () => {
   try {
@@ -315,6 +324,7 @@ export const apiService = {
   companies,
   orders,
   channels,
+  drivers,
   billing,
   dashboard
 }

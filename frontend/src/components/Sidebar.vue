@@ -16,6 +16,11 @@
       <router-link v-if="auth.isAdmin" to="/admin/orders" class="nav-item">📦 <span>Pedidos Globales</span></router-link>
       <router-link v-if="auth.isAdmin" to="/admin/channels" class="nav-item">📡 <span>Canales de Venta</span></router-link>
       <router-link v-if="auth.isAdmin" to="/admin/billing" class="nav-item">🧾 <span>Facturación</span></router-link>
+      <router-link v-if="auth.isAdmin" to="/admin/drivers" class="nav-item">🚚 <span>Conductores</span></router-link>
+
+
+
+
 
       <router-link v-if="!auth.isAdmin" to="/dashboard" class="nav-item">📊 <span>Dashboard</span></router-link>
       <router-link v-if="!auth.isAdmin" to="/orders" class="nav-item">📦 <span>Mis Pedidos</span></router-link>

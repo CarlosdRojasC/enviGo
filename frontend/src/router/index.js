@@ -58,6 +58,13 @@ const routes = [
     component: () => import('../views/Companies.vue'),
     meta: { roles: ['admin'] }
   },
+   // --- AÑADE ESTE BLOQUE PARA LA NUEVA RUTA ---
+      {
+        path: 'admin/drivers',
+        name: 'AdminDrivers',
+        component: () => import('../views/Drivers.vue'),
+        meta: { roles: ['admin'] }
+      },
     {
     path: 'admin/orders',
     name: 'AdminOrders',

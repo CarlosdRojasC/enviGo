@@ -1,6 +1,25 @@
 // backend/src/models/Order.js
 const mongoose = require('mongoose');
 
+
+const evidenceSchema = new mongoose.Schema({
+  photo_url: { type: String },
+  signature_url: { type: String },
+  notes: { type: String },
+  location: {
+    type: {
+      type: String,
+      enum: ['Point'],
+      default: 'Point'
+    },
+    coordinates: {
+      type: [Number], // [longitude, latitude]
+      index: '2dsphere'
+    }
+  }
+}, { _id: false });
+
+
 const orderSchema = new mongoose.Schema({
   // Relaciones
   company_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Company', required: true },
@@ -39,6 +58,16 @@ const orderSchema = new mongoose.Schema({
   load1Packages: { type: Number, default: 1 }, // Carga 1 (ej: N° de paquetes)
   load2WeightKg: { type: Number, default: 1 }, // Carga 2 (ej: Peso en KG)
   
+   // --- NUEVOS CAMPOS PARA SHIPDAY ---
+  shipday_order_id: { type: String, index: true },
+  shipday_driver_id: { type: String, index: true },
+  tracking_link: { type: String },
+  delivery_status: {
+    type: String,
+    enum: ['unassigned', 'assigned', 'started', 'picked_up', 'on_the_way', 'arrived', 'delivered', 'failed_delivery'],
+    default: 'unassigned'
+  },
+  proof_of_delivery: { type: evidenceSchema, default: null },
   
   // Estados y fechas
   status: { 

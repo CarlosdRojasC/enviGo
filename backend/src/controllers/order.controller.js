@@ -4,6 +4,7 @@ const Order = require('../models/Order');
 const Company = require('../models/Company');
 const Channel = require('../models/Channel');
 const mongoose = require('mongoose'); // Agregar esta línea
+const ShipdayService = require('../services/shipday.service.js');
 
 class OrderController {
   async getAll(req, res) {
@@ -320,7 +321,7 @@ async exportForOptiRoute(req, res) {
       res.status(500).json({ error: ERRORS.SERVER_ERROR });
     }
   }
-async getOrdersTrend(req, res) {
+  async getOrdersTrend(req, res) {
   try {
     const { period = '30d' } = req.query;
     const filters = {};
@@ -378,6 +379,39 @@ async getOrdersTrend(req, res) {
     res.status(500).json({ error: ERRORS.SERVER_ERROR });
   }
 }
-}
+/**
+   * Asigna un pedido a un conductor y lo crea en Shipday.
+   */
+  async assignToDriver(req, res) {
+    try {
+      const { orderId } = req.params;
+      const { driverId } = req.body; // driverId de Shipday
 
+      if (!driverId) {
+        return res.status(400).json({ error: 'Se requiere el ID del conductor de Shipday.' });
+      }
+
+      const order = await Order.findById(orderId);
+      if (!order) {
+        return res.status(404).json({ error: 'Pedido no encontrado.' });
+      }
+      
+      // Lógica de permisos (asegurarse de que el usuario puede modificar este pedido)
+      if (req.user.role !== 'admin' && req.user.company_id.toString() !== order.company_id.toString()) {
+        return res.status(403).json({ error: ERRORS.FORBIDDEN });
+      }
+
+      const shipdayResult = await ShipdayService.createAndAssignOrder(order, driverId);
+
+      res.status(200).json({ 
+        message: 'Pedido asignado y creado en Shipday exitosamente.',
+        order: shipdayResult.order 
+      });
+
+    } catch (error) {
+      console.error('Error asignando pedido a conductor:', error);
+      res.status(500).json({ error: error.message || ERRORS.SERVER_ERROR });
+    }
+  }
+}
 module.exports = new OrderController();
