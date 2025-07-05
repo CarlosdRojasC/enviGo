@@ -13,6 +13,8 @@ class ShipDayService {
 
     try {
       this.shipdayClient = new Shipday(this.apiKey, 10000); // Timeout 10s
+      console.log('Métodos disponibles en shipdayClient:', Object.keys(this.shipdayClient));
+console.log('Contenido del shipdayClient:', this.shipdayClient);
       this.carrierModule = this.shipdayClient.getCarriersModule();
       this.orderModule = this.shipdayClient.getOrdersModule();
       console.log('✅ ShipDay SDK y módulos cargados correctamente');
