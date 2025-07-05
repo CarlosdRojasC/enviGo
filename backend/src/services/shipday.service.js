@@ -1,46 +1,20 @@
 // backend/src/services/shipday.service.js
 
-const axios = require('axios');
+const Shipday = require('shipday/integration');
 
 class ShipDayService {
   constructor() {
-    this.baseURL = 'https://api.shipday.com';
     this.apiKey = process.env.SHIPDAY_API_KEY;
     
     if (!this.apiKey) {
       console.warn('⚠️  SHIPDAY_API_KEY no está configurada en las variables de entorno');
+      return;
     }
+
+    // Inicializar cliente de ShipDay con timeout de 10 segundos
+    this.client = new Shipday(this.apiKey, 10000);
     
-    this.client = axios.create({
-      baseURL: this.baseURL,
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-        'Authorization': `Basic ${this.apiKey}`
-      },
-      timeout: 30000
-    });
-
-    // Interceptor para logging
-    this.client.interceptors.request.use(
-      (config) => {
-        console.log(`📡 ShipDay API Request: ${config.method?.toUpperCase()} ${config.url}`);
-        return config;
-      },
-      (error) => Promise.reject(error)
-    );
-
-    this.client.interceptors.response.use(
-      (response) => {
-        console.log(`✅ ShipDay API Response: ${response.status} - ${response.config.url}`);
-        return response;
-      },
-      (error) => {
-        console.error(`❌ ShipDay API Error: ${error.response?.status} - ${error.config?.url}`);
-        console.error('Error details:', error.response?.data);
-        return Promise.reject(error);
-      }
-    );
+    console.log('✅ ShipDay SDK inicializado correctamente');
   }
 
   // ==================== DRIVERS ====================
@@ -52,11 +26,14 @@ class ShipDayService {
    */
   async createDriver(driverData) {
     try {
+      if (!this.client) {
+        throw new Error('ShipDay SDK no está inicializado. Verifica la API Key.');
+      }
+
       const payload = {
         name: driverData.name,
         email: driverData.email,
         phone: driverData.phone,
-        // Campos adicionales según la API de ShipDay
         company_name: driverData.company_name || '',
         driver_license: driverData.driver_license || '',
         vehicle_type: driverData.vehicle_type || 'car',
@@ -66,12 +43,12 @@ class ShipDayService {
 
       console.log('🚚 Creando conductor en ShipDay:', payload);
 
-      const response = await this.client.post('/drivers', payload);
+      const result = await this.client.driver.insert(payload);
       
-      console.log('✅ Conductor creado exitosamente:', response.data);
-      return response.data;
+      console.log('✅ Conductor creado exitosamente:', result);
+      return result;
     } catch (error) {
-      console.error('❌ Error creando conductor:', error.response?.data || error.message);
+      console.error('❌ Error creando conductor:', error);
       throw this.handleError(error);
     }
   }
@@ -82,40 +59,52 @@ class ShipDayService {
    */
   async getDrivers() {
     try {
-      const response = await this.client.get('/drivers');
-      return response.data;
+      if (!this.client) {
+        throw new Error('ShipDay SDK no está inicializado. Verifica la API Key.');
+      }
+
+      const result = await this.client.driver.getAll();
+      return result;
     } catch (error) {
-      console.error('❌ Error obteniendo conductores:', error.response?.data || error.message);
+      console.error('❌ Error obteniendo conductores:', error);
       throw this.handleError(error);
     }
   }
 
   /**
-   * Obtener un conductor por ID
-   * @param {string} driverId - ID del conductor
+   * Obtener un conductor por email (ShipDay usa email como ID único)
+   * @param {string} email - Email del conductor
    * @returns {Promise<Object>} - Datos del conductor
    */
-  async getDriver(driverId) {
+  async getDriver(email) {
     try {
-      const response = await this.client.get(`/drivers/${driverId}`);
-      return response.data;
+      if (!this.client) {
+        throw new Error('ShipDay SDK no está inicializado. Verifica la API Key.');
+      }
+
+      const result = await this.client.driver.get(email);
+      return result;
     } catch (error) {
-      console.error('❌ Error obteniendo conductor:', error.response?.data || error.message);
+      console.error('❌ Error obteniendo conductor:', error);
       throw this.handleError(error);
     }
   }
 
   /**
    * Actualizar un conductor
-   * @param {string} driverId - ID del conductor
+   * @param {string} email - Email del conductor (ID único)
    * @param {Object} updateData - Datos a actualizar
    * @returns {Promise<Object>} - Conductor actualizado
    */
-  async updateDriver(driverId, updateData) {
+  async updateDriver(email, updateData) {
     try {
+      if (!this.client) {
+        throw new Error('ShipDay SDK no está inicializado. Verifica la API Key.');
+      }
+
       const payload = {
+        email: email, // ShipDay usa email como identificador único
         name: updateData.name,
-        email: updateData.email,
         phone: updateData.phone,
         company_name: updateData.company_name,
         driver_license: updateData.driver_license,
@@ -124,25 +113,29 @@ class ShipDayService {
         is_active: updateData.is_active
       };
 
-      const response = await this.client.put(`/drivers/${driverId}`, payload);
-      return response.data;
+      const result = await this.client.driver.update(payload);
+      return result;
     } catch (error) {
-      console.error('❌ Error actualizando conductor:', error.response?.data || error.message);
+      console.error('❌ Error actualizando conductor:', error);
       throw this.handleError(error);
     }
   }
 
   /**
    * Eliminar un conductor
-   * @param {string} driverId - ID del conductor
+   * @param {string} email - Email del conductor
    * @returns {Promise<Boolean>} - True si fue eliminado
    */
-  async deleteDriver(driverId) {
+  async deleteDriver(email) {
     try {
-      await this.client.delete(`/drivers/${driverId}`);
+      if (!this.client) {
+        throw new Error('ShipDay SDK no está inicializado. Verifica la API Key.');
+      }
+
+      await this.client.driver.delete(email);
       return true;
     } catch (error) {
-      console.error('❌ Error eliminando conductor:', error.response?.data || error.message);
+      console.error('❌ Error eliminando conductor:', error);
       throw this.handleError(error);
     }
   }
@@ -156,12 +149,16 @@ class ShipDayService {
    */
   async createOrder(orderData) {
     try {
+      if (!this.client) {
+        throw new Error('ShipDay SDK no está inicializado. Verifica la API Key.');
+      }
+
       const payload = {
         orderNumber: orderData.orderNumber,
         customerName: orderData.customerName,
         customerAddress: orderData.customerAddress,
-        customerEmail: orderData.customerEmail,
-        customerPhone: orderData.customerPhone,
+        customerEmail: orderData.customerEmail || '',
+        customerPhone: orderData.customerPhone || '',
         restaurantName: orderData.restaurantName || '',
         restaurantAddress: orderData.restaurantAddress || '',
         restaurantPhone: orderData.restaurantPhone || '',
@@ -180,12 +177,12 @@ class ShipDayService {
 
       console.log('📦 Creando orden en ShipDay:', payload);
 
-      const response = await this.client.post('/orders', payload);
+      const result = await this.client.order.insert(payload);
       
-      console.log('✅ Orden creada exitosamente:', response.data);
-      return response.data;
+      console.log('✅ Orden creada exitosamente:', result);
+      return result;
     } catch (error) {
-      console.error('❌ Error creando orden:', error.response?.data || error.message);
+      console.error('❌ Error creando orden:', error);
       throw this.handleError(error);
     }
   }
@@ -197,16 +194,15 @@ class ShipDayService {
    */
   async getOrders(filters = {}) {
     try {
-      const params = new URLSearchParams();
-      
-      if (filters.status) params.append('status', filters.status);
-      if (filters.date) params.append('date', filters.date);
-      if (filters.driver_id) params.append('driver_id', filters.driver_id);
-      
-      const response = await this.client.get(`/orders?${params.toString()}`);
-      return response.data;
+      if (!this.client) {
+        throw new Error('ShipDay SDK no está inicializado. Verifica la API Key.');
+      }
+
+      // El SDK de ShipDay maneja los filtros automáticamente
+      const result = await this.client.order.getAll(filters);
+      return result;
     } catch (error) {
-      console.error('❌ Error obteniendo órdenes:', error.response?.data || error.message);
+      console.error('❌ Error obteniendo órdenes:', error);
       throw this.handleError(error);
     }
   }
@@ -218,10 +214,14 @@ class ShipDayService {
    */
   async getOrder(orderId) {
     try {
-      const response = await this.client.get(`/orders/${orderId}`);
-      return response.data;
+      if (!this.client) {
+        throw new Error('ShipDay SDK no está inicializado. Verifica la API Key.');
+      }
+
+      const result = await this.client.order.get(orderId);
+      return result;
     } catch (error) {
-      console.error('❌ Error obteniendo orden:', error.response?.data || error.message);
+      console.error('❌ Error obteniendo orden:', error);
       throw this.handleError(error);
     }
   }
@@ -229,19 +229,23 @@ class ShipDayService {
   /**
    * Asignar una orden a un conductor
    * @param {string} orderId - ID de la orden
-   * @param {string} driverId - ID del conductor
+   * @param {string} driverEmail - Email del conductor
    * @returns {Promise<Object>} - Orden actualizada
    */
-  async assignOrder(orderId, driverId) {
+  async assignOrder(orderId, driverEmail) {
     try {
-      const payload = {
-        driver_id: driverId
-      };
+      if (!this.client) {
+        throw new Error('ShipDay SDK no está inicializado. Verifica la API Key.');
+      }
 
-      const response = await this.client.put(`/orders/${orderId}/assign`, payload);
-      return response.data;
+      const result = await this.client.order.assign({
+        orderId: orderId,
+        driverEmail: driverEmail
+      });
+      
+      return result;
     } catch (error) {
-      console.error('❌ Error asignando orden:', error.response?.data || error.message);
+      console.error('❌ Error asignando orden:', error);
       throw this.handleError(error);
     }
   }
@@ -254,14 +258,18 @@ class ShipDayService {
    */
   async updateOrderStatus(orderId, status) {
     try {
-      const payload = {
-        status: status
-      };
+      if (!this.client) {
+        throw new Error('ShipDay SDK no está inicializado. Verifica la API Key.');
+      }
 
-      const response = await this.client.put(`/orders/${orderId}/status`, payload);
-      return response.data;
+      const result = await this.client.order.updateStatus({
+        orderId: orderId,
+        status: status
+      });
+      
+      return result;
     } catch (error) {
-      console.error('❌ Error actualizando estado de orden:', error.response?.data || error.message);
+      console.error('❌ Error actualizando estado de orden:', error);
       throw this.handleError(error);
     }
   }
@@ -275,39 +283,14 @@ class ShipDayService {
    */
   async getOrderTracking(orderId) {
     try {
-      const response = await this.client.get(`/orders/${orderId}/tracking`);
-      return response.data;
+      if (!this.client) {
+        throw new Error('ShipDay SDK no está inicializado. Verifica la API Key.');
+      }
+
+      const result = await this.client.order.getTracking(orderId);
+      return result;
     } catch (error) {
-      console.error('❌ Error obteniendo tracking:', error.response?.data || error.message);
-      throw this.handleError(error);
-    }
-  }
-
-  // ==================== WEBHOOKS ====================
-
-  /**
-   * Configurar webhook para recibir actualizaciones
-   * @param {string} webhookUrl - URL del webhook
-   * @param {Array} events - Eventos a suscribir
-   * @returns {Promise<Object>} - Configuración del webhook
-   */
-  async setupWebhook(webhookUrl, events = []) {
-    try {
-      const payload = {
-        url: webhookUrl,
-        events: events.length > 0 ? events : [
-          'ORDER_CREATED',
-          'ORDER_ASSIGNED',
-          'ORDER_PICKED_UP',
-          'ORDER_DELIVERED',
-          'ORDER_CANCELLED'
-        ]
-      };
-
-      const response = await this.client.post('/webhooks', payload);
-      return response.data;
-    } catch (error) {
-      console.error('❌ Error configurando webhook:', error.response?.data || error.message);
+      console.error('❌ Error obteniendo tracking:', error);
       throw this.handleError(error);
     }
   }
@@ -320,25 +303,31 @@ class ShipDayService {
    */
   async testConnection() {
     try {
+      if (!this.client) {
+        console.error('❌ ShipDay SDK no está inicializado');
+        return false;
+      }
+
       console.log('🔍 Probando conexión con ShipDay...');
       
       // Intentar obtener órdenes para verificar conectividad
-      await this.client.get('/orders');
+      await this.client.order.getAll({ limit: 1 });
       
       console.log('✅ Conexión con ShipDay exitosa');
       return true;
     } catch (error) {
-      console.error('❌ Error de conexión con ShipDay:', error.response?.data || error.message);
+      console.error('❌ Error de conexión con ShipDay:', error.message);
       return false;
     }
   }
 
   /**
-   * Manejar errores de la API
-   * @param {Error} error - Error de Axios
+   * Manejar errores del SDK
+   * @param {Error} error - Error del SDK
    * @returns {Error} - Error personalizado
    */
   handleError(error) {
+    // El SDK de ShipDay ya maneja los errores de HTTP
     if (error.response) {
       const { status, data } = error.response;
       
@@ -358,10 +347,10 @@ class ShipDayService {
         default:
           return new Error(`Error ${status}: ${data.message || 'Error desconocido'}`);
       }
-    } else if (error.request) {
-      return new Error('Error de conexión con ShipDay. Verifica tu internet');
+    } else if (error.message) {
+      return new Error(error.message);
     } else {
-      return new Error(`Error de configuración: ${error.message}`);
+      return new Error('Error desconocido en ShipDay SDK');
     }
   }
 }
