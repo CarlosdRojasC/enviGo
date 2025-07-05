@@ -1,6 +1,6 @@
 // frontend/src/services/shipday.js
 
-import { apiService } from './api'
+import api from './api'
 
 export const shipdayService = {
   // ==================== CONEXIÓN ====================
@@ -9,7 +9,7 @@ export const shipdayService = {
    * Probar conexión con ShipDay
    */
   testConnection: () => {
-    return apiService.get('/shipday/test-connection')
+    return api.get('/shipday/test-connection')
   },
 
   // ==================== DRIVERS ====================
@@ -18,35 +18,35 @@ export const shipdayService = {
    * Obtener todos los conductores
    */
   getDrivers: () => {
-    return apiService.get('/shipday/drivers')
+    return api.get('/shipday/drivers')
   },
 
   /**
    * Obtener un conductor específico
    */
   getDriver: (id) => {
-    return apiService.get(`/shipday/drivers/${id}`)
+    return api.get(`/shipday/drivers/${id}`)
   },
 
   /**
    * Crear nuevo conductor
    */
   createDriver: (driverData) => {
-    return apiService.post('/shipday/drivers', driverData)
+    return api.post('/shipday/drivers', driverData)
   },
 
   /**
    * Actualizar conductor
    */
   updateDriver: (id, driverData) => {
-    return apiService.put(`/shipday/drivers/${id}`, driverData)
+    return api.put(`/shipday/drivers/${id}`, driverData)
   },
 
   /**
    * Eliminar conductor
    */
   deleteDriver: (id) => {
-    return apiService.delete(`/shipday/drivers/${id}`)
+    return api.delete(`/shipday/drivers/${id}`)
   },
 
   // ==================== ORDERS ====================
@@ -56,35 +56,35 @@ export const shipdayService = {
    */
   getOrders: (filters = {}) => {
     const params = new URLSearchParams(filters).toString()
-    return apiService.get(`/shipday/orders${params ? `?${params}` : ''}`)
+    return api.get(`/shipday/orders${params ? `?${params}` : ''}`)
   },
 
   /**
    * Obtener una orden específica
    */
   getOrder: (id) => {
-    return apiService.get(`/shipday/orders/${id}`)
+    return api.get(`/shipday/orders/${id}`)
   },
 
   /**
    * Crear nueva orden
    */
   createOrder: (orderData) => {
-    return apiService.post('/shipday/orders', orderData)
+    return api.post('/shipday/orders', orderData)
   },
 
   /**
    * Asignar orden a conductor
    */
   assignOrder: (orderId, driverId) => {
-    return apiService.put(`/shipday/orders/${orderId}/assign`, { driver_id: driverId })
+    return api.put(`/shipday/orders/${orderId}/assign`, { driver_id: driverId })
   },
 
   /**
    * Actualizar estado de orden
    */
   updateOrderStatus: (orderId, status) => {
-    return apiService.put(`/shipday/orders/${orderId}/status`, { status })
+    return api.put(`/shipday/orders/${orderId}/status`, { status })
   },
 
   // ==================== TRACKING ====================
@@ -93,7 +93,7 @@ export const shipdayService = {
    * Obtener tracking de una orden
    */
   getOrderTracking: (orderId) => {
-    return apiService.get(`/shipday/orders/${orderId}/tracking`)
+    return api.get(`/shipday/orders/${orderId}/tracking`)
   },
 
   // ==================== WEBHOOKS ====================
@@ -102,7 +102,7 @@ export const shipdayService = {
    * Configurar webhook
    */
   setupWebhook: (webhookUrl, events = []) => {
-    return apiService.post('/shipday/webhooks/setup', {
+    return api.post('/shipday/webhooks/setup', {
       webhook_url: webhookUrl,
       events
     })

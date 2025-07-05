@@ -1,5 +1,3 @@
-// frontend/src/components/DriverForm.vue
-
 <template>
   <div class="driver-form">
     <h2 class="form-title">{{ isEditing ? 'Editar Conductor' : 'Nuevo Conductor' }}</h2>
