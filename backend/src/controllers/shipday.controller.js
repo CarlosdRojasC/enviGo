@@ -514,4 +514,14 @@ class ShipDayController {
   }
 }
 
-module.exports = new ShipDayController();
+// ✅ IMPORTANTE: Crear instancia correctamente con binding
+const shipdayController = new ShipDayController();
+
+// Bind all methods to the instance to preserve 'this' context
+Object.getOwnPropertyNames(ShipDayController.prototype).forEach(method => {
+  if (method !== 'constructor' && typeof shipdayController[method] === 'function') {
+    shipdayController[method] = shipdayController[method].bind(shipdayController);
+  }
+});
+
+module.exports = shipdayController;
