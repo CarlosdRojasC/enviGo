@@ -14,6 +14,9 @@ router.get('/drivers/:id', authenticateToken, shipdayController.getDriver);
 router.post('/drivers', authenticateToken, shipdayController.createDriver);
 router.put('/drivers/:id', authenticateToken, shipdayController.updateDriver);
 router.delete('/drivers/:id', authenticateToken, shipdayController.deleteDriver);
+// --- RUTA NUEVA PARA ELIMINAR ---
+router.delete('/drivers/:driverId', authenticateToken, driverController.deleteDriver);
+
 
 // ==================== ORDERS ====================
 router.get('/orders', authenticateToken, shipdayController.getOrders);

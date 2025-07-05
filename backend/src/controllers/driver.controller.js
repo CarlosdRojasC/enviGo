@@ -55,6 +55,33 @@ class DriverController {
       res.status(500).json({ error: ERRORS.SERVER_ERROR });
     }
   }
+  async deleteDriver(req, res) {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ error: ERRORS.FORBIDDEN });
+    }
+    try {
+      const { driverId } = req.params;
+
+      // 1. Encontrar el usuario/conductor en tu base de datos
+      const driver = await User.findById(driverId);
+      if (!driver || driver.role !== 'driver') {
+        return res.status(404).json({ error: 'Conductor no encontrado.' });
+      }
+
+      // 2. Llamar al servicio para eliminarlo de Shipday usando su email
+      // El servicio que me pasaste usa el email para borrar, así que lo usamos.
+      await ShipdayService.deleteDriver(driver.email);
+      
+      // 3. Si se elimina de Shipday, eliminarlo de tu base de datos
+      await User.findByIdAndDelete(driverId);
+
+      res.status(200).json({ message: 'Conductor eliminado exitosamente.' });
+    } catch (error) {
+      console.error('Error eliminando conductor:', error);
+      res.status(500).json({ error: error.message });
+    }
+  }
+  
 }
 
 module.exports = new DriverController();
