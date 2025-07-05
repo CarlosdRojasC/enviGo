@@ -13,6 +13,7 @@ class ShipDayService {
 
     try {
       this.shipdayClient = new Shipday(this.apiKey, 10000); // Timeout 10s
+      console.log('Métodos disponibles en shipdayClient:', Object.keys(this.shipdayClient));
       console.log('✅ ShipDay SDK inicializado correctamente');
     } catch (error) {
       console.error('❌ Error inicializando ShipDay SDK:', error);
