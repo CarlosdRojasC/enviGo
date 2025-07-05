@@ -24,17 +24,13 @@ const channelController = require('../controllers/channel.controller');
 const userController = require('../controllers/user.controller'); // <-- AÑADIR IMPORT
 const { validateOrderCreation, validateStatusUpdate } = require('../middlewares/validators/order.validator.js');
 const billingController = require('../controllers/billing.controller')
-const driverController = require('../controllers/driver.controller');
 
-
-const ShipdayService = require('../services/shipday.service.js');
-
+const shipdayRoutes = require('./shipday.routes');
 
 // Importar modelos para dashboard
 const Company = require('../models/Company');
 const Order = require('../models/Order');
 const Channel = require('../models/Channel');
-const Invoice = require('../models/Invoice');
 
 // ==================== RUTAS PÚBLICAS ====================
 
@@ -178,6 +174,8 @@ router.delete('/billing/invoices', authenticateToken, isAdmin, billingController
 
 // Borrar todas las facturas (solo desarrollo)
 router.delete('/billing/invoices/all/development', authenticateToken, isAdmin, billingController.deleteAllInvoices);
+
+router.use('/shipday', shipdayRoutes);
 
 // ==================== DASHBOARD STATS (MONGO) ====================
 
@@ -342,35 +340,7 @@ Order.aggregate([
     res.status(500).json({ error: 'Error obteniendo estadísticas' });
   }
 });
-// --- NUEVA RUTA PARA WEBHOOKS DE SHIPDAY ---
-router.post('/webhooks/shipday', async (req, res) => {
-  try {
-    // 1. Extraer el token del encabezado de la petición
-    // Shipday envía el token en el header 'Authorization'
-    const receivedToken = req.headers['authorization'];
-    const expectedToken = process.env.SHIPDAY_WEBHOOK_SECRET;
 
-    // 2. Verificar que el token sea el correcto
-    if (!receivedToken || receivedToken !== expectedToken) {
-      console.warn('Intento de webhook recibido con token inválido.');
-      return res.status(403).json({ error: 'Token de webhook no válido.' });
-    }
-
-    // 3. Si el token es válido, procesar el webhook
-    console.log('Webhook de Shipday recibido y verificado.');
-    await ShipdayService.processWebhook(req.body);
-    res.status(200).json({ received: true });
-    
-  } catch (error) {
-    console.error('Error procesando webhook de Shipday:', error);
-    res.status(500).json({ error: 'Error procesando webhook' });
-  }
-});
-
-
-// ==================== CONDUCTORES (DRIVERS) ====================
-router.post('/drivers', authenticateToken, driverController.createDriver);
-router.get('/drivers', authenticateToken, driverController.getAllDrivers);
 
 
 module.exports = router;

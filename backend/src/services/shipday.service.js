@@ -1,145 +1,369 @@
 // backend/src/services/shipday.service.js
+
 const axios = require('axios');
-const Order = require('../models/Order');
 
-class ShipdayService {
-  constructor(apiKey) {
-    this.apiKey = apiKey || process.env.SHIPDAY_API_KEY;
-    this.api = axios.create({
-      baseURL: 'https://api.shipday.com/',
-      headers: {
-        'Authorization': `Basic ${Buffer.from(this.apiKey + ':').toString('base64')}`,
-        'Content-Type': 'application/json'
-      }
-    });
-  }
-
-  /**
-   * Crea un pedido en Shipday y lo asigna a un conductor.
-   * @param {object} orderData - Los datos del pedido de tu base de datos.
-   * @param {string} driverId - El ID del conductor de Shipday.
-   * @returns {Promise<object>} - La respuesta de la API de Shipday.
-   */
-  async createAndAssignOrder(orderData, driverId) {
-    try {
-      const payload = {
-        orderNumber: orderData.order_number,
-        customerName: orderData.customer_name,
-        customerEmail: orderData.customer_email,
-        customerPhoneNumber: orderData.customer_phone,
-        deliveryAddress: {
-          address: orderData.shipping_address,
-          city: orderData.shipping_city,
-          state: orderData.shipping_state,
-          zip: orderData.shipping_zip
-        },
-        // Puedes añadir más detalles si los tienes
-        // restaurantName: "Tu Empresa",
-        // restaurantAddress: "Dirección de recogida",
-        // deliveryTime: "YYYY-MM-DDTHH:mm:ssZ"
-        assignedTo: driverId
-      };
-
-      console.log('Enviando pedido a Shipday:', payload);
-      const response = await this.api.post('/orders', payload);
-
-      // Actualizar nuestro pedido con los datos de Shipday
-      const updatedOrder = await Order.findByIdAndUpdate(
-        orderData._id,
-        {
-          $set: {
-            shipday_order_id: response.data.orderId,
-            shipday_driver_id: driverId,
-            tracking_link: response.data.trackingLink,
-            delivery_status: 'assigned', // Estado inicial tras la asignación
-            updated_at: new Date()
-          }
-        },
-        { new: true }
-      );
-
-      console.log(`Pedido ${orderData.order_number} creado en Shipday y asignado a driver ${driverId}.`);
-      return { success: true, shipdayOrder: response.data, order: updatedOrder };
-
-    } catch (error) {
-      console.error('Error creando pedido en Shipday:', error.response?.data || error.message);
-      throw new Error(error.response?.data?.message || 'Error al conectar con Shipday.');
-    }
-  }
-
-  /**
-   * Procesa un evento de webhook de Shipday.
-   * @param {object} webhookData - El cuerpo del webhook recibido.
-   */
-  async processWebhook(webhookData) {
-    const { orderId, eventType, orderState, proofOfDelivery } = webhookData;
-
-    console.log(`Webhook recibido de Shipday: OrderID ${orderId}, Evento ${eventType}`);
-
-    const order = await Order.findOne({ shipday_order_id: orderId });
-    if (!order) {
-      console.warn(`Pedido con Shipday ID ${orderId} no encontrado en la base de datos.`);
-      return { success: false, message: 'Pedido no encontrado.' };
-    }
-
-    const updateData = {
-      delivery_status: orderState.toLowerCase().replace(/ /g, '_'), // ej. "On The Way" -> "on_the_way"
-      updated_at: new Date()
-    };
-
-    // Si es un evento de entrega, guardar la prueba.
-    if (eventType === 'delivered' && proofOfDelivery) {
-      updateData.proof_of_delivery = {
-        photo_url: proofOfDelivery.photo,
-        signature_url: proofOfDelivery.signature,
-        notes: proofOfDelivery.notes,
-        location: {
-          type: 'Point',
-          coordinates: [proofOfDelivery.location.longitude, proofOfDelivery.location.latitude]
-        }
-      };
-      // Opcional: Actualizar también tu estado principal
-      updateData.status = 'delivered';
-      updateData.delivery_date = new Date();
+class ShipDayService {
+  constructor() {
+    this.baseURL = 'https://api.shipday.com';
+    this.apiKey = process.env.SHIPDAY_API_KEY;
+    
+    if (!this.apiKey) {
+      console.warn('⚠️  SHIPDAY_API_KEY no está configurada en las variables de entorno');
     }
     
-    if (eventType === 'failed_delivery') {
-      updateData.status = 'cancelled'; // O un estado personalizado como 'failed_delivery'
-    }
+    this.client = axios.create({
+      baseURL: this.baseURL,
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+        'Authorization': `Basic ${this.apiKey}`
+      },
+      timeout: 30000
+    });
 
-    await Order.updateOne({ _id: order._id }, { $set: updateData });
+    // Interceptor para logging
+    this.client.interceptors.request.use(
+      (config) => {
+        console.log(`📡 ShipDay API Request: ${config.method?.toUpperCase()} ${config.url}`);
+        return config;
+      },
+      (error) => Promise.reject(error)
+    );
 
-    console.log(`Pedido ${order.order_number} actualizado por webhook. Nuevo estado: ${updateData.delivery_status}`);
-    return { success: true, message: 'Webhook procesado.' };
+    this.client.interceptors.response.use(
+      (response) => {
+        console.log(`✅ ShipDay API Response: ${response.status} - ${response.config.url}`);
+        return response;
+      },
+      (error) => {
+        console.error(`❌ ShipDay API Error: ${error.response?.status} - ${error.config?.url}`);
+        console.error('Error details:', error.response?.data);
+        return Promise.reject(error);
+      }
+    );
   }
-   /**
-   * Crea un conductor en Shipday.
-   * @param {object} driverInfo - Información del conductor (name, email, phone).
-   * @returns {Promise<object>} - La respuesta de la API de Shipday con los datos del conductor creado.
+
+  // ==================== DRIVERS ====================
+
+  /**
+   * Crear un nuevo conductor
+   * @param {Object} driverData - Datos del conductor
+   * @returns {Promise<Object>} - Respuesta de la API
    */
-  async createDriver(driverInfo) {
+  async createDriver(driverData) {
     try {
       const payload = {
-        name: driverInfo.name,
-        email: driverInfo.email,
-        phoneNumber: driverInfo.phone
-        // Shipday podría permitir más campos como 'teamId', etc.
+        name: driverData.name,
+        email: driverData.email,
+        phone: driverData.phone,
+        // Campos adicionales según la API de ShipDay
+        company_name: driverData.company_name || '',
+        driver_license: driverData.driver_license || '',
+        vehicle_type: driverData.vehicle_type || 'car',
+        vehicle_plate: driverData.vehicle_plate || '',
+        is_active: driverData.is_active !== undefined ? driverData.is_active : true
       };
 
-      console.log('Creando conductor en Shipday:', payload);
-      const response = await this.api.post('/drivers', payload);
+      console.log('🚚 Creando conductor en ShipDay:', payload);
 
-      console.log('Conductor creado en Shipday exitosamente:', response.data);
-      return response.data; // Devuelve el objeto del conductor creado
-
+      const response = await this.client.post('/drivers', payload);
+      
+      console.log('✅ Conductor creado exitosamente:', response.data);
+      return response.data;
     } catch (error) {
-      console.error('Error creando conductor en Shipday:', error.response?.data || error.message);
-      // Extraer un mensaje de error más claro si está disponible
-      const errorMessage = error.response?.data?.message || 'Error al crear conductor en Shipday.';
-      throw new Error(errorMessage);
+      console.error('❌ Error creando conductor:', error.response?.data || error.message);
+      throw this.handleError(error);
+    }
+  }
+
+  /**
+   * Obtener todos los conductores
+   * @returns {Promise<Array>} - Lista de conductores
+   */
+  async getDrivers() {
+    try {
+      const response = await this.client.get('/drivers');
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error obteniendo conductores:', error.response?.data || error.message);
+      throw this.handleError(error);
+    }
+  }
+
+  /**
+   * Obtener un conductor por ID
+   * @param {string} driverId - ID del conductor
+   * @returns {Promise<Object>} - Datos del conductor
+   */
+  async getDriver(driverId) {
+    try {
+      const response = await this.client.get(`/drivers/${driverId}`);
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error obteniendo conductor:', error.response?.data || error.message);
+      throw this.handleError(error);
+    }
+  }
+
+  /**
+   * Actualizar un conductor
+   * @param {string} driverId - ID del conductor
+   * @param {Object} updateData - Datos a actualizar
+   * @returns {Promise<Object>} - Conductor actualizado
+   */
+  async updateDriver(driverId, updateData) {
+    try {
+      const payload = {
+        name: updateData.name,
+        email: updateData.email,
+        phone: updateData.phone,
+        company_name: updateData.company_name,
+        driver_license: updateData.driver_license,
+        vehicle_type: updateData.vehicle_type,
+        vehicle_plate: updateData.vehicle_plate,
+        is_active: updateData.is_active
+      };
+
+      const response = await this.client.put(`/drivers/${driverId}`, payload);
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error actualizando conductor:', error.response?.data || error.message);
+      throw this.handleError(error);
+    }
+  }
+
+  /**
+   * Eliminar un conductor
+   * @param {string} driverId - ID del conductor
+   * @returns {Promise<Boolean>} - True si fue eliminado
+   */
+  async deleteDriver(driverId) {
+    try {
+      await this.client.delete(`/drivers/${driverId}`);
+      return true;
+    } catch (error) {
+      console.error('❌ Error eliminando conductor:', error.response?.data || error.message);
+      throw this.handleError(error);
+    }
+  }
+
+  // ==================== ORDERS ====================
+
+  /**
+   * Crear una nueva orden
+   * @param {Object} orderData - Datos de la orden
+   * @returns {Promise<Object>} - Respuesta de la API
+   */
+  async createOrder(orderData) {
+    try {
+      const payload = {
+        orderNumber: orderData.orderNumber,
+        customerName: orderData.customerName,
+        customerAddress: orderData.customerAddress,
+        customerEmail: orderData.customerEmail,
+        customerPhone: orderData.customerPhone,
+        restaurantName: orderData.restaurantName || '',
+        restaurantAddress: orderData.restaurantAddress || '',
+        restaurantPhone: orderData.restaurantPhone || '',
+        deliveryInstruction: orderData.deliveryInstruction || '',
+        deliveryFee: orderData.deliveryFee || 0,
+        tips: orderData.tips || 0,
+        tax: orderData.tax || 0,
+        discount: orderData.discount || 0,
+        total: orderData.total || 0,
+        paymentMethod: orderData.paymentMethod || 'CASH',
+        orderItems: orderData.orderItems || [],
+        // Fechas programadas
+        expectedPickupTime: orderData.expectedPickupTime,
+        expectedDeliveryTime: orderData.expectedDeliveryTime
+      };
+
+      console.log('📦 Creando orden en ShipDay:', payload);
+
+      const response = await this.client.post('/orders', payload);
+      
+      console.log('✅ Orden creada exitosamente:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error creando orden:', error.response?.data || error.message);
+      throw this.handleError(error);
+    }
+  }
+
+  /**
+   * Obtener todas las órdenes
+   * @param {Object} filters - Filtros para las órdenes
+   * @returns {Promise<Array>} - Lista de órdenes
+   */
+  async getOrders(filters = {}) {
+    try {
+      const params = new URLSearchParams();
+      
+      if (filters.status) params.append('status', filters.status);
+      if (filters.date) params.append('date', filters.date);
+      if (filters.driver_id) params.append('driver_id', filters.driver_id);
+      
+      const response = await this.client.get(`/orders?${params.toString()}`);
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error obteniendo órdenes:', error.response?.data || error.message);
+      throw this.handleError(error);
+    }
+  }
+
+  /**
+   * Obtener una orden por ID
+   * @param {string} orderId - ID de la orden
+   * @returns {Promise<Object>} - Datos de la orden
+   */
+  async getOrder(orderId) {
+    try {
+      const response = await this.client.get(`/orders/${orderId}`);
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error obteniendo orden:', error.response?.data || error.message);
+      throw this.handleError(error);
+    }
+  }
+
+  /**
+   * Asignar una orden a un conductor
+   * @param {string} orderId - ID de la orden
+   * @param {string} driverId - ID del conductor
+   * @returns {Promise<Object>} - Orden actualizada
+   */
+  async assignOrder(orderId, driverId) {
+    try {
+      const payload = {
+        driver_id: driverId
+      };
+
+      const response = await this.client.put(`/orders/${orderId}/assign`, payload);
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error asignando orden:', error.response?.data || error.message);
+      throw this.handleError(error);
+    }
+  }
+
+  /**
+   * Actualizar estado de una orden
+   * @param {string} orderId - ID de la orden
+   * @param {string} status - Nuevo estado
+   * @returns {Promise<Object>} - Orden actualizada
+   */
+  async updateOrderStatus(orderId, status) {
+    try {
+      const payload = {
+        status: status
+      };
+
+      const response = await this.client.put(`/orders/${orderId}/status`, payload);
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error actualizando estado de orden:', error.response?.data || error.message);
+      throw this.handleError(error);
+    }
+  }
+
+  // ==================== TRACKING ====================
+
+  /**
+   * Obtener tracking de una orden
+   * @param {string} orderId - ID de la orden
+   * @returns {Promise<Object>} - Información de tracking
+   */
+  async getOrderTracking(orderId) {
+    try {
+      const response = await this.client.get(`/orders/${orderId}/tracking`);
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error obteniendo tracking:', error.response?.data || error.message);
+      throw this.handleError(error);
+    }
+  }
+
+  // ==================== WEBHOOKS ====================
+
+  /**
+   * Configurar webhook para recibir actualizaciones
+   * @param {string} webhookUrl - URL del webhook
+   * @param {Array} events - Eventos a suscribir
+   * @returns {Promise<Object>} - Configuración del webhook
+   */
+  async setupWebhook(webhookUrl, events = []) {
+    try {
+      const payload = {
+        url: webhookUrl,
+        events: events.length > 0 ? events : [
+          'ORDER_CREATED',
+          'ORDER_ASSIGNED',
+          'ORDER_PICKED_UP',
+          'ORDER_DELIVERED',
+          'ORDER_CANCELLED'
+        ]
+      };
+
+      const response = await this.client.post('/webhooks', payload);
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error configurando webhook:', error.response?.data || error.message);
+      throw this.handleError(error);
+    }
+  }
+
+  // ==================== UTILITIES ====================
+
+  /**
+   * Verificar conectividad con ShipDay
+   * @returns {Promise<Boolean>} - True si la conexión es exitosa
+   */
+  async testConnection() {
+    try {
+      console.log('🔍 Probando conexión con ShipDay...');
+      
+      // Intentar obtener órdenes para verificar conectividad
+      await this.client.get('/orders');
+      
+      console.log('✅ Conexión con ShipDay exitosa');
+      return true;
+    } catch (error) {
+      console.error('❌ Error de conexión con ShipDay:', error.response?.data || error.message);
+      return false;
+    }
+  }
+
+  /**
+   * Manejar errores de la API
+   * @param {Error} error - Error de Axios
+   * @returns {Error} - Error personalizado
+   */
+  handleError(error) {
+    if (error.response) {
+      const { status, data } = error.response;
+      
+      switch (status) {
+        case 400:
+          return new Error(`Error de validación: ${data.message || 'Datos inválidos'}`);
+        case 401:
+          return new Error('API Key inválida o no autorizada');
+        case 403:
+          return new Error('Acceso denegado. Verifica permisos de la API Key');
+        case 404:
+          return new Error('Recurso no encontrado');
+        case 429:
+          return new Error('Límite de requests excedido. Intenta más tarde');
+        case 500:
+          return new Error('Error interno del servidor de ShipDay');
+        default:
+          return new Error(`Error ${status}: ${data.message || 'Error desconocido'}`);
+      }
+    } else if (error.request) {
+      return new Error('Error de conexión con ShipDay. Verifica tu internet');
+    } else {
+      return new Error(`Error de configuración: ${error.message}`);
     }
   }
 }
 
-// Exportar una instancia para usarla como singleton
-module.exports = new ShipdayService(process.env.SHIPDAY_API_KEY);
+module.exports = ShipDayService;
