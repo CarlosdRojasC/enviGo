@@ -32,6 +32,7 @@ export const shipdayService = {
    * Crear nuevo conductor
    */
   createDriver: (driverData) => {
+    console.log('🔍 Creando conductor con:', driverData)
     return api.post('/shipday/drivers', driverData)
   },
 
