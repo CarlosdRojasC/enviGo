@@ -1,137 +1,94 @@
 // backend/src/services/shipday.service.js
 
-const Shipday = require('shipday/integration');
+const axios = require('axios');
+
+const BASE_URL = 'https://api.shipday.com';
+const API_KEY = process.env.SHIPDAY_API_KEY;
+
+const headers = {
+  'Content-Type': 'application/json',
+  Authorization: `Basic ${API_KEY}`,
+};
 
 class ShipDayService {
   constructor() {
-    this.apiKey = process.env.SHIPDAY_API_KEY;
-
-    if (!this.apiKey) {
+    if (!API_KEY) {
       console.warn('⚠️  SHIPDAY_API_KEY no está configurada en las variables de entorno');
-      return;
-    }
-
-    try {
-      this.shipdayClient = new Shipday(this.apiKey, 10000); // Timeout 10s
-      this.carrierModule = this.shipdayClient.carrierService;
-      this.orderModule = this.shipdayClient.orderService;
-      console.log('✅ ShipDay SDK y módulos cargados correctamente');
-    } catch (error) {
-      console.error('❌ Error inicializando ShipDay SDK:', error);
-      this.shipdayClient = null;
     }
   }
 
   // ==================== DRIVERS ====================
 
   async createDriver(driverData) {
-    if (!this.carrierModule) throw new Error('Módulo de carrier no inicializado');
-
     const payload = {
       name: driverData.name,
       email: driverData.email,
-      phone: driverData.phone,
-      vehicle_type: driverData.vehicle_type || 'car',
-      vehicle_plate: driverData.vehicle_plate || '',
-      is_active: driverData.is_active !== undefined ? driverData.is_active : true
+      phoneNumber: driverData.phone,
+      vehicleType: driverData.vehicle_type || 'car'
     };
 
-    try {
-      const result = await this.carrierModule.insert(payload);
-      return result;
-    } catch (error) {
-      console.error('❌ Error creando conductor:', error);
-      throw this.handleError(error);
-    }
+    const res = await axios.post(`${BASE_URL}/carriers`, payload, { headers });
+    return res.data;
   }
 
   async getDrivers() {
-    if (!this.carrierModule) throw new Error('Módulo de carrier no inicializado');
-    return await this.carrierModule.getAll();
+    const res = await axios.get(`${BASE_URL}/carriers`, { headers });
+    return res.data;
   }
 
   async getDriver(email) {
-    if (!this.carrierModule) throw new Error('Módulo de carrier no inicializado');
-    return await this.carrierModule.get(email);
+    const res = await axios.get(`${BASE_URL}/carriers/${email}`, { headers });
+    return res.data;
   }
 
   async updateDriver(email, updateData) {
-    if (!this.carrierModule) throw new Error('Módulo de carrier no inicializado');
-
     const payload = {
-      email: email,
       name: updateData.name,
-      phone: updateData.phone,
-      vehicle_type: updateData.vehicle_type,
-      vehicle_plate: updateData.vehicle_plate,
+      email,
+      phoneNumber: updateData.phone,
+      vehicleType: updateData.vehicle_type,
       is_active: updateData.is_active
     };
 
-    return await this.carrierModule.update(payload);
+    const res = await axios.put(`${BASE_URL}/carriers/${email}`, payload, { headers });
+    return res.data;
   }
 
   async deleteDriver(email) {
-    if (!this.carrierModule) throw new Error('Módulo de carrier no inicializado');
-    return await this.carrierModule.delete(email);
+    const res = await axios.delete(`${BASE_URL}/carriers/${email}`, { headers });
+    return res.data;
   }
 
   // ==================== ORDERS ====================
 
   async createOrder(orderData) {
-    if (!this.orderModule) throw new Error('Módulo de orden no inicializado');
-
-    const payload = {
-      orderNumber: orderData.orderNumber,
-      customerName: orderData.customerName,
-      customerAddress: orderData.customerAddress,
-      customerEmail: orderData.customerEmail || '',
-      customerPhone: orderData.customerPhone || '',
-      restaurantName: orderData.restaurantName || '',
-      restaurantAddress: orderData.restaurantAddress || '',
-      restaurantPhone: orderData.restaurantPhone || '',
-      deliveryInstruction: orderData.deliveryInstruction || '',
-      deliveryFee: orderData.deliveryFee || 0,
-      tips: orderData.tips || 0,
-      tax: orderData.tax || 0,
-      discount: orderData.discount || 0,
-      total: orderData.total || 0,
-      paymentMethod: orderData.paymentMethod || 'CASH',
-      orderItems: orderData.orderItems || [],
-      expectedPickupTime: orderData.expectedPickupTime,
-      expectedDeliveryTime: orderData.expectedDeliveryTime
-    };
-
-    const result = await this.orderModule.insert(payload);
-    return result;
+    const res = await axios.post(`${BASE_URL}/orders`, orderData, { headers });
+    return res.data;
   }
 
-  async getOrders(filters = {}) {
-    if (!this.orderModule) throw new Error('Módulo de orden no inicializado');
-    return await this.orderModule.getAll(filters);
+  async getOrders() {
+    const res = await axios.get(`${BASE_URL}/orders`, { headers });
+    return res.data;
   }
 
-  async getOrder(orderNumber) {
-    if (!this.orderModule) throw new Error('Módulo de orden no inicializado');
-    return await this.orderModule.get(orderNumber);
+  async getOrder(orderId) {
+    const res = await axios.get(`${BASE_URL}/orders/${orderId}`, { headers });
+    return res.data;
   }
 
-  async assignOrder(orderId, carrierEmail) {
-    if (!this.orderModule) throw new Error('Módulo de orden no inicializado');
-
-    return await this.orderModule.assign({
-      orderId,
-      carrierEmail
-    });
+  async assignOrder(orderId, email) {
+    const payload = { orderId, email };
+    const res = await axios.post(`${BASE_URL}/assignorder`, payload, { headers });
+    return res.data;
   }
 
   // ==================== UTILITIES ====================
 
   async testConnection() {
-    if (!this.orderModule) return false;
     try {
-      await this.getOrders({ limit: 1 });
+      const result = await axios.get(`${BASE_URL}/orders?limit=1`, { headers });
       console.log('✅ Conexión con ShipDay exitosa');
-      return true;
+      return !!result.data;
     } catch (error) {
       console.error('❌ Error de conexión con ShipDay:', error.message);
       return false;
@@ -141,15 +98,7 @@ class ShipDayService {
   handleError(error) {
     if (error.response) {
       const { status, data } = error.response;
-      switch (status) {
-        case 400: return new Error(`Datos inválidos: ${data.message || data.error}`);
-        case 401: return new Error('API Key inválida');
-        case 403: return new Error('Acceso denegado');
-        case 404: return new Error('Recurso no encontrado');
-        case 429: return new Error('Límite de requests excedido');
-        case 500: return new Error('Error interno del servidor');
-        default: return new Error(`Error ${status}: ${data.message || data.error}`);
-      }
+      return new Error(data?.message || `Error ${status}`);
     } else if (error.message) {
       return new Error(error.message);
     } else {
