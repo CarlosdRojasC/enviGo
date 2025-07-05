@@ -13,8 +13,9 @@ class ShipDayService {
 
     try {
       this.shipdayClient = new Shipday(this.apiKey, 10000); // Timeout 10s
-      console.log('Métodos disponibles en shipdayClient:', Object.keys(this.shipdayClient));
-      console.log('✅ ShipDay SDK inicializado correctamente');
+      this.carrierModule = this.shipdayClient.getCarriersModule();
+      this.orderModule = this.shipdayClient.getOrdersModule();
+      console.log('✅ ShipDay SDK y módulos cargados correctamente');
     } catch (error) {
       console.error('❌ Error inicializando ShipDay SDK:', error);
       this.shipdayClient = null;
@@ -24,7 +25,7 @@ class ShipDayService {
   // ==================== DRIVERS ====================
 
   async createDriver(driverData) {
-    if (!this.shipdayClient) throw new Error('SDK no inicializado');
+    if (!this.carrierModule) throw new Error('Módulo de carrier no inicializado');
 
     const payload = {
       name: driverData.name,
@@ -36,7 +37,7 @@ class ShipDayService {
     };
 
     try {
-      const result = await this.shipdayClient.carrier.insert(payload);
+      const result = await this.carrierModule.insert(payload);
       return result;
     } catch (error) {
       console.error('❌ Error creando conductor:', error);
@@ -45,17 +46,17 @@ class ShipDayService {
   }
 
   async getDrivers() {
-    if (!this.shipdayClient) throw new Error('SDK no inicializado');
-    return await this.shipdayClient.carrier.getAll();
+    if (!this.carrierModule) throw new Error('Módulo de carrier no inicializado');
+    return await this.carrierModule.getAll();
   }
 
   async getDriver(email) {
-    if (!this.shipdayClient) throw new Error('SDK no inicializado');
-    return await this.shipdayClient.carrier.get(email);
+    if (!this.carrierModule) throw new Error('Módulo de carrier no inicializado');
+    return await this.carrierModule.get(email);
   }
 
   async updateDriver(email, updateData) {
-    if (!this.shipdayClient) throw new Error('SDK no inicializado');
+    if (!this.carrierModule) throw new Error('Módulo de carrier no inicializado');
 
     const payload = {
       email: email,
@@ -66,18 +67,18 @@ class ShipDayService {
       is_active: updateData.is_active
     };
 
-    return await this.shipdayClient.carrier.update(payload);
+    return await this.carrierModule.update(payload);
   }
 
   async deleteDriver(email) {
-    if (!this.shipdayClient) throw new Error('SDK no inicializado');
-    return await this.shipdayClient.carrier.delete(email);
+    if (!this.carrierModule) throw new Error('Módulo de carrier no inicializado');
+    return await this.carrierModule.delete(email);
   }
 
   // ==================== ORDERS ====================
 
   async createOrder(orderData) {
-    if (!this.shipdayClient) throw new Error('SDK no inicializado');
+    if (!this.orderModule) throw new Error('Módulo de orden no inicializado');
 
     const payload = {
       orderNumber: orderData.orderNumber,
@@ -100,24 +101,24 @@ class ShipDayService {
       expectedDeliveryTime: orderData.expectedDeliveryTime
     };
 
-    const result = await this.shipdayClient.order.insert(payload);
+    const result = await this.orderModule.insert(payload);
     return result;
   }
 
   async getOrders(filters = {}) {
-    if (!this.shipdayClient) throw new Error('SDK no inicializado');
-    return await this.shipdayClient.order.getAll(filters);
+    if (!this.orderModule) throw new Error('Módulo de orden no inicializado');
+    return await this.orderModule.getAll(filters);
   }
 
   async getOrder(orderNumber) {
-    if (!this.shipdayClient) throw new Error('SDK no inicializado');
-    return await this.shipdayClient.order.get(orderNumber);
+    if (!this.orderModule) throw new Error('Módulo de orden no inicializado');
+    return await this.orderModule.get(orderNumber);
   }
 
   async assignOrder(orderId, carrierEmail) {
-    if (!this.shipdayClient) throw new Error('SDK no inicializado');
+    if (!this.orderModule) throw new Error('Módulo de orden no inicializado');
 
-    return await this.shipdayClient.order.assign({
+    return await this.orderModule.assign({
       orderId,
       carrierEmail
     });
@@ -126,7 +127,7 @@ class ShipDayService {
   // ==================== UTILITIES ====================
 
   async testConnection() {
-    if (!this.shipdayClient) return false;
+    if (!this.orderModule) return false;
     try {
       await this.getOrders({ limit: 1 });
       console.log('✅ Conexión con ShipDay exitosa');
