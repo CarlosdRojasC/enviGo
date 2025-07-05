@@ -10,6 +10,8 @@ const connectDB = require('./config/database');  // <-- Importa conexión MongoD
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+// --- AÑADE ESTA LÍNEA AQUÍ ---
+app.set('trust proxy', 1); // Confía en el primer proxy (el de Render)
 // Middlewares de seguridad
 app.use(helmet());
 app.use(compression());
