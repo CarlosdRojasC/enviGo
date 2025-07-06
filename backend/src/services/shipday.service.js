@@ -16,11 +16,21 @@ class ShipDayService {
 
   // Método para probar diferentes formatos de autenticación
   getHeaders(format = 1) {
+    const baseHeaders = {
+      'Content-Type': 'application/json',
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+      'Accept': 'application/json, text/plain, */*',
+      'Accept-Language': 'en-US,en;q=0.9',
+      'Accept-Encoding': 'gzip, deflate, br',
+      'Connection': 'keep-alive',
+      'Upgrade-Insecure-Requests': '1',
+    };
+
     const formats = {
-      1: { 'Content-Type': 'application/json', 'Authorization': `Basic ${API_KEY}` },
-      2: { 'Content-Type': 'application/json', 'Authorization': API_KEY },
-      3: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${API_KEY}` },
-      4: { 'Content-Type': 'application/json', 'X-API-Key': API_KEY },
+      1: { ...baseHeaders, 'Authorization': `Basic ${API_KEY}` },
+      2: { ...baseHeaders, 'Authorization': API_KEY },
+      3: { ...baseHeaders, 'Authorization': `Bearer ${API_KEY}` },
+      4: { ...baseHeaders, 'X-API-Key': API_KEY },
     };
     return formats[format] || formats[1];
   }
