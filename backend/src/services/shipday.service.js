@@ -5,20 +5,15 @@ const axios = require('axios');
 const BASE_URL = 'https://api.shipday.com';
 const API_KEY = process.env.SHIPDAY_API_KEY;
 
-// Codificación correcta en Base64: "API_KEY:"
-const authString = Buffer.from(`${API_KEY}:`).toString('base64');
-
 const headers = {
   'Content-Type': 'application/json',
-  Authorization: `Basic ${authString}`,
+  Authorization: `Basic ${API_KEY}`,
 };
 
 class ShipDayService {
   constructor() {
     if (!API_KEY) {
       console.warn('⚠️  SHIPDAY_API_KEY no está configurada en las variables de entorno');
-    } else {
-      console.log('🔐 Shipday API Key cargada correctamente.');
     }
   }
 
