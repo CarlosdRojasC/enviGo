@@ -132,9 +132,9 @@
                   <button @click="openUsersModal(company)" class="btn-action users" title="Gestionar Usuarios">
                     👥
                   </button>
-                  <button @click="exportCompanyOrders(company)" class="btn-action stats" title="Exportar Pedidos (OptiRoute)">
-                    🚚
-                  </button>
+                    <button @click="exportCompanyOrders(company)" class="btn-action stats" title="Exportar Pedidos (OptiRoute)">
+      🚚
+    </button>
                   <button @click="openStatsModal(company)" class="btn-action stats" title="Ver Estadísticas">
                     📊
                   </button>
@@ -178,7 +178,6 @@
             <input id="company-address" v-model="newCompany.address" type="text">
           </div>
         </div>
-
         <div class="form-section">
           <h4>Usuario Administrador de la Empresa</h4>
           <div class="form-row">
@@ -197,7 +196,6 @@
             <small class="form-hint">El usuario deberá usar esta contraseña para su primer acceso.</small>
           </div>
         </div>
-
         <div class="modal-actions">
           <button type="button" @click="showAddCompanyModal = false" class="btn-cancel">Cancelar</button>
           <button type="submit" :disabled="isAddingCompany" class="btn-save">
@@ -209,11 +207,75 @@
 
     <Modal v-model="showPricingModal" :title="`Configurar Precios - ${selectedCompany?.name}`" width="600px">
       <div v-if="selectedCompany" class="pricing-config">
+        <div class="pricing-header">
+          <h4>Configuración de Facturación</h4>
+          <p>Configura el precio por pedido y las condiciones de facturación</p>
         </div>
+        <div class="pricing-form">
+          <div class="form-row">
+            <div class="form-group">
+              <label for="plan-type">Tipo de Plan</label>
+              <select id="plan-type" v-model="pricingForm.plan_type" @change="updatePriceSuggestion">
+                <option value="basic">Básico</option>
+                <option value="pro">Pro</option>
+                <option value="enterprise">Enterprise</option>
+                <option value="custom">Personalizado</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="billing-cycle">Ciclo de Facturación</label>
+              <select id="billing-cycle" v-model="pricingForm.billing_cycle">
+                <option value="monthly">Mensual</option>
+                <option value="quarterly">Trimestral</option>
+                <option value="annual">Anual</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="price-per-order">Precio por Pedido (Sin IVA)</label>
+            <div class="price-input-group">
+              <span class="currency-symbol">$</span>
+              <input 
+                id="price-per-order"
+                type="number" 
+                v-model.number="pricingForm.price_per_order"
+                @input="calculatePricingBreakdown"
+                placeholder="0"
+                min="0"
+                step="1"
+              />
+              <span class="price-suggestion" v-if="suggestedPrice">
+                Sugerido: ${{ formatCurrency(suggestedPrice) }}
+              </span>
+            </div>
+          </div>
+          <div class="pricing-breakdown">
+            <h5>Desglose de Facturación</h5>
+            </div>
+          <div class="revenue-projection" v-if="selectedCompany.orders_this_month">
+            <h5>Proyección de Ingresos</h5>
+            </div>
+          <div class="form-group">
+            <label for="pricing-notes">Notas de Facturación</label>
+            <textarea 
+              id="pricing-notes"
+              v-model="pricingForm.pricing_notes"
+              placeholder="Condiciones especiales, descuentos, etc."
+              rows="3"
+            ></textarea>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button @click="showPricingModal = false" class="btn-cancel">Cancelar</button>
+          <button @click="savePricingConfig" :disabled="savingPricing" class="btn-save">
+            {{ savingPricing ? 'Guardando...' : 'Guardar Configuración' }}
+          </button>
+        </div>
+      </div>
     </Modal>
 
     <Modal v-model="showUsersModal" :title="`Usuarios de ${selectedCompany?.name}`" width="800px">
-        </Modal>
+      </Modal>
     
     <Modal v-model="showAddUserForm" :title="`Añadir Usuario a ${selectedCompany?.name}`" width="500px">
         </Modal>
@@ -333,7 +395,7 @@ async function openUsersModal(company) {
     showUsersModal.value = true;
     loadingUsers.value = true;
     try {
-        const { data } = await apiService.users.getByCompany(company._id);
+        const { data } = await apiService.companies.getUsers(company._id);
         users.value = data;
     } catch (error) {
         alert('No se pudieron cargar los usuarios de la empresa.');
@@ -364,6 +426,20 @@ async function handleAddNewUser() {
     }
 }
 
+async function toggleUserStatus(user) {
+  const newStatus = !user.is_active;
+  const confirmation = confirm(`¿Estás seguro de que quieres ${newStatus ? 'activar' : 'desactivar'} a ${user.full_name}?`);
+  if (confirmation) {
+    try {
+      await apiService.users.update(user._id, { is_active: newStatus });
+      user.is_active = newStatus;
+      alert('Usuario actualizado con éxito.');
+    } catch (error) {
+      alert(`Error al actualizar usuario: ${error.message}`);
+    }
+  }
+}
+
 function openPricingModal(company) {
   selectedCompany.value = company;
   pricingForm.value = {
@@ -375,29 +451,152 @@ function openPricingModal(company) {
   showPricingModal.value = true;
 }
 
-function formatCurrency(amount) {
-  return new Intl.NumberFormat('es-CL').format(amount || 0);
+async function savePricingConfig() {
+  if (!selectedCompany.value) return;
+  
+  savingPricing.value = true;
+  try {
+    await apiService.companies.updatePrice(selectedCompany.value._id, pricingForm.value.price_per_order);
+    
+    const updateData = {
+      plan_type: pricingForm.value.plan_type,
+      billing_cycle: pricingForm.value.billing_cycle,
+      pricing_notes: pricingForm.value.pricing_notes
+    };
+    
+    await apiService.companies.update(selectedCompany.value._id, updateData);
+    
+    const companyIndex = companies.value.findIndex(c => c._id === selectedCompany.value._id);
+    if (companyIndex !== -1) {
+      companies.value[companyIndex] = {
+        ...companies.value[companyIndex],
+        price_per_order: pricingForm.value.price_per_order,
+        ...updateData
+      };
+    }
+    
+    showPricingModal.value = false;
+    alert('Configuración de precios guardada con éxito.');
+    
+  } catch (error) {
+    alert(`Error al guardar configuración: ${error.message}`);
+  } finally {
+    savingPricing.value = false;
+  }
+}
+
+async function exportCompanyOrders(company) {
+  const confirmation = confirm(`¿Deseas exportar todos los pedidos para OptiRoute de la empresa "${company.name}"?`);
+  if (!confirmation) return;
+
+  isExporting.value = true;
+  try {
+    const params = { company_id: company._id };
+    const response = await apiService.orders.exportForOptiRoute(params);
+    
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `pedidos_optiroute_${company.slug}_${Date.now()}.xlsx`);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+    
+  } catch (error) {
+    console.error('Error exporting company orders:', error);
+    alert('No se encontraron pedidos para exportar para esta empresa.');
+  } finally {
+    isExporting.value = false;
+  }
+}
+
+async function toggleCompanyStatus(company) {
+  const newStatus = !company.is_active;
+  const confirmation = confirm(`¿Estás seguro de que quieres ${newStatus ? 'activar' : 'desactivar'} la empresa ${company.name}?`);
+  
+  if (confirmation) {
+    try {
+      await apiService.companies.update(company._id, { is_active: newStatus });
+      company.is_active = newStatus;
+      alert(`Empresa ${newStatus ? 'activada' : 'desactivada'} con éxito.`);
+    } catch (error) {
+      alert(`Error al actualizar empresa: ${error.message}`);
+    }
+  }
+}
+
+function updatePriceSuggestion() {
+  const plan = planPricing[pricingForm.value.plan_type];
+  if (plan && plan.price > 0) {
+    pricingForm.value.price_per_order = plan.price;
+  }
+  calculatePricingBreakdown();
+}
+
+function calculatePricingBreakdown() {
+  // Los computed properties se actualizan automáticamente
+}
+
+async function exportCompaniesData() {
+  try {
+    const csvData = companies.value.map(company => ({
+      'Nombre Empresa': company.name,
+      'Plan': getPlanName(company.plan_type),
+      'Precio Base': company.price_per_order || 0,
+      'IVA': calculateIVA(company.price_per_order || 0),
+      'Total por Pedido': getTotalPriceWithIVA(company.price_per_order || 0),
+      'Pedidos este Mes': company.orders_this_month || 0,
+      'Revenue Mensual': calculateMonthlyRevenue(company),
+      'Estado': company.is_active ? 'Activa' : 'Inactiva',
+      'Usuarios': company.users_count || 0
+    }));
+    
+    const csv = convertToCSV(csvData);
+    downloadCSV(csv, `empresas_facturacion_${new Date().toISOString().split('T')[0]}.csv`);
+    
+  } catch (error) {
+    alert('Error al exportar datos');
+  }
+}
+
+// Funciones de utilidad
+function calculateIVA(basePrice) {
+  return Math.round(basePrice * IVA_RATE);
+}
+
+function getTotalPriceWithIVA(basePrice) {
+  return basePrice + calculateIVA(basePrice);
 }
 
 function calculateMonthlyRevenue(company) {
-    const baseRevenue = (company.price_per_order || 0) * (company.orders_this_month || 0);
-    return baseRevenue + calculateIVA(baseRevenue);
+  const baseRevenue = (company.price_per_order || 0) * (company.orders_this_month || 0);
+  return baseRevenue + calculateIVA(baseRevenue);
 }
 
-function calculateIVA(basePrice) {
-  return Math.round(basePrice * IVA_RATE);
+function getBaseRevenue(company) {
+  return (company.price_per_order || 0) * (company.orders_this_month || 0);
+}
+
+function getIVARevenue(company) {
+  return calculateIVA(getBaseRevenue(company));
 }
 
 function getPlanName(planType) {
   return planPricing[planType]?.name || 'Básico';
 }
 
-function getBaseRevenue(company) {
-    return (company.price_per_order || 0) * (company.orders_this_month || 0);
+function getPlanUserLimit(planType) {
+  return planPricing[planType]?.users || 3;
 }
 
-function getIVARevenue(company) {
-    return calculateIVA(getBaseRevenue(company));
+function getRoleName(role) {
+  const roles = {
+    company_owner: 'Dueño',
+    company_employee: 'Empleado',
+    admin: 'Administrador'
+  };
+  return roles[role] || role;
 }
 
 function getStatusClass(company) {
@@ -412,6 +611,10 @@ function getStatusText(company) {
   return 'Activa';
 }
 
+function formatCurrency(amount) {
+  return new Intl.NumberFormat('es-CL').format(amount || 0);
+}
+
 function formatDate(dateStr) {
   if (!dateStr) return 'Nunca';
   return new Date(dateStr).toLocaleDateString('es-ES', {
@@ -421,10 +624,6 @@ function formatDate(dateStr) {
   });
 }
 
-function getTotalPriceWithIVA(basePrice) {
-  return basePrice + calculateIVA(basePrice);
-}
-
 let searchTimeout;
 function debounceSearch() {
   clearTimeout(searchTimeout);
@@ -432,8 +631,41 @@ function debounceSearch() {
     fetchCompanies();
   }, 500);
 }
-</script>
 
+function convertToCSV(data) {
+  if (!data || data.length === 0) return '';
+  
+  const headers = Object.keys(data[0]);
+  const csvContent = [
+    headers.join(','),
+    ...data.map(row => 
+      headers.map(header => {
+        const value = row[header];
+        return typeof value === 'string' && value.includes(',') 
+          ? `"${value.replace(/"/g, '""')}"` 
+          : value;
+      }).join(',')
+    )
+  ].join('\n');
+  
+  return csvContent;
+}
+
+function downloadCSV(csv, filename) {
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const link = document.createElement('a');
+  
+  if (link.download !== undefined) {
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', filename);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
+}
+</script>
 <style scoped>
 .page-container { 
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; 
@@ -814,5 +1046,120 @@ function debounceSearch() {
 }
 .empty-state-small {
   padding: 20px;
+}
+.page-container { 
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; 
+  max-width: 1400px;
+  margin: 0 auto;
+}
+.page-header { 
+  display: flex; 
+  justify-content: space-between; 
+  align-items: center; 
+  margin-bottom: 24px; 
+}
+.page-title { 
+  font-size: 28px; 
+  font-weight: 700; 
+  color: #1f2937; 
+}
+.header-actions {
+  display: flex;
+  gap: 12px;
+}
+.btn-primary, .btn-secondary { 
+  padding: 10px 20px; 
+  border-radius: 6px; 
+  border: none; 
+  cursor: pointer; 
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+.btn-primary { 
+  background-color: #4f46e5; 
+  color: white; 
+}
+.company-form {
+  max-height: 70vh;
+  overflow-y: auto;
+  padding-right: 10px;
+}
+.form-section {
+  margin-bottom: 24px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid #e5e7eb;
+}
+.form-section:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+.form-section h4 {
+  margin: 0 0 16px 0;
+  color: #1f2937;
+  font-size: 16px;
+  font-weight: 600;
+}
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+.form-group { 
+  margin-bottom: 0; 
+}
+.form-group label { 
+  display: block; 
+  margin-bottom: 8px; 
+  font-weight: 500; 
+  color: #374151;
+}
+.form-group input { 
+  width: 100%; 
+  padding: 10px 12px; 
+  border: 1px solid #d1d5db; 
+  border-radius: 6px; 
+  box-sizing: border-box; 
+  font-size: 14px;
+}
+.form-hint {
+  font-size: 12px;
+  color: #6b7280;
+  margin-top: 4px;
+}
+.modal-actions { 
+  display: flex; 
+  justify-content: flex-end; 
+  gap: 12px; 
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid #e5e7eb;
+}
+.btn-cancel, 
+.btn-save { 
+  padding: 10px 20px; 
+  border-radius: 6px; 
+  border: 1px solid transparent; 
+  cursor: pointer; 
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+.btn-cancel { 
+  background-color: #e5e7eb; 
+  color: #374151;
+}
+.btn-cancel:hover {
+  background-color: #d1d5db;
+}
+.btn-save { 
+  background-color: #4f46e5; 
+  color: white; 
+}
+.btn-save:hover {
+  background-color: #4338ca;
+}
+.btn-save:disabled { 
+  opacity: 0.5; 
+  cursor: not-allowed; 
 }
 </style>
