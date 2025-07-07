@@ -293,7 +293,7 @@
                   <div class="order-info">
                     <div class="order-header">
                       <span class="order-number">#{{ order.order_number }}</span>
-                      <span class="order-amount">${{ formatCurrency(order.total_amount) }}</span>
+                      <span class="order-amount">${{ formatCurrency(order.shipping_cost) }}</span>
                     </div>
                     <div class="order-details">
                       <span class="order-customer">{{ order.customer_name }}</span>
@@ -394,12 +394,12 @@
               <div class="company-preview">
                 <span class="company-name">{{ preview.company_name }}</span>
                 <span class="orders-count">{{ preview.orders_count }} pedidos</span>
-                <span class="total-amount">${{ formatCurrency(preview.total_amount) }}</span>
+                <span class="total-amount">${{ formatCurrency(preview.shipping_cost) }}</span>
               </div>
             </div>
           </div>
           <div class="bulk-preview-summary">
-            <strong>Total: ${{ formatCurrency(bulkPreview.reduce((sum, p) => sum + p.total_amount, 0)) }}</strong>
+            <strong>Total: ${{ formatCurrency(bulkPreview.reduce((sum, p) => sum + p.shipping_cost, 0)) }}</strong>
           </div>
         </div>
 
