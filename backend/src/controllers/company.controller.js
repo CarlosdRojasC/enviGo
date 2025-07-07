@@ -78,6 +78,7 @@ class CompanyController {
       const {
         name,
         email,
+        contact_email,
         phone,
         address,
         price_per_order,
@@ -93,7 +94,7 @@ class CompanyController {
         .substring(0, 100);
 
       // Validar si ya existe empresa con mismo email o slug
-      const exists = await Company.findOne({ $or: [{ email }, { slug }] });
+      const exists = await Company.findOne({ $or: [{ email: finalEmail }, { slug }] });
       if (exists) {
         return res.status(400).json({ error: 'Ya existe una empresa con ese nombre o email' });
       }
@@ -102,7 +103,7 @@ class CompanyController {
       const company = new Company({
         name,
         slug,
-        email,
+        email: finalEmail,
         phone,
         address,
         price_per_order: price_per_order || 0
