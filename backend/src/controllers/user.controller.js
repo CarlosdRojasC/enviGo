@@ -33,6 +33,45 @@ class UserController {
       res.status(500).json({ error: ERRORS.SERVER_ERROR });
     }
   }
+    async getByCompany(req, res) {
+    try {
+      const { companyId } = req.params;
+      const users = await User.find({ company_id: companyId }).select('-password');
+      res.json(users);
+    } catch (error) {
+      console.error('Error obteniendo usuarios por empresa:', error);
+      res.status(500).json({ error: ERRORS.SERVER_ERROR });
+    }
+  }
+
+  // 🔹 Actualizar estado activo/inactivo de usuario
+  async updateUser(req, res) {
+    try {
+      const { id } = req.params;
+      const { is_active } = req.body;
+
+      if (typeof is_active !== 'boolean') {
+        return res.status(400).json({ error: 'Solo se puede actualizar el estado de activación.' });
+      }
+
+      const user = await User.findById(id);
+      if (!user) {
+        return res.status(404).json({ error: 'Usuario no encontrado' });
+      }
+
+      if (user.role === 'admin' && !is_active) {
+        return res.status(400).json({ error: 'Un administrador no puede desactivarse a sí mismo.' });
+      }
+
+      user.is_active = is_active;
+      await user.save();
+
+      res.json({ message: 'Usuario actualizado exitosamente.', user });
+    } catch (error) {
+      console.error('Error actualizando usuario:', error);
+      res.status(500).json({ error: ERRORS.SERVER_ERROR });
+    }
+  }
 }
 
 module.exports = new UserController();

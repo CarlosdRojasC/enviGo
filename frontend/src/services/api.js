@@ -64,7 +64,10 @@ const companies = {
   getUsers: (id) => api.get(`/companies/${id}/users`),
   getStats: (id, params = {}) => api.get(`/companies/${id}/stats`, { params })
 }
-
+const users = {
+  getByCompany: (companyId) => api.get(`/users/company/${companyId}`),
+  create: (userData) => api.post('/auth/register', userData)
+}
 // Servicios de pedidos
 const orders = {
   getAll: (params = {}) => api.get('/orders', { params }),
@@ -326,7 +329,8 @@ export const apiService = {
   channels,
   drivers,
   billing,
-  dashboard
+  dashboard,
+  users
 }
 
 // Exportar instancia de axios para casos especiales

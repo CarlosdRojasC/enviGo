@@ -422,6 +422,21 @@
       <label for="company-price">Precio por pedido (sin IVA)</label>
       <input id="company-price" v-model.number="newCompany.price_per_order" type="number" min="0" placeholder="Ej: 500" />
     </div>
+    <div class="form-divider">Usuario Administrador</div>
+
+<div class="form-group">
+  <label for="owner-name">Nombre del Dueño</label>
+  <input id="owner-name" v-model="newCompany.owner.full_name" required />
+</div>
+<div class="form-group">
+  <label for="owner-email">Email del Dueño</label>
+  <input id="owner-email" v-model="newCompany.owner.email" type="email" required />
+</div>
+<div class="form-group">
+  <label for="owner-password">Contraseña Provisional</label>
+  <input id="owner-password" v-model="newCompany.owner.password" type="password" minlength="6" required />
+  <small class="form-hint">El dueño podrá cambiarla en su primer acceso</small>
+</div>
     <div class="modal-actions">
       <button type="button" class="btn-cancel" @click="showAddCompanyModal = false">Cancelar</button>
       <button type="submit" class="btn-save">Crear Empresa</button>
@@ -810,7 +825,12 @@ const newCompany = ref({
   name: '',
   contact_email: '',
   plan_type: 'basic',
-  price_per_order: 0
+  price_per_order: 0,
+  owner: {
+    full_name: '',
+    email: '',
+    password: ''
+  }
 })
 
 function openAddCompanyModal() {
@@ -826,12 +846,28 @@ function openAddCompanyModal() {
 
 async function handleAddCompany() {
   try {
-    await apiService.companies.create(newCompany.value)
-    alert('Empresa añadida con éxito')
+    // Paso 1: Crear empresa
+    const { data: createdCompany } = await apiService.companies.create({
+      name: newCompany.value.name,
+      contact_email: newCompany.value.contact_email,
+      plan_type: newCompany.value.plan_type,
+      price_per_order: newCompany.value.price_per_order
+    })
+
+    // Paso 2: Crear usuario dueño
+    await apiService.users.create({
+      full_name: newCompany.value.owner.full_name,
+      email: newCompany.value.owner.email,
+      password: newCompany.value.owner.password,
+      role: 'company_owner',
+      company_id: createdCompany._id
+    })
+
+    alert('Empresa y usuario creados con éxito')
     showAddCompanyModal.value = false
     await fetchCompanies()
   } catch (error) {
-    alert('Error al crear empresa: ' + (error.response?.data?.message || error.message))
+    alert('Error al crear empresa o usuario: ' + (error.response?.data?.message || error.message))
   }
 }
 </script>
