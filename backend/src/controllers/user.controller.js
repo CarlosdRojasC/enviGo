@@ -33,16 +33,16 @@ class UserController {
       res.status(500).json({ error: ERRORS.SERVER_ERROR });
     }
   }
-    async getByCompany(req, res) {
-    try {
-      const { companyId } = req.params;
-      const users = await User.find({ company_id: companyId }).select('-password');
-      res.json(users);
-    } catch (error) {
-      console.error('Error obteniendo usuarios por empresa:', error);
-      res.status(500).json({ error: ERRORS.SERVER_ERROR });
-    }
+async getByCompany(req, res) {
+  try {
+    const { companyId } = req.params;
+    const users = await User.find({ company_id: companyId }).select('-password'); // Excluir contraseñas
+    res.json(users);
+  } catch (error) {
+    console.error('Error al obtener usuarios por empresa:', error);
+    res.status(500).json({ error: ERRORS.SERVER_ERROR });
   }
+}
 
   // 🔹 Actualizar estado activo/inactivo de usuario
   async updateUser(req, res) {

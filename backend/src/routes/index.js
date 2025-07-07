@@ -92,6 +92,9 @@ router.post('/channels/:id/test', authenticateToken, validateMongoId('id'), chan
 // La creación de usuarios por parte de un admin
 router.post('/users', authenticateToken, isAdmin, authController.register);
 
+router.get('/users/company/:companyId', authenticateToken, isAdmin, userController.getByCompany);
+
+
 // Ruta para actualizar (activar/desactivar)
 router.patch('/users/:id', authenticateToken, isAdmin, userController.updateUser);
 
