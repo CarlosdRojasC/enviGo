@@ -551,20 +551,27 @@ function openAddUserModal() {
 }
 
 async function handleAddNewUser() {
-    isAddingUser.value = true
+    isAddingUser.value = true;
     try {
-        await apiService.users.create(newUser.value)
-        alert('Usuario creado con éxito.')
-        showAddUserForm.value = false
-        await openUsersModal(selectedCompany.value)
-        await fetchCompanies()
+        // --- CAMBIO CLAVE: AÑADIR explícitamente el company_id ---
+        const userData = {
+            ...newUser.value,
+            company_id: selectedCompany.value._id
+        };
+        // En lugar de llamar a `apiService.users.create`, usamos `auth.register` que es más directo.
+        await apiService.auth.register(userData);
+        alert('Usuario creado con éxito.');
+        showAddUserForm.value = false;
+        await openUsersModal(selectedCompany.value); // Recargar la lista de usuarios del modal
+        await fetchCompanies(); // Recargar los datos de las compañías por si cambió el contador de usuarios
     } catch (error) {
-        alert(`Error al crear usuario: ${error.message}`)
+        // Mostrar un error más específico si el backend lo envía
+        const errorMessage = error.response?.data?.error || `Error al crear usuario: ${error.message}`;
+        alert(errorMessage);
     } finally {
-        isAddingUser.value = false
+        isAddingUser.value = false;
     }
 }
-
 async function toggleUserStatus(user) {
   const newStatus = !user.is_active
   const confirmation = confirm(`¿Estás seguro de que quieres ${newStatus ? 'activar' : 'desactivar'} a ${user.full_name}?`)
