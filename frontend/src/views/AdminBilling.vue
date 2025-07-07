@@ -618,7 +618,7 @@ const generatePreview = computed(() => {
 const selectedOrdersTotal = computed(() => {
   return availableOrders.value
     .filter(order => selectedOrders.value.includes(order._id))
-    .reduce((total, order) => total + (order.total_amount || 0), 0)
+    .reduce((total, order) => total + (order.shipping_cost || 0), 0)
 })
 
 const canGenerate = computed(() => {
