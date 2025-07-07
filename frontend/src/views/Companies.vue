@@ -854,7 +854,7 @@ async function handleAddCompany() {
     // Paso 1: Crear empresa
     const { data: createdCompany } = await apiService.companies.create({
       name: newCompany.value.name,
-      contact_email: newCompany.value.email,
+      contact_email: newCompany.value.contact_email,
       plan_type: newCompany.value.plan_type,
       price_per_order: newCompany.value.price_per_order
     })
