@@ -1,12 +1,12 @@
 const axios = require('axios');
-// Se importan los modelos de Mongoose en lugar del 'pool' de PostgreSQL
+// Se importan los modelos de Mongoose necesarios
 const Order = require('../models/Order');
 const Channel = require('../models/Channel');
+const Company = require('../models/Company'); // <-- Modelo de empresa añadido
 
 class WooCommerceService {
   // Construir headers de autenticación
   static getAuthHeader(channel) {
-    // WooCommerce usa autenticación básica con consumer key y secret
     const auth = Buffer.from(`${channel.api_key}:${channel.api_secret}`).toString('base64');
     return {
       'Authorization': `Basic ${auth}`,
@@ -16,11 +16,11 @@ class WooCommerceService {
   
   // Obtener URL base de la API
   static getApiUrl(channel) {
-    const baseUrl = channel.store_url.replace(/\/$/, ''); // Remover trailing slash
+    const baseUrl = channel.store_url.replace(/\/$/, '');
     return `${baseUrl}/wp-json/wc/v3`;
   }
   
-  // Probar conexión (sin cambios)
+  // Probar conexión
   static async testConnection(channel) {
     try {
       const response = await axios.get(
@@ -45,7 +45,7 @@ class WooCommerceService {
     }
   }
   
-  // Registrar webhook (sin cambios en la lógica principal)
+  // Registrar webhook
   static async registerWebhook(channel) {
     try {
       const webhookUrl = `${process.env.BACKEND_URL}/api/webhooks/woocommerce/${channel.id}`;
@@ -96,7 +96,7 @@ class WooCommerceService {
     }
   }
   
-  // --- MÉTODO SYNCORDERS CORREGIDO CON MONGOOSE ---
+  // --- MÉTODO SYNCORDERS CORREGIDO ---
   static async syncOrders(channel, dateFrom, dateTo) {
     let ordersImported = 0;
     let page = 1;
@@ -104,6 +104,13 @@ class WooCommerceService {
     let hasMore = true;
     
     try {
+      // 1. Obtener los datos de la empresa para saber el costo fijo
+      const company = await Company.findById(channel.company_id);
+      if (!company) {
+        throw new Error(`No se encontró la empresa con ID: ${channel.company_id}`);
+      }
+      const fixedShippingCost = company.price_per_order || 0;
+
       while (hasMore) {
         const params = new URLSearchParams({
           page: page,
@@ -129,14 +136,12 @@ class WooCommerceService {
         
         for (const wooOrder of orders) {
           try {
-            // Reemplazar la consulta de PostgreSQL con Mongoose
             const existingOrder = await Order.findOne({ 
               channel_id: channel._id, 
               external_order_id: wooOrder.id.toString() 
             });
             
             if (!existingOrder) {
-              // Reemplazar la inserción SQL con el método de Mongoose
               await Order.create({
                 company_id: channel.company_id,
                 channel_id: channel._id,
@@ -145,19 +150,14 @@ class WooCommerceService {
                 customer_name: this.getCustomerName(wooOrder),
                 customer_email: wooOrder.billing.email,
                 customer_phone: wooOrder.billing.phone,
-                customer_document: wooOrder.meta_data?.find(m => m.key === '_billing_rut')?.value || '',
                 shipping_address: this.getShippingAddress(wooOrder),
                 shipping_city: wooOrder.shipping.city || wooOrder.billing.city,
-                shipping_state: wooOrder.shipping.state || wooOrder.billing.state,
-                shipping_zip: wooOrder.shipping.postcode || wooOrder.billing.postcode,
                 total_amount: wooOrder.total,
-                shipping_cost: wooOrder.shipping_total,
-                currency: wooOrder.currency,
+                // 2. Usar el costo de envío fijo de la empresa
+                shipping_cost: fixedShippingCost,
                 status: this.mapOrderStatus(wooOrder),
                 order_date: wooOrder.date_created,
                 raw_data: wooOrder
-                // Nota: Los items del pedido (line_items) no se están guardando.
-                // Si tu modelo Order lo permite, deberías mapearlos y guardarlos aquí.
               });
               
               ordersImported++;
@@ -181,14 +181,20 @@ class WooCommerceService {
     }
   }
   
-  // --- MÉTODO PROCESSWEBHOOK CORREGIDO CON MONGOOSE ---
+  // --- MÉTODO PROCESSWEBHOOK CORREGIDO ---
   static async processWebhook(channelId, data, headers) {
     try {
       const channel = await Channel.findById(channelId);
-      
       if (!channel) {
         throw new Error('Canal no encontrado');
       }
+
+      // 1. Obtener la empresa para usar su costo de envío
+      const company = await Company.findById(channel.company_id);
+      if (!company) {
+        throw new Error(`Empresa no encontrada para el canal: ${channelId}`);
+      }
+      const fixedShippingCost = company.price_per_order || 0;
       
       const wooOrder = data;
       
@@ -200,6 +206,8 @@ class WooCommerceService {
       if (existingOrder) {
         existingOrder.status = this.mapOrderStatus(wooOrder);
         existingOrder.total_amount = wooOrder.total;
+        // 2. Actualizar también el costo de envío por si cambia en la empresa
+        existingOrder.shipping_cost = fixedShippingCost;
         existingOrder.raw_data = wooOrder;
         await existingOrder.save();
       } else {
@@ -214,7 +222,8 @@ class WooCommerceService {
             shipping_address: this.getShippingAddress(wooOrder),
             shipping_city: wooOrder.shipping.city || wooOrder.billing.city,
             total_amount: wooOrder.total,
-            shipping_cost: wooOrder.shipping_total,
+            // 3. Usar el costo de envío fijo al crear desde el webhook
+            shipping_cost: fixedShippingCost,
             status: this.mapOrderStatus(wooOrder),
             order_date: wooOrder.date_created,
             raw_data: wooOrder
@@ -267,25 +276,17 @@ class WooCommerceService {
   
   static mapOrderStatus(wooOrder) {
     const statusMap = {
-      'pending': 'pending',
-      'processing': 'processing',
-      'on-hold': 'pending',
-      'completed': 'delivered',
-      'cancelled': 'cancelled',
-      'refunded': 'cancelled',
-      'failed': 'cancelled',
-      'shipped': 'shipped'
+      'pending': 'pending', 'processing': 'processing', 'on-hold': 'pending',
+      'completed': 'delivered', 'cancelled': 'cancelled', 'refunded': 'cancelled',
+      'failed': 'cancelled', 'shipped': 'shipped'
     };
     return statusMap[wooOrder.status] || 'pending';
   }
   
   static mapStatusToWooCommerce(status) {
     const statusMap = {
-      'pending': 'pending',
-      'processing': 'processing',
-      'shipped': 'shipped',
-      'delivered': 'completed',
-      'cancelled': 'cancelled'
+      'pending': 'pending', 'processing': 'processing', 'shipped': 'shipped',
+      'delivered': 'completed', 'cancelled': 'cancelled'
     };
     return statusMap[status] || 'pending';
   }
