@@ -86,6 +86,13 @@
                 <div class="action-buttons">
                   <button @click="openOrderDetailsModal(order)" class="btn-table-action view">Ver</button>
                   <button @click="openUpdateStatusModal(order)" class="btn-table-action edit">Estado</button>
+                  <button 
+                    @click="openAssignModal(order)" 
+                    class="btn-table-action assign" 
+                    :disabled="order.shipday_order_id"
+                    title="Asignar a un conductor en Shipday">
+                    Asignar
+                  </button>
                 </div>
               </td>
             </tr>
@@ -157,12 +164,38 @@
         </div>
       </div>
     </Modal>
+
+    <Modal v-model="showAssignModal" title="Asignar Conductor" width="500px">
+      <div v-if="selectedOrder">
+        <p>Asignando pedido <strong>#{{ selectedOrder.order_number }}</strong> a un conductor de Shipday.</p>
+        
+        <div v-if="loadingDrivers" class="loading-state">Cargando conductores...</div>
+        
+        <div v-else class="form-group">
+          <label>Conductor Disponible</label>
+          <select v-model="selectedDriverId">
+            <option disabled value="">-- Selecciona un conductor --</option>
+            <option v-for="driver in availableDrivers" :key="driver.id" :value="driver.id">
+              {{ driver.name }} ({{ driver.email }})
+            </option>
+          </select>
+        </div>
+
+        <div class="modal-actions">
+          <button @click="showAssignModal = false" class="btn-cancel">Cancelar</button>
+          <button @click="confirmAssignment" :disabled="!selectedDriverId || isAssigning" class="btn-save">
+            {{ isAssigning ? 'Asignando...' : 'Confirmar Asignación' }}
+          </button>
+        </div>
+      </div>
+    </Modal>
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted } from 'vue';
 import { apiService } from '../services/api';
+import { shipdayService } from '../services/shipday'; // NUEVO: Importar servicio de Shipday
 import Modal from '../components/Modal.vue';
 import UpdateOrderStatus from '../components/UpdateOrderStatus.vue';
 import OrderDetails from '../components/OrderDetails.vue';
@@ -187,6 +220,14 @@ const isUploading = ref(false);
 const uploadFeedback = ref('');
 const uploadStatus = ref('');
 
+// NUEVO: Estado para el modal de asignación
+const showAssignModal = ref(false);
+const availableDrivers = ref([]);
+const loadingDrivers = ref(false);
+const selectedDriverId = ref('');
+const isAssigning = ref(false);
+
+
 onMounted(() => {
   fetchCompanies();
   fetchOrders();
@@ -194,7 +235,7 @@ onMounted(() => {
 
 async function fetchCompanies() { try { const { data } = await apiService.companies.getAll(); companies.value = data; } catch (error) { console.error("Error fetching companies:", error); } }
 async function fetchOrders() { loadingOrders.value = true; try { const params = { page: pagination.value.page, limit: pagination.value.limit, ...filters.value }; const { data } = await apiService.orders.getAll(params); orders.value = data.orders; pagination.value = data.pagination; } catch (error) { console.error('Error fetching orders:', error); } finally { loadingOrders.value = false; } }
-async function exportOrders() { isExporting.value = true; try { const response = await apiService.orders.export(filters.value); const url = window.URL.createObjectURL(new Blob([response.data])); const link = document.createElement('a'); link.href = url; link.setAttribute('download', `pedidos_optiroute_${Date.now()}.xlsx`); document.body.appendChild(link); link.click(); link.remove(); window.URL.revokeObjectURL(url); } catch (error) { alert('No se encontraron pedidos para exportar.'); } finally { isExporting.value = false; } }
+async function exportOrders() { isExporting.value = true; try { const response = await apiService.orders.exportForOptiRoute(filters.value); const url = window.URL.createObjectURL(new Blob([response.data])); const link = document.createElement('a'); link.href = url; link.setAttribute('download', `pedidos_optiroute_${Date.now()}.xlsx`); document.body.appendChild(link); link.click(); link.remove(); window.URL.revokeObjectURL(url); } catch (error) { alert('No se encontraron pedidos para exportar.'); } finally { isExporting.value = false; } }
 function openUpdateStatusModal(order) { selectedOrder.value = order; showUpdateStatusModal.value = true; }
 function openOrderDetailsModal(order) { selectedOrder.value = order; showOrderDetailsModal.value = true; }
 async function handleStatusUpdate({ orderId, newStatus }) { try { await apiService.orders.updateStatus(orderId, newStatus); const index = orders.value.findIndex(o => o._id === orderId); if (index !== -1) { orders.value[index].status = newStatus; } showUpdateStatusModal.value = false; alert('Estado actualizado con éxito.'); } catch (error) { alert(`Error al actualizar estado: ${error.message}`); } }
@@ -209,6 +250,46 @@ async function handleBulkUpload() { if (!selectedFile.value) { alert('Por favor,
 function formatCurrency(amount) { if (amount === undefined || amount === null) return '0'; return new Intl.NumberFormat('es-CL').format(amount); }
 function formatDate(dateStr, withTime = false) { if (!dateStr) return 'N/A'; const options = { day: '2-digit', month: '2-digit', year: 'numeric' }; if (withTime) { options.hour = '2-digit'; options.minute = '2-digit'; } return new Date(dateStr).toLocaleString('es-CL', options); }
 function getStatusName(status) { const names = { pending: 'Pendiente', processing: 'Procesando', shipped: 'Enviado', delivered: 'Entregado', cancelled: 'Cancelado' }; return names[status] || status; }
+
+// NUEVO: Funciones para asignar conductor
+async function openAssignModal(order) {
+  selectedOrder.value = order;
+  selectedDriverId.value = '';
+  showAssignModal.value = true;
+  await fetchAvailableDrivers();
+}
+
+async function fetchAvailableDrivers() {
+  loadingDrivers.value = true;
+  try {
+    const response = await shipdayService.getDrivers();
+    availableDrivers.value = response.data.data.filter(driver => driver.isActive && !driver.isOnShift);
+  } catch (error) {
+    alert("Error al cargar los conductores desde Shipday.");
+    console.error(error);
+  } finally {
+    loadingDrivers.value = false;
+  }
+}
+
+async function confirmAssignment() {
+  if (!selectedDriverId.value) {
+    alert("Por favor, selecciona un conductor.");
+    return;
+  }
+  isAssigning.value = true;
+  try {
+    await apiService.orders.assignDriver(selectedOrder.value._id, selectedDriverId.value);
+    alert('Pedido asignado exitosamente en Shipday.');
+    showAssignModal.value = false;
+    fetchOrders();
+  } catch (error) {
+    alert(`Error al asignar: ${error.response?.data?.error || error.message}`);
+  } finally {
+    isAssigning.value = false;
+  }
+}
+
 </script>
 
 <style scoped>
@@ -270,4 +351,24 @@ function getStatusName(status) { const names = { pending: 'Pendiente', processin
 .btn-table-action.view:hover { background-color: #3b82f6; color: white; }
 .btn-table-action.edit { color: #8b5cf6; border-color: #ddd6fe; }
 .btn-table-action.edit:hover { background-color: #8b5cf6; color: white; }
+/* NUEVO: Estilos para el botón de asignar */
+.btn-table-action.assign {
+  color: #16a34a; 
+  border-color: #86efac;
+}
+.btn-table-action.assign:hover:not(:disabled) {
+  background-color: #16a34a;
+  color: white;
+}
+.btn-table-action:disabled {
+  background-color: #e5e7eb;
+  color: #9ca3af;
+  cursor: not-allowed;
+  border-color: #d1d5db;
+}
+.loading-state {
+  text-align: center;
+  padding: 20px;
+  color: #6b7280;
+}
 </style>

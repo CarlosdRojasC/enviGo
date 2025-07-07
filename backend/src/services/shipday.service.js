@@ -328,6 +328,7 @@ class ShipDayService {
       return new Error('Error desconocido en ShipDay SDK');
     }
   }
+  
 }
 
 module.exports = ShipDayService;

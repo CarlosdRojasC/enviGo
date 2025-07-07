@@ -321,8 +321,8 @@ async exportForOptiRoute(req, res) {
       res.status(500).json({ error: ERRORS.SERVER_ERROR });
     }
   }
-  async getOrdersTrend(req, res) {
-  try {
+async getOrdersTrend(req, res) {
+      try {
     const { period = '30d' } = req.query;
     const filters = {};
 
@@ -374,18 +374,20 @@ async exportForOptiRoute(req, res) {
     ]);
     
     res.json(trendData);
-  } catch (error) {
+      } catch (error) {
     console.error('Error obteniendo tendencia de pedidos:', error);
     res.status(500).json({ error: ERRORS.SERVER_ERROR });
   }
 }
-/**
-   * Asigna un pedido a un conductor y lo crea en Shipday.
+
+  /**
+   * Asigna un pedido a un conductor y, en el proceso, crea la orden en Shipday.
+   * Esta acción es iniciada por un administrador desde el panel.
    */
   async assignToDriver(req, res) {
     try {
       const { orderId } = req.params;
-      const { driverId } = req.body; // driverId de Shipday
+      const { driverId } = req.body; // Este es el ID del conductor de Shipday (carrierId)
 
       if (!driverId) {
         return res.status(400).json({ error: 'Se requiere el ID del conductor de Shipday.' });
@@ -395,16 +397,21 @@ async exportForOptiRoute(req, res) {
       if (!order) {
         return res.status(404).json({ error: 'Pedido no encontrado.' });
       }
-      
-      // Lógica de permisos (asegurarse de que el usuario puede modificar este pedido)
-      if (req.user.role !== 'admin' && req.user.company_id.toString() !== order.company_id.toString()) {
-        return res.status(403).json({ error: ERRORS.FORBIDDEN });
+
+      // Evitar re-asignar un pedido que ya está en Shipday
+      if (order.shipday_order_id) {
+        return res.status(400).json({ error: 'Este pedido ya ha sido enviado y asignado en Shipday.' });
       }
 
+      // Llama al servicio que formatea y crea la orden en Shipday, asignándola al conductor
       const shipdayResult = await ShipdayService.createAndAssignOrder(order, driverId);
 
+      // Actualiza el pedido en tu base de datos local
+      order.status = 'processing'; // O el estado que prefieras para "asignado"
+      await order.save();
+
       res.status(200).json({ 
-        message: 'Pedido asignado y creado en Shipday exitosamente.',
+        message: 'Pedido asignado a Shipday exitosamente.',
         order: shipdayResult.order 
       });
 

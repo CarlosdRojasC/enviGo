@@ -79,7 +79,9 @@ const orders = {
   exportForOptiRoute: (params = {}) => api.get('/orders/export', { 
     params,
     responseType: 'blob'
-  })
+  }),
+  assignDriver: (orderId, driverId) => api.post(`/orders/${orderId}/assign-driver`, { driverId }),
+
 }
 
 // Servicios de canales

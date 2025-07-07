@@ -133,8 +133,8 @@ router.get('/orders/export', authenticateToken, isAdmin, orderController.exportF
 router.post('/orders', authenticateToken, validateOrderCreation, orderController.create);
 router.get('/orders/:id', authenticateToken, validateMongoId('id'), orderController.getById); // <-- USAR MIDDLEWARE
 router.patch('/orders/:id/status', authenticateToken, validateMongoId('id'), isAdmin, orderController.updateStatus); // <-- USAR MIDDLEWARE
-router.post('/orders/:orderId/assign-driver', authenticateToken, orderController.assignToDriver);
-
+// Ruta para que el admin asigne un conductor a un pedido
+router.post('/orders/:orderId/assign-driver', authenticateToken, isAdmin, orderController.assignToDriver);
 
 
 // ==================== FACTURACIÓN (BILLING) ====================
