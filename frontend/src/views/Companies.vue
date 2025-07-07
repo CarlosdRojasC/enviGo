@@ -193,17 +193,253 @@
       </form>
     </Modal>
 
+    <!-- Modal de Configuración de Precios -->
     <Modal v-model="showPricingModal" :title="`Configurar Precios - ${selectedCompany?.name}`" width="600px">
-      </Modal>
+      <div v-if="selectedCompany" class="pricing-config">
+        <div class="pricing-header">
+          <h4>Configuración de Facturación</h4>
+          <p>Configura el precio por pedido y las condiciones de facturación</p>
+        </div>
 
+        <div class="pricing-form">
+          <div class="form-row">
+            <div class="form-group">
+              <label for="plan-type">Tipo de Plan</label>
+              <select id="plan-type" v-model="pricingForm.plan_type" @change="updatePriceSuggestion">
+                <option value="basic">Básico</option>
+                <option value="pro">Pro</option>
+                <option value="enterprise">Enterprise</option>
+                <option value="custom">Personalizado</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="billing-cycle">Ciclo de Facturación</label>
+              <select id="billing-cycle" v-model="pricingForm.billing_cycle">
+                <option value="monthly">Mensual</option>
+                <option value="quarterly">Trimestral</option>
+                <option value="annual">Anual</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="price-per-order">Precio por Pedido (Sin IVA)</label>
+            <div class="price-input-group">
+              <span class="currency-symbol">$</span>
+              <input 
+                id="price-per-order"
+                type="number" 
+                v-model.number="pricingForm.price_per_order"
+                @input="calculatePricingBreakdown"
+                placeholder="0"
+                min="0"
+                step="1"
+              />
+              <span class="price-suggestion" v-if="suggestedPrice">
+                Sugerido: ${{ formatCurrency(suggestedPrice) }}
+              </span>
+            </div>
+          </div>
+
+          <!-- Desglose de Precios -->
+          <div class="pricing-breakdown">
+            <h5>Desglose de Facturación</h5>
+            <div class="breakdown-grid">
+              <div class="breakdown-item">
+                <span class="breakdown-label">Precio Base:</span>
+                <span class="breakdown-value">${{ formatCurrency(pricingForm.price_per_order || 0) }}</span>
+              </div>
+              <div class="breakdown-item">
+                <span class="breakdown-label">IVA (19%):</span>
+                <span class="breakdown-value">${{ formatCurrency(calculateIVA(pricingForm.price_per_order || 0)) }}</span>
+              </div>
+              <div class="breakdown-item total">
+                <span class="breakdown-label">Total por Pedido:</span>
+                <span class="breakdown-value">${{ formatCurrency(getTotalPriceWithIVA(pricingForm.price_per_order || 0)) }}</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Proyección de Ingresos -->
+          <div class="revenue-projection" v-if="selectedCompany.orders_this_month">
+            <h5>Proyección de Ingresos</h5>
+            <div class="projection-grid">
+              <div class="projection-item">
+                <span class="projection-label">Pedidos este mes:</span>
+                <span class="projection-value">{{ selectedCompany.orders_this_month }}</span>
+              </div>
+              <div class="projection-item">
+                <span class="projection-label">Revenue estimado (base):</span>
+                <span class="projection-value">${{ formatCurrency((pricingForm.price_per_order || 0) * selectedCompany.orders_this_month) }}</span>
+              </div>
+              <div class="projection-item">
+                <span class="projection-label">IVA a facturar:</span>
+                <span class="projection-value">${{ formatCurrency(calculateIVA((pricingForm.price_per_order || 0) * selectedCompany.orders_this_month)) }}</span>
+              </div>
+              <div class="projection-item total">
+                <span class="projection-label">Total a facturar:</span>
+                <span class="projection-value">${{ formatCurrency(getTotalPriceWithIVA((pricingForm.price_per_order || 0) * selectedCompany.orders_this_month)) }}</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="pricing-notes">Notas de Facturación</label>
+            <textarea 
+              id="pricing-notes"
+              v-model="pricingForm.pricing_notes"
+              placeholder="Condiciones especiales, descuentos, etc."
+              rows="3"
+            ></textarea>
+          </div>
+        </div>
+
+        <div class="modal-actions">
+          <button @click="showPricingModal = false" class="btn-cancel">Cancelar</button>
+          <button @click="savePricingConfig" :disabled="savingPricing" class="btn-save">
+            {{ savingPricing ? 'Guardando...' : 'Guardar Configuración' }}
+          </button>
+        </div>
+      </div>
+    </Modal>
+
+    <!-- Modal de Usuarios (mantenemos el existente pero mejorado) -->
     <Modal v-model="showUsersModal" :title="`Usuarios de ${selectedCompany?.name}`" width="800px">
-      </Modal>
+      <div v-if="loadingUsers" class="loading-state">Cargando usuarios...</div>
+      <div v-else>
+        <div class="users-header">
+          <div class="users-summary">
+            <span class="users-count">{{ users.length }} usuario{{ users.length !== 1 ? 's' : '' }}</span>
+            <span class="users-limit">Límite del plan: {{ getPlanUserLimit(selectedCompany?.plan_type) }}</span>
+          </div>
+          <button @click="openAddUserModal" class="btn-add-user" :disabled="users.length >= getPlanUserLimit(selectedCompany?.plan_type)">
+            + Añadir Usuario
+          </button>
+        </div>
+        
+        <div class="users-table-wrapper">
+          <table class="users-table">
+            <thead>
+              <tr>
+                <th>Nombre</th>
+                <th>Email</th>
+                <th>Rol</th>
+                <th>Estado</th>
+                <th>Último Acceso</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-if="users.length === 0">
+                  <td colspan="6" class="empty-state-small">No hay usuarios en esta empresa.</td>
+              </tr>
+              <tr v-else v-for="user in users" :key="user._id">
+                <td>{{ user.full_name }}</td>
+                <td>{{ user.email }}</td>
+                <td>
+                  <span class="role-badge" :class="user.role">
+                    {{ getRoleName(user.role) }}
+                  </span>
+                </td>
+                <td>
+                  <span class="status-badge" :class="user.is_active ? 'active' : 'inactive'">
+                    {{ user.is_active ? 'Activo' : 'Inactivo' }}
+                  </span>
+                </td>
+                <td>{{ formatDate(user.last_login) }}</td>
+                <td>
+                  <button @click="toggleUserStatus(user)" class="btn-toggle-status" :disabled="user.role === 'admin'">
+                    {{ user.is_active ? 'Desactivar' : 'Activar' }}
+                  </button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </Modal>
     
+    <!-- Modal de Añadir Usuario (mejorado) -->
     <Modal v-model="showAddUserForm" :title="`Añadir Usuario a ${selectedCompany?.name}`" width="500px">
-      </Modal>
+        <form @submit.prevent="handleAddNewUser">
+            <div class="form-group">
+                <label for="new-user-name">Nombre Completo</label>
+                <input id="new-user-name" v-model="newUser.full_name" type="text" required>
+            </div>
+            <div class="form-group">
+                <label for="new-user-email">Email</label>
+                <input id="new-user-email" v-model="newUser.email" type="email" required>
+            </div>
+            <div class="form-group">
+                <label for="new-user-password">Contraseña Provisional</label>
+                <input id="new-user-password" v-model="newUser.password" type="password" required minlength="6">
+                <small class="form-hint">El usuario podrá cambiarla en su primer acceso</small>
+            </div>
+            <div class="form-group">
+                <label for="new-user-role">Rol</label>
+                <select id="new-user-role" v-model="newUser.role">
+                    <option value="company_employee">Empleado</option>
+                    <option value="company_owner">Dueño/Administrador</option>
+                </select>
+            </div>
+            <div class="modal-actions">
+                <button type="button" @click="showAddUserForm = false" class="btn-cancel">Cancelar</button>
+                <button type="submit" :disabled="isAddingUser" class="btn-save">
+                    {{ isAddingUser ? 'Añadiendo...' : 'Añadir Usuario' }}
+                </button>
+            </div>
+        </form>
+    </Modal>
 
+    <!-- Modal de Estadísticas de Empresa -->
     <Modal v-model="showStatsModal" :title="`Estadísticas - ${selectedCompany?.name}`" width="900px">
-        </Modal>
+      <div v-if="selectedCompany" class="company-stats-modal">
+        <div class="stats-grid">
+          <div class="stat-card-modal">
+            <h4>Pedidos</h4>
+            <div class="stat-value">{{ selectedCompany.orders_count || 0 }}</div>
+            <div class="stat-change">+{{ selectedCompany.orders_this_month || 0 }} este mes</div>
+          </div>
+          <div class="stat-card-modal">
+            <h4>Revenue Generado</h4>
+            <div class="stat-value">${{ formatCurrency(calculateMonthlyRevenue(selectedCompany)) }}</div>
+            <div class="stat-change">Solo este mes</div>
+          </div>
+          <div class="stat-card-modal">
+            <h4>Promedio por Pedido</h4>
+            <div class="stat-value">${{ formatCurrency(selectedCompany.price_per_order || 0) }}</div>
+            <div class="stat-change">+ IVA incluido</div>
+          </div>
+          <div class="stat-card-modal">
+            <h4>Usuarios Activos</h4>
+            <div class="stat-value">{{ selectedCompany.active_users || selectedCompany.users_count || 0 }}</div>
+            <div class="stat-change">De {{ selectedCompany.users_count || 0 }} totales</div>
+          </div>
+        </div>
+        
+        <div class="stats-details">
+          <h4>Detalles de Facturación</h4>
+          <div class="billing-details">
+            <div class="billing-row">
+              <span>Plan Actual:</span>
+              <span class="plan-badge" :class="selectedCompany.plan_type">{{ getPlanName(selectedCompany.plan_type) }}</span>
+            </div>
+            <div class="billing-row">
+              <span>Precio por Pedido (base):</span>
+              <span>${{ formatCurrency(selectedCompany.price_per_order || 0) }}</span>
+            </div>
+            <div class="billing-row">
+              <span>IVA por Pedido:</span>
+              <span>${{ formatCurrency(calculateIVA(selectedCompany.price_per_order || 0)) }}</span>
+            </div>
+            <div class="billing-row total">
+              <span>Total por Pedido:</span>
+              <span>${{ formatCurrency(getTotalPriceWithIVA(selectedCompany.price_per_order || 0)) }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Modal>
   </div>
 </template>
 
