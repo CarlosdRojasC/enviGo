@@ -87,19 +87,27 @@ class CompanyController {
         owner_password
       } = req.body;
 
+      // Definir finalEmail (usa email o contact_email)
+const finalEmail = email || contact_email;
+
+if (!name || !finalEmail) {
+  return res.status(400).json({ error: 'El nombre y el email de la empresa son obligatorios' });
+}
+
       // Generar slug
       const slug = name.toLowerCase()
         .replace(/\s+/g, '-')
         .replace(/[^\w-]/g, '')
         .substring(0, 100);
 
+            
       // Validar si ya existe empresa con mismo email o slug
       const exists = await Company.findOne({ $or: [{ email: finalEmail }, { slug }] });
       if (exists) {
         return res.status(400).json({ error: 'Ya existe una empresa con ese nombre o email' });
       }
 
-      // Crear empresa
+        // Crear empresa
       const company = new Company({
         name,
         slug,
@@ -109,6 +117,8 @@ class CompanyController {
         price_per_order: price_per_order || 0
       });
       await company.save();
+
+
 
       // Crear usuario dueño si datos completos
       if (owner_email && owner_password) {
