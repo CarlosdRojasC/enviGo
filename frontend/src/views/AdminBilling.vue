@@ -595,17 +595,25 @@ const financialSummary = ref({
 
 // Computed properties
 const generatePreview = computed(() => {
-  if (selectedOrders.value.length === 0 || !generateForm.value.company_id) return null
+  if (selectedOrders.value.length === 0 || !generateForm.value.company_id) return null;
+
+  // Filtra los pedidos completos que han sido seleccionados
+  const selectedOrderDetails = availableOrders.value.filter(order => 
+    selectedOrders.value.includes(order._id)
+  );
+
+  // Suma el `shipping_cost` de cada pedido seleccionado
+  const subtotal = selectedOrderDetails.reduce((sum, order) => sum + (order.shipping_cost || 0), 0);
   
-  const selectedCompany = companies.value.find(c => c._id === generateForm.value.company_id)
-  const pricePerOrder = selectedCompany?.price_per_order || 0
+  const tax = Math.round(subtotal * 0.19);
+  const total = subtotal + tax;
   
-  const subtotal = selectedOrders.value.length * pricePerOrder // Precio del servicio por pedido
-  const tax = Math.round(subtotal * 0.19)
-  const total = subtotal + tax
-  
-  return { subtotal, tax, total, pricePerOrder }
-})
+  // El precio por pedido ahora es solo informativo
+  const selectedCompany = companies.value.find(c => c._id === generateForm.value.company_id);
+  const pricePerOrder = selectedCompany?.price_per_order || 0;
+
+  return { subtotal, tax, total, pricePerOrder };
+});
 
 const selectedOrdersTotal = computed(() => {
   return availableOrders.value
@@ -622,11 +630,7 @@ const canGenerate = computed(() => {
 
 // Lifecycle
 onMounted(async () => {
-  console.log('🚀 Iniciando AdminBilling...')
-  console.log('👤 Usuario actual:', auth.user)
-  console.log('🔑 Es admin:', auth.isAdmin)
-  console.log('🏢 Company ID:', auth.user?.company_id)
-  
+  console.log('🔄 Cargando vista de facturación para administrador...')
   // Verificar que el usuario sea admin
   if (!auth.isAdmin) {
     console.error('❌ Usuario no es administrador')

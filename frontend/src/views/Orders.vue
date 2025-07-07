@@ -71,7 +71,7 @@
                   {{ getStatusName(order.status) }}
                 </span>
               </td>
-              <td class="order-total">${{ formatCurrency(order.total_amount) }}</td>
+              <td class="order-total">${{ formatCurrency(order.shipping_cost) }}</td>
               <td class="order-date">{{ formatDate(order.order_date) }}</td>
               <td class="order-actions">
                 <button @click="openOrderDetailsModal(order)" class="action-btn view">👁️</button>
