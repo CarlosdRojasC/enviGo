@@ -1,5 +1,6 @@
 const axios = require('axios');
 const pool = require('../config/database');
+const ShipdayService = require('./shipday.service');
 
 class ShopifyService {
   // Construir URL base de la API
@@ -15,6 +16,55 @@ class ShopifyService {
     };
   }
   
+  
+  async processWebhook(channelId, webhookData) {
+    try {
+      // 1. Procesar el pedido normalmente (crear en tu BD)
+      const order = await this.createOrderFromWebhook(channelId, webhookData);
+      
+      // 2. NUEVO: Crear automáticamente en Shipday si está configurado
+      if (process.env.AUTO_CREATE_SHIPDAY_ORDERS === 'true') {
+        await this.autoCreateInShipday(order);
+      }
+
+      return order;
+    } catch (error) {
+      console.error('Error procesando webhook:', error);
+      throw error;
+    }
+  }
+
+  async autoCreateInShipday(order) {
+    try {
+      console.log('🚀 Creando orden automáticamente en Shipday:', order.order_number);
+      
+      // Preparar datos para Shipday
+      const shipdayData = {
+        orderNumber: order.order_number,
+        customerName: order.customer_name,
+        customerAddress: order.shipping_address,
+        customerEmail: order.customer_email || '',
+        customerPhoneNumber: order.customer_phone || '',
+        deliveryInstruction: order.notes || 'Sin instrucciones especiales',
+        // NO asignar conductor aún (carrierId se omite)
+      };
+
+      // Crear en Shipday
+      const shipdayOrder = await ShipdayService.createOrder(shipdayData);
+      
+      // Actualizar tu orden local con el ID de Shipday
+      order.shipday_order_id = shipdayOrder.orderId;
+      order.status = 'processing'; // Cambiar estado
+      await order.save();
+
+      console.log('✅ Orden creada en Shipday:', shipdayOrder.orderId);
+      
+    } catch (error) {
+      console.error('❌ Error creando orden en Shipday:', error);
+      // No lanzar error para no afectar el procesamiento principal
+      // Solo loggear y continuar
+    }
+  }
   // Probar conexión
   static async testConnection(channel) {
     try {

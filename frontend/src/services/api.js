@@ -80,8 +80,20 @@ const orders = {
     params,
     responseType: 'blob'
   }),
+    
+  // ==================== NUEVOS MÉTODOS SHIPDAY ====================
+  
+  // Crear orden en Shipday sin asignar conductor
+  createInShipday: (orderId) => api.post(`/orders/${orderId}/create-shipday`),
+  
+  // Asignar conductor (crear+asignar o solo asignar)
   assignDriver: (orderId, driverId) => api.post(`/orders/${orderId}/assign-driver`, { driverId }),
-
+  
+  // Crear múltiples órdenes en Shipday
+  bulkCreateInShipday: (orderIds) => api.post('/orders/bulk-create-shipday', { orderIds }),
+  
+  // Obtener estado de sincronización con Shipday
+  getShipdayStatus: (orderId) => api.get(`/orders/${orderId}/shipday-status`),
 }
 
 // Servicios de canales
@@ -285,11 +297,16 @@ const dashboard = {
 }
 
 const drivers = {
-  create: (driverData) => api.post('/drivers', driverData),
-  // MÉTODO MODIFICADO/AÑADIDO
+// Obtener todos los conductores (desde tu BD local)
   getAll: () => api.get('/drivers'),
-  // El método getByCompany sigue siendo útil si en alguna otra parte un admin
-  // necesita ver los conductores de una sola empresa, pero no es necesario para Drivers.vue
+  
+  // Crear conductor en tu BD local
+  create: (driverData) => api.post('/drivers', driverData),
+  
+  // Eliminar conductor
+  delete: (driverId) => api.delete(`/drivers/${driverId}`),
+  
+  // Obtener conductores por empresa (si necesitas)
   getByCompany: (companyId) => api.get(`/companies/${companyId}/drivers`)
 };
 

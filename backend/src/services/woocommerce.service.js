@@ -227,7 +227,6 @@ class WooCommerceService {
     }
   }
   
-  // El resto de los métodos helper se mantienen igual
   static getCustomerName(order) {
     const billing = order.billing;
     return `${billing.first_name} ${billing.last_name}`.trim() || 
@@ -255,6 +254,46 @@ class WooCommerceService {
       'delivered': 'completed', 'cancelled': 'cancelled'
     };
     return statusMap[status] || 'pending';
+  }
+  async processWebhook(channelId, webhookData, headers) {
+    try {
+      const order = await this.createOrderFromWebhook(channelId, webhookData, headers);
+      
+      // Auto-crear en Shipday
+      if (process.env.AUTO_CREATE_SHIPDAY_ORDERS === 'true') {
+        await this.autoCreateInShipday(order);
+      }
+
+      return order;
+    } catch (error) {
+      console.error('Error procesando webhook WooCommerce:', error);
+      throw error;
+    }
+  }
+
+  async autoCreateInShipday(order) {
+    // Mismo método que en ShopifyService
+    try {
+      const shipdayData = {
+        orderNumber: order.order_number,
+        customerName: order.customer_name,
+        customerAddress: order.shipping_address,
+        customerEmail: order.customer_email || '',
+        customerPhoneNumber: order.customer_phone || '',
+        deliveryInstruction: order.notes || 'Sin instrucciones especiales',
+      };
+
+      const shipdayOrder = await ShipdayService.createOrder(shipdayData);
+      
+      order.shipday_order_id = shipdayOrder.orderId;
+      order.status = 'processing';
+      await order.save();
+
+      console.log('✅ Orden WooCommerce creada en Shipday:', shipdayOrder.orderId);
+      
+    } catch (error) {
+      console.error('❌ Error creando orden WooCommerce en Shipday:', error);
+    }
   }
 }
 

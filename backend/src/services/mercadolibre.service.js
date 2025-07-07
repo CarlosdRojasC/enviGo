@@ -697,6 +697,45 @@ class MercadoLibreService {
       throw error;
     }
   }
+  async processWebhook(channelId, webhookData) {
+    try {
+      const order = await this.createOrderFromWebhook(channelId, webhookData);
+      
+      // Auto-crear en Shipday
+      if (process.env.AUTO_CREATE_SHIPDAY_ORDERS === 'true') {
+        await this.autoCreateInShipday(order);
+      }
+
+      return order;
+    } catch (error) {
+      console.error('Error procesando webhook MercadoLibre:', error);
+      throw error;
+    }
+  }
+
+  async autoCreateInShipday(order) {
+    try {
+      const shipdayData = {
+        orderNumber: order.order_number,
+        customerName: order.customer_name,
+        customerAddress: order.shipping_address,
+        customerEmail: order.customer_email || '',
+        customerPhoneNumber: order.customer_phone || '',
+        deliveryInstruction: order.notes || 'Sin instrucciones especiales',
+      };
+
+      const shipdayOrder = await ShipdayService.createOrder(shipdayData);
+      
+      order.shipday_order_id = shipdayOrder.orderId;
+      order.status = 'processing';
+      await order.save();
+
+      console.log('✅ Orden MercadoLibre creada en Shipday:', shipdayOrder.orderId);
+      
+    } catch (error) {
+      console.error('❌ Error creando orden MercadoLibre en Shipday:', error);
+    }
+  }
 }
 
 module.exports = MercadoLibreService;
