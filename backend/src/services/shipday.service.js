@@ -231,6 +231,44 @@ class ShipDayService {
       throw this.handleError(error);
     }
   }
+  
+  /**
+   * NUEVO: Añade esta función completa a tu servicio.
+   * Crea la orden en Shipday y la asigna a un conductor en un solo paso.
+   */
+  async createAndAssignOrder(order, driverId) {
+    try {
+      // 1. Prepara los datos del pedido para la API de Shipday
+      const payload = {
+        orderNumber: order.order_number,
+        customerName: order.customer_name,
+        customerAddress: order.shipping_address,
+        customerEmail: order.customer_email || '',
+        customerPhoneNumber: order.customer_phone || '',
+        deliveryInstruction: order.notes || 'Sin notas.',
+        // 2. Asigna el conductor directamente al crear la orden
+        carrierId: driverId,
+      };
+
+      console.log('📦 Creando y asignando pedido en Shipday con payload:', payload);
+
+      // 3. Llama al método que ya tienes para crear la orden
+      const createdOrder = await this.createOrder(payload);
+
+      // 4. Actualiza tu pedido local con el ID de Shipday y el nuevo estado
+      order.shipday_order_id = createdOrder.orderId;
+      order.shipday_driver_id = driverId;
+      order.status = 'processing'; // Cambia el estado a "Procesando"
+      await order.save();
+
+      return { success: true, order: createdOrder };
+
+    } catch (error) {
+      console.error('❌ Error en createAndAssignOrder:', error.message);
+      // Lanza el error para que el controlador lo maneje y envíe una respuesta clara al frontend
+      throw error;
+    }
+  }
 
   async getOrders() {
     try {
@@ -328,7 +366,6 @@ class ShipDayService {
       return new Error('Error desconocido en ShipDay SDK');
     }
   }
-  
 }
 
-module.exports = ShipDayService;
+module.exports = new ShipDayService();
