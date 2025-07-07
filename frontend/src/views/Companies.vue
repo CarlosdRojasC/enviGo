@@ -451,7 +451,7 @@ import { ref, computed, onMounted } from 'vue'
 import { apiService } from '../services/api'
 import Modal from '../components/Modal.vue'
 
-// Estado existente (mantenemos la lógica original)
+// Estado
 const companies = ref([])
 const users = ref([])
 const loading = ref(true)
@@ -459,15 +459,27 @@ const loadingUsers = ref(false)
 const showUsersModal = ref(false)
 const showAddUserForm = ref(false)
 const isAddingUser = ref(false)
+const isExporting = ref(false)
 const selectedCompany = ref(null)
 
-// Nuevo estado para facturación y precios
 const showPricingModal = ref(false)
 const showStatsModal = ref(false)
 const savingPricing = ref(false)
 const filters = ref({ status: '', plan: '', search: '' })
 
-// Configuración de precios
+const showAddCompanyModal = ref(false)
+const isAddingCompany = ref(false)
+const newCompany = ref({
+  name: '',
+  email: '',
+  phone: '',
+  address: '',
+  price_per_order: 500,
+  owner_name: '',
+  owner_email: '',
+  owner_password: ''
+})
+
 const pricingForm = ref({
   plan_type: 'basic',
   price_per_order: 0,
@@ -475,46 +487,36 @@ const pricingForm = ref({
   pricing_notes: ''
 })
 
-// Planes y precios sugeridos
 const planPricing = {
-  basic: { price: 2800, users: 3, name: 'Básico' },
-  pro: { price: 2300, users: 10, name: 'Pro' },
-  enterprise: { price: 2000, users: 50, name: 'Enterprise' },
+  basic: { price: 500, users: 3, name: 'Básico' },
+  pro: { price: 350, users: 10, name: 'Pro' },
+  enterprise: { price: 250, users: 50, name: 'Enterprise' },
   custom: { price: 0, users: 999, name: 'Personalizado' }
 }
 
-const IVA_RATE = 0.19 // 19% IVA en Chile
+const IVA_RATE = 0.19
 
 const newUser = ref({ full_name: '', email: '', password: '', role: 'company_employee', company_id: null })
 
-// Computed properties para estadísticas
-const activeCompanies = computed(() => 
-  companies.value.filter(c => c.is_active).length
-)
-
-const totalMonthlyRevenue = computed(() => 
-  companies.value.reduce((total, company) => total + calculateMonthlyRevenue(company), 0)
-)
-
-const totalOrders = computed(() => 
-  companies.value.reduce((total, company) => total + (company.orders_count || 0), 0)
-)
-
+// Computed
+const activeCompanies = computed(() => companies.value.filter(c => c.is_active).length)
+const totalMonthlyRevenue = computed(() => companies.value.reduce((total, company) => total + calculateMonthlyRevenue(company), 0))
+const totalOrders = computed(() => companies.value.reduce((total, company) => total + (company.orders_count || 0), 0))
 const suggestedPrice = computed(() => {
   const plan = planPricing[pricingForm.value.plan_type]
   return plan ? plan.price : 0
 })
 
-// Funciones existentes (mantenemos la lógica original)
+// Lifecycle
 onMounted(fetchCompanies)
 
+// Funciones
 async function fetchCompanies() {
   loading.value = true
   try {
     const { data } = await apiService.companies.getAll()
     companies.value = data.map(company => ({
       ...company,
-      // Asegurar que tenemos datos de precio y plan
       price_per_order: company.price_per_order || 0,
       plan_type: company.plan_type || 'basic',
       orders_this_month: company.orders_this_month || 0
@@ -527,19 +529,48 @@ async function fetchCompanies() {
   }
 }
 
-async function openUsersModal(company) {
-  selectedCompany.value = company
-  showUsersModal.value = true
-  loadingUsers.value = true
-  try {
-    const { data } = await apiService.users.getByCompany(company._id)
-    users.value = data
-  } catch (error) {
-    console.error("Error cargando usuarios:", error)
-    alert('No se pudieron cargar los usuarios de la empresa.')
-  } finally {
-    loadingUsers.value = false
+function openAddCompanyModal() {
+  newCompany.value = {
+    name: '', email: '', phone: '', address: '',
+    price_per_order: 500, owner_name: '', owner_email: '', owner_password: ''
   }
+  showAddCompanyModal.value = true
+}
+
+// --- FUNCIÓN CORREGIDA Y VERIFICADA ---
+async function handleAddNewCompany() {
+  isAddingCompany.value = true;
+  try {
+    // Esta es la llamada correcta. Envía todos los datos al endpoint de creación de empresas.
+    // El backend se encarga de crear la empresa y LUEGO el usuario dueño.
+    await apiService.companies.create(newCompany.value);
+    
+    alert('Empresa y usuario administrador creados exitosamente.');
+    showAddCompanyModal.value = false;
+    await fetchCompanies(); // Recargar la lista para mostrar la nueva empresa
+
+  } catch (error) {
+    const errorMessage = error.response?.data?.error || 'Ocurrió un error inesperado.';
+    console.error("Error al crear la empresa:", error);
+    alert(`No se pudo crear la empresa: ${errorMessage}`);
+    
+  } finally {
+    isAddingCompany.value = false;
+  }
+}
+
+async function openUsersModal(company) {
+    selectedCompany.value = company
+    showUsersModal.value = true
+    loadingUsers.value = true
+    try {
+        const { data } = await apiService.companies.getUsers(company._id)
+        users.value = data
+    } catch (error) {
+        alert('No se pudieron cargar los usuarios de la empresa.')
+    } finally {
+        loadingUsers.value = false
+    }
 }
 
 function openAddUserModal() {
@@ -550,27 +581,26 @@ function openAddUserModal() {
   showAddUserForm.value = true
 }
 
-async function handleAddNewCompany() {
-  isAddingCompany.value = true;
-  try {
-    // Esta llamada es la correcta. Envía todos los datos de la empresa y el dueño
-    // al endpoint de creación de empresas. El backend se encargará de todo.
-    await apiService.companies.create(newCompany.value);
-    
-    alert('Empresa y usuario administrador creados exitosamente.');
-    showAddCompanyModal.value = false;
-    await fetchCompanies(); // Recargar la lista para mostrar la nueva empresa
-
-  } catch (error) {
-    // Proporcionar un mensaje de error más claro al usuario
-    const errorMessage = error.response?.data?.error || 'Ocurrió un error inesperado.';
-    console.error("Error al crear la empresa:", error);
-    alert(`No se pudo crear la empresa: ${errorMessage}`);
-    
-  } finally {
-    isAddingCompany.value = false;
-  }
+async function handleAddNewUser() {
+    isAddingUser.value = true;
+    try {
+        const userData = {
+            ...newUser.value,
+            company_id: selectedCompany.value._id
+        };
+        await apiService.auth.register(userData);
+        alert('Usuario creado con éxito.');
+        showAddUserForm.value = false;
+        await openUsersModal(selectedCompany.value);
+        await fetchCompanies();
+    } catch (error) {
+        const errorMessage = error.response?.data?.error || `Error al crear usuario: ${error.message}`;
+        alert(errorMessage);
+    } finally {
+        isAddingUser.value = false;
+    }
 }
+
 async function toggleUserStatus(user) {
   const newStatus = !user.is_active
   const confirmation = confirm(`¿Estás seguro de que quieres ${newStatus ? 'activar' : 'desactivar'} a ${user.full_name}?`)
@@ -585,7 +615,6 @@ async function toggleUserStatus(user) {
   }
 }
 
-// Nuevas funciones para facturación y precios
 function openPricingModal(company) {
   selectedCompany.value = company
   pricingForm.value = {
@@ -597,29 +626,17 @@ function openPricingModal(company) {
   showPricingModal.value = true
 }
 
-function openStatsModal(company) {
-  selectedCompany.value = company
-  showStatsModal.value = true
-}
-
 async function savePricingConfig() {
   if (!selectedCompany.value) return
-  
   savingPricing.value = true
   try {
-    // Actualizar precio por pedido
-    await apiService.companies.updatePrice(selectedCompany.value._id, pricingForm.value.price_per_order)
-    
-    // Si tienes endpoint para actualizar plan completo
+    await apiService.companies.updatePrice(selectedCompany.value._id, { price_per_order: pricingForm.value.price_per_order })
     const updateData = {
       plan_type: pricingForm.value.plan_type,
       billing_cycle: pricingForm.value.billing_cycle,
       pricing_notes: pricingForm.value.pricing_notes
     }
-    
     await apiService.companies.update(selectedCompany.value._id, updateData)
-    
-    // Actualizar en la lista local
     const companyIndex = companies.value.findIndex(c => c._id === selectedCompany.value._id)
     if (companyIndex !== -1) {
       companies.value[companyIndex] = {
@@ -628,16 +645,15 @@ async function savePricingConfig() {
         ...updateData
       }
     }
-    
     showPricingModal.value = false
     alert('Configuración de precios guardada con éxito.')
-    
   } catch (error) {
     alert(`Error al guardar configuración: ${error.message}`)
   } finally {
     savingPricing.value = false
   }
 }
+
 async function exportCompanyOrders(company) {
   const confirmation = confirm(`¿Deseas exportar todos los pedidos para OptiRoute de la empresa "${company.name}"?`);
   if (!confirmation) return;
@@ -645,8 +661,7 @@ async function exportCompanyOrders(company) {
   isExporting.value = true;
   try {
     const params = { company_id: company._id };
-    const response = await apiService.orders.export(params);
-    
+    const response = await apiService.orders.exportForOptiRoute(params);
     const url = window.URL.createObjectURL(new Blob([response.data]));
     const link = document.createElement('a');
     link.href = url;
@@ -655,7 +670,6 @@ async function exportCompanyOrders(company) {
     link.click();
     link.remove();
     window.URL.revokeObjectURL(url);
-    
   } catch (error) {
     console.error('Error exporting company orders:', error);
     alert('No se encontraron pedidos para exportar para esta empresa.');
@@ -667,7 +681,6 @@ async function exportCompanyOrders(company) {
 async function toggleCompanyStatus(company) {
   const newStatus = !company.is_active
   const confirmation = confirm(`¿Estás seguro de que quieres ${newStatus ? 'activar' : 'desactivar'} la empresa ${company.name}?`)
-  
   if (confirmation) {
     try {
       await apiService.companies.update(company._id, { is_active: newStatus })
@@ -684,68 +697,30 @@ function updatePriceSuggestion() {
   if (plan && plan.price > 0) {
     pricingForm.value.price_per_order = plan.price
   }
-  calculatePricingBreakdown()
 }
 
-function calculatePricingBreakdown() {
-  // Esta función se llama cuando cambia el precio para recalcular todo
-  // Los computed properties se actualizarán automáticamente
-}
-
-async function exportCompaniesData() {
-  try {
-    // Crear CSV con datos de facturación
-    const csvData = companies.value.map(company => ({
-      'Nombre Empresa': company.name,
-      'Plan': getPlanName(company.plan_type),
-      'Precio Base': company.price_per_order || 0,
-      'IVA': calculateIVA(company.price_per_order || 0),
-      'Total por Pedido': getTotalPriceWithIVA(company.price_per_order || 0),
-      'Pedidos este Mes': company.orders_this_month || 0,
-      'Revenue Mensual': calculateMonthlyRevenue(company),
-      'Estado': company.is_active ? 'Activa' : 'Inactiva',
-      'Usuarios': company.users_count || 0
-    }))
-    
-    const csv = convertToCSV(csvData)
-    downloadCSV(csv, `empresas_facturacion_${new Date().toISOString().split('T')[0]}.csv`)
-    
-  } catch (error) {
-    alert('Error al exportar datos')
-  }
-}
-
-// Funciones de cálculo de precios e IVA
 function calculateIVA(basePrice) {
   return Math.round(basePrice * IVA_RATE)
 }
-
 function getTotalPriceWithIVA(basePrice) {
   return basePrice + calculateIVA(basePrice)
 }
-
 function calculateMonthlyRevenue(company) {
   const baseRevenue = (company.price_per_order || 0) * (company.orders_this_month || 0)
   return baseRevenue + calculateIVA(baseRevenue)
 }
-
 function getBaseRevenue(company) {
   return (company.price_per_order || 0) * (company.orders_this_month || 0)
 }
-
 function getIVARevenue(company) {
   return calculateIVA(getBaseRevenue(company))
 }
-
-// Funciones de utilidad
 function getPlanName(planType) {
   return planPricing[planType]?.name || 'Básico'
 }
-
 function getPlanUserLimit(planType) {
   return planPricing[planType]?.users || 3
 }
-
 function getRoleName(role) {
   const roles = {
     company_owner: 'Dueño',
@@ -754,23 +729,19 @@ function getRoleName(role) {
   }
   return roles[role] || role
 }
-
 function getStatusClass(company) {
   if (!company.is_active) return 'inactive'
   if (company.plan_type === 'trial') return 'trial'
   return 'active'
 }
-
 function getStatusText(company) {
   if (!company.is_active) return 'Inactiva'
   if (company.plan_type === 'trial') return 'En Prueba'
   return 'Activa'
 }
-
 function formatCurrency(amount) {
   return new Intl.NumberFormat('es-CL').format(amount || 0)
 }
-
 function formatDate(dateStr) {
   if (!dateStr) return 'Nunca'
   return new Date(dateStr).toLocaleDateString('es-ES', {
@@ -779,8 +750,6 @@ function formatDate(dateStr) {
     year: 'numeric'
   })
 }
-
-// Funciones de búsqueda y filtros
 let searchTimeout
 function debounceSearch() {
   clearTimeout(searchTimeout)
