@@ -834,12 +834,17 @@ const newCompany = ref({
 })
 
 function openAddCompanyModal() {
-  // Resetear el formulario antes de mostrar
+  // Resetear el formulario incluyendo el dueño
   newCompany.value = {
     name: '',
     contact_email: '',
     plan_type: 'basic',
-    price_per_order: 0
+    price_per_order: 0,
+    owner: {
+      full_name: '',
+      email: '',
+      password: ''
+    }
   }
   showAddCompanyModal.value = true
 }
