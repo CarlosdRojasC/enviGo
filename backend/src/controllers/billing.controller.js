@@ -37,6 +37,7 @@ class BillingController {
 
       let orderFilter = {
         company_id: new mongoose.Types.ObjectId(company_id),
+        status: 'delivered',
         order_date: {
           $gte: new Date(period_start),
           $lte: new Date(period_end)
@@ -87,7 +88,7 @@ class BillingController {
 
       await Order.updateMany(
         { _id: { $in: orders.map(o => o._id) } },
-        { $set: { invoice_id: invoice._id, billed: true, updated_at: new Date() } }
+        { $set: { status: 'facturado', invoice_id: invoice._id, billed: true, updated_at: new Date() } }
       );
 
       const invoiceWithCompany = await Invoice.findById(invoice._id).populate('company_id', 'name email');
@@ -140,6 +141,7 @@ class BillingController {
 
           const orders = await Order.find({
             company_id: company._id,
+            status: 'delivered',
             order_date: {
               $gte: new Date(period_start),
               $lte: new Date(period_end)

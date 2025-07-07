@@ -22,7 +22,8 @@ module.exports = {
     PROCESSING: 'processing',
     SHIPPED: 'shipped',
     DELIVERED: 'delivered',
-    CANCELLED: 'cancelled'
+    CANCELLED: 'cancelled',
+    INVOICED: 'facturado'
   },
   
   // Estados de facturas

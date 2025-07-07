@@ -809,7 +809,7 @@ async function loadOrdersForPeriod() {
       company_id: generateForm.value.company_id,
       date_from: generateForm.value.period_start,
       date_to: generateForm.value.period_end,
-      status: ['pending', 'processing', 'shipped', 'delivered'], // Excluir cancelados
+      status: 'delivered', // Excluir cancelados
       limit: 1000 // Obtener todos los pedidos del período
     }
     
@@ -994,7 +994,8 @@ function getStatusText(status) {
     sent: 'Enviada',
     paid: 'Pagada',
     overdue: 'Vencida',
-    cancelled: 'Cancelada'
+    cancelled: 'Cancelada',
+    facturado: 'Facturado'
   }
   return statuses[status] || status
 }
@@ -2362,5 +2363,9 @@ function openBulkGenerateModal() {
   border: 1px solid #f59e0b;
   border-radius: 6px;
   color: #92400e;
+}
+.status-badge.facturado {
+  background: #e0e7ff; /* Un color morado claro, por ejemplo */
+  color: #3730a3;
 }
 </style>
