@@ -550,27 +550,26 @@ function openAddUserModal() {
   showAddUserForm.value = true
 }
 
-async function handleAddNewUser() {
-    isAddingUser.value = true;
-    try {
-        // --- CAMBIO CLAVE: AÑADIR explícitamente el company_id ---
-        const userData = {
-            ...newUser.value,
-            company_id: selectedCompany.value._id
-        };
-        // En lugar de llamar a `apiService.users.create`, usamos `auth.register` que es más directo.
-        await apiService.auth.register(userData);
-        alert('Usuario creado con éxito.');
-        showAddUserForm.value = false;
-        await openUsersModal(selectedCompany.value); // Recargar la lista de usuarios del modal
-        await fetchCompanies(); // Recargar los datos de las compañías por si cambió el contador de usuarios
-    } catch (error) {
-        // Mostrar un error más específico si el backend lo envía
-        const errorMessage = error.response?.data?.error || `Error al crear usuario: ${error.message}`;
-        alert(errorMessage);
-    } finally {
-        isAddingUser.value = false;
-    }
+async function handleAddNewCompany() {
+  isAddingCompany.value = true;
+  try {
+    // Esta llamada es la correcta. Envía todos los datos de la empresa y el dueño
+    // al endpoint de creación de empresas. El backend se encargará de todo.
+    await apiService.companies.create(newCompany.value);
+    
+    alert('Empresa y usuario administrador creados exitosamente.');
+    showAddCompanyModal.value = false;
+    await fetchCompanies(); // Recargar la lista para mostrar la nueva empresa
+
+  } catch (error) {
+    // Proporcionar un mensaje de error más claro al usuario
+    const errorMessage = error.response?.data?.error || 'Ocurrió un error inesperado.';
+    console.error("Error al crear la empresa:", error);
+    alert(`No se pudo crear la empresa: ${errorMessage}`);
+    
+  } finally {
+    isAddingCompany.value = false;
+  }
 }
 async function toggleUserStatus(user) {
   const newStatus = !user.is_active
