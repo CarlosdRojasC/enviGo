@@ -84,12 +84,91 @@ class ShipDayService {
   async getDrivers() {
     try {
       const headers = this.workingFormat || this.getHeaders(1);
+      console.log('🔍 Obteniendo conductores desde ShipDay...');
+      
       const res = await axios.get(`${BASE_URL}/carriers`, { headers });
-      return res.data;
+      console.log('✅ Respuesta cruda de ShipDay:', JSON.stringify(res.data, null, 2));
+      
+      // Verificar si res.data es un array o tiene un wrapper
+      const driversData = Array.isArray(res.data) ? res.data : res.data.data || res.data.carriers || [];
+      
+      if (!Array.isArray(driversData)) {
+        console.error('❌ Los datos de conductores no son un array:', typeof driversData);
+        return [];
+      }
+      
+      console.log(`📊 Procesando ${driversData.length} conductores...`);
+      
+      // Mapear la respuesta de ShipDay al formato esperado
+      const mappedDrivers = driversData.map((driver, index) => {
+        console.log(`🔍 Conductor ${index + 1}:`, {
+          name: driver.name,
+          isActive: driver.isActive,
+          isOnShift: driver.isOnShift,
+          email: driver.email
+        });
+        
+        return {
+          ...driver,
+          // Campos principales de ShipDay
+          id: driver.id,
+          carrierId: driver.id,
+          email: driver.email,
+          name: driver.name,
+          phoneNumber: driver.phoneNumber,
+          companyId: driver.companyId,
+          
+          // Estados importantes de ShipDay (con conversión explícita a boolean)
+          isActive: Boolean(driver.isActive), // Habilitado para recibir órdenes
+          isOnShift: Boolean(driver.isOnShift), // Trabajando actualmente
+          
+          // Ubicación GPS de ShipDay (campos originales + mapeados)
+          carrrierLocationLat: driver.carrrierLocationLat,
+          carrrierLocationLng: driver.carrrierLocationLng,
+          location: {
+            lat: driver.carrrierLocationLat || null,
+            lng: driver.carrrierLocationLng || null
+          },
+          
+          // Campos adicionales
+          codeName: driver.codeName || '',
+          carrierPhoto: driver.carrierPhoto || null,
+          personalId: driver.personalId || '',
+          areaId: driver.areaId || null,
+          
+          // Estado calculado para la UI
+          status: this.calculateDriverStatus(driver)
+        };
+      });
+      
+      console.log('✅ Conductores mapeados:', mappedDrivers.length);
+      console.log('📊 Estados encontrados:', {
+        active: mappedDrivers.filter(d => d.isActive).length,
+        inactive: mappedDrivers.filter(d => !d.isActive).length,
+        onShift: mappedDrivers.filter(d => d.isOnShift).length,
+        available: mappedDrivers.filter(d => d.isActive && !d.isOnShift).length
+      });
+      
+      return mappedDrivers;
     } catch (error) {
       console.error('❌ Error obteniendo conductores:', error.response?.data);
       throw this.handleError(error);
     }
+  }
+
+  /**
+   * Calcular el estado del conductor para la UI
+   */
+  calculateDriverStatus(driver) {
+    if (!driver.isActive) {
+      return 'inactive'; // Deshabilitado
+    }
+    
+    if (driver.isOnShift) {
+      return 'working'; // Trabajando/En turno
+    }
+    
+    return 'available'; // Disponible para trabajar
   }
 
   async getDriver(email) {
@@ -108,13 +187,20 @@ class ShipDayService {
       const payload = {
         name: updateData.name,
         email,
-        phoneNumber: updateData.phone,
-        vehicleType: updateData.vehicle_type,
-        is_active: updateData.is_active
+        phoneNumber: updateData.phone || updateData.phoneNumber,
+        // ShipDay maneja isActive para habilitar/deshabilitar
+        isActive: updateData.isActive,
+        // Otros campos si están disponibles
+        codeName: updateData.codeName || '',
+        areaId: updateData.areaId || null
       };
+
+      console.log('🔄 Actualizando conductor en ShipDay:', payload);
 
       const headers = this.workingFormat || this.getHeaders(1);
       const res = await axios.put(`${BASE_URL}/carriers/${email}`, payload, { headers });
+      
+      console.log('✅ Conductor actualizado:', res.data);
       return res.data;
     } catch (error) {
       console.error('❌ Error actualizando conductor:', error.response?.data);
