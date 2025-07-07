@@ -293,10 +293,10 @@ async function syncChannel(channelId) {
     if (syncingChannels.value.includes(channelId)) return;
     syncingChannels.value.push(channelId);
     try {
-        await apiService.channels.sync(channelId, {
-            date_from: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
-            date_to: new Date().toISOString()
-        });
+      await apiService.channels.syncOrders(channelId, {
+    date_from: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
+    date_to: new Date().toISOString()
+});
         alert('Sincronización iniciada. Los pedidos aparecerán en la sección "Mis Pedidos" en unos momentos.');
         await fetchChannels();
     } catch (error) {
