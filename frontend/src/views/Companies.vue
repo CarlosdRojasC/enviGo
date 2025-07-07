@@ -1624,4 +1624,492 @@ function downloadCSV(csv, filename) {
 .empty-state-small {
   padding: 20px;
 }
+/* Estilos específicos para el modal de empresa */
+.company-form {
+  max-height: 80vh;
+  overflow-y: auto;
+  padding-right: 8px;
+}
+
+/* Scroll personalizado para el formulario */
+.company-form::-webkit-scrollbar {
+  width: 6px;
+}
+
+.company-form::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 3px;
+}
+
+.company-form::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 3px;
+}
+
+.company-form::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
+}
+
+/* Secciones del formulario */
+.form-section {
+  margin-bottom: 32px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.form-section:last-of-type {
+  border-bottom: none;
+  margin-bottom: 0;
+}
+
+.form-section h4 {
+  margin: 0 0 16px 0;
+  color: #1f2937;
+  font-size: 16px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.form-section h4::before {
+  content: '';
+  width: 4px;
+  height: 16px;
+  background: #3b82f6;
+  border-radius: 2px;
+}
+
+.section-description {
+  margin: 0 0 16px 0;
+  color: #6b7280;
+  font-size: 14px;
+  font-style: italic;
+  background: #f9fafb;
+  padding: 8px 12px;
+  border-radius: 6px;
+  border-left: 3px solid #d1d5db;
+}
+
+/* Grid de formulario */
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  margin-bottom: 16px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.form-group label {
+  font-weight: 500;
+  color: #374151;
+  margin-bottom: 8px;
+  font-size: 14px;
+}
+
+.form-group input,
+.form-group select,
+.form-group textarea {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 14px;
+  transition: all 0.2s ease;
+  box-sizing: border-box;
+}
+
+.form-group input:focus,
+.form-group select:focus,
+.form-group textarea:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.form-group textarea {
+  resize: vertical;
+  min-height: 80px;
+  font-family: inherit;
+}
+
+/* Estados de input */
+.form-group input.error,
+.form-group select.error,
+.form-group textarea.error {
+  border-color: #ef4444;
+  background-color: #fef2f2;
+}
+
+.form-group input:disabled {
+  background-color: #f9fafb;
+  color: #6b7280;
+  cursor: not-allowed;
+}
+
+/* Textos de ayuda y errores */
+.form-hint {
+  font-size: 12px;
+  color: #6b7280;
+  margin-top: 4px;
+  line-height: 1.4;
+}
+
+.error-message {
+  color: #ef4444;
+  font-size: 12px;
+  margin-top: 4px;
+  display: block;
+  font-weight: 500;
+}
+
+/* Checkbox personalizado */
+.checkbox-input {
+  width: 18px !important;
+  height: 18px !important;
+  margin-right: 8px !important;
+  accent-color: #3b82f6;
+}
+
+.checkbox-label {
+  font-weight: 500;
+  color: #374151;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+}
+
+/* Grupo de precio con símbolo */
+.price-input-group {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.currency-symbol {
+  position: absolute;
+  left: 12px;
+  color: #6b7280;
+  font-weight: 600;
+  z-index: 1;
+  font-size: 14px;
+}
+
+.price-input-group input {
+  padding-left: 32px !important;
+}
+
+.price-suggestion {
+  margin-left: 12px;
+  font-size: 12px;
+  color: #10b981;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* Error general */
+.general-error {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 20px;
+}
+
+.general-error .error-message {
+  color: #dc2626;
+  font-size: 14px;
+  margin: 0;
+  font-weight: 500;
+}
+
+/* Sección de resumen */
+.summary-section {
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  border: 2px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 24px;
+  margin-top: 24px;
+  position: relative;
+}
+
+.summary-section::before {
+  content: '📋';
+  position: absolute;
+  top: -12px;
+  left: 20px;
+  background: white;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 16px;
+}
+
+.summary-section h4 {
+  margin: 0 0 16px 0;
+  color: #1e293b;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.summary-section h4::before {
+  display: none;
+}
+
+.config-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.summary-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 0;
+  font-size: 14px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.summary-row:last-child {
+  border-bottom: none;
+}
+
+.summary-row.total {
+  border-top: 2px solid #cbd5e1;
+  margin-top: 8px;
+  padding-top: 16px;
+  font-weight: 700;
+  color: #1e293b;
+  font-size: 15px;
+}
+
+.summary-row span:first-child {
+  color: #64748b;
+  font-weight: 500;
+}
+
+.summary-row span:last-child {
+  color: #1e293b;
+  font-weight: 600;
+}
+
+/* Badges dentro del resumen */
+.summary-row .plan-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 8px;
+  border-radius: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.summary-row .plan-badge.basic {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.summary-row .plan-badge.pro {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.summary-row .plan-badge.enterprise {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.summary-row .plan-badge.custom {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+/* Acciones del modal */
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 32px;
+  padding-top: 24px;
+  border-top: 2px solid #e5e7eb;
+}
+
+.btn-cancel,
+.btn-save {
+  padding: 12px 24px;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 14px;
+  transition: all 0.2s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.btn-cancel {
+  background-color: #f3f4f6;
+  color: #374151;
+  border: 1px solid #d1d5db;
+}
+
+.btn-cancel:hover {
+  background-color: #e5e7eb;
+  transform: translateY(-1px);
+}
+
+.btn-save {
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  color: white;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
+
+.btn-save:hover:not(:disabled) {
+  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(59, 130, 246, 0.4);
+}
+
+.btn-save:disabled {
+  background: #9ca3af;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+/* Animación de loading para botón */
+.btn-save:disabled::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  right: 12px;
+  transform: translateY(-50%);
+  width: 16px;
+  height: 16px;
+  border: 2px solid transparent;
+  border-top: 2px solid white;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: translateY(-50%) rotate(0deg); }
+  100% { transform: translateY(-50%) rotate(360deg); }
+}
+
+/* Responsive para el modal */
+@media (max-width: 768px) {
+  .company-form {
+    max-height: 70vh;
+    padding-right: 4px;
+  }
+  
+  .form-row {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  
+  .form-section {
+    margin-bottom: 24px;
+    padding-bottom: 16px;
+  }
+  
+  .form-section h4 {
+    font-size: 15px;
+  }
+  
+  .summary-section {
+    padding: 16px;
+    margin-top: 16px;
+  }
+  
+  .modal-actions {
+    flex-direction: column;
+    gap: 8px;
+  }
+  
+  .btn-cancel,
+  .btn-save {
+    width: 100%;
+    padding: 14px 20px;
+  }
+  
+  .price-input-group {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .price-suggestion {
+    margin-left: 0;
+    margin-top: 4px;
+    text-align: center;
+  }
+}
+
+@media (max-width: 480px) {
+  .company-form {
+    max-height: 65vh;
+  }
+  
+  .form-group input,
+  .form-group select,
+  .form-group textarea {
+    padding: 10px;
+    font-size: 16px; /* Previene zoom en iOS */
+  }
+  
+  .summary-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+  
+  .summary-row span:last-child {
+    align-self: flex-end;
+  }
+}
+
+/* Estilos adicionales para mejorar la accesibilidad */
+.form-group input:focus-visible,
+.form-group select:focus-visible,
+.form-group textarea:focus-visible {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+}
+
+.btn-cancel:focus-visible,
+.btn-save:focus-visible {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+}
+
+/* Animación suave para errores */
+.error-message {
+  animation: fadeInError 0.3s ease-out;
+}
+
+@keyframes fadeInError {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Estilos para el badge de editar en la tabla */
+.btn-action.edit {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.btn-action.edit:hover {
+  background: #fde68a;
+  transform: scale(1.1);
+}
 </style>
