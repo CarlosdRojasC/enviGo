@@ -31,13 +31,20 @@
           <option value="delivered">Entregados</option>
           <option value="cancelled">Cancelados</option>
         </select>
+        <!-- NUEVO: Filtro por comuna -->
+        <select v-model="filters.commune" @change="fetchOrders" class="commune-filter">
+          <option value="">Todas las Comunas</option>
+          <option v-for="commune in availableCommunes" :key="commune" :value="commune">
+            {{ commune }}
+          </option>
+        </select>
         <input type="date" v-model="filters.date_from" @change="fetchOrders" />
         <input type="date" v-model="filters.date_to" @change="fetchOrders" />
         <input 
           type="text" 
           v-model="filters.search" 
           @input="debounceSearch"
-          placeholder="Buscar pedido..."
+          placeholder="Buscar por pedido, cliente o dirección..."
           class="search-input"
         />
       </div>
@@ -76,6 +83,7 @@
               <th>Pedido</th>
               <th>Empresa</th>
               <th>Cliente</th>
+              <th>Comuna</th>
               <th>Fechas (Creación / Entrega)</th>
               <th>Estado</th>
               <th>Costo de Envío</th>
@@ -84,10 +92,10 @@
           </thead>
           <tbody>
             <tr v-if="loadingOrders">
-              <td colspan="8" class="loading-row">Cargando pedidos...</td>
+              <td colspan="9" class="loading-row">Cargando pedidos...</td>
             </tr>
             <tr v-else-if="orders.length === 0">
-              <td colspan="8" class="empty-row">No se encontraron pedidos.</td>
+              <td colspan="9" class="empty-row">No se encontraron pedidos.</td>
             </tr>
             <tr v-else v-for="order in orders" :key="order._id" :class="{ 'selected-row': selectedOrders.includes(order._id) }">
               <!-- NUEVO: Checkbox individual -->
@@ -103,6 +111,12 @@
               <td class="order-number">{{ order.order_number }}</td>
               <td>{{ order.company_id.name }}</td>
               <td>{{ order.customer_name }}</td>
+              <!-- NUEVA: Columna de comuna -->
+              <td class="commune-cell">
+                <span class="commune-badge" :class="getCommuneClass(order.shipping_commune)">
+                  {{ order.shipping_commune || 'Sin comuna' }}
+                </span>
+              </td>
               <td class="date-cell">
                 <div class="date-creation">
                   <span class="date-label">Creado:</span> {{ formatDate(order.order_date, true) }}
@@ -171,8 +185,8 @@
           <div class="form-group"><label>Nombre del Cliente *</label><input v-model="newOrder.customer_name" type="text" required /></div>
           <div class="form-group"><label>Email del Cliente</label><input v-model="newOrder.customer_email" type="email" /></div>
           <div class="form-group full-width"><label>Dirección de Envío *</label><input v-model="newOrder.shipping_address" type="text" required /></div>
-          <div class="form-group"><label>Ciudad</label><input v-model="newOrder.shipping_city" type="text" /></div>
           <div class="form-group"><label>Comuna</label><input v-model="newOrder.shipping_commune" type="text" /></div>
+          <div class="form-group"><label>Ciudad</label><input v-model="newOrder.shipping_city" type="text" /></div>
           <div class="form-group"><label>Costo de Envío</label><input v-model.number="newOrder.shipping_cost" type="number" /></div>
           
           <div class="form-group full-width section-header"><h4>Datos para Logística (OptiRoute)</h4></div>
@@ -347,7 +361,7 @@ const route = useRoute();
 const orders = ref([]);
 const companies = ref([]);
 const pagination = ref({ page: 1, limit: 15, total: 0, totalPages: 1 });
-const filters = ref({ company_id: '', status: '', date_from: '', date_to: '', search: '' });
+const filters = ref({ company_id: '', status: '', commune: '', date_from: '', date_to: '', search: '' });
 const loadingOrders = ref(true);
 const isExporting = ref(false);
 const selectedOrder = ref(null);
@@ -378,6 +392,9 @@ const bulkAssignmentCompleted = ref(0);
 const bulkAssignmentResults = ref([]);
 const bulkAssignmentFinished = ref(false);
 
+// NUEVO: Estados para filtros y comunas
+const availableCommunes = ref([]);
+
 // NUEVO: Computed properties para selección masiva
 const selectAllChecked = computed(() => {
   const selectableOrders = orders.value.filter(order => !order.shipday_order_id);
@@ -398,6 +415,7 @@ const bulkProgressPercentage = computed(() => {
 onMounted(() => {
   fetchCompanies();
   fetchOrders();
+  fetchAvailableCommunes();
 });
 
 // Funciones existentes (sin cambios)
@@ -424,6 +442,44 @@ async function fetchOrders() {
   } finally { 
     loadingOrders.value = false; 
   } 
+}
+
+// NUEVA: Función mejorada para obtener comunas disponibles
+async function fetchAvailableCommunes() {
+  try {
+    console.log('🏘️ Obteniendo comunas disponibles...');
+    
+    const params = {};
+    
+    // Si hay filtro de empresa, aplicarlo también para las comunas
+    if (filters.value.company_id) {
+      params.company_id = filters.value.company_id;
+    }
+    
+    const { data } = await apiService.orders.getAvailableCommunes(params);
+    availableCommunes.value = data.communes || [];
+    
+    console.log('✅ Comunas cargadas:', availableCommunes.value.length);
+    
+  } catch (error) {
+    console.error('❌ Error fetching communes:', error);
+    // Fallback: extraer comunas de las órdenes actuales
+    if (orders.value.length > 0) {
+      updateAvailableCommunes(orders.value);
+    }
+  }
+}
+
+// NUEVA: Función para actualizar la lista de comunas (fallback)
+function updateAvailableCommunes(orders) {
+  const communes = new Set();
+  orders.forEach(order => {
+    if (order.shipping_commune && order.shipping_commune.trim()) {
+      communes.add(order.shipping_commune.trim());
+    }
+  });
+  availableCommunes.value = [...communes].sort();
+  console.log('📍 Comunas actualizadas desde órdenes locales:', availableCommunes.value.length);
 }
 
 async function exportOrders() { 
@@ -574,6 +630,13 @@ function getStatusName(status) {
     delivered: 'Entregado', cancelled: 'Cancelado' 
   }; 
   return names[status] || status; 
+}
+
+// NUEVA: Función para obtener clase CSS de comuna
+function getCommuneClass(commune) {
+  if (!commune || commune === 'Sin comuna') return 'commune-empty';
+  // Podrías agregar lógica específica para ciertas comunas
+  return 'commune-filled';
 }
 
 // Funciones de asignación individual (existentes)
@@ -926,6 +989,38 @@ function closeBulkAssignModal() {
 .filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; }
 .filters select, .filters input { padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; }
 .search-input { grid-column: span 2; }
+
+/* NUEVO: Estilos para filtro de comuna */
+.commune-filter {
+  background-color: #f0f9ff;
+  border-color: #0ea5e9;
+}
+
+.commune-cell {
+  text-align: center;
+}
+
+.commune-badge {
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: capitalize;
+}
+
+.commune-badge.commune-filled {
+  background-color: #dbeafe;
+  color: #1e40af;
+  border: 1px solid #93c5fd;
+}
+
+.commune-badge.commune-empty {
+  background-color: #f3f4f6;
+  color: #6b7280;
+  border: 1px solid #d1d5db;
+  font-style: italic;
+}
 
 /* NUEVO: Estilos para selección masiva */
 .bulk-actions-section {

@@ -163,6 +163,67 @@ router.get('/orders', authenticateToken, orderController.getAll);
 router.get('/orders/stats', authenticateToken, orderController.getStats);
 router.get('/orders/trend', authenticateToken, orderController.getOrdersTrend);
 router.get('/orders/export', authenticateToken, isAdmin, orderController.exportForOptiRoute);
+
+// NUEVA: Ruta para obtener todas las comunas disponibles
+router.get('/orders/communes', authenticateToken, async (req, res) => {
+  try {
+    const { company_id } = req.query;
+    
+    const filters = {};
+    
+    // Aplicar filtro de empresa según el rol del usuario
+    if (req.user.role === 'admin') {
+      if (company_id) {
+        filters.company_id = new mongoose.Types.ObjectId(company_id);
+      }
+    } else {
+      if (req.user.company_id) {
+        filters.company_id = new mongoose.Types.ObjectId(req.user.company_id);
+      }
+    }
+    
+    console.log('🏘️ Obteniendo comunas con filtros:', filters);
+    
+    // Agregar pipeline de agregación para obtener comunas únicas
+    const communes = await Order.aggregate([
+      { $match: filters },
+      {
+        $group: {
+          _id: '$shipping_commune',
+          count: { $sum: 1 }
+        }
+      },
+      {
+        $match: {
+          _id: { $ne: null, $ne: '' }
+        }
+      },
+      {
+        $sort: { _id: 1 }
+      },
+      {
+        $project: {
+          commune: '$_id',
+          count: 1,
+          _id: 0
+        }
+      }
+    ]);
+    
+    console.log('✅ Comunas encontradas:', communes.length);
+    
+    res.json({
+      communes: communes.map(c => c.commune),
+      detailed: communes,
+      total: communes.length
+    });
+    
+  } catch (error) {
+    console.error('❌ Error obteniendo comunas:', error);
+    res.status(500).json({ error: 'Error obteniendo comunas disponibles' });
+  }
+});
+
 router.post('/orders', authenticateToken, validateOrderCreation, orderController.create);
 
 // DEBUG: Ruta para verificar datos de orden antes de enviar a Shipday
