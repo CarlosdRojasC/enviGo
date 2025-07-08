@@ -386,60 +386,41 @@ class ShipDayService {
   /**
    * MÉTODO ORIGINAL MEJORADO: Crear con conductor en un solo paso
    */
-  async createAndAssignOrder(orderData, driverId) {
+async createAndAssignOrder(order, driverId) {
     try {
-      console.log('🚀 MÉTODO DIRECTO - Creando orden con conductor asignado');
-      console.log('📋 Driver ID:', driverId);
-      
-      // Verificar que el conductor existe primero
-      const drivers = await this.getDrivers();
-      const driver = drivers.find(d => d.id === driverId || d.carrierId === driverId);
-      
-      if (!driver) {
-        console.error('❌ Conductor no encontrado:', driverId);
-        throw new Error(`Conductor con ID ${driverId} no encontrado`);
-      }
-      
-      console.log('✅ Conductor verificado:', {
-        id: driver.id,
-        email: driver.email,
-        name: driver.name
-      });
-      
-      // Preparar datos CON conductor
-      const orderDataWithDriver = {
-        ...orderData,
-        carrierId: driverId // Usar el ID exacto que tenemos
-      };
-      
-      console.log('📦 Creando orden CON conductor asignado...');
-      const createdOrder = await this.createOrder(orderDataWithDriver);
-      
-      console.log('📋 Resultado de creación:', createdOrder);
-
-      if (!createdOrder || createdOrder.success === false) {
-        const errorMsg = createdOrder?.response || 'Error desconocido en Shipday';
-        console.error('❌ Error en respuesta de Shipday:', errorMsg);
+      // ✅ CAMBIO CLAVE: Construimos el payload con los campos requeridos
+      const payload = {
+        orderNumber: order.order_number,
         
-        // Si falló con conductor, intentar método separado
-        console.log('🔄 Intentando método separado...');
-        return await this.createAndAssignOrderSeparately(orderData, driverId);
-      }
-
-      console.log('✅ Orden creada exitosamente con conductor:', createdOrder.orderId);
-
-      return { 
-        success: true, 
-        order: createdOrder,
-        orderId: createdOrder.orderId,
-        driver: driver,
-        message: 'Orden creada y asignada exitosamente en Shipday'
+        // Datos del punto de recogida (usamos los de la empresa)
+        restaurantName: order.company_id.name,
+        restaurantAddress: order.company_id.address || 'Dirección no especificada', // Usamos la dirección de la empresa
+        
+        // Datos del cliente final
+        customerName: order.customer_name,
+        customerAddress: order.shipping_address,
+        customerEmail: order.customer_email || '',
+        customerPhoneNumber: order.customer_phone || '',
+        
+        // Instrucciones y asignación
+        deliveryInstruction: order.notes || 'Sin notas.',
+        carrierId: driverId,
       };
+
+      console.log('📦 Creando y asignando pedido en Shipday con payload:', payload);
+      const createdOrder = await this.createOrder(payload);
+
+      // Actualiza tu pedido local con el ID de Shipday y el nuevo estado
+      order.shipday_order_id = createdOrder.orderId;
+      order.shipday_driver_id = driverId;
+      order.status = 'processing';
+      await order.save();
+
+      return { success: true, order: createdOrder };
 
     } catch (error) {
-      console.error('❌ Error en método directo, intentando método separado:', error.message);
-      // Fallback al método separado
-      return await this.createAndAssignOrderSeparately(orderData, driverId);
+      console.error('❌ Error en createAndAssignOrder:', error.message);
+      throw error;
     }
   }
   async getOrders() {

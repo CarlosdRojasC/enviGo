@@ -383,165 +383,46 @@ async getOrdersTrend(req, res) {
 /**
    * CORREGIDO: assignToDriver que maneja correctamente el .save()
    */
-  async assignToDriver(req, res) {
+async assignToDriver(req, res) {
     try {
       const { orderId } = req.params;
       const { driverId } = req.body;
-
-      console.log('🔍 assignToDriver iniciado:', { orderId, driverId });
 
       if (!driverId) {
         return res.status(400).json({ error: 'Se requiere el ID del conductor de Shipday.' });
       }
 
-      // Obtener orden con población completa - MANTENER COMO DOCUMENTO MONGOOSE
-      const order = await Order.findById(orderId)
-        .populate('company_id')
-        .populate('channel_id');
-        
+      // ✅ CAMBIO CLAVE: Hacemos "populate" para traer los datos de la empresa
+      const order = await Order.findById(orderId).populate('company_id');
+
       if (!order) {
         return res.status(404).json({ error: 'Pedido no encontrado.' });
       }
-
-      console.log('📋 Orden encontrada:', {
-        order_number: order.order_number,
-        company_name: order.company_id?.name,
-        customer_name: order.customer_name,
-        shipday_order_id: order.shipday_order_id
-      });
-
-      let result;
-
-      // Caso 1: Crear y asignar
-      if (!order.shipday_order_id) {
-        console.log('📦 Creando nueva orden en Shipday...');
-        
-        // Verificar datos de empresa
-        if (!order.company_id) {
-          console.error('❌ Orden sin company_id');
-          return res.status(400).json({ error: 'Orden sin empresa asociada' });
-        }
-
-        console.log('🏢 Datos de empresa:', {
-          _id: order.company_id._id,
-          name: order.company_id.name,
-          phone: order.company_id.phone
-        });
-        
-        // ✅ CORREGIDO: Preparar datos SIN usar .toObject()
-        // Pasar los datos necesarios como objeto plano, pero mantener 'order' como documento
-        const orderDataForShipday = {
-          order_number: order.order_number,
-          customer_name: order.customer_name,
-          customer_email: order.customer_email,
-          customer_phone: order.customer_phone,
-          shipping_address: order.shipping_address,
-          pickup_address: order.pickup_address,
-          notes: order.notes,
-          total_amount: order.total_amount,
-          shipping_cost: order.shipping_cost,
-          tax_amount: order.tax_amount,
-          discount_amount: order.discount_amount,
-          payment_method: order.payment_method,
-          items_count: order.items_count,
-          
-          // Datos de empresa
-          company_name: order.company_id.name,
-          company_phone: order.company_id.phone,
-        };
-        
-        console.log('💎 Datos preparados para Shipday:', orderDataForShipday);
-        
-        try {
-          result = await ShipdayService.createAndAssignOrder(orderDataForShipday, driverId);
-          console.log('✅ Resultado de createAndAssignOrder:', result);
-        } catch (shipdayError) {
-          console.error('❌ Error en Shipday:', shipdayError);
-          return res.status(400).json({ 
-            error: 'Error en Shipday: ' + shipdayError.message,
-            details: shipdayError.message
-          });
-        }
-        
-        // Verificar resultado
-        if (!result.success || result.order?.success === false) {
-          console.error('❌ Shipday retornó error:', result);
-          return res.status(400).json({ 
-            error: 'Error en Shipday: ' + (result.order?.response || result.message || 'Error desconocido'),
-            shipday_error: result.order,
-            full_result: result
-          });
-        }
-        
-        // ✅ CORREGIDO: Actualizar el documento Mongoose original
-        if (result.orderId || result.order?.orderId) {
-          order.shipday_order_id = result.orderId || result.order.orderId;
-          order.shipday_driver_id = driverId;
-          order.status = 'shipped';
-          order.updated_at = new Date();
-          
-          // Ahora SÍ podemos hacer .save() porque 'order' sigue siendo un documento Mongoose
-          await order.save();
-          console.log('✅ Orden local actualizada con ID:', order.shipday_order_id);
-        }
-        
-        res.status(200).json({ 
-          message: 'Pedido creado y asignado en Shipday exitosamente.',
-          shipday_order_id: order.shipday_order_id,
-          success: true,
-          debug_info: {
-            company_name: orderDataForShipday.company_name,
-            restaurant_name_sent: orderDataForShipday.company_name
-          }
-        });
-      } 
-      // Caso 2: Solo asignar
-      else {
-        console.log('👨‍💼 Asignando a orden existente...');
-        
-        const drivers = await ShipdayService.getDrivers();
-        const driver = drivers.find(d => d.id === driverId || d.carrierId === driverId);
-        
-        if (!driver) {
-          return res.status(404).json({ error: 'Conductor no encontrado en Shipday.' });
-        }
-
-        await ShipdayService.assignOrder(order.shipday_order_id, driver.email);
-        
-        // Actualizar documento Mongoose
-        order.shipday_driver_id = driverId;
-        order.status = 'shipped';
-        order.updated_at = new Date();
-        await order.save();
-
-        res.status(200).json({ 
-          message: 'Conductor asignado exitosamente a la orden existente.',
-          order_id: order.shipday_order_id,
-          driver_email: driver.email,
-          success: true
-        });
+      
+      if (!order.company_id) {
+        return res.status(400).json({ error: 'El pedido no está asociado a ninguna empresa.' });
       }
+
+      if (order.shipday_order_id) {
+        return res.status(400).json({ error: 'Este pedido ya ha sido enviado y asignado en Shipday.' });
+      }
+
+      // La lógica de permisos sigue igual
+      if (req.user.role !== 'admin' && req.user.company_id.toString() !== order.company_id._id.toString()) {
+        return res.status(403).json({ error: ERRORS.FORBIDDEN });
+      }
+
+      // Llamamos al servicio con el pedido completo (que ahora incluye los datos de la empresa)
+      const shipdayResult = await ShipdayService.createAndAssignOrder(order, driverId);
+
+      res.status(200).json({ 
+        message: 'Pedido asignado a Shipday exitosamente.',
+        order: shipdayResult.order 
+      });
 
     } catch (error) {
-      console.error('❌ Error completo en assignToDriver:', error);
-      
-      let errorMessage = 'Error interno del servidor';
-      
-      if (error.message.includes('Column') && error.message.includes('cannot be null')) {
-        errorMessage = 'Error en Shipday: Faltan datos del restaurante. Verifica que la empresa tenga nombre configurado.';
-      } else if (error.message.includes('API Key')) {
-        errorMessage = 'Error de autenticación con Shipday. Verifica tu API Key.';
-      } else if (error.message) {
-        errorMessage = error.message;
-      }
-      
-      res.status(500).json({ 
-        error: errorMessage,
-        debug_details: process.env.NODE_ENV === 'development' ? {
-          message: error.message,
-          stack: error.stack
-        } : undefined
-      });
+      console.error('Error asignando pedido a conductor:', error);
+      res.status(500).json({ error: error.message || ERRORS.SERVER_ERROR });
     }
   }
 
