@@ -185,6 +185,40 @@ class ShipDayService {
     }
   }
 
+    async assignOrderNewUrl(orderId, carrierId) {
+    if (!orderId || !carrierId) {
+      throw new Error('El orderId y el carrierId son requeridos para el nuevo método.');
+    }
+
+    try {
+      // Usa los headers que ya sabes que funcionan o el default
+      const headers = this.workingFormat || this.getHeaders(1);
+      
+      // Construye la URL exacta que sugeriste
+      const url = `${BASE_URL}/orders/assign/${orderId}/${carrierId}`;
+      
+      console.log(`🚀 Probando NUEVO método de asignación con la URL sugerida...`);
+      console.log(`🌐 URL: PUT ${url}`);
+      
+      // La petición PUT se envía SIN cuerpo (payload), por eso pasamos un objeto vacío {}.
+      // Toda la información necesaria ya está en la URL.
+      const response = await axios.put(url, {}, { headers });
+      
+      console.log('✅ ¡ÉXITO con el nuevo método de asignación!:', response.data);
+      return response.data;
+
+    } catch (error) {
+      console.error('❌ Error fatal con el nuevo método de asignación:', {
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data,
+        url: error.config?.url
+      });
+      // Reutiliza tu manejador de errores
+      throw this.handleError(error);
+    }
+  }
+
   /**
    * ✅ CORREGIDO: Asigna una orden ya creada a un conductor.
    * Sigue la documentación oficial: POST /orders/assign/{orderId}
@@ -466,89 +500,9 @@ class ShipDayService {
       throw this.handleError(error);
     }
   }
-   async analyzeOrdersStructure() {
-    try {
-      console.log('🔍 Analizando estructura de órdenes en Shipday...');
-      
-      const orders = await this.getOrders();
-      
-      if (!orders || !Array.isArray(orders) || orders.length === 0) {
-        return {
-          error: 'No se encontraron órdenes para analizar',
-          orders_count: 0
-        };
-      }
-      
-      const firstOrder = orders[0];
-      const secondOrder = orders[1] || {};
-      
-      console.log('📋 Estructura de primera orden:', Object.keys(firstOrder));
-      console.log('📋 Campos relacionados con conductor:', {
-        carrierId: firstOrder.carrierId,
-        carrierEmail: firstOrder.carrierEmail,
-        carrierName: firstOrder.carrierName,
-        driverId: firstOrder.driverId,
-        driver_id: firstOrder.driver_id,
-        assignedTo: firstOrder.assignedTo
-      });
-      
-      return {
-        orders_count: orders.length,
-        first_order_keys: Object.keys(firstOrder),
-        driver_related_fields: Object.keys(firstOrder).filter(key => 
-          key.toLowerCase().includes('carrier') || 
-          key.toLowerCase().includes('driver') || 
-          key.toLowerCase().includes('assign')
-        ),
-        sample_order: {
-          orderId: firstOrder.orderId || firstOrder.id,
-          orderNumber: firstOrder.orderNumber,
-          customerName: firstOrder.customerName,
-          status: firstOrder.orderStatus || firstOrder.status,
-          hasDriver: !!(firstOrder.carrierId || firstOrder.carrierEmail || firstOrder.driverId)
-        },
-        all_unique_keys: [...new Set([...Object.keys(firstOrder), ...Object.keys(secondOrder)])]
-      };
-      
-    } catch (error) {
-      console.error('❌ Error analizando estructura de órdenes:', error);
-      return { error: error.message };
-    }
-  }
+
 
   // ==================== UTILITIES ====================
-
-  async testConnection() {
-    try {
-      console.log('🔍 Probando conexión con ShipDay...');
-      
-      const authFormats = [
-        { name: 'Basic + API_KEY', headers: this.getHeaders(1) },
-        { name: 'Solo API_KEY', headers: this.getHeaders(2) },
-        { name: 'Bearer + API_KEY', headers: this.getHeaders(3) },
-        { name: 'X-API-Key header', headers: this.getHeaders(4) }
-      ];
-
-      for (const format of authFormats) {
-        try {
-          console.log(`🔍 Probando conexión con formato: ${format.name}`);
-          const result = await axios.get(`${BASE_URL}/orders?limit=1`, { headers: format.headers });
-          console.log(`✅ Conexión exitosa con formato: ${format.name}`);
-          this.workingFormat = format.headers;
-          return true;
-        } catch (error) {
-          console.log(`❌ Formato ${format.name} falló en test:`, error.response?.status);
-          continue;
-        }
-      }
-      
-      console.error('❌ Todos los formatos fallaron en test de conexión');
-      return false;
-    } catch (error) {
-      console.error('❌ Error general en test de conexión:', error.message);
-      return false;
-    }
-  }
 
   handleError(error) {
     if (error.response) {
@@ -577,279 +531,6 @@ class ShipDayService {
     } else {
       return new Error('Error desconocido en ShipDay SDK');
     }
-  }
-
-  /**
-   * ✅ INVESTIGACIÓN: Determinar qué endpoints están realmente disponibles
-   */
-  async investigateAPIEndpoints() {
-    try {
-      const headers = this.workingFormat || this.getHeaders(1);
-      
-      console.log('🔍 INVESTIGACIÓN COMPLETA: Determinando endpoints disponibles...');
-      
-      // 1. Probar obtener información de la API
-      const apiInfo = await this.getAPIInfo();
-      
-      // 2. Probar diferentes endpoints de órdenes
-      const orderEndpoints = await this.testOrderEndpoints();
-      
-      // 3. Probar diferentes endpoints de asignación
-      const assignEndpoints = await this.testAssignmentEndpoints();
-      
-      return {
-        api_info: apiInfo,
-        order_endpoints: orderEndpoints,
-        assignment_endpoints: assignEndpoints,
-        conclusion: this.analyzeAPICapabilities(apiInfo, orderEndpoints, assignEndpoints)
-      };
-      
-    } catch (error) {
-      console.error('❌ Error en investigación:', error);
-      return { error: error.message };
-    }
-  }
-
-  /**
-   * ✅ OBTENER INFO: Información general de la API
-   */
-  async getAPIInfo() {
-    const headers = this.workingFormat || this.getHeaders(1);
-    const infoEndpoints = [
-      { name: 'root', url: `${BASE_URL}/` },
-      { name: 'version', url: `${BASE_URL}/version` },
-      { name: 'info', url: `${BASE_URL}/info` },
-      { name: 'health', url: `${BASE_URL}/health` }
-    ];
-    
-    const results = {};
-    
-    for (const endpoint of infoEndpoints) {
-      try {
-        const response = await axios.get(endpoint.url, { headers });
-        results[endpoint.name] = {
-          status: 'success',
-          data: response.data,
-          headers: response.headers
-        };
-        console.log(`✅ ${endpoint.name}: ${endpoint.url} - OK`);
-      } catch (error) {
-        results[endpoint.name] = {
-          status: 'failed',
-          error: error.response?.status || error.message
-        };
-        console.log(`❌ ${endpoint.name}: ${endpoint.url} - ${error.response?.status || 'FAILED'}`);
-      }
-    }
-    
-    return results;
-  }
-
-  /**
-   * ✅ PROBAR ENDPOINTS: Diferentes formatos de endpoints de órdenes
-   */
-  async testOrderEndpoints() {
-    const headers = this.workingFormat || this.getHeaders(1);
-    const testOrderId = '33462439'; // Usar el ID que sabemos que existe
-    
-    const orderEndpoints = [
-      { name: 'orders_by_id', url: `${BASE_URL}/orders/${testOrderId}` },
-      { name: 'order_by_id', url: `${BASE_URL}/order/${testOrderId}` },
-      { name: 'orders_get', url: `${BASE_URL}/orders?orderId=${testOrderId}` },
-      { name: 'orders_search', url: `${BASE_URL}/orders/search?id=${testOrderId}` },
-      { name: 'orders_find', url: `${BASE_URL}/orders/find/${testOrderId}` }
-    ];
-    
-    const results = {};
-    
-    for (const endpoint of orderEndpoints) {
-      try {
-        const response = await axios.get(endpoint.url, { headers });
-        results[endpoint.name] = {
-          status: 'success',
-          data_structure: this.analyzeDataStructure(response.data),
-          sample_data: this.getSampleData(response.data)
-        };
-        console.log(`✅ ORDEN ${endpoint.name}: ${endpoint.url} - OK`);
-      } catch (error) {
-        results[endpoint.name] = {
-          status: 'failed',
-          error: error.response?.status || error.message
-        };
-        console.log(`❌ ORDEN ${endpoint.name}: ${endpoint.url} - ${error.response?.status || 'FAILED'}`);
-      }
-    }
-    
-    return results;
-  }
-
-  /**
-   * ✅ PROBAR ASIGNACIÓN: Diferentes endpoints de asignación
-   */
-  async testAssignmentEndpoints() {
-    const headers = this.workingFormat || this.getHeaders(1);
-    const testOrderId = '33462439';
-    const testDriverId = '392057';
-    
-    const assignEndpoints = [
-      { 
-        name: 'official_docs', 
-        method: 'PUT',
-        url: `${BASE_URL}/orders/${testOrderId}/assign`,
-        payload: { carrierId: parseInt(testDriverId) }
-      },
-      { 
-        name: 'assign_order', 
-        method: 'POST',
-        url: `${BASE_URL}/assignorder`,
-        payload: { orderId: testOrderId, carrierId: testDriverId }
-      },
-      { 
-        name: 'assign_carrier', 
-        method: 'POST',
-        url: `${BASE_URL}/assign`,
-        payload: { orderId: testOrderId, carrierId: testDriverId }
-      },
-      { 
-        name: 'orders_assign', 
-        method: 'POST',
-        url: `${BASE_URL}/orders/assign`,
-        payload: { orderId: testOrderId, carrierId: testDriverId }
-      },
-      { 
-        name: 'carrier_assign', 
-        method: 'PUT',
-        url: `${BASE_URL}/carriers/assign`,
-        payload: { orderId: testOrderId, carrierId: testDriverId }
-      }
-    ];
-    
-    const results = {};
-    
-    for (const endpoint of assignEndpoints) {
-      try {
-        let response;
-        
-        if (endpoint.method === 'POST') {
-          response = await axios.post(endpoint.url, endpoint.payload, { headers });
-        } else if (endpoint.method === 'PUT') {
-          response = await axios.put(endpoint.url, endpoint.payload, { headers });
-        }
-        
-        results[endpoint.name] = {
-          status: 'success',
-          method: endpoint.method,
-          url: endpoint.url,
-          payload: endpoint.payload,
-          response: response.data
-        };
-        console.log(`✅ ASIGNACIÓN ${endpoint.name}: ${endpoint.method} ${endpoint.url} - OK`);
-        
-        // Si este funciona, es el que debemos usar!
-        console.log(`🎯 ENCONTRADO ENDPOINT QUE FUNCIONA: ${endpoint.name}`);
-        
-      } catch (error) {
-        results[endpoint.name] = {
-          status: 'failed',
-          method: endpoint.method,
-          url: endpoint.url,
-          payload: endpoint.payload,
-          error: error.response?.status || error.message,
-          error_data: error.response?.data
-        };
-        console.log(`❌ ASIGNACIÓN ${endpoint.name}: ${endpoint.method} ${endpoint.url} - ${error.response?.status || 'FAILED'}`);
-      }
-    }
-    
-    return results;
-  }
-
-  /**
-   * ✅ ANÁLISIS: Determinar capacidades de la API
-   */
-  analyzeAPICapabilities(apiInfo, orderEndpoints, assignEndpoints) {
-    const workingOrderEndpoint = Object.entries(orderEndpoints).find(([key, value]) => value.status === 'success');
-    const workingAssignEndpoint = Object.entries(assignEndpoints).find(([key, value]) => value.status === 'success');
-    
-    const conclusion = {
-      api_version_detected: this.detectAPIVersion(apiInfo),
-      working_order_endpoint: workingOrderEndpoint ? workingOrderEndpoint[0] : 'none',
-      working_assign_endpoint: workingAssignEndpoint ? workingAssignEndpoint[0] : 'none',
-      recommendations: [],
-      next_steps: []
-    };
-    
-    if (workingAssignEndpoint) {
-      conclusion.recommendations.push(`✅ Usar endpoint: ${workingAssignEndpoint[1].method} ${workingAssignEndpoint[1].url}`);
-      conclusion.next_steps.push('Implementar método de asignación usando el endpoint que funciona');
-    } else {
-      conclusion.recommendations.push('❌ No se encontraron endpoints de asignación funcionales');
-      conclusion.next_steps.push('Contactar soporte de Shipday para confirmar endpoints disponibles');
-      conclusion.next_steps.push('Verificar versión del plan de Shipday (algunos endpoints pueden requerir plan premium)');
-    }
-    
-    return conclusion;
-  }
-
-  /**
-   * ✅ DETECTAR VERSIÓN: Intentar determinar la versión de la API
-   */
-  detectAPIVersion(apiInfo) {
-    // Analizar respuestas para determinar versión
-    if (apiInfo.version && apiInfo.version.status === 'success') {
-      return apiInfo.version.data;
-    }
-    
-    if (apiInfo.root && apiInfo.root.status === 'success') {
-      return apiInfo.root.data;
-    }
-    
-    return 'unknown';
-  }
-
-  /**
-   * ✅ ANÁLISIS DE ESTRUCTURA: Entender la estructura de datos
-   */
-  analyzeDataStructure(data) {
-    if (Array.isArray(data)) {
-      return {
-        type: 'array',
-        length: data.length,
-        first_item_keys: data.length > 0 ? Object.keys(data[0]) : []
-      };
-    } else if (typeof data === 'object') {
-      return {
-        type: 'object',
-        keys: Object.keys(data),
-        nested_objects: Object.keys(data).filter(key => typeof data[key] === 'object')
-      };
-    } else {
-      return {
-        type: typeof data,
-        value: data
-      };
-    }
-  }
-
-  /**
-   * ✅ DATOS DE MUESTRA: Obtener muestra de datos sin información sensible
-   */
-  getSampleData(data) {
-    if (Array.isArray(data)) {
-      return data.slice(0, 2); // Primeros 2 elementos
-    } else if (typeof data === 'object') {
-      // Devolver estructura sin datos sensibles
-      const sample = {};
-      Object.keys(data).forEach(key => {
-        if (typeof data[key] === 'string' && data[key].length > 20) {
-          sample[key] = `${data[key].substring(0, 20)}...`;
-        } else {
-          sample[key] = data[key];
-        }
-      });
-      return sample;
-    }
-    return data;
   }
 }
 
