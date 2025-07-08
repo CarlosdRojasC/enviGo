@@ -1,19 +1,14 @@
 // backend/src/controllers/shipday.controller.js
 
-const ShipdayService = require('../services/shipday.service'); // Ya es una instancia, no una clase
+const ShipdayService = require('../services/shipday.service');
 
 class ShipdayController {
-  constructor() {
-    // CORREGIDO: No usar 'new' porque ShipdayService ya es una instancia
-    this.shipdayService = ShipdayService;
-  }
-
   // ==================== CONEXIÓN ====================
   
   async testConnection(req, res) {
     try {
       console.log('🔍 Probando conexión con Shipday...');
-      const isConnected = await this.shipdayService.testConnection();
+      const isConnected = await ShipdayService.testConnection();
       
       if (isConnected) {
         res.json({ 
@@ -41,7 +36,7 @@ class ShipdayController {
   async getDrivers(req, res) {
     try {
       console.log('🔍 Solicitando lista de conductores...');
-      const drivers = await this.shipdayService.getDrivers();
+      const drivers = await ShipdayService.getDrivers();
       
       res.json({
         success: true,
@@ -63,7 +58,7 @@ class ShipdayController {
       const { id } = req.params; // Este puede ser email o ID
       console.log('🔍 Obteniendo conductor:', id);
       
-      const driver = await this.shipdayService.getDriver(id);
+      const driver = await ShipdayService.getDriver(id);
       
       res.json({
         success: true,
@@ -92,7 +87,7 @@ class ShipdayController {
         });
       }
 
-      const newDriver = await this.shipdayService.createDriver(driverData);
+      const newDriver = await ShipdayService.createDriver(driverData);
       
       res.status(201).json({
         success: true,
@@ -115,7 +110,7 @@ class ShipdayController {
       const updateData = req.body;
       console.log('🔄 Actualizando conductor:', id, updateData);
 
-      const updatedDriver = await this.shipdayService.updateDriver(id, updateData);
+      const updatedDriver = await ShipdayService.updateDriver(id, updateData);
       
       res.json({
         success: true,
@@ -137,7 +132,7 @@ class ShipdayController {
       const { id } = req.params; // Email del conductor
       console.log('🗑️ Eliminando conductor:', id);
 
-      await this.shipdayService.deleteDriver(id);
+      await ShipdayService.deleteDriver(id);
       
       res.json({
         success: true,
@@ -160,7 +155,7 @@ class ShipdayController {
       const filters = req.query;
       console.log('📦 Obteniendo órdenes con filtros:', filters);
       
-      const orders = await this.shipdayService.getOrders();
+      const orders = await ShipdayService.getOrders();
       
       res.json({
         success: true,
@@ -182,7 +177,7 @@ class ShipdayController {
       const { id } = req.params;
       console.log('📦 Obteniendo orden:', id);
       
-      const order = await this.shipdayService.getOrder(id);
+      const order = await ShipdayService.getOrder(id);
       
       res.json({
         success: true,
@@ -211,7 +206,7 @@ class ShipdayController {
         });
       }
 
-      const newOrder = await this.shipdayService.createOrder(orderData);
+      const newOrder = await ShipdayService.createOrder(orderData);
       
       res.status(201).json({
         success: true,
@@ -245,7 +240,7 @@ class ShipdayController {
       // Si solo tenemos driver_id, buscar el email
       let email = driver_email;
       if (!email && driver_id) {
-        const drivers = await this.shipdayService.getDrivers();
+        const drivers = await ShipdayService.getDrivers();
         const driver = drivers.find(d => d.id === driver_id || d.carrierId === driver_id);
         if (!driver) {
           return res.status(404).json({
@@ -256,7 +251,7 @@ class ShipdayController {
         email = driver.email;
       }
 
-      const result = await this.shipdayService.assignOrder(id, email);
+      const result = await ShipdayService.assignOrder(id, email);
       
       res.json({
         success: true,
@@ -307,7 +302,7 @@ class ShipdayController {
       console.log('📍 Obteniendo tracking de orden:', id);
       
       // Implementar según la API de Shipday para tracking
-      const order = await this.shipdayService.getOrder(id);
+      const order = await ShipdayService.getOrder(id);
       
       res.json({
         success: true,
@@ -387,4 +382,5 @@ class ShipdayController {
   }
 }
 
+// IMPORTANTE: Exportar una instancia, no la clase
 module.exports = new ShipdayController();
