@@ -380,9 +380,72 @@ async getOrdersTrend(req, res) {
   }
 }
 
-  /**
-   * OPCIÓN A: Crear orden en Shipday sin asignar conductor
+   /**
+   * Asigna un pedido a un conductor y, en el proceso, crea la orden en Shipday si no existe.
+   * Esta acción es iniciada por un administrador desde el panel.
    */
+  async assignToDriver(req, res) {
+    try {
+      const { orderId } = req.params;
+      const { driverId } = req.body; // Este es el ID del conductor de Shipday (carrierId)
+
+      if (!driverId) {
+        return res.status(400).json({ error: 'Se requiere el ID del conductor de Shipday.' });
+      }
+
+      const order = await Order.findById(orderId);
+      if (!order) {
+        return res.status(404).json({ error: 'Pedido no encontrado.' });
+      }
+
+      let result;
+
+      // Caso 1: La orden NO está en Shipday → Crear y asignar en un solo paso
+      if (!order.shipday_order_id) {
+        console.log('📦 Creando y asignando orden nueva en Shipday...');
+        result = await ShipdayService.createAndAssignOrder(order, driverId);
+        
+        res.status(200).json({ 
+          message: 'Pedido creado y asignado en Shipday exitosamente.',
+          ...result
+        });
+      } 
+      // Caso 2: La orden YA está en Shipday → Solo asignar conductor
+      else {
+        console.log('👨‍💼 Asignando conductor a orden existente en Shipday...');
+        
+        // Primero obtener la información del conductor para conseguir su email
+        const drivers = await ShipdayService.getDrivers();
+        const driver = drivers.find(d => d.id === driverId || d.carrierId === driverId);
+        
+        if (!driver) {
+          return res.status(404).json({ error: 'Conductor no encontrado en Shipday.' });
+        }
+
+        // Asignar usando el email del conductor
+        await ShipdayService.assignOrder(order.shipday_order_id, driver.email);
+        
+        // Actualizar orden local
+        order.shipday_driver_id = driverId;
+        order.status = 'shipped'; // Estado para "asignado a conductor"
+        await order.save();
+
+        res.status(200).json({ 
+          message: 'Conductor asignado exitosamente a la orden existente.',
+          order_id: order.shipday_order_id,
+          driver_email: driver.email
+        });
+      }
+
+    } catch (error) {
+      console.error('Error en assignToDriver:', error);
+      res.status(500).json({ 
+        error: error.message || 'Error interno del servidor',
+        details: error.stack // Solo en desarrollo
+      });
+    }
+  }
+
   async createInShipday(req, res) {
     try {
       const { orderId } = req.params;
@@ -421,135 +484,6 @@ async getOrdersTrend(req, res) {
 
     } catch (error) {
       console.error('Error creando pedido en Shipday:', error);
-      res.status(500).json({ error: error.message || 'Error interno del servidor' });
-    }
-  }
-
-  /**
-   * OPCIÓN B: Crear Y asignar en un solo paso (método actual mejorado)
-   */
-  async assignToDriver(req, res) {
-    try {
-      const { orderId } = req.params;
-      const { driverId } = req.body;
-
-      if (!driverId) {
-        return res.status(400).json({ error: 'Se requiere el ID del conductor de Shipday.' });
-      }
-
-      const order = await Order.findById(orderId);
-      if (!order) {
-        return res.status(404).json({ error: 'Pedido no encontrado.' });
-      }
-
-      let shipdayResult;
-
-      // Caso 1: La orden NO está en Shipday → Crear y asignar
-      if (!order.shipday_order_id) {
-        console.log('📦 Creando y asignando orden nueva en Shipday...');
-        shipdayResult = await ShipdayService.createAndAssignOrder(order, driverId);
-      } 
-      // Caso 2: La orden YA está en Shipday → Solo asignar
-      else {
-        console.log('👨‍💼 Asignando orden existente en Shipday...');
-        
-        // Obtener email del conductor por su ID
-        const drivers = await ShipdayService.getDrivers();
-        const driver = drivers.data?.data?.find(d => d.id === driverId);
-        
-        if (!driver) {
-          return res.status(404).json({ error: 'Conductor no encontrado en Shipday.' });
-        }
-
-        // Asignar usando el email del conductor
-        await ShipdayService.assignOrder(order.shipday_order_id, driver.email);
-        
-        // Actualizar orden local
-        order.shipday_driver_id = driverId;
-        order.status = 'shipped'; // O el estado que prefieras para "asignado"
-        await order.save();
-
-        shipdayResult = { success: true, message: 'Orden asignada exitosamente' };
-      }
-
-      res.status(200).json({ 
-        message: 'Pedido procesado en Shipday exitosamente.',
-        result: shipdayResult
-      });
-
-    } catch (error) {
-      console.error('Error en assignToDriver:', error);
-      res.status(500).json({ error: error.message || 'Error interno del servidor' });
-    }
-  }
-
-  /**
-   * OPCIÓN C: Crear múltiples órdenes en Shipday de una vez
-   */
-  async bulkCreateInShipday(req, res) {
-    try {
-      const { orderIds } = req.body; // Array de IDs de órdenes
-
-      if (!Array.isArray(orderIds) || orderIds.length === 0) {
-        return res.status(400).json({ error: 'Se requiere un array de IDs de órdenes.' });
-      }
-
-      const orders = await Order.find({ 
-        _id: { $in: orderIds },
-        shipday_order_id: { $exists: false } // Solo órdenes que NO están en Shipday
-      });
-
-      if (orders.length === 0) {
-        return res.status(400).json({ error: 'No se encontraron órdenes válidas para procesar.' });
-      }
-
-      const results = {
-        successful: [],
-        failed: []
-      };
-
-      // Procesar cada orden
-      for (const order of orders) {
-        try {
-          const shipdayData = {
-            orderNumber: order.order_number,
-            customerName: order.customer_name,
-            customerAddress: order.shipping_address,
-            customerEmail: order.customer_email || '',
-            customerPhoneNumber: order.customer_phone || '',
-            deliveryInstruction: order.notes || 'Sin instrucciones especiales',
-          };
-
-          const shipdayOrder = await ShipdayService.createOrder(shipdayData);
-
-          // Actualizar orden local
-          order.shipday_order_id = shipdayOrder.orderId;
-          order.status = 'processing';
-          await order.save();
-
-          results.successful.push({
-            local_order_id: order._id,
-            order_number: order.order_number,
-            shipday_order_id: shipdayOrder.orderId
-          });
-
-        } catch (error) {
-          console.error(`Error procesando orden ${order.order_number}:`, error);
-          results.failed.push({
-            local_order_id: order._id,
-            order_number: order.order_number,
-            error: error.message
-          });
-        }
-      }
-
-      res.status(200).json({
-        message: `Procesamiento completado: ${results.successful.length} exitosas, ${results.failed.length} fallidas.`,
-        results
-      });
-
-    } catch (error) {
-      console.error('Error en bulkCreateInShipday:', error);
       res.status(500).json({ error: error.message || 'Error interno del servidor' });
     }
   }

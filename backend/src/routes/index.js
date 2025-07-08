@@ -166,6 +166,8 @@ router.get('/orders/export', authenticateToken, isAdmin, orderController.exportF
 router.post('/orders', authenticateToken, validateOrderCreation, orderController.create);
 router.get('/orders/:id', authenticateToken, validateMongoId('id'), orderController.getById);
 router.patch('/orders/:id/status', authenticateToken, validateMongoId('id'), isAdmin, orderController.updateStatus);
+router.post('/orders/:orderId/create-shipday', authenticateToken, isAdmin, orderController.createInShipday);
+
 
 // ==================== PEDIDOS - INTEGRACIÓN SHIPDAY ====================
 // NUEVAS RUTAS para integración con Shipday

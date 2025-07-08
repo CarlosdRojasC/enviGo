@@ -12,6 +12,7 @@ class ShipDayService {
     } else {
       console.log('✅ ShipDay API Key configurada:', `${API_KEY.substring(0, 10)}...`);
     }
+    this.workingFormat = null; // Para almacenar el formato de auth que funciona
   }
 
   // Método para probar diferentes formatos de autenticación
@@ -60,7 +61,6 @@ class ShipDayService {
     for (const format of authFormats) {
       try {
         console.log(`🔍 Probando formato: ${format.name}`);
-        console.log('📋 Headers:', format.headers);
         
         const res = await axios.post(`${BASE_URL}/carriers`, payload, { headers: format.headers });
         console.log(`✅ ¡ÉXITO con formato ${format.name}!`, res.data);
@@ -142,13 +142,6 @@ class ShipDayService {
       });
       
       console.log('✅ Conductores mapeados:', mappedDrivers.length);
-      console.log('📊 Estados encontrados:', {
-        active: mappedDrivers.filter(d => d.isActive).length,
-        inactive: mappedDrivers.filter(d => !d.isActive).length,
-        onShift: mappedDrivers.filter(d => d.isOnShift).length,
-        available: mappedDrivers.filter(d => d.isActive && !d.isOnShift).length
-      });
-      
       return mappedDrivers;
     } catch (error) {
       console.error('❌ Error obteniendo conductores:', error.response?.data);
@@ -224,11 +217,59 @@ class ShipDayService {
   async createOrder(orderData) {
     try {
       const headers = this.workingFormat || this.getHeaders(1);
+      console.log('📦 Creando orden en Shipday:', orderData);
+      
       const res = await axios.post(`${BASE_URL}/orders`, orderData, { headers });
+      console.log('✅ Orden creada en Shipday:', res.data);
+      
       return res.data;
     } catch (error) {
       console.error('❌ Error creando orden:', error.response?.data);
       throw this.handleError(error);
+    }
+  }
+  
+  /**
+   * CORREGIDO: Crea la orden en Shipday y la asigna a un conductor
+   */
+  async createAndAssignOrder(order, driverId) {
+    try {
+      console.log('🚀 Iniciando createAndAssignOrder para:', order.order_number, 'con conductor:', driverId);
+      
+      // 1. Preparar los datos del pedido para la API de Shipday
+      const payload = {
+        orderNumber: order.order_number,
+        customerName: order.customer_name,
+        customerAddress: order.shipping_address,
+        customerEmail: order.customer_email || '',
+        customerPhoneNumber: order.customer_phone || '',
+        deliveryInstruction: order.notes || 'Sin notas.',
+        // 2. Asignar el conductor directamente al crear la orden
+        carrierId: driverId,
+      };
+
+      console.log('📦 Creando y asignando pedido en Shipday con payload:', payload);
+
+      // 3. Crear la orden con conductor asignado
+      const createdOrder = await this.createOrder(payload);
+
+      // 4. Actualizar el pedido local
+      order.shipday_order_id = createdOrder.orderId;
+      order.shipday_driver_id = driverId;
+      order.status = 'shipped'; // Cambia el estado a "Enviado" cuando se asigna conductor
+      await order.save();
+
+      console.log('✅ Orden creada y asignada exitosamente:', createdOrder.orderId);
+
+      return { 
+        success: true, 
+        order: createdOrder,
+        message: 'Orden creada y asignada exitosamente en Shipday'
+      };
+
+    } catch (error) {
+      console.error('❌ Error en createAndAssignOrder:', error.message);
+      throw error;
     }
   }
 
@@ -258,7 +299,11 @@ class ShipDayService {
     try {
       const payload = { orderId, email };
       const headers = this.workingFormat || this.getHeaders(1);
+      console.log('👨‍💼 Asignando orden existente:', payload);
+      
       const res = await axios.post(`${BASE_URL}/assignorder`, payload, { headers });
+      console.log('✅ Orden asignada:', res.data);
+      
       return res.data;
     } catch (error) {
       console.error('❌ Error asignando orden:', error.response?.data);
@@ -328,7 +373,6 @@ class ShipDayService {
       return new Error('Error desconocido en ShipDay SDK');
     }
   }
-  
 }
 
-module.exports = ShipDayService;
+module.exports = new ShipDayService();
