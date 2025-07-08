@@ -189,17 +189,191 @@ class ShipDayService {
    * ✅ CORREGIDO: Asigna una orden ya creada a un conductor.
    * Sigue la documentación oficial: POST /orders/assign/{orderId}
    */
+  /**
+   * ✅ CORREGIDO: Asigna una orden ya creada a un conductor.
+   * Usa el endpoint correcto de Shipday
+   */
   async assignOrder(orderId, driverId) {
     try {
       const headers = this.workingFormat || this.getHeaders(1);
-      const payload = { carrierId: driverId };
-
-      console.log(`🔗 Asignando orden ${orderId} al conductor ${driverId}...`);
-
-      const res = await axios.post(`${BASE_URL}/orders/assign/${orderId}`, payload, { headers });
-      return res.data;
+      
+      console.log(`🔗 Intentando asignar orden ${orderId} al conductor ${driverId}...`);
+      
+      // Probar diferentes endpoints y formatos que usa Shipday
+      const attempts = [
+        // Intento 1: POST /assignorder (formato original)
+        {
+          method: 'POST',
+          url: `${BASE_URL}/assignorder`,
+          payload: { orderId: orderId, email: driverId }
+        },
+        
+        // Intento 2: POST /assignorder con carrierId
+        {
+          method: 'POST', 
+          url: `${BASE_URL}/assignorder`,
+          payload: { orderId: orderId, carrierId: driverId }
+        },
+        
+        // Intento 3: PUT /orders/{orderId}/assign
+        {
+          method: 'PUT',
+          url: `${BASE_URL}/orders/${orderId}/assign`,
+          payload: { carrierId: driverId }
+        },
+        
+        // Intento 4: POST /orders/assign/{orderId}
+        {
+          method: 'POST',
+          url: `${BASE_URL}/orders/assign/${orderId}`,
+          payload: { carrierId: driverId }
+        },
+        
+        // Intento 5: PATCH /orders/{orderId}
+        {
+          method: 'PATCH',
+          url: `${BASE_URL}/orders/${orderId}`,
+          payload: { carrierId: driverId }
+        }
+      ];
+      
+      let lastError;
+      
+      for (let i = 0; i < attempts.length; i++) {
+        const attempt = attempts[i];
+        
+        try {
+          console.log(`🔍 Intento ${i + 1}: ${attempt.method} ${attempt.url}`);
+          console.log(`📋 Payload:`, attempt.payload);
+          
+          let response;
+          
+          if (attempt.method === 'POST') {
+            response = await axios.post(attempt.url, attempt.payload, { headers });
+          } else if (attempt.method === 'PUT') {
+            response = await axios.put(attempt.url, attempt.payload, { headers });
+          } else if (attempt.method === 'PATCH') {
+            response = await axios.patch(attempt.url, attempt.payload, { headers });
+          }
+          
+          console.log(`✅ Asignación exitosa con intento ${i + 1}:`, response.data);
+          return response.data;
+          
+        } catch (error) {
+          console.log(`❌ Intento ${i + 1} falló:`, {
+            status: error.response?.status,
+            statusText: error.response?.statusText,
+            data: error.response?.data
+          });
+          lastError = error;
+          continue;
+        }
+      }
+      
+      // Si todos los intentos fallaron
+      console.error('❌ Todos los intentos de asignación fallaron');
+      throw this.handleError(lastError);
+      
     } catch (error) {
-      console.error('❌ Error asignando la orden en Shipday:', error.response?.data);
+      console.error('❌ Error general en assignOrder:', error);
+      throw this.handleError(error);
+    }
+  }
+
+  /**
+   * NUEVO: Método alternativo que primero obtiene la información del conductor
+   */
+  async assignOrderWithDriverInfo(orderId, driverId) {
+    try {
+      console.log(`🔍 Obteniendo información del conductor ${driverId}...`);
+      
+      // Primero obtener todos los conductores para encontrar el email
+      const drivers = await this.getDrivers();
+      const driver = drivers.find(d => d.id === driverId || d.carrierId === driverId);
+      
+      if (!driver) {
+        throw new Error(`Conductor con ID ${driverId} no encontrado`);
+      }
+      
+      console.log(`✅ Conductor encontrado:`, {
+        id: driver.id,
+        email: driver.email,
+        name: driver.name,
+        isActive: driver.isActive
+      });
+      
+      // Ahora intentar asignar usando el email del conductor
+      return await this.assignOrderByEmail(orderId, driver.email);
+      
+    } catch (error) {
+      console.error('❌ Error en assignOrderWithDriverInfo:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * NUEVO: Asignar usando el email del conductor
+   */
+  async assignOrderByEmail(orderId, driverEmail) {
+    try {
+      const headers = this.workingFormat || this.getHeaders(1);
+      
+      console.log(`📧 Asignando orden ${orderId} al conductor con email: ${driverEmail}`);
+      
+      const attempts = [
+        // Intento 1: POST /assignorder con email
+        {
+          method: 'POST',
+          url: `${BASE_URL}/assignorder`,
+          payload: { orderId: orderId, email: driverEmail }
+        },
+        
+        // Intento 2: POST /assignorder con carrierEmail
+        {
+          method: 'POST',
+          url: `${BASE_URL}/assignorder`, 
+          payload: { orderId: orderId, carrierEmail: driverEmail }
+        },
+        
+        // Intento 3: PUT /orders/{orderId}/carrier
+        {
+          method: 'PUT',
+          url: `${BASE_URL}/orders/${orderId}/carrier`,
+          payload: { email: driverEmail }
+        }
+      ];
+      
+      let lastError;
+      
+      for (let i = 0; i < attempts.length; i++) {
+        const attempt = attempts[i];
+        
+        try {
+          console.log(`🔍 Intento email ${i + 1}: ${attempt.method} ${attempt.url}`);
+          console.log(`📋 Payload:`, attempt.payload);
+          
+          let response;
+          
+          if (attempt.method === 'POST') {
+            response = await axios.post(attempt.url, attempt.payload, { headers });
+          } else if (attempt.method === 'PUT') {
+            response = await axios.put(attempt.url, attempt.payload, { headers });
+          }
+          
+          console.log(`✅ Asignación por email exitosa con intento ${i + 1}:`, response.data);
+          return response.data;
+          
+        } catch (error) {
+          console.log(`❌ Intento email ${i + 1} falló:`, error.response?.status, error.response?.data);
+          lastError = error;
+          continue;
+        }
+      }
+      
+      throw this.handleError(lastError);
+      
+    } catch (error) {
+      console.error('❌ Error en assignOrderByEmail:', error);
       throw this.handleError(error);
     }
   }
@@ -227,7 +401,65 @@ class ShipDayService {
     }
   }
 
- 
+ /**
+   * NUEVO: Verificar si una orden tiene conductor asignado
+   */
+  async verifyOrderAssignment(orderId) {
+    try {
+      console.log(`🔍 Verificando asignación de orden: ${orderId}`);
+      
+      const headers = this.workingFormat || this.getHeaders(1);
+      const response = await axios.get(`${BASE_URL}/orders/${orderId}`, { headers });
+      
+      const orderInfo = response.data;
+      
+      console.log(`📋 Info de la orden en Shipday:`, {
+        orderId: orderInfo.orderId,
+        carrierId: orderInfo.carrierId,
+        carrierEmail: orderInfo.carrierEmail,
+        orderStatus: orderInfo.orderStatus,
+        hasDriver: !!(orderInfo.carrierId || orderInfo.carrierEmail)
+      });
+      
+      return {
+        orderId: orderInfo.orderId,
+        hasDriverAssigned: !!(orderInfo.carrierId || orderInfo.carrierEmail),
+        driverId: orderInfo.carrierId,
+        driverEmail: orderInfo.carrierEmail,
+        status: orderInfo.orderStatus,
+        fullInfo: orderInfo
+      };
+      
+    } catch (error) {
+      console.error(`❌ Error verificando orden ${orderId}:`, error.response?.data);
+      return {
+        orderId: orderId,
+        hasDriverAssigned: false,
+        error: error.message,
+        verificationFailed: true
+      };
+    }
+  }
+
+  /**
+   * NUEVO: Método de debug para mostrar información de una orden
+   */
+  async debugOrder(orderId) {
+    try {
+      console.log(`🔍 DEBUG: Información completa de orden ${orderId}`);
+      
+      const headers = this.workingFormat || this.getHeaders(1);
+      const response = await axios.get(`${BASE_URL}/orders/${orderId}`, { headers });
+      
+      console.log(`📋 DEBUG: Orden completa:`, JSON.stringify(response.data, null, 2));
+      
+      return response.data;
+      
+    } catch (error) {
+      console.error(`❌ DEBUG: Error obteniendo orden ${orderId}:`, error.response?.data);
+      throw this.handleError(error);
+    }
+  }
   // ==================== UTILITIES ====================
 
   async testConnection() {

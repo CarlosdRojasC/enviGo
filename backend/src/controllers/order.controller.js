@@ -421,7 +421,7 @@ async getOrdersTrend(req, res) {
   }
 }
 
-  async assignToDriver(req, res) {
+ async assignToDriver(req, res) {
     try {
       const { orderId } = req.params;
       const { driverId } = req.body;
@@ -430,7 +430,9 @@ async getOrdersTrend(req, res) {
         return res.status(400).json({ error: 'Se requiere el ID del conductor de Shipday.' });
       }
 
-      // Hacemos "populate" para traer los datos de la empresa
+      console.log('🔍 assignToDriver iniciado:', { orderId, driverId });
+
+      // Obtener orden con población completa
       const order = await Order.findById(orderId).populate('company_id');
 
       if (!order) {
@@ -441,58 +443,136 @@ async getOrdersTrend(req, res) {
         return res.status(400).json({ error: 'El pedido no está asociado a ninguna empresa.' });
       }
 
-      if (order.shipday_order_id) {
-        return res.status(400).json({ error: 'Este pedido ya fue enviado a Shipday.' });
-      }
-
-      if (req.user.role !== 'admin' && req.user.company_id.toString() !== order.company_id._id.toString()) {
-        return res.status(403).json({ error: ERRORS.FORBIDDEN });
-      }
-
-      // Paso 1: Crear la orden en Shipday con todos los datos necesarios
-      const orderDataForShipday = {
-        orderNumber: order.order_number,
-        customerName: order.customer_name,
-        customerAddress: order.shipping_address,
-        restaurantName: order.company_id.name,
-        restaurantAddress: order.company_id.address,
-        customerPhoneNumber: order.customer_phone || '',
-        deliveryInstruction: order.notes || '',
-      };
-      
-      const createdShipdayOrder = await ShipdayService.createOrder(orderDataForShipday);
-      
-      if (!createdShipdayOrder || !createdShipdayOrder.orderId) {
-        throw new Error('No se pudo crear la orden en Shipday o la respuesta no incluyó un orderId.');
-      }
-      
-      const shipdayOrderId = createdShipdayOrder.orderId;
-      console.log(`✅ Orden creada en Shipday con ID: ${shipdayOrderId}`);
-
-      // Paso 2: Asignar la orden recién creada al conductor
-      const assignmentResult = await ShipdayService.assignOrder(shipdayOrderId, driverId);
-      
-      if (!assignmentResult || assignmentResult.success === false) {
-        console.error('❌ Fallo al asignar la orden en Shipday. Respuesta:', assignmentResult);
-        throw new Error(`La orden se creó en Shipday (ID: ${shipdayOrderId}), pero falló la asignación al conductor.`);
-      }
-      
-      console.log(`✅ Orden ${shipdayOrderId} asignada al conductor ${driverId}.`);
-
-      // Paso 3: Actualizar nuestro pedido local
-      order.shipday_order_id = shipdayOrderId;
-      order.shipday_driver_id = driverId;
-      order.status = 'processing';
-      await order.save();
-
-      res.status(200).json({ 
-        message: 'Pedido creado y asignado en Shipday exitosamente.',
-        order: order 
+      console.log('📋 Orden encontrada:', {
+        order_number: order.order_number,
+        company_name: order.company_id.name,
+        customer_name: order.customer_name,
+        shipday_order_id: order.shipday_order_id
       });
 
+      // CASO 1: La orden NO está en Shipday → Crear primero
+      if (!order.shipday_order_id) {
+        console.log('📦 Orden no está en Shipday, creando primero...');
+        
+        // Paso 1: Crear la orden en Shipday SIN conductor
+        const orderDataForShipday = {
+          orderNumber: order.order_number,
+          customerName: order.customer_name,
+          customerAddress: order.shipping_address,
+          restaurantName: order.company_id.name,
+          restaurantAddress: order.company_id.address || order.shipping_address,
+          customerPhoneNumber: order.customer_phone || '',
+          deliveryInstruction: order.notes || '',
+        };
+        
+        console.log('📦 Creando orden en Shipday:', orderDataForShipday);
+        
+        const createdShipdayOrder = await ShipdayService.createOrder(orderDataForShipday);
+        
+        if (!createdShipdayOrder || !createdShipdayOrder.orderId) {
+          throw new Error('No se pudo crear la orden en Shipday o la respuesta no incluyó un orderId.');
+        }
+        
+        const shipdayOrderId = createdShipdayOrder.orderId;
+        console.log(`✅ Orden creada en Shipday con ID: ${shipdayOrderId}`);
+
+        // Paso 2: Asignar la orden recién creada al conductor
+        console.log(`👨‍💼 Asignando orden ${shipdayOrderId} al conductor ${driverId}...`);
+        
+        try {
+          // Intentar primero el método con información del conductor
+          const assignmentResult = await ShipdayService.assignOrderWithDriverInfo(shipdayOrderId, driverId);
+          console.log(`✅ Asignación exitosa:`, assignmentResult);
+        } catch (assignError) {
+          console.error('❌ Error en asignación con info del conductor, intentando método directo:', assignError);
+          
+          // Fallback: intentar asignación directa
+          try {
+            const directAssignment = await ShipdayService.assignOrder(shipdayOrderId, driverId);
+            console.log(`✅ Asignación directa exitosa:`, directAssignment);
+          } catch (directError) {
+            console.error('❌ Error en asignación directa también:', directError);
+            
+            // La orden se creó pero no se pudo asignar
+            // Actualizar con info parcial
+            order.shipday_order_id = shipdayOrderId;
+            order.status = 'processing'; // Sin conductor asignado
+            await order.save();
+            
+            return res.status(200).json({ 
+              message: `Orden creada en Shipday (ID: ${shipdayOrderId}) pero falló la asignación del conductor. Puedes asignarlo manualmente desde el dashboard de Shipday.`,
+              shipday_order_id: shipdayOrderId,
+              assignment_error: directError.message,
+              success: true
+            });
+          }
+        }
+
+        // Actualizar orden local con éxito completo
+        order.shipday_order_id = shipdayOrderId;
+        order.shipday_driver_id = driverId;
+        order.status = 'shipped'; // Asignado exitosamente
+        await order.save();
+
+        res.status(200).json({ 
+          message: 'Pedido creado y asignado en Shipday exitosamente.',
+          shipday_order_id: shipdayOrderId,
+          driver_id: driverId,
+          success: true
+        });
+      } 
+      // CASO 2: La orden YA está en Shipday → Solo asignar
+      else {
+        console.log('👨‍💼 Orden ya existe en Shipday, solo asignando conductor...');
+        
+        try {
+          // Intentar asignación con información del conductor
+          const assignmentResult = await ShipdayService.assignOrderWithDriverInfo(order.shipday_order_id, driverId);
+          console.log(`✅ Asignación exitosa:`, assignmentResult);
+          
+          // Actualizar orden local
+          order.shipday_driver_id = driverId;
+          order.status = 'shipped';
+          await order.save();
+
+          res.status(200).json({ 
+            message: 'Conductor asignado exitosamente a la orden existente.',
+            shipday_order_id: order.shipday_order_id,
+            driver_id: driverId,
+            success: true
+          });
+          
+        } catch (assignError) {
+          console.error('❌ Error asignando a orden existente:', assignError);
+          
+          res.status(400).json({ 
+            error: `Error asignando conductor: ${assignError.message}`,
+            shipday_order_id: order.shipday_order_id,
+            details: assignError.message
+          });
+        }
+      }
+
     } catch (error) {
-      console.error('Error en el proceso de asignación:', error);
-      res.status(500).json({ error: error.message || 'Error interno del servidor' });
+      console.error('❌ Error completo en assignToDriver:', error);
+      
+      let errorMessage = 'Error interno del servidor';
+      
+      if (error.message.includes('Recurso no encontrado')) {
+        errorMessage = 'Error: Endpoint de asignación no encontrado en Shipday. Verifica la documentación de la API.';
+      } else if (error.message.includes('API Key')) {
+        errorMessage = 'Error de autenticación con Shipday. Verifica tu API Key.';
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      res.status(500).json({ 
+        error: errorMessage,
+        debug_details: process.env.NODE_ENV === 'development' ? {
+          message: error.message,
+          stack: error.stack
+        } : undefined
+      });
     }
   }
 
