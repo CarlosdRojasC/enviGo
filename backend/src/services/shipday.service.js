@@ -214,212 +214,68 @@ class ShipDayService {
 
   // ==================== ORDERS ====================
 
- async createOrder(orderData) {
+  async createOrder(orderData) {
     try {
       const headers = this.workingFormat || this.getHeaders(1);
-      
-      console.log('🔍 DEBUG - Datos recibidos en createOrder:', JSON.stringify(orderData, null, 2));
-      
-      // Asegurar que SIEMPRE tenemos un nombre de restaurante
-      const restaurantName = orderData.restaurantName || 
-                           orderData.company_name || 
-                           'Tienda Principal';
-      
-      const restaurantAddress = orderData.restaurantAddress || 
-                              orderData.pickup_address || 
-                              orderData.customerAddress || 
-                              'Dirección no especificada';
-      
-      const payload = {
-        // Información básica de la orden
-        orderNumber: orderData.orderNumber || `ORDER-${Date.now()}`,
-        customerName: orderData.customerName || 'Cliente',
-        customerAddress: orderData.customerAddress || 'Dirección no especificada',
-        customerEmail: orderData.customerEmail || '',
-        customerPhoneNumber: orderData.customerPhoneNumber || '',
-        deliveryInstruction: orderData.deliveryInstruction || 'Sin instrucciones',
-        
-        // CRÍTICO: Información del restaurante con valores garantizados
-        restaurantName: restaurantName,
-        restaurantAddress: restaurantAddress,
-        restaurantPhoneNumber: orderData.restaurantPhoneNumber || 
-                              orderData.company_phone || 
-                              '',
-        
-        // Información financiera con valores por defecto
-        deliveryFee: parseFloat(orderData.deliveryFee) || 0,
-        tips: parseFloat(orderData.tips) || 0,
-        tax: parseFloat(orderData.tax) || 0,
-        discount: parseFloat(orderData.discount) || 0,
-        total: parseFloat(orderData.total) || 1,
-        
-        // Método de pago
-        paymentMethod: orderData.paymentMethod || 'CASH',
-        
-        // Items de la orden obligatorios
-        orderItems: orderData.orderItems || [
-          {
-            name: 'Producto/Servicio',
-            quantity: 1,
-            price: parseFloat(orderData.total) || 1
-          }
-        ]
-      };
-
-      // ⭐ CRÍTICO: Solo agregar carrierId si existe y es válido
-      if (orderData.carrierId) {
-        console.log('👨‍💼 DEBUG - Asignando conductor con carrierId:', orderData.carrierId);
-        payload.carrierId = orderData.carrierId;
-      } else {
-        console.log('📝 DEBUG - Creando orden SIN conductor asignado');
-      }
-
-      console.log('📦 DEBUG - Payload final enviado a Shipday:', JSON.stringify(payload, null, 2));
-      
-      // Validación adicional antes de enviar
-      if (!payload.restaurantName || payload.restaurantName.trim() === '') {
-        console.error('❌ CRÍTICO: restaurantName está vacío!');
-        payload.restaurantName = 'Tienda Principal';
-      }
-      
-      if (!payload.customerName || payload.customerName.trim() === '') {
-        console.error('❌ CRÍTICO: customerName está vacío!');
-        payload.customerName = 'Cliente Sin Nombre';
-      }
-      
-      console.log('🚀 Enviando a Shipday:', {
-        url: `${BASE_URL}/orders`,
-        restaurantName: payload.restaurantName,
-        customerName: payload.customerName,
-        orderNumber: payload.orderNumber,
-        carrierId: payload.carrierId || 'NO ASIGNADO',
-        total: payload.total
-      });
-      
-      const res = await axios.post(`${BASE_URL}/orders`, payload, { headers });
-      console.log('✅ Respuesta completa de Shipday:', JSON.stringify(res.data, null, 2));
-      
+      const res = await axios.post(`${BASE_URL}/orders`, orderData, { headers });
       return res.data;
     } catch (error) {
-      console.error('❌ Error completo creando orden:', {
-        status: error.response?.status,
-        statusText: error.response?.statusText,
-        data: error.response?.data,
-        headers: error.response?.headers
-      });
+      console.error('❌ Error creando orden en Shipday:', error.response?.data);
       throw this.handleError(error);
     }
   }
-
+  
   /**
-   * MÉTODO ALTERNATIVO: Crear orden y asignar conductor en pasos separados
+   * ✅ CORREGIDO Y MEJORADO:
+   * Crea la orden en Shipday y la asigna a un conductor, asegurando que todos los campos requeridos estén presentes.
    */
-  async createAndAssignOrderSeparately(orderData, driverId) {
+  async createAndAssignOrder(order, driverId) {
     try {
-      console.log('🚀 MÉTODO SEPARADO - Creando orden primero, luego asignando conductor');
-      console.log('📋 Driver ID recibido:', driverId);
-      
-      // Paso 1: Crear orden SIN conductor
-      const orderDataWithoutDriver = { ...orderData };
-      delete orderDataWithoutDriver.carrierId; // Asegurar que no tenga carrierId
-      
-      console.log('📦 Paso 1: Creando orden sin conductor...');
-      const createdOrder = await this.createOrder(orderDataWithoutDriver);
-      
-      if (!createdOrder || createdOrder.success === false) {
-        throw new Error(`Error creando orden: ${createdOrder?.response || 'Error desconocido'}`);
-      }
-      
-      console.log('✅ Orden creada exitosamente:', createdOrder.orderId);
-      
-      // Paso 2: Obtener información del conductor
-      console.log('👨‍💼 Paso 2: Obteniendo información del conductor...');
-      const drivers = await this.getDrivers();
-      const driver = drivers.find(d => d.id === driverId || d.carrierId === driverId);
-      
-      if (!driver) {
-        console.error('❌ Conductor no encontrado:', driverId);
-        console.log('📋 Conductores disponibles:', drivers.map(d => ({ id: d.id, email: d.email, name: d.name })));
-        throw new Error(`Conductor con ID ${driverId} no encontrado`);
-      }
-      
-      console.log('✅ Conductor encontrado:', {
-        id: driver.id,
-        email: driver.email,
-        name: driver.name,
-        isActive: driver.isActive
-      });
-      
-      // Paso 3: Asignar conductor a la orden
-      console.log('🔗 Paso 3: Asignando conductor a la orden...');
-      try {
-        const assignResult = await this.assignOrder(createdOrder.orderId, driver.email);
-        console.log('✅ Asignación exitosa:', assignResult);
-        
-        return {
-          success: true,
-          order: createdOrder,
-          orderId: createdOrder.orderId,
-          driver: driver,
-          assignment: assignResult,
-          message: 'Orden creada y conductor asignado exitosamente'
-        };
-      } catch (assignError) {
-        console.error('❌ Error en asignación:', assignError);
-        // La orden se creó pero no se pudo asignar
-        return {
-          success: true,
-          order: createdOrder,
-          orderId: createdOrder.orderId,
-          driver: driver,
-          assignment_error: assignError.message,
-          message: 'Orden creada exitosamente, pero falló la asignación del conductor'
-        };
-      }
-      
-    } catch (error) {
-      console.error('❌ Error en createAndAssignOrderSeparately:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * MÉTODO ORIGINAL MEJORADO: Crear con conductor en un solo paso
-   */
-async createAndAssignOrder(order, driverId) {
-    try {
-      // ✅ CAMBIO CLAVE: Construimos el payload con los campos requeridos
+      // 1. Prepara el payload con valores por defecto para evitar errores
       const payload = {
         orderNumber: order.order_number,
         
-        // Datos del punto de recogida (usamos los de la empresa)
-        restaurantName: order.company_id.name,
-        restaurantAddress: order.company_id.address || 'Dirección no especificada', // Usamos la dirección de la empresa
-        
-        // Datos del cliente final
+        // --- Datos del punto de recogida (CRÍTICO) ---
+        restaurantName: order.company_id.name || 'Punto de Recogida',
+        restaurantAddress: order.company_id.address || 'Dirección de la empresa no especificada',
+        restaurantPhoneNumber: order.company_id.phone || '',
+
+        // --- Datos del cliente final ---
         customerName: order.customer_name,
         customerAddress: order.shipping_address,
         customerEmail: order.customer_email || '',
         customerPhoneNumber: order.customer_phone || '',
         
-        // Instrucciones y asignación
-        deliveryInstruction: order.notes || 'Sin notas.',
+        // --- Asignación y detalles ---
         carrierId: driverId,
+        deliveryInstruction: order.notes || 'Sin instrucciones.',
+        
+        // Para que la orden sea inmediata y no programada, no incluimos fechas de entrega
+        // expectedDeliveryDate: 'YYYY-MM-DD', 
+        // expectedDeliveryTime: 'HH:mm:ss',
       };
 
-      console.log('📦 Creando y asignando pedido en Shipday con payload:', payload);
+      console.log('📦 Enviando este payload a Shipday:', JSON.stringify(payload, null, 2));
+
+      // 2. Llama al método para crear la orden
       const createdOrder = await this.createOrder(payload);
 
-      // Actualiza tu pedido local con el ID de Shipday y el nuevo estado
+      // 3. Verifica la respuesta de Shipday antes de continuar
+      if (!createdOrder || createdOrder.success === false) {
+        throw new Error(`Shipday devolvió un error: ${createdOrder.response || 'Error desconocido'}`);
+      }
+
+      // 4. Actualiza tu pedido local con el ID de Shipday y el nuevo estado
       order.shipday_order_id = createdOrder.orderId;
       order.shipday_driver_id = driverId;
-      order.status = 'processing';
+      order.status = 'processing'; // Marcar como "Procesando"
       await order.save();
 
       return { success: true, order: createdOrder };
 
     } catch (error) {
       console.error('❌ Error en createAndAssignOrder:', error.message);
+      // Lanza el error para que el controlador lo maneje y envíe una respuesta clara al frontend
       throw error;
     }
   }
