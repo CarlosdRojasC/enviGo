@@ -85,6 +85,28 @@ class OrderController {
         .lean();
 
       if (!order) return res.status(404).json({ error: 'Pedido no encontrado' });
+      
+if (order.shipday_order_id) {
+        try {
+          const shipdayOrderDetails = await ShipdayService.getOrder(order.shipday_order_id);
+          order.shipday_details = shipdayOrderDetails._raw;
+          order.delivery_note = shipdayOrderDetails._raw?.deliveryNote;
+          order.podUrls = shipdayOrderDetails._raw?.podUrls || [];
+          order.signatureUrl = shipdayOrderDetails._raw?.signatures?.[0]?.url;
+          order.driver_info = shipdayOrderDetails._raw?.assignedCarrier;
+          order.shipday_times = shipdayOrderDetails._raw?.activityLog;
+          if (shipdayOrderDetails._raw?.proofOfDelivery?.location) {
+            order.delivery_location = {
+              lat: shipdayOrderDetails._raw.proofOfDelivery.location.latitude,
+              lng: shipdayOrderDetails._raw.proofOfDelivery.location.longitude,
+              formatted_address: shipdayOrderDetails._raw.proofOfDelivery.location.address
+            };
+          }
+        } catch (shipdayError) {
+          order.shipday_error = "No se pudieron obtener los detalles de Shipday.";
+        }
+      }
+      // --- FIN DE LA LÓGICA AÑADIDA ---
 
       if (req.user.role !== 'admin' && req.user.company_id.toString() !== order.company_id._id.toString()) {
         return res.status(403).json({ error: ERRORS.FORBIDDEN });

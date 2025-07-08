@@ -439,6 +439,21 @@ async handleWebhook(req, res) {
         orderUpdated = true;
         console.log(`✅ Orden marcada como entregada: ${order.delivery_date}`);
       }
+       // Guardar la prueba de entrega (fotos, firma, notas, etc.)
+      order.proof_of_delivery = {
+        photo_url: webhookData.pods?.[0]?.url || null,
+        signature_url: webhookData.signatures?.[0]?.url || null,
+        notes: webhookData.delivery_note || '',
+        location: {
+          coordinates: [
+            webhookData.delivery_details?.location?.lng || 0,
+            webhookData.delivery_details?.location?.lat || 0
+          ]
+        }
+      };
+      orderUpdated = true; // Asegurarse de que se guarde
+      console.log('📝 Prueba de entrega actualizada en la orden.');
+      
     } else if (eventType === 'ORDER_ASSIGNED' || carrierInfo) {
       if (order.status === 'processing') {
         order.status = 'shipped';
