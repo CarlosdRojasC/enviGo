@@ -64,10 +64,13 @@ const companies = {
   getUsers: (id) => api.get(`/companies/${id}/users`),
   getStats: (id, params = {}) => api.get(`/companies/${id}/stats`, { params })
 }
+
 const users = {
   getByCompany: (companyId) => api.get(`/users/company/${companyId}`),
-  create: (userData) => api.post('/auth/register', userData)
+  create: (userData) => api.post('/auth/register', userData),
+  updateUser: (id, userData) => api.patch(`/users/${id}`, userData)
 }
+
 // Servicios de pedidos
 const orders = {
   getAll: (params = {}) => api.get('/orders', { params }),
@@ -82,8 +85,7 @@ const orders = {
     responseType: 'blob'
   }),
   
-    
-  // ==================== NUEVOS MÉTODOS SHIPDAY ====================
+  // ==================== MÉTODOS SHIPDAY EXISTENTES ====================
   
   // Crear orden en Shipday sin asignar conductor
   createInShipday: (orderId) => api.post(`/orders/${orderId}/create-shipday`),
@@ -96,6 +98,101 @@ const orders = {
   
   // Obtener estado de sincronización con Shipday
   getShipdayStatus: (orderId) => api.get(`/orders/${orderId}/shipday-status`),
+
+  // ==================== NUEVOS MÉTODOS PARA ASIGNACIÓN MASIVA ====================
+  
+  /**
+   * Asignar múltiples pedidos a un conductor de forma masiva
+   * @param {Array} orderIds - Array de IDs de pedidos
+   * @param {string} driverId - ID del conductor en Shipday
+   * @returns {Promise} Respuesta con resultados de la asignación masiva
+   */
+  bulkAssignDriver: async (orderIds, driverId) => {
+    try {
+      console.log('📦 API: Iniciando asignación masiva:', {
+        ordersCount: orderIds.length,
+        driverId
+      });
+      
+      const response = await api.post('/orders/bulk-assign-driver', {
+        orderIds,
+        driverId
+      });
+      
+      console.log('✅ API: Asignación masiva completada:', response.data);
+      return response;
+      
+    } catch (error) {
+      console.error('❌ API: Error en asignación masiva:', error.response || error);
+      throw error;
+    }
+  },
+
+  /**
+   * Verificar el estado de múltiples asignaciones
+   * @param {Array} orderIds - Array de IDs de pedidos
+   * @returns {Promise} Estado de asignación de cada pedido
+   */
+  bulkCheckAssignmentStatus: async (orderIds) => {
+    try {
+      console.log('🔍 API: Verificando estado de asignaciones masivas:', orderIds);
+      
+      const response = await api.post('/orders/bulk-assignment-status', {
+        orderIds
+      });
+      
+      console.log('✅ API: Estados de asignación obtenidos:', response.data);
+      return response;
+      
+    } catch (error) {
+      console.error('❌ API: Error verificando estados:', error.response || error);
+      throw error;
+    }
+  },
+
+  /**
+   * Cancelar asignaciones masivas (si es necesario)
+   * @param {Array} orderIds - Array de IDs de pedidos
+   * @returns {Promise} Resultado de la cancelación
+   */
+  bulkUnassignDriver: async (orderIds) => {
+    try {
+      console.log('🚫 API: Cancelando asignaciones masivas:', orderIds);
+      
+      const response = await api.post('/orders/bulk-unassign-driver', {
+        orderIds
+      });
+      
+      console.log('✅ API: Asignaciones canceladas:', response.data);
+      return response;
+      
+    } catch (error) {
+      console.error('❌ API: Error cancelando asignaciones:', error.response || error);
+      throw error;
+    }
+  },
+
+  /**
+   * Obtener resumen de capacidad de asignación masiva
+   * @param {Array} orderIds - Array de IDs de pedidos
+   * @returns {Promise} Análisis de qué pedidos pueden ser asignados
+   */
+  bulkAssignmentPreview: async (orderIds) => {
+    try {
+      console.log('🔍 API: Obteniendo preview de asignación masiva:', orderIds);
+      
+      const response = await api.post('/orders/bulk-assignment-preview', {
+        orderIds
+      });
+      
+      console.log('✅ API: Preview obtenido:', response.data);
+      return response;
+      
+    } catch (error) {
+      console.error('❌ API: Error en preview:', error.response || error);
+      throw error;
+    }
+  }
 }
 
 // Servicios de canales
@@ -298,8 +395,9 @@ const dashboard = {
   getStats: () => api.get('/stats/dashboard')
 }
 
+// Servicios de conductores
 const drivers = {
-// Obtener todos los conductores (desde tu BD local)
+  // Obtener todos los conductores (desde tu BD local)
   getAll: () => api.get('/drivers'),
   
   // Crear conductor en tu BD local
@@ -310,7 +408,7 @@ const drivers = {
   
   // Obtener conductores por empresa (si necesitas)
   getByCompany: (companyId) => api.get(`/companies/${companyId}/drivers`)
-};
+}
 
 // Helper para verificar conectividad
 export const checkConnection = async () => {

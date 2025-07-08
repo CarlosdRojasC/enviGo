@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose'); 
+
 // Importar middlewares
 const {
   authenticateToken,
@@ -21,10 +22,10 @@ const channelController = require('../controllers/channel.controller');
 const userController = require('../controllers/user.controller');
 const { validateOrderCreation, validateStatusUpdate } = require('../middlewares/validators/order.validator.js');
 const billingController = require('../controllers/billing.controller')
-const driverController = require('../controllers/driver.controller'); // NUEVO: Importar driver controller
+const driverController = require('../controllers/driver.controller');
 
 const shipdayRoutes = require('./shipday.routes');
-const ShipdayService = require('../services/shipday.service'); // NUEVO: Para usar en rutas
+const ShipdayService = require('../services/shipday.service');
 
 // Importar modelos para dashboard
 const Company = require('../models/Company');
@@ -125,7 +126,6 @@ router.get('/users/company/:companyId', authenticateToken, isAdmin, userControll
 router.patch('/users/:id', authenticateToken, isAdmin, userController.updateUser);
 
 // ==================== CONDUCTORES ====================
-// NUEVO: Rutas para gestión de conductores
 
 router.get('/drivers', authenticateToken, isAdmin, driverController.getAllDrivers);
 router.post('/drivers', authenticateToken, isAdmin, driverController.createDriver);
@@ -164,6 +164,7 @@ router.get('/orders/stats', authenticateToken, orderController.getStats);
 router.get('/orders/trend', authenticateToken, orderController.getOrdersTrend);
 router.get('/orders/export', authenticateToken, isAdmin, orderController.exportForOptiRoute);
 router.post('/orders', authenticateToken, validateOrderCreation, orderController.create);
+
 // DEBUG: Ruta para verificar datos de orden antes de enviar a Shipday
 router.get('/orders/:orderId/debug-shipday', authenticateToken, isAdmin, async (req, res) => {
   try {
@@ -271,20 +272,18 @@ router.get('/orders/:orderId/debug-shipday', authenticateToken, isAdmin, async (
     res.status(500).json({ error: error.message });
   }
 });
+
 router.get('/orders/:id', authenticateToken, validateMongoId('id'), orderController.getById);
 router.patch('/orders/:id/status', authenticateToken, validateMongoId('id'), isAdmin, orderController.updateStatus);
-router.post('/orders/:orderId/create-shipday', authenticateToken, isAdmin, orderController.createInShipday);
-
 
 // ==================== PEDIDOS - INTEGRACIÓN SHIPDAY ====================
-// NUEVAS RUTAS para integración con Shipday
 
 // Crear orden individual en Shipday (sin asignar conductor)
 router.post('/orders/:orderId/create-shipday', authenticateToken, isAdmin, async (req, res) => {
   try {
     const { orderId } = req.params;
 
-    const order = await Order.findById(orderId);
+    const order = await Order.findById(orderId).populate('company_id');
     if (!order) {
       return res.status(404).json({ error: 'Pedido no encontrado.' });
     }
@@ -297,6 +296,8 @@ router.post('/orders/:orderId/create-shipday', authenticateToken, isAdmin, async
       orderNumber: order.order_number,
       customerName: order.customer_name,
       customerAddress: order.shipping_address,
+      restaurantName: order.company_id?.name || 'Tienda Principal',
+      restaurantAddress: order.company_id?.address || order.shipping_address,
       customerEmail: order.customer_email || '',
       customerPhoneNumber: order.customer_phone || '',
       deliveryInstruction: order.notes || 'Sin instrucciones especiales',
@@ -322,6 +323,324 @@ router.post('/orders/:orderId/create-shipday', authenticateToken, isAdmin, async
 // Asignar conductor a pedido (crear+asignar o solo asignar)
 router.post('/orders/:orderId/assign-driver', authenticateToken, isAdmin, orderController.assignToDriver);
 
+// ==================== NUEVAS RUTAS PARA ASIGNACIÓN MASIVA ====================
+
+// Asignar múltiples pedidos a un conductor de forma masiva
+router.post('/orders/bulk-assign-driver', authenticateToken, isAdmin, async (req, res) => {
+  try {
+    const { orderIds, driverId } = req.body;
+
+    if (!Array.isArray(orderIds) || orderIds.length === 0) {
+      return res.status(400).json({ error: 'Se requiere un array de IDs de órdenes.' });
+    }
+
+    if (!driverId) {
+      return res.status(400).json({ error: 'Se requiere el ID del conductor.' });
+    }
+
+    console.log(`🚀 Iniciando asignación masiva: ${orderIds.length} pedidos al conductor ${driverId}`);
+
+    const results = {
+      successful: [],
+      failed: [],
+      total: orderIds.length
+    };
+
+    // Procesar cada orden secuencialmente
+    for (let i = 0; i < orderIds.length; i++) {
+      const orderId = orderIds[i];
+      
+      try {
+        console.log(`📦 Procesando orden ${i + 1}/${orderIds.length}: ${orderId}`);
+        
+        // Obtener información de la orden
+        const order = await Order.findById(orderId).populate('company_id');
+        
+        if (!order) {
+          results.failed.push({
+            orderId,
+            orderNumber: 'No encontrado',
+            error: 'Orden no encontrada en la base de datos'
+          });
+          continue;
+        }
+
+        if (order.shipday_order_id) {
+          results.failed.push({
+            orderId,
+            orderNumber: order.order_number,
+            error: 'La orden ya está asignada en Shipday'
+          });
+          continue;
+        }
+
+        // Usar el mismo método que funciona individualmente
+        let shipdayOrderId = order.shipday_order_id;
+
+        // Si no está en Shipday, crearla primero
+        if (!shipdayOrderId) {
+          const orderDataForShipday = {
+            orderNumber: order.order_number,
+            customerName: order.customer_name,
+            customerAddress: order.shipping_address,
+            restaurantName: order.company_id?.name || 'Tienda Principal',
+            restaurantAddress: order.company_id?.address || order.shipping_address,
+            customerPhoneNumber: order.customer_phone || '',
+            deliveryInstruction: order.notes || '',
+            deliveryFee: parseFloat(order.shipping_cost) || 0,
+            total: parseFloat(order.total_amount) || parseFloat(order.shipping_cost) || 1,
+            paymentMethod: order.payment_method || 'CASH'
+          };
+          
+          const createdShipdayOrder = await ShipdayService.createOrder(orderDataForShipday);
+          
+          if (!createdShipdayOrder || !createdShipdayOrder.orderId) {
+            results.failed.push({
+              orderId,
+              orderNumber: order.order_number,
+              error: 'No se pudo crear la orden en Shipday'
+            });
+            continue;
+          }
+          
+          shipdayOrderId = createdShipdayOrder.orderId;
+          order.shipday_order_id = shipdayOrderId;
+          order.status = 'processing';
+          await order.save();
+        }
+
+        // Asignar conductor usando el método que funciona
+        await ShipdayService.assignOrderNewUrl(shipdayOrderId, driverId);
+        
+        // Actualizar orden local
+        order.shipday_driver_id = driverId;
+        order.status = 'shipped';
+        await order.save();
+
+        results.successful.push({
+          orderId,
+          orderNumber: order.order_number,
+          shipdayOrderId: shipdayOrderId,
+          message: 'Asignado exitosamente'
+        });
+
+        console.log(`✅ Orden ${order.order_number} asignada exitosamente`);
+
+      } catch (error) {
+        console.error(`❌ Error procesando orden ${orderId}:`, error);
+        
+        results.failed.push({
+          orderId,
+          orderNumber: 'Error',
+          error: error.message || 'Error desconocido'
+        });
+      }
+
+      // Pausa pequeña entre asignaciones para no sobrecargar
+      if (i < orderIds.length - 1) {
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+    }
+
+    console.log('🏁 Asignación masiva completada:', {
+      total: results.total,
+      successful: results.successful.length,
+      failed: results.failed.length
+    });
+
+    res.status(200).json({
+      message: `Asignación masiva completada: ${results.successful.length} exitosas, ${results.failed.length} fallidas.`,
+      results,
+      summary: {
+        total: results.total,
+        successful: results.successful.length,
+        failed: results.failed.length,
+        success_rate: Math.round((results.successful.length / results.total) * 100)
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Error en asignación masiva:', error);
+    res.status(500).json({ 
+      error: error.message || 'Error interno del servidor en asignación masiva',
+      details: 'Error procesando la asignación masiva'
+    });
+  }
+});
+
+// Preview de asignación masiva (verificar qué pedidos pueden ser asignados)
+router.post('/orders/bulk-assignment-preview', authenticateToken, isAdmin, async (req, res) => {
+  try {
+    const { orderIds } = req.body;
+
+    if (!Array.isArray(orderIds) || orderIds.length === 0) {
+      return res.status(400).json({ error: 'Se requiere un array de IDs de órdenes.' });
+    }
+
+    console.log(`🔍 Generando preview para ${orderIds.length} pedidos`);
+
+    const orders = await Order.find({ 
+      _id: { $in: orderIds }
+    }).populate('company_id').lean();
+
+    const analysis = {
+      assignable: [],
+      not_assignable: [],
+      total: orderIds.length,
+      found: orders.length
+    };
+
+    orders.forEach(order => {
+      if (order.shipday_order_id) {
+        analysis.not_assignable.push({
+          orderId: order._id,
+          orderNumber: order.order_number,
+          reason: 'Ya está en Shipday'
+        });
+      } else if (!order.company_id?.name) {
+        analysis.not_assignable.push({
+          orderId: order._id,
+          orderNumber: order.order_number,
+          reason: 'Sin datos de empresa'
+        });
+      } else {
+        analysis.assignable.push({
+          orderId: order._id,
+          orderNumber: order.order_number,
+          customerName: order.customer_name,
+          companyName: order.company_id.name
+        });
+      }
+    });
+
+    // Verificar órdenes no encontradas
+    const foundIds = orders.map(o => o._id.toString());
+    const notFound = orderIds.filter(id => !foundIds.includes(id));
+    
+    notFound.forEach(orderId => {
+      analysis.not_assignable.push({
+        orderId,
+        orderNumber: 'No encontrado',
+        reason: 'Orden no existe'
+      });
+    });
+
+    res.json({
+      preview: analysis,
+      recommendations: analysis.assignable.length > 0 ? 
+        [`Se pueden asignar ${analysis.assignable.length} de ${analysis.total} pedidos`] :
+        ['No hay pedidos disponibles para asignación'],
+      ready_for_assignment: analysis.assignable.length > 0
+    });
+
+  } catch (error) {
+    console.error('❌ Error generando preview:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Verificar estado de asignaciones masivas
+router.post('/orders/bulk-assignment-status', authenticateToken, isAdmin, async (req, res) => {
+  try {
+    const { orderIds } = req.body;
+
+    if (!Array.isArray(orderIds) || orderIds.length === 0) {
+      return res.status(400).json({ error: 'Se requiere un array de IDs de órdenes.' });
+    }
+
+    const orders = await Order.find({ 
+      _id: { $in: orderIds }
+    }).lean();
+
+    const statusReport = orders.map(order => ({
+      orderId: order._id,
+      orderNumber: order.order_number,
+      status: order.status,
+      isInShipday: !!order.shipday_order_id,
+      shipdayOrderId: order.shipday_order_id,
+      hasDriverAssigned: !!order.shipday_driver_id,
+      shipdayDriverId: order.shipday_driver_id
+    }));
+
+    const summary = {
+      total: orderIds.length,
+      in_shipday: statusReport.filter(s => s.isInShipday).length,
+      with_driver: statusReport.filter(s => s.hasDriverAssigned).length,
+      pending: statusReport.filter(s => !s.isInShipday).length
+    };
+
+    res.json({
+      status_report: statusReport,
+      summary,
+      timestamp: new Date().toISOString()
+    });
+
+  } catch (error) {
+    console.error('❌ Error verificando estados:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Cancelar asignaciones masivas (desasignar conductores)
+router.post('/orders/bulk-unassign-driver', authenticateToken, isAdmin, async (req, res) => {
+  try {
+    const { orderIds } = req.body;
+
+    if (!Array.isArray(orderIds) || orderIds.length === 0) {
+      return res.status(400).json({ error: 'Se requiere un array de IDs de órdenes.' });
+    }
+
+    console.log(`🚫 Cancelando asignaciones para ${orderIds.length} pedidos`);
+
+    const results = {
+      successful: [],
+      failed: [],
+      total: orderIds.length
+    };
+
+    const orders = await Order.find({ 
+      _id: { $in: orderIds },
+      shipday_driver_id: { $exists: true }
+    });
+
+    for (const order of orders) {
+      try {
+        // Resetear campos de asignación
+        order.shipday_driver_id = undefined;
+        order.status = 'processing'; // Volver a estado anterior
+        await order.save();
+
+        results.successful.push({
+          orderId: order._id,
+          orderNumber: order.order_number,
+          message: 'Asignación cancelada'
+        });
+
+      } catch (error) {
+        results.failed.push({
+          orderId: order._id,
+          orderNumber: order.order_number,
+          error: error.message
+        });
+      }
+    }
+
+    res.json({
+      message: `Cancelación completada: ${results.successful.length} exitosas, ${results.failed.length} fallidas.`,
+      results,
+      summary: {
+        total: results.total,
+        successful: results.successful.length,
+        failed: results.failed.length
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Error cancelando asignaciones:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Crear múltiples órdenes en Shipday de una vez
 router.post('/orders/bulk-create-shipday', authenticateToken, isAdmin, async (req, res) => {
   try {
@@ -334,7 +653,7 @@ router.post('/orders/bulk-create-shipday', authenticateToken, isAdmin, async (re
     const orders = await Order.find({ 
       _id: { $in: orderIds },
       shipday_order_id: { $exists: false }
-    });
+    }).populate('company_id');
 
     if (orders.length === 0) {
       return res.status(400).json({ error: 'No se encontraron órdenes válidas para procesar.' });
@@ -351,6 +670,8 @@ router.post('/orders/bulk-create-shipday', authenticateToken, isAdmin, async (re
           orderNumber: order.order_number,
           customerName: order.customer_name,
           customerAddress: order.shipping_address,
+          restaurantName: order.company_id?.name || 'Tienda Principal',
+          restaurantAddress: order.company_id?.address || order.shipping_address,
           customerEmail: order.customer_email || '',
           customerPhoneNumber: order.customer_phone || '',
           deliveryInstruction: order.notes || 'Sin instrucciones especiales',
@@ -603,7 +924,6 @@ router.get('/stats/dashboard', authenticateToken, async (req, res) => {
   }
 });
 
-
 // ==================== DEBUG: PROBAR ENDPOINT OFICIAL DE SHIPDAY ====================
 
 // Ruta para probar directamente el endpoint oficial de asignación
@@ -742,6 +1062,7 @@ router.get('/shipday/drivers-detailed', authenticateToken, isAdmin, async (req, 
     res.status(500).json({ error: error.message });
   }
 });
+
 // ==================== INVESTIGACIÓN COMPLETA DE SHIPDAY API ====================
 
 router.get('/shipday/full-investigation', authenticateToken, isAdmin, async (req, res) => {
@@ -808,4 +1129,5 @@ router.get('/shipday/basic-test', authenticateToken, isAdmin, async (req, res) =
     });
   }
 });
+
 module.exports = router;
