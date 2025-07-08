@@ -742,4 +742,70 @@ router.get('/shipday/drivers-detailed', authenticateToken, isAdmin, async (req, 
     res.status(500).json({ error: error.message });
   }
 });
+// ==================== INVESTIGACIÓN COMPLETA DE SHIPDAY API ====================
+
+router.get('/shipday/full-investigation', authenticateToken, isAdmin, async (req, res) => {
+  try {
+    console.log('🔬 INICIANDO INVESTIGACIÓN COMPLETA DE SHIPDAY API...');
+    
+    const investigation = await ShipdayService.investigateAPIEndpoints();
+    
+    res.json({
+      investigation_timestamp: new Date().toISOString(),
+      shipday_base_url: 'https://api.shipday.com',
+      investigation_results: investigation,
+      summary: {
+        api_accessible: investigation.api_info ? true : false,
+        order_endpoints_working: Object.values(investigation.order_endpoints || {}).some(e => e.status === 'success'),
+        assignment_endpoints_working: Object.values(investigation.assignment_endpoints || {}).some(e => e.status === 'success'),
+        conclusion: investigation.conclusion
+      },
+      next_actions: investigation.conclusion?.working_assign_endpoint !== 'none' ? [
+        'Implementar el endpoint de asignación que funciona',
+        'Actualizar el método assignOrder en el servicio',
+        'Probar la asignación con el nuevo método'
+      ] : [
+        'Contactar soporte de Shipday',
+        'Verificar plan y permisos de API',
+        'Considerar asignación manual desde dashboard web'
+      ]
+    });
+    
+  } catch (error) {
+    console.error('❌ Error en investigación completa:', error);
+    res.status(500).json({ 
+      error: error.message,
+      suggestion: 'Verificar conectividad básica con Shipday'
+    });
+  }
+});
+
+// Ruta más simple para probar conectividad básica
+router.get('/shipday/basic-test', authenticateToken, isAdmin, async (req, res) => {
+  try {
+    console.log('🧪 Prueba básica de Shipday...');
+    
+    // Probar obtener órdenes (sabemos que esto funciona)
+    const orders = await ShipdayService.getOrders();
+    const drivers = await ShipdayService.getDrivers();
+    
+    res.json({
+      test_result: 'success',
+      connectivity: 'OK',
+      orders_endpoint: 'working',
+      drivers_endpoint: 'working',
+      orders_count: Array.isArray(orders) ? orders.length : 'unknown',
+      drivers_count: Array.isArray(drivers) ? drivers.length : 'unknown',
+      next_step: 'Run full investigation to find working assignment endpoint',
+      investigation_url: '/api/shipday/full-investigation'
+    });
+    
+  } catch (error) {
+    console.error('❌ Error en prueba básica:', error);
+    res.status(500).json({ 
+      test_result: 'failed',
+      error: error.message 
+    });
+  }
+});
 module.exports = router;
