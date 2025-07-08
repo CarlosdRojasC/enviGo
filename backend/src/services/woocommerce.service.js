@@ -96,27 +96,39 @@ class WooCommerceService {
     }
   }
   
-  // --- MÉTODO SYNCORDERS CORREGIDO ---
+  // --- MÉTODO SYNCORDERS CORREGIDO CON LOGGING Y MAPEO DE COMUNA ---
   static async syncOrders(channel, dateFrom, dateTo) {
     let ordersImported = 0;
     let page = 1;
     const perPage = 100;
     let hasMore = true;
+    let totalOrdersProcessed = 0;
     
     try {
+      console.log(`🔄 Iniciando sincronización WooCommerce para canal ${channel._id}`);
+      console.log(`📅 Rango de fechas: ${dateFrom || 'Sin límite'} - ${dateTo || 'Sin límite'}`);
+      
       const company = await Company.findById(channel.company_id);
       if (!company) {
         throw new Error(`No se encontró la empresa con ID: ${channel.company_id}`);
       }
       const fixedShippingCost = company.price_per_order || 0;
+      console.log(`💰 Costo de envío fijo de la empresa: $${fixedShippingCost}`);
 
       while (hasMore) {
+        console.log(`📄 Procesando página ${page} (${perPage} pedidos por página)...`);
+        
         const params = new URLSearchParams({
-          page: page, per_page: perPage, orderby: 'date', order: 'desc'
+          page: page, 
+          per_page: perPage, 
+          orderby: 'date', 
+          order: 'desc'
         });
         
         if (dateFrom) params.append('after', dateFrom);
         if (dateTo) params.append('before', dateTo);
+        
+        console.log(`🌐 URL de consulta: ${this.getApiUrl(channel)}/orders?${params}`);
         
         const response = await axios.get(
           `${this.getApiUrl(channel)}/orders?${params}`,
@@ -124,13 +136,16 @@ class WooCommerceService {
         );
         
         const orders = response.data;
+        console.log(`📦 Recibidos ${orders.length} pedidos en página ${page}`);
         
         if (orders.length === 0) {
+          console.log('🛑 No hay más pedidos, finalizando sincronización');
           hasMore = false;
           break;
         }
         
         for (const wooOrder of orders) {
+          totalOrdersProcessed++;
           try {
             const existingOrder = await Order.findOne({ 
               channel_id: channel._id, 
@@ -138,7 +153,8 @@ class WooCommerceService {
             });
             
             if (!existingOrder) {
-              await Order.create({
+              // 🇨🇱 MAPEO CORRECTO PARA CHILE
+              const orderData = {
                 company_id: channel.company_id,
                 channel_id: channel._id,
                 external_order_id: wooOrder.id.toString(),
@@ -147,39 +163,70 @@ class WooCommerceService {
                 customer_email: wooOrder.billing.email,
                 customer_phone: wooOrder.billing.phone,
                 shipping_address: this.getShippingAddress(wooOrder),
+                // ✅ CAMBIO PRINCIPAL: WooCommerce shipping.city → Comuna chilena
                 shipping_commune: wooOrder.shipping.city || wooOrder.billing.city,
-                // --- CAMBIO: Usar el costo de envío fijo de la empresa ---
+                // ✅ NUEVO: Región por defecto para Chile
+                shipping_state: wooOrder.shipping.state || wooOrder.billing.state || 'Región Metropolitana',
+                shipping_zip: wooOrder.shipping.postcode || wooOrder.billing.postcode,
                 shipping_cost: fixedShippingCost,
+                // ✅ AGREGAR: Total del pedido
+                total_amount: parseFloat(wooOrder.total) || 0,
                 status: this.mapOrderStatus(wooOrder),
                 order_date: wooOrder.date_created,
+                notes: wooOrder.customer_note || '',
                 raw_data: wooOrder
-                // El campo `total_amount` se omite intencionalmente
-              });
+              };
               
+              console.log(`✅ Creando pedido ${wooOrder.number} - Comuna: ${orderData.shipping_commune}`);
+              
+              await Order.create(orderData);
               ordersImported++;
+            } else {
+              console.log(`⏭️ Pedido ${wooOrder.number} ya existe, omitiendo`);
             }
           } catch (orderError) {
-            console.error(`Error importando pedido WooCommerce ${wooOrder.number}:`, orderError);
+            console.error(`❌ Error importando pedido WooCommerce ${wooOrder.number}:`, orderError);
           }
         }
         
+        // ✅ CONDICIÓN MEJORADA para continuar paginación
         if (orders.length < perPage) {
+          console.log(`📄 Página ${page} tiene ${orders.length} pedidos (menos que ${perPage}), finalizando`);
           hasMore = false;
         } else {
           page++;
+          console.log(`➡️ Avanzando a página ${page}`);
+          
+          // ✅ PROTECCIÓN: Evitar bucle infinito
+          if (page > 50) {
+            console.log('⚠️ Límite de seguridad alcanzado (50 páginas), finalizando');
+            hasMore = false;
+          }
         }
       }
       
+      console.log(`🏁 Sincronización completada:`);
+      console.log(`   📊 Total pedidos procesados: ${totalOrdersProcessed}`);
+      console.log(`   ✅ Pedidos importados: ${ordersImported}`);
+      console.log(`   ⏭️ Pedidos ya existentes: ${totalOrdersProcessed - ordersImported}`);
+      
       return ordersImported;
     } catch (error) {
-      console.error('Error sincronizando pedidos WooCommerce:', error);
+      console.error('❌ Error sincronizando pedidos WooCommerce:', error);
+      console.error('🔍 Detalles del error:', {
+        message: error.message,
+        status: error.response?.status,
+        data: error.response?.data
+      });
       throw error;
     }
   }
   
-  // --- MÉTODO PROCESSWEBHOOK CORREGIDO ---
+  // --- MÉTODO PROCESSWEBHOOK CORREGIDO CON MAPEO DE COMUNA ---
   static async processWebhook(channelId, data, headers) {
     try {
+      console.log(`🔔 Procesando webhook WooCommerce para canal ${channelId}`);
+      
       const channel = await Channel.findById(channelId);
       if (!channel) throw new Error('Canal no encontrado');
 
@@ -195,34 +242,52 @@ class WooCommerceService {
       });
       
       if (existingOrder) {
+        console.log(`🔄 Actualizando pedido existente ${wooOrder.number}`);
         existingOrder.status = this.mapOrderStatus(wooOrder);
-        // --- CAMBIO: Ya no se actualiza el total_amount ---
         existingOrder.shipping_cost = fixedShippingCost;
+        // ✅ CAMBIO: Actualizar comuna desde WooCommerce
+        existingOrder.shipping_commune = wooOrder.shipping.city || wooOrder.billing.city;
+        existingOrder.shipping_state = wooOrder.shipping.state || wooOrder.billing.state || 'Región Metropolitana';
+        existingOrder.total_amount = parseFloat(wooOrder.total) || 0;
         existingOrder.raw_data = wooOrder;
         await existingOrder.save();
       } else {
-        await Order.create({
-            company_id: channel.company_id,
-            channel_id: channelId,
-            external_order_id: wooOrder.id.toString(),
-            order_number: wooOrder.number,
-            customer_name: this.getCustomerName(wooOrder),
-            customer_email: wooOrder.billing.email,
-            customer_phone: wooOrder.billing.phone,
-            shipping_address: this.getShippingAddress(wooOrder),
-            shipping_commune: wooOrder.shipping.city || wooOrder.billing.city,
-            // --- CAMBIO: Usar el costo de envío fijo al crear desde el webhook ---
-            shipping_cost: fixedShippingCost,
-            status: this.mapOrderStatus(wooOrder),
-            order_date: wooOrder.date_created,
-            raw_data: wooOrder
-            // El campo `total_amount` se omite intencionalmente
-        });
+        console.log(`✅ Creando nuevo pedido ${wooOrder.number} desde webhook`);
+        
+        const orderData = {
+          company_id: channel.company_id,
+          channel_id: channelId,
+          external_order_id: wooOrder.id.toString(),
+          order_number: wooOrder.number,
+          customer_name: this.getCustomerName(wooOrder),
+          customer_email: wooOrder.billing.email,
+          customer_phone: wooOrder.billing.phone,
+          shipping_address: this.getShippingAddress(wooOrder),
+          // ✅ CAMBIO PRINCIPAL: WooCommerce city → Comuna chilena
+          shipping_commune: wooOrder.shipping.city || wooOrder.billing.city,
+          shipping_state: wooOrder.shipping.state || wooOrder.billing.state || 'Región Metropolitana',
+          shipping_zip: wooOrder.shipping.postcode || wooOrder.billing.postcode,
+          shipping_cost: fixedShippingCost,
+          total_amount: parseFloat(wooOrder.total) || 0,
+          status: this.mapOrderStatus(wooOrder),
+          order_date: wooOrder.date_created,
+          notes: wooOrder.customer_note || '',
+          raw_data: wooOrder
+        };
+        
+        console.log(`📍 Comuna del pedido: ${orderData.shipping_commune}`);
+        
+        const newOrder = await Order.create(orderData);
+        
+        // Auto-crear en Shipday si está habilitado
+        if (process.env.AUTO_CREATE_SHIPDAY_ORDERS === 'true') {
+          await this.autoCreateInShipday(newOrder);
+        }
       }
       
       return true;
     } catch (error) {
-      console.error('Error procesando webhook WooCommerce:', error);
+      console.error('❌ Error procesando webhook WooCommerce:', error);
       throw error;
     }
   }
@@ -241,39 +306,33 @@ class WooCommerceService {
   
   static mapOrderStatus(wooOrder) {
     const statusMap = {
-      'pending': 'pending', 'processing': 'processing', 'on-hold': 'pending',
-      'completed': 'delivered', 'cancelled': 'cancelled', 'refunded': 'cancelled',
-      'failed': 'cancelled', 'shipped': 'shipped'
+      'pending': 'pending', 
+      'processing': 'processing', 
+      'on-hold': 'pending',
+      'completed': 'delivered', 
+      'cancelled': 'cancelled', 
+      'refunded': 'cancelled',
+      'failed': 'cancelled', 
+      'shipped': 'shipped'
     };
     return statusMap[wooOrder.status] || 'pending';
   }
   
   static mapStatusToWooCommerce(status) {
     const statusMap = {
-      'pending': 'pending', 'processing': 'processing', 'shipped': 'shipped',
-      'delivered': 'completed', 'cancelled': 'cancelled'
+      'pending': 'pending', 
+      'processing': 'processing', 
+      'shipped': 'shipped',
+      'delivered': 'completed', 
+      'cancelled': 'cancelled'
     };
     return statusMap[status] || 'pending';
   }
-  async processWebhook(channelId, webhookData, headers) {
+
+  static async autoCreateInShipday(order) {
     try {
-      const order = await this.createOrderFromWebhook(channelId, webhookData, headers);
+      const ShipdayService = require('./shipday.service');
       
-      // Auto-crear en Shipday
-      if (process.env.AUTO_CREATE_SHIPDAY_ORDERS === 'true') {
-        await this.autoCreateInShipday(order);
-      }
-
-      return order;
-    } catch (error) {
-      console.error('Error procesando webhook WooCommerce:', error);
-      throw error;
-    }
-  }
-
-  async autoCreateInShipday(order) {
-    // Mismo método que en ShopifyService
-    try {
       const shipdayData = {
         orderNumber: order.order_number,
         customerName: order.customer_name,
