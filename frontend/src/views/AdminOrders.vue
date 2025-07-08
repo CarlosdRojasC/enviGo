@@ -93,6 +93,13 @@
                     title="Asignar a un conductor en Shipday">
                     Asignar
                   </button>
+                  <button 
+  @click="debugOrder(order)" 
+  class="btn-table-action debug" 
+  title="Debug datos para Shipday">
+  🔍 Debug
+</button>
+
                 </div>
               </td>
             </tr>
@@ -289,10 +296,63 @@ async function confirmAssignment() {
     isAssigning.value = false;
   }
 }
+async function debugOrder(order) {
+  try {
+    console.log('🔍 Iniciando debug para orden:', order._id);
+    
+    // Usar el servicio API en lugar de fetch directo
+    const response = await apiService.orders.debugShipday(order._id);
+    
+    console.log('✅ Debug Info completa:', response.data);
+    
+    const debugInfo = response.data.debug_info;
+    const validations = debugInfo.validations;
+    const companyData = debugInfo.company_data;
+    const orderData = debugInfo.order_basics;
+    
+    // Mostrar resumen en alert
+    alert(`
+🔍 DEBUG ORDEN: ${orderData.order_number}
+
+📊 DATOS BÁSICOS:
+• Cliente: ${orderData.customer_name || 'NO DEFINIDO'}
+• Dirección: ${orderData.shipping_address || 'NO DEFINIDA'}
+• Total: $${orderData.total_amount || orderData.shipping_cost || 0}
+
+🏢 DATOS EMPRESA:
+• ID: ${companyData.company_id || 'NO DEFINIDO'}
+• Nombre: ${companyData.company_name || 'NO DEFINIDO'}
+• Teléfono: ${companyData.company_phone || 'NO DEFINIDO'}
+
+✅ VALIDACIONES:
+• Tiene empresa: ${validations.has_company ? '✅' : '❌'}
+• Nombre empresa: ${validations.has_company_name ? '✅' : '❌'}
+• Nombre no vacío: ${validations.company_name_not_empty ? '✅' : '❌'}
+• Todo OK: ${validations.all_required_fields_ok ? '✅' : '❌'}
+
+🚀 NOMBRE RESTAURANTE FINAL: 
+"${validations.restaurant_name_final}"
+
+Ver consola para detalles completos.
+    `);
+    
+  } catch (error) {
+    console.error('❌ Error en debug:', error);
+    alert(`Error: ${error.response?.data?.error || error.message}`);
+  }
+}
 
 </script>
 
 <style scoped>
+.btn-table-action.debug {
+  color: #8b5cf6; 
+  border-color: #ddd6fe;
+}
+.btn-table-action.debug:hover {
+  background-color: #8b5cf6;
+  color: white;
+}
 /* Estilos completos y corregidos */
 .page-container { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
 .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }

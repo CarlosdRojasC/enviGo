@@ -49,6 +49,9 @@ const orderSchema = new mongoose.Schema({
   // Información del pedido (Existente)
   total_amount: { type: Number, required: true, default: 0 },
   shipping_cost: { type: Number, default: 0 },
+  tax_amount: { type: Number, default: 0 },
+  discount_amount: { type: Number, default: 0 },
+  payment_method: { type: String, default: 'CASH' },
   
   // --- CAMPOS DE OPTIROUTE AÑADIDOS ---
   priority: { type: String, default: 'Normal' },
@@ -59,16 +62,16 @@ const orderSchema = new mongoose.Schema({
   load2WeightKg: { type: Number, default: 1 }, // Carga 2 (ej: Peso en KG)
   
    // --- NUEVOS CAMPOS PARA SHIPDAY ---
-  shipday_order_id: { type: String, index: true },
-  shipday_driver_id: { type: String, index: true },
-  tracking_link: { type: String },
-  delivery_status: {
-    type: String,
-    enum: ['unassigned', 'assigned', 'started', 'picked_up', 'on_the_way', 'arrived', 'delivered', 'failed_delivery'],
-    default: 'unassigned'
-  },
+    shipday_order_id: { type: String }, // ID de la orden en Shipday
+  shipday_driver_id: { type: String }, // ID del conductor asignado en Shipday
+  shipday_tracking_url: { type: String }, // URL de tracking de Shipday
+  shipday_status: { type: String }, // Estado en Shipday
   proof_of_delivery: { type: evidenceSchema, default: null },
-  
+  // NUEVOS CAMPOS PARA SHIPDAY
+  pickup_address: { type: String }, // Dirección de recogida (restaurante/tienda)
+  pickup_city: { type: String },
+  pickup_phone: { type: String },
+
   // Estados y fechas
   status: { 
     type: String, 
@@ -77,6 +80,10 @@ const orderSchema = new mongoose.Schema({
   },
   order_date: { type: Date, required: true },
   delivery_date: { type: Date },
+
+   // Información adicional
+  items_count: { type: Number, default: 0 },
+  notes: { type: String },
   
   // Datos adicionales
   notes: { type: String },

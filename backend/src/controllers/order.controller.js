@@ -380,41 +380,108 @@ async getOrdersTrend(req, res) {
   }
 }
 
-   /**
-   * Asigna un pedido a un conductor y, en el proceso, crea la orden en Shipday si no existe.
-   * Esta acción es iniciada por un administrador desde el panel.
+/**
+   * DEBUG: assignToDriver con logging completo
    */
   async assignToDriver(req, res) {
     try {
       const { orderId } = req.params;
-      const { driverId } = req.body; // Este es el ID del conductor de Shipday (carrierId)
+      const { driverId } = req.body;
+
+      console.log('🔍 DEBUG - assignToDriver iniciado:', { orderId, driverId });
 
       if (!driverId) {
         return res.status(400).json({ error: 'Se requiere el ID del conductor de Shipday.' });
       }
 
-      const order = await Order.findById(orderId);
+      // Obtener orden con población completa
+      const order = await Order.findById(orderId)
+        .populate('company_id')
+        .populate('channel_id');
+        
       if (!order) {
         return res.status(404).json({ error: 'Pedido no encontrado.' });
       }
 
+      console.log('📋 DEBUG - Orden encontrada:', {
+        order_number: order.order_number,
+        company_id: order.company_id,
+        customer_name: order.customer_name,
+        shipping_address: order.shipping_address,
+        shipday_order_id: order.shipday_order_id
+      });
+
       let result;
 
-      // Caso 1: La orden NO está en Shipday → Crear y asignar en un solo paso
+      // Caso 1: Crear y asignar
       if (!order.shipday_order_id) {
-        console.log('📦 Creando y asignando orden nueva en Shipday...');
-        result = await ShipdayService.createAndAssignOrder(order, driverId);
+        console.log('📦 DEBUG - Creando nueva orden en Shipday...');
+        
+        // Verificar datos de empresa
+        if (!order.company_id) {
+          console.error('❌ CRÍTICO: Orden sin company_id');
+          return res.status(400).json({ error: 'Orden sin empresa asociada' });
+        }
+
+        console.log('🏢 DEBUG - Datos de empresa:', {
+          _id: order.company_id._id,
+          name: order.company_id.name,
+          phone: order.company_id.phone
+        });
+        
+        // Preparar orden enriquecida
+        const enrichedOrder = {
+          ...order.toObject(),
+          company_name: order.company_id.name || 'Tienda Principal',
+          company_phone: order.company_id.phone || '',
+          pickup_address: order.pickup_address || order.shipping_address,
+        };
+        
+        console.log('💎 DEBUG - Orden enriquecida:', {
+          order_number: enrichedOrder.order_number,
+          company_name: enrichedOrder.company_name,
+          company_phone: enrichedOrder.company_phone,
+          customer_name: enrichedOrder.customer_name,
+          shipping_address: enrichedOrder.shipping_address,
+          total_amount: enrichedOrder.total_amount,
+          shipping_cost: enrichedOrder.shipping_cost
+        });
+        
+        try {
+          result = await ShipdayService.createAndAssignOrder(enrichedOrder, driverId);
+          console.log('✅ DEBUG - Resultado de createAndAssignOrder:', result);
+        } catch (shipdayError) {
+          console.error('❌ DEBUG - Error en Shipday:', shipdayError);
+          return res.status(400).json({ 
+            error: 'Error en Shipday: ' + shipdayError.message,
+            details: shipdayError.message
+          });
+        }
+        
+        // Verificar resultado
+        if (!result.success || result.order?.success === false) {
+          console.error('❌ DEBUG - Shipday retornó error:', result);
+          return res.status(400).json({ 
+            error: 'Error en Shipday: ' + (result.order?.response || result.message || 'Error desconocido'),
+            shipday_error: result.order,
+            full_result: result
+          });
+        }
         
         res.status(200).json({ 
           message: 'Pedido creado y asignado en Shipday exitosamente.',
-          ...result
+          shipday_order_id: result.order?.orderId,
+          success: true,
+          debug_info: {
+            company_name: enrichedOrder.company_name,
+            restaurant_name_sent: enrichedOrder.company_name
+          }
         });
       } 
-      // Caso 2: La orden YA está en Shipday → Solo asignar conductor
+      // Caso 2: Solo asignar
       else {
-        console.log('👨‍💼 Asignando conductor a orden existente en Shipday...');
+        console.log('👨‍💼 DEBUG - Asignando a orden existente...');
         
-        // Primero obtener la información del conductor para conseguir su email
         const drivers = await ShipdayService.getDrivers();
         const driver = drivers.find(d => d.id === driverId || d.carrierId === driverId);
         
@@ -422,40 +489,58 @@ async getOrdersTrend(req, res) {
           return res.status(404).json({ error: 'Conductor no encontrado en Shipday.' });
         }
 
-        // Asignar usando el email del conductor
         await ShipdayService.assignOrder(order.shipday_order_id, driver.email);
         
-        // Actualizar orden local
         order.shipday_driver_id = driverId;
-        order.status = 'shipped'; // Estado para "asignado a conductor"
+        order.status = 'shipped';
         await order.save();
 
         res.status(200).json({ 
           message: 'Conductor asignado exitosamente a la orden existente.',
           order_id: order.shipday_order_id,
-          driver_email: driver.email
+          driver_email: driver.email,
+          success: true
         });
       }
 
     } catch (error) {
-      console.error('Error en assignToDriver:', error);
+      console.error('❌ DEBUG - Error completo en assignToDriver:', error);
+      
+      let errorMessage = 'Error interno del servidor';
+      
+      if (error.message.includes('Column') && error.message.includes('cannot be null')) {
+        errorMessage = 'Error en Shipday: Faltan datos del restaurante. Verifica que la empresa tenga nombre configurado.';
+      } else if (error.message.includes('API Key')) {
+        errorMessage = 'Error de autenticación con Shipday. Verifica tu API Key.';
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
       res.status(500).json({ 
-        error: error.message || 'Error interno del servidor',
-        details: error.stack // Solo en desarrollo
+        error: errorMessage,
+        debug_details: process.env.NODE_ENV === 'development' ? {
+          message: error.message,
+          stack: error.stack
+        } : undefined
       });
     }
   }
 
+  /**
+   * MEJORADO: Método para crear en Shipday sin asignar conductor
+   */
   async createInShipday(req, res) {
     try {
       const { orderId } = req.params;
 
-      const order = await Order.findById(orderId);
+      const order = await Order.findById(orderId)
+        .populate('company_id', 'name phone')
+        .populate('channel_id', 'channel_name');
+        
       if (!order) {
         return res.status(404).json({ error: 'Pedido no encontrado.' });
       }
 
-      // Verificar si ya está en Shipday
       if (order.shipday_order_id) {
         return res.status(400).json({ error: 'Este pedido ya está en Shipday.' });
       }
@@ -468,9 +553,36 @@ async getOrdersTrend(req, res) {
         customerEmail: order.customer_email || '',
         customerPhoneNumber: order.customer_phone || '',
         deliveryInstruction: order.notes || 'Sin instrucciones especiales',
+        
+        // Información del restaurante
+        restaurantName: order.company_id?.name || 'Tienda Principal',
+        restaurantAddress: order.shipping_address, // Por defecto
+        restaurantPhoneNumber: order.company_id?.phone || '',
+        
+        // Información financiera
+        deliveryFee: parseFloat(order.shipping_cost) || 0,
+        total: parseFloat(order.total_amount) || parseFloat(order.shipping_cost) || 0,
+        paymentMethod: 'CASH',
+        
+        // Items básicos
+        orderItems: [
+          {
+            name: `Pedido ${order.order_number}`,
+            quantity: order.items_count || 1,
+            price: parseFloat(order.total_amount) || parseFloat(order.shipping_cost) || 0
+          }
+        ]
       };
 
       const shipdayOrder = await ShipdayService.createOrder(shipdayData);
+
+      // Verificar respuesta de Shipday
+      if (!shipdayOrder.success || shipdayOrder.success === false) {
+        return res.status(400).json({ 
+          error: 'Error en Shipday: ' + (shipdayOrder.response || 'Error desconocido'),
+          shipday_error: shipdayOrder
+        });
+      }
 
       // Actualizar orden local
       order.shipday_order_id = shipdayOrder.orderId;
@@ -479,7 +591,8 @@ async getOrdersTrend(req, res) {
 
       res.status(200).json({ 
         message: 'Pedido creado en Shipday exitosamente.',
-        shipday_order_id: shipdayOrder.orderId
+        shipday_order_id: shipdayOrder.orderId,
+        success: true
       });
 
     } catch (error) {

@@ -2,16 +2,26 @@
 const mongoose = require('mongoose');
 
 const companySchema = new mongoose.Schema({
-  name: { type: String, required: true, unique: true },
+   name: { 
+    type: String, 
+    required: true,
+    trim: true,
+    minlength: 1 // Asegurar que no esté vacío
+  },
   slug: { type: String, required: true, unique: true },
   
   // NUEVOS: Campos de facturación
   rut: { type: String },
   email: { type: String },
   contact_email: { type: String },
-  phone: { type: String },
-  address: { type: String },
-  
+   phone: { 
+    type: String,
+    default: '' // Permitir vacío pero no null
+  },
+  address: { 
+    type: String,
+    default: ''
+  },
   // Configuración de precios
   price_per_order: { type: Number, default: 0 },
   plan_type: { 
@@ -36,6 +46,11 @@ const companySchema = new mongoose.Schema({
 companySchema.pre('save', function(next) {
   this.updated_at = Date.now();
   next();
+  
+    if (!this.name || this.name.trim() === '') {
+    this.name = 'Empresa Sin Nombre';
+  }
+  
 });
 
 // Método para calcular precio total con IVA
@@ -58,6 +73,7 @@ companySchema.methods.getBillingInfo = function() {
     totalPerOrder,
     billingCycle: this.billing_cycle
   };
+
 };
 
 module.exports = mongoose.model('Company', companySchema);

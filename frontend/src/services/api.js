@@ -76,10 +76,12 @@ const orders = {
   updateStatus: (id, status) => api.patch(`/orders/${id}/status`, { status }),
   getStats: (params = {}) => api.get('/orders/stats', { params }),
   getTrend: (params = {}) => api.get('/orders/trend', { params }),
+  debugShipday: (orderId) => api.get(`/orders/${orderId}/debug-shipday`),
   exportForOptiRoute: (params = {}) => api.get('/orders/export', { 
     params,
     responseType: 'blob'
   }),
+  
     
   // ==================== NUEVOS MÉTODOS SHIPDAY ====================
   

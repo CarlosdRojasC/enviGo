@@ -164,6 +164,113 @@ router.get('/orders/stats', authenticateToken, orderController.getStats);
 router.get('/orders/trend', authenticateToken, orderController.getOrdersTrend);
 router.get('/orders/export', authenticateToken, isAdmin, orderController.exportForOptiRoute);
 router.post('/orders', authenticateToken, validateOrderCreation, orderController.create);
+// DEBUG: Ruta para verificar datos de orden antes de enviar a Shipday
+router.get('/orders/:orderId/debug-shipday', authenticateToken, isAdmin, async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    
+    const order = await Order.findById(orderId)
+      .populate('company_id')
+      .populate('channel_id');
+      
+    if (!order) {
+      return res.status(404).json({ error: 'Pedido no encontrado.' });
+    }
+
+    const debugInfo = {
+      // Datos básicos de la orden
+      order_basics: {
+        _id: order._id,
+        order_number: order.order_number,
+        customer_name: order.customer_name,
+        shipping_address: order.shipping_address,
+        total_amount: order.total_amount,
+        shipping_cost: order.shipping_cost,
+        status: order.status,
+        shipday_order_id: order.shipday_order_id
+      },
+      
+      // Datos de la empresa
+      company_data: {
+        company_id: order.company_id?._id,
+        company_name: order.company_id?.name,
+        company_phone: order.company_id?.phone,
+        company_email: order.company_id?.email,
+        company_address: order.company_id?.address
+      },
+      
+      // Datos del canal
+      channel_data: {
+        channel_id: order.channel_id?._id,
+        channel_name: order.channel_id?.channel_name,
+        channel_type: order.channel_id?.channel_type
+      },
+      
+      // Payload que se enviaría a Shipday
+      shipday_payload_preview: {
+        orderNumber: order.order_number,
+        customerName: order.customer_name || 'Cliente Sin Nombre',
+        customerAddress: order.shipping_address || 'Dirección no especificada',
+        customerEmail: order.customer_email || '',
+        customerPhoneNumber: order.customer_phone || '',
+        deliveryInstruction: order.notes || 'Sin instrucciones especiales',
+        
+        // CRÍTICO: Datos del restaurante
+        restaurantName: order.company_id?.name || 'Tienda Principal',
+        restaurantAddress: order.pickup_address || order.shipping_address || 'Dirección no especificada',
+        restaurantPhoneNumber: order.company_id?.phone || '',
+        
+        // Financiero
+        deliveryFee: parseFloat(order.shipping_cost) || 1,
+        total: parseFloat(order.total_amount) || parseFloat(order.shipping_cost) || 1,
+        paymentMethod: order.payment_method || 'CASH',
+        
+        // Items
+        orderItems: [
+          {
+            name: `Pedido ${order.order_number}`,
+            quantity: order.items_count || 1,
+            price: parseFloat(order.total_amount) || parseFloat(order.shipping_cost) || 1
+          }
+        ]
+      },
+      
+      // Validaciones
+      validations: {
+        has_company: !!order.company_id,
+        has_company_name: !!(order.company_id?.name),
+        company_name_not_empty: !!(order.company_id?.name && order.company_id.name.trim() !== ''),
+        has_customer_name: !!order.customer_name,
+        has_shipping_address: !!order.shipping_address,
+        restaurant_name_final: order.company_id?.name || 'Tienda Principal',
+        all_required_fields_ok: !!(
+          order.order_number &&
+          (order.customer_name || 'Cliente Sin Nombre') &&
+          (order.shipping_address || 'Dirección no especificada') &&
+          (order.company_id?.name || 'Tienda Principal')
+        )
+      }
+    };
+
+    res.json({
+      success: true,
+      debug_info: debugInfo,
+      recommendations: debugInfo.validations.all_required_fields_ok 
+        ? ['✅ Todos los campos requeridos están presentes']
+        : [
+            '❌ Faltan campos requeridos:',
+            !order.order_number && '- order_number',
+            !order.customer_name && '- customer_name',
+            !order.shipping_address && '- shipping_address',
+            !(order.company_id?.name) && '- company name'
+          ].filter(Boolean)
+    });
+
+  } catch (error) {
+    console.error('Error en debug:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
 router.get('/orders/:id', authenticateToken, validateMongoId('id'), orderController.getById);
 router.patch('/orders/:id/status', authenticateToken, validateMongoId('id'), isAdmin, orderController.updateStatus);
 router.post('/orders/:orderId/create-shipday', authenticateToken, isAdmin, orderController.createInShipday);
@@ -495,5 +602,4 @@ router.get('/stats/dashboard', authenticateToken, async (req, res) => {
     res.status(500).json({ error: 'Error obteniendo estadísticas' });
   }
 });
-
 module.exports = router;
