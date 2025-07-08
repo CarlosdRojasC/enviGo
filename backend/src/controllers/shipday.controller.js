@@ -1,6 +1,7 @@
 // backend/src/controllers/shipday.controller.js
 
 const ShipdayService = require('../services/shipday.service');
+const Order = require('../models/Order'); // Asegúrate de que esta línea esté al inicio del archivo
 
 class ShipdayController {
   // ==================== CONEXIÓN ====================
@@ -358,12 +359,12 @@ class ShipdayController {
   /**
    * ✅ CORREGIDO Y VERIFICADO: Procesa webhooks de Shipday para actualizar el estado de los pedidos.
    */
-  async handleWebhook(req, res) {
+ async handleWebhook(req, res) {
     try {
       const webhookData = req.body;
       console.log('📥 Webhook recibido de Shipday:', JSON.stringify(webhookData, null, 2));
 
-      // 1. Extraer los datos correctos del payload que nos enviaste
+      // 1. Extraer los datos correctos del payload
       const shipdayOrderId = webhookData.order?.id;
       const shipdayStatus = webhookData.order_status;
       const eventType = webhookData.event;
@@ -374,8 +375,7 @@ class ShipdayController {
         return res.status(400).json({ success: false, error: 'Payload inválido.' });
       }
 
-      // 2. Comprobar el evento y el estado
-      // El evento principal es ORDER_COMPLETED, y el estado es ALREADY_DELIVERED
+      // 2. Comprobar el evento y el estado de entrega
       if (eventType === 'ORDER_COMPLETED' || shipdayStatus === 'ALREADY_DELIVERED') {
         
         console.log(`🔄 Evento de entrega detectado para Shipday ID: ${shipdayOrderId}`);
@@ -384,22 +384,18 @@ class ShipdayController {
         const order = await Order.findOne({ shipday_order_id: shipdayOrderId.toString() });
 
         if (order) {
-          // Si la orden ya está entregada, no hacer nada para evitar procesos duplicados
           if (order.status === 'delivered') {
             console.log(`ℹ️  La orden #${order.order_number} ya estaba marcada como entregada. No se requieren cambios.`);
           } else {
             // 4. Actualizar el estado y la fecha de entrega
             order.status = 'delivered';
-            // El payload incluye la fecha de entrega, ¡usémosla!
             if (webhookData.order?.delivery_time) {
               order.delivery_date = new Date(webhookData.order.delivery_time);
             } else {
               order.delivery_date = new Date();
             }
-            
-            order.shipday_status = shipdayStatus; // Guardar el estado exacto de Shipday
+            order.shipday_status = shipdayStatus;
             await order.save();
-            
             console.log(`✅ Orden local #${order.order_number} actualizada a "entregado".`);
           }
         } else {
@@ -409,7 +405,7 @@ class ShipdayController {
         console.log(`ℹ️  Evento "${eventType}" con estado "${shipdayStatus}" recibido. No se requiere acción de entrega.`);
       }
 
-      // 5. Responder a Shipday con un 200 OK para confirmar la recepción
+      // 5. Responder a Shipday con un 200 OK
       res.status(200).json({ success: true, message: 'Webhook procesado.' });
 
     } catch (error) {
@@ -419,8 +415,7 @@ class ShipdayController {
         error: error.message 
       });
     }
-  }
 }
-
+}
 // IMPORTANTE: Exportar una instancia, no la clase
 module.exports = new ShipdayController();

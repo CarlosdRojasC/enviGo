@@ -147,7 +147,7 @@ class WooCommerceService {
                 customer_email: wooOrder.billing.email,
                 customer_phone: wooOrder.billing.phone,
                 shipping_address: this.getShippingAddress(wooOrder),
-                shipping_city: wooOrder.shipping.city || wooOrder.billing.city,
+                shipping_commune: wooOrder.shipping.city || wooOrder.billing.city,
                 // --- CAMBIO: Usar el costo de envío fijo de la empresa ---
                 shipping_cost: fixedShippingCost,
                 status: this.mapOrderStatus(wooOrder),
@@ -210,7 +210,7 @@ class WooCommerceService {
             customer_email: wooOrder.billing.email,
             customer_phone: wooOrder.billing.phone,
             shipping_address: this.getShippingAddress(wooOrder),
-            shipping_city: wooOrder.shipping.city || wooOrder.billing.city,
+            shipping_commune: wooOrder.shipping.city || wooOrder.billing.city,
             // --- CAMBIO: Usar el costo de envío fijo al crear desde el webhook ---
             shipping_cost: fixedShippingCost,
             status: this.mapOrderStatus(wooOrder),
