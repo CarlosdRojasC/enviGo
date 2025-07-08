@@ -358,22 +358,47 @@ class ShipdayController {
   async handleWebhook(req, res) {
     try {
       const webhookData = req.body;
-      const headers = req.headers;
+      console.log('📥 Webhook recibido de Shipday:', JSON.stringify(webhookData, null, 2));
+
+      // Asumimos que el payload de Shipday tiene una estructura como:
+      // { "orderId": "12345", "orderStatus": "DELIVERED", ... }
+      // ¡IMPORTANTE! Verifica en tus logs la estructura exacta del payload.
       
-      console.log('📥 Webhook recibido de Shipday:', webhookData);
-      console.log('📋 Headers:', headers);
+      const { orderId, orderStatus } = webhookData;
 
-      // Implementar lógica de procesamiento de webhook
-      // Validar firma si Shipday la proporciona
-      // Procesar eventos (order_status_changed, driver_location_updated, etc.)
+      if (!orderId || !orderStatus) {
+        console.warn('⚠️ Webhook de Shipday recibido sin orderId u orderStatus. Ignorando.');
+        return res.status(400).json({ success: false, error: 'Payload inválido.' });
+      }
 
-      res.status(200).json({
-        success: true,
-        message: 'Webhook procesado exitosamente',
-        timestamp: new Date().toISOString()
-      });
+      // 1. Procesar solo si el estado es 'DELIVERED' (Entregado)
+      if (orderStatus.toUpperCase() === 'DELIVERED') {
+        console.log(`🔄 Estado "DELIVERED" detectado para la orden de Shipday ID: ${orderId}`);
+
+        // 2. Buscar la orden en tu base de datos usando el ID de Shipday
+        const order = await Order.findOne({ shipday_order_id: orderId });
+
+        if (order) {
+          // 3. Actualizar el estado y la fecha de entrega en tu sistema
+          order.status = 'delivered';
+          order.delivery_date = new Date(); // Guardar la fecha de entrega
+          order.shipday_status = 'DELIVERED'; // Opcional: guardar el estado de shipday
+          await order.save();
+          
+          console.log(`✅ Orden local #${order.order_number} actualizada a "entregado".`);
+
+        } else {
+          console.warn(`⚠️  No se encontró una orden local correspondiente al Shipday ID: ${orderId}`);
+        }
+      } else {
+        console.log(`ℹ️  Webhook recibido con estado "${orderStatus}". No se requiere acción.`);
+      }
+
+      // 4. Responder a Shipday con un 200 OK para confirmar la recepción
+      res.status(200).json({ success: true, message: 'Webhook procesado.' });
+
     } catch (error) {
-      console.error('❌ Error procesando webhook:', error);
+      console.error('❌ Error procesando el webhook de Shipday:', error);
       res.status(500).json({ 
         success: false, 
         error: error.message 
