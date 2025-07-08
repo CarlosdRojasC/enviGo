@@ -173,28 +173,41 @@
     </Modal>
 
     <Modal v-model="showAssignModal" title="Asignar Conductor" width="500px">
-      <div v-if="selectedOrder">
-        <p>Asignando pedido <strong>#{{ selectedOrder.order_number }}</strong> a un conductor de Shipday.</p>
-        
-        <div v-if="loadingDrivers" class="loading-state">Cargando conductores...</div>
-        
-        <div v-else class="form-group">
-          <label>Conductor Disponible</label>
-          <select v-model="selectedDriverId">
-            <option disabled value="">-- Selecciona un conductor --</option>
-            <option v-for="driver in availableDrivers" :key="driver.id" :value="driver.id">
-              {{ driver.name }} ({{ driver.email }})
-            </option>
-          </select>
-        </div>
+     <div v-if="selectedOrder">
+  <p>Asignando pedido <strong>#{{ selectedOrder.order_number }}</strong> a un conductor de Shipday.</p>
+  
+  <!-- NUEVO: Botón de debug -->
+  <div class="debug-section">
+    <button @click="debugDrivers" class="btn-debug" type="button">
+      🔍 Debug Conductores
+    </button>
+  </div>
+  
+  <div v-if="loadingDrivers" class="loading-state">Cargando conductores...</div>
+  
+  <div v-else class="form-group">
+    <label>Conductor Disponible</label>
+    <select v-model="selectedDriverId">
+      <option disabled value="">-- Selecciona un conductor --</option>
+      <option v-for="driver in availableDrivers" :key="driver.id" :value="driver.id">
+        {{ driver.name }} ({{ driver.email }}) - {{ driver.isActive ? 'Activo' : 'Inactivo' }}
+      </option>
+    </select>
+    
+    <!-- NUEVO: Info del conductor seleccionado -->
+    <div v-if="selectedDriverId" class="driver-info">
+      <p><strong>Conductor seleccionado:</strong></p>
+      <pre>{{ JSON.stringify(availableDrivers.find(d => d.id === selectedDriverId), null, 2) }}</pre>
+    </div>
+  </div>
 
-        <div class="modal-actions">
-          <button @click="showAssignModal = false" class="btn-cancel">Cancelar</button>
-          <button @click="confirmAssignment" :disabled="!selectedDriverId || isAssigning" class="btn-save">
-            {{ isAssigning ? 'Asignando...' : 'Confirmar Asignación' }}
-          </button>
-        </div>
-      </div>
+  <div class="modal-actions">
+    <button @click="showAssignModal = false" class="btn-cancel">Cancelar</button>
+    <button @click="confirmAssignment" :disabled="!selectedDriverId || isAssigning" class="btn-save">
+      {{ isAssigning ? 'Asignando...' : 'Confirmar Asignación' }}
+    </button>
+  </div>
+</div>
     </Modal>
   </div>
 </template>
@@ -342,6 +355,73 @@ Ver consola para detalles completos.
   }
 }
 
+async function debugDrivers() {
+  try {
+    console.log('🔍 Iniciando debug de conductores...');
+    
+    // Obtener conductores desde Shipday
+    const response = await shipdayService.getDrivers();
+    console.log('📋 Respuesta completa de getDrivers:', response);
+    
+    const drivers = response.data?.data || response.data || [];
+    console.log('👥 Conductores procesados:', drivers);
+    
+    // Mostrar información detallada
+    drivers.forEach((driver, index) => {
+      console.log(`👨‍💼 Conductor ${index + 1}:`, {
+        id: driver.id,
+        carrierId: driver.carrierId,
+        name: driver.name,
+        email: driver.email,
+        isActive: driver.isActive,
+        isOnShift: driver.isOnShift,
+        status: driver.status
+      });
+    });
+    
+    // Verificar filtros actuales
+    const filtered = drivers.filter(driver => driver.isActive && !driver.isOnShift);
+    console.log('🎯 Conductores filtrados (disponibles):', filtered);
+    
+    alert(`
+🔍 DEBUG CONDUCTORES
+
+📊 Total conductores: ${drivers.length}
+✅ Activos: ${drivers.filter(d => d.isActive).length}
+🚚 En turno: ${drivers.filter(d => d.isOnShift).length}
+⭐ Disponibles: ${filtered.length}
+
+Ver consola para detalles completos.
+    `);
+    
+  } catch (error) {
+    console.error('❌ Error en debug de conductores:', error);
+    alert('Error obteniendo conductores: ' + error.message);
+  }
+}
+
+async function fetchAvailableDrivers() {
+  loadingDrivers.value = true;
+  try {
+    const response = await shipdayService.getDrivers();
+    console.log('📋 Respuesta de conductores:', response);
+    
+    const allDrivers = response.data?.data || response.data || [];
+    console.log('👥 Todos los conductores:', allDrivers);
+    
+    // CAMBIO: Mostrar TODOS los conductores activos, no solo los disponibles
+    availableDrivers.value = allDrivers.filter(driver => driver.isActive);
+    
+    console.log('⭐ Conductores mostrados en select:', availableDrivers.value);
+    
+  } catch (error) {
+    alert("Error al cargar los conductores desde Shipday.");
+    console.error(error);
+  } finally {
+    loadingDrivers.value = false;
+  }
+}
+
 </script>
 
 <style scoped>
@@ -352,6 +432,41 @@ Ver consola para detalles completos.
 .btn-table-action.debug:hover {
   background-color: #8b5cf6;
   color: white;
+}
+.debug-section {
+  margin-bottom: 16px;
+  padding: 12px;
+  background-color: #f8f9fa;
+  border-radius: 6px;
+  border: 1px solid #e9ecef;
+}
+
+.btn-debug {
+  background-color: #8b5cf6;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.btn-debug:hover {
+  background-color: #7c3aed;
+}
+
+.driver-info {
+  margin-top: 12px;
+  padding: 8px;
+  background-color: #f1f5f9;
+  border-radius: 4px;
+  font-size: 11px;
+}
+
+.driver-info pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-all;
 }
 /* Estilos completos y corregidos */
 .page-container { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
