@@ -1,27 +1,27 @@
-// ==================== ARCHIVO: frontend/src/views/Orders.vue ====================
-
 <template>
-  <div class="page-container">
+  <div class="orders-page">
+    <!-- Header con estadísticas -->
     <div class="page-header">
       <h1 class="page-title">Mis Pedidos</h1>
       <div class="header-stats">
-        <div class="stat-card">
+        <div class="stat-item">
           <span class="stat-number">{{ orders.length }}</span>
-          <span class="stat-label">Pedidos</span>
+          <span class="stat-label">Total</span>
         </div>
-        <div class="stat-card">
-          <span class="stat-number">{{ getOrdersByStatus('delivered').length }}</span>
-          <span class="stat-label">Entregados</span>
-        </div>
-        <div class="stat-card">
+        <div class="stat-item">
           <span class="stat-number">{{ getOrdersByStatus('shipped').length }}</span>
           <span class="stat-label">En Tránsito</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-number">{{ getOrdersByStatus('delivered').length }}</span>
+          <span class="stat-label">Entregados</span>
         </div>
       </div>
     </div>
     
+    <!-- Filtros compactos -->
     <div class="filters-section">
-      <div class="filters">
+      <div class="filters-row">
         <select v-model="filters.status" @change="fetchOrders" class="filter-select">
           <option value="">📋 Todos los estados</option>
           <option value="pending">⏳ Pendientes</option>
@@ -38,35 +38,24 @@
           </option>
         </select>
         
-        <input 
-          type="date" 
-          v-model="filters.date_from" 
-          @change="fetchOrders" 
-          class="filter-input"
-          placeholder="Fecha desde"
-        />
-        <input 
-          type="date" 
-          v-model="filters.date_to" 
-          @change="fetchOrders" 
-          class="filter-input"
-          placeholder="Fecha hasta"
-        />
+        <input type="date" v-model="filters.date_from" @change="fetchOrders" class="filter-input" />
+        <input type="date" v-model="filters.date_to" @change="fetchOrders" class="filter-input" />
         
         <input 
           type="text" 
           v-model="filters.search" 
           @input="debounceSearch"
-          placeholder="🔍 Buscar por cliente, email o #pedido"
+          placeholder="🔍 Buscar pedidos..."
           class="search-input"
         />
       </div>
     </div>
 
-    <div class="orders-section">
+    <!-- Tabla de pedidos -->
+    <div class="orders-table-section">
       <div v-if="loadingOrders" class="loading-state">
         <div class="loading-spinner"></div>
-        <p>Cargando tus pedidos...</p>
+        <p>Cargando pedidos...</p>
       </div>
       
       <div v-else-if="orders.length === 0" class="empty-state">
@@ -75,166 +64,183 @@
         <p>No se encontraron pedidos con los filtros actuales.</p>
       </div>
       
-      <div v-else class="orders-grid">
-        <div v-for="order in orders" :key="order._id" class="order-card" :class="getOrderCardClass(order)">
-          
-          <!-- Header de la tarjeta -->
-          <div class="order-header">
-            <div class="order-number-section">
-              <h3 class="order-number">#{{ order.order_number }}</h3>
-              <span class="order-date">{{ formatDate(order.order_date) }}</span>
-            </div>
-            <div class="order-status-section">
-              <span class="status-badge" :class="order.status">
-                {{ getStatusIcon(order.status) }} {{ getStatusName(order.status) }}
-              </span>
-            </div>
-          </div>
-
-          <!-- Información del cliente -->
-          <div class="order-customer">
-            <div class="customer-avatar">{{ getCustomerInitials(order.customer_name) }}</div>
-            <div class="customer-info">
-              <div class="customer-name">{{ order.customer_name }}</div>
-              <div class="customer-contact">
-                <span v-if="order.customer_email" class="customer-email">
-                  📧 {{ order.customer_email }}
-                </span>
-                <span v-if="order.customer_phone" class="customer-phone">
-                  📱 {{ order.customer_phone }}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <!-- Dirección de entrega con comuna destacada -->
-          <div class="order-delivery">
-            <div class="delivery-icon">🏠</div>
-            <div class="delivery-details">
-              <div class="delivery-address">{{ order.shipping_address }}</div>
-              <div class="delivery-location">
-                <span class="commune-tag">{{ order.shipping_commune || 'Sin comuna' }}</span>
-                <span class="region">{{ order.shipping_state || 'RM' }}</span>
-              </div>
-            </div>
-          </div>
-
-          <!-- NUEVO: Sección de tracking si está disponible -->
-          <div v-if="hasTrackingInfo(order)" class="order-tracking">
-            <div class="tracking-header">
-              <span class="tracking-icon">🚚</span>
-              <span class="tracking-title">Estado de Entrega</span>
-              <span v-if="order.shipday_tracking_url" class="live-indicator">
-                📡 En Vivo
-              </span>
-            </div>
-            
-            <!-- Quick tracking info -->
-            <div class="tracking-quick-info">
-              <div v-if="order.shipday_driver_id" class="tracking-item">
-                <span class="tracking-label">👨‍💼 Conductor:</span>
-                <span class="tracking-value">{{ getDriverDisplayName(order) }}</span>
-              </div>
+      <div v-else class="table-container">
+        <table class="orders-table">
+          <thead>
+            <tr>
+              <th class="col-order">#Pedido</th>
+              <th class="col-customer">Cliente</th>
+              <th class="col-address">Dirección</th>
+              <th class="col-status">Estado</th>
+              <th class="col-tracking">Tracking</th>
+              <th class="col-amount">Total</th>
+              <th class="col-date">Fecha</th>
+              <th class="col-actions">Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="order in orders" :key="order._id" class="order-row" :class="getRowClass(order)">
               
-              <div v-if="order.status === 'shipped'" class="tracking-item">
-                <span class="tracking-label">🚚 Estado:</span>
-                <span class="tracking-value in-transit">En camino a tu dirección</span>
-              </div>
+              <!-- Número de pedido -->
+              <td class="col-order">
+                <div class="order-number-cell">
+                  <span class="order-number">#{{ order.order_number }}</span>
+                  <span v-if="order.channel_id" class="channel-badge" :class="order.channel_id.channel_type">
+                    {{ getChannelIcon(order.channel_id.channel_type) }}
+                  </span>
+                </div>
+              </td>
               
-              <div v-if="order.delivery_date" class="tracking-item">
-                <span class="tracking-label">✅ Entregado:</span>
-                <span class="tracking-value delivered">{{ formatDeliveryTime(order.delivery_date) }}</span>
-              </div>
+              <!-- Cliente -->
+              <td class="col-customer">
+                <div class="customer-cell">
+                  <div class="customer-name">{{ order.customer_name }}</div>
+                  <div v-if="order.customer_phone" class="customer-contact">
+                    📱 {{ order.customer_phone }}
+                  </div>
+                </div>
+              </td>
               
-              <div v-if="order.status === 'processing'" class="tracking-item">
-                <span class="tracking-label">⚙️ Estado:</span>
-                <span class="tracking-value processing">Preparando tu pedido</span>
-              </div>
-            </div>
-            
-            <!-- Call to action para tracking -->
-            <div v-if="order.shipday_tracking_url" class="tracking-cta">
-              <button @click="openTrackingModal(order)" class="quick-track-btn">
-                📍 Ver en Mapa en Tiempo Real
-              </button>
-            </div>
-          </div>
-
-          <!-- Canal de venta y monto -->
-          <div class="order-details">
-            <div class="channel-info">
-              <span v-if="order.channel_id" class="channel-badge" :class="order.channel_id.channel_type">
-                {{ getChannelIcon(order.channel_id.channel_type) }} {{ order.channel_id.channel_name }}
-              </span>
-            </div>
-            <div class="order-amount">
-              <span class="amount-label">Total:</span>
-              <span class="amount-value">${{ formatCurrency(order.total_amount || order.shipping_cost) }}</span>
-            </div>
-          </div>
-
-          <!-- Notas si existen -->
-          <div v-if="order.notes" class="order-notes">
-            <div class="notes-icon">📝</div>
-            <div class="notes-text">{{ order.notes }}</div>
-          </div>
-
-          <!-- Acciones -->
-          <div class="order-actions">
-            <button @click="openOrderDetailsModal(order)" class="action-btn primary">
-              👁️ Ver Detalles
-            </button>
-            <button 
-              v-if="hasTrackingInfo(order)" 
-              @click="openTrackingModal(order)"
-              class="action-btn tracking"
-              :class="{ 'live-tracking': order.shipday_tracking_url }">
-              🚚 {{ order.shipday_tracking_url ? 'Rastrear Live' : 'Seguimiento' }}
-            </button>
-            <button 
-              v-if="canContactSupport(order)" 
-              @click="contactSupport(order)"
-              class="action-btn support">
-              💬 Soporte
-            </button>
-          </div>
-        </div>
+              <!-- Dirección -->
+              <td class="col-address">
+                <div class="address-cell">
+                  <div class="address-text">{{ truncateAddress(order.shipping_address) }}</div>
+                  <div v-if="order.shipping_commune" class="commune-tag">
+                    📍 {{ order.shipping_commune }}
+                  </div>
+                </div>
+              </td>
+              
+              <!-- Estado -->
+              <td class="col-status">
+                <div class="status-cell">
+                  <span class="status-badge" :class="order.status">
+                    {{ getStatusIcon(order.status) }} {{ getStatusName(order.status) }}
+                  </span>
+                  <div v-if="order.driver_info?.name" class="driver-info">
+                    👨‍💼 {{ order.driver_info.name }}
+                  </div>
+                </div>
+              </td>
+              
+              <!-- Tracking -->
+              <td class="col-tracking">
+                <div class="tracking-cell">
+                  <!-- Live tracking -->
+                  <div v-if="order.shipday_tracking_url" class="tracking-live">
+                    <span class="live-indicator">🔴 Live</span>
+                    <button @click="openLiveTracking(order)" class="track-live-btn">
+                      📍 Ver Mapa
+                    </button>
+                  </div>
+                  
+                  <!-- Proof of delivery -->
+                  <div v-else-if="hasProofOfDelivery(order)" class="proof-delivery">
+                    <span class="proof-indicator">📋 Prueba</span>
+                    <button @click="showProofOfDelivery(order)" class="proof-btn">
+                      📸 Ver Prueba
+                    </button>
+                  </div>
+                  
+                  <!-- Timeline tracking -->
+                  <div v-else-if="hasTrackingInfo(order)" class="tracking-available">
+                    <span class="tracking-indicator">📦 Info</span>
+                    <button @click="openTrackingModal(order)" class="tracking-btn">
+                      🚚 Seguimiento
+                    </button>
+                  </div>
+                  
+                  <!-- No tracking -->
+                  <div v-else class="no-tracking">
+                    <span class="no-tracking-text">Sin tracking</span>
+                  </div>
+                </div>
+              </td>
+              
+              <!-- Total -->
+              <td class="col-amount">
+                <div class="amount-cell">
+                  <span class="amount">${{ formatCurrency(order.total_amount || order.shipping_cost) }}</span>
+                </div>
+              </td>
+              
+              <!-- Fecha -->
+              <td class="col-date">
+                <div class="date-cell">
+                  <div class="order-date">{{ formatDate(order.order_date) }}</div>
+                  <div v-if="order.delivery_date" class="delivery-date">
+                    ✅ {{ formatDate(order.delivery_date) }}
+                  </div>
+                </div>
+              </td>
+              
+              <!-- Acciones -->
+              <td class="col-actions">
+                <div class="actions-cell">
+                  <button @click="openOrderDetailsModal(order)" class="action-btn details" title="Ver detalles">
+                    👁️
+                  </button>
+                  
+                  <button 
+                    v-if="order.shipday_tracking_url" 
+                    @click="openLiveTracking(order)" 
+                    class="action-btn tracking live" 
+                    title="Tracking en vivo">
+                    🚚
+                  </button>
+                  
+                  <button 
+                    v-else-if="hasTrackingInfo(order)"
+                    @click="openTrackingModal(order)" 
+                    class="action-btn tracking" 
+                    title="Ver seguimiento">
+                    📍
+                  </button>
+                  
+                  <button 
+                    v-if="hasProofOfDelivery(order)"
+                    @click="showProofOfDelivery(order)" 
+                    class="action-btn proof" 
+                    title="Ver prueba de entrega">
+                    📸
+                  </button>
+                  
+                  <button 
+                    v-if="canContactSupport(order)" 
+                    @click="contactSupport(order)" 
+                    class="action-btn support" 
+                    title="Contactar soporte">
+                    💬
+                  </button>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
       </div>
       
-      <!-- Paginación mejorada -->
+      <!-- Paginación -->
       <div v-if="pagination.totalPages > 1" class="pagination">
-        <button 
-          @click="goToPage(pagination.page - 1)" 
-          :disabled="pagination.page <= 1" 
-          class="page-btn">
+        <button @click="goToPage(pagination.page - 1)" :disabled="pagination.page <= 1" class="page-btn">
           ← Anterior
         </button>
-        
-        <div class="page-numbers">
-          <button 
-            v-for="page in getVisiblePages()" 
-            :key="page"
-            @click="goToPage(page)"
-            :class="['page-number', { active: page === pagination.page }]">
-            {{ page }}
-          </button>
-        </div>
-        
-        <button 
-          @click="goToPage(pagination.page + 1)" 
-          :disabled="pagination.page >= pagination.totalPages" 
-          class="page-btn">
+        <span class="page-info">
+          Página {{ pagination.page }} de {{ pagination.totalPages }} ({{ pagination.total }} pedidos)
+        </span>
+        <button @click="goToPage(pagination.page + 1)" :disabled="pagination.page >= pagination.totalPages" class="page-btn">
           Siguiente →
         </button>
       </div>
     </div>
 
-    <!-- Modal de detalles mejorado -->
+    <!-- Modales -->
+    
+    <!-- Modal de detalles -->
     <Modal v-model="showOrderDetailsModal" :title="`Pedido #${selectedOrder?.order_number}`" width="800px">
       <OrderDetails v-if="selectedOrder" :order="selectedOrder" />
     </Modal>
 
-    <!-- NUEVO: Modal de tracking -->
+    <!-- Modal de tracking -->
     <Modal v-model="showTrackingModal" :title="`🚚 Tracking - Pedido #${selectedTrackingOrder?.order_number}`" width="900px">
       <OrderTracking 
         v-if="selectedTrackingOrder" 
@@ -244,8 +250,13 @@
       />
     </Modal>
 
-    <!-- Modal de soporte (existente) -->
-    <Modal v-model="showSupportModal" title="Contactar Soporte" width="500px">
+    <!-- NUEVO: Modal de prueba de entrega -->
+    <Modal v-model="showProofModal" :title="`📋 Prueba de Entrega - #${selectedProofOrder?.order_number}`" width="700px">
+      <ProofOfDelivery v-if="selectedProofOrder" :order="selectedProofOrder" />
+    </Modal>
+
+    <!-- Modal de soporte -->
+    <Modal v-model="showSupportModal" title="💬 Contactar Soporte" width="500px">
       <div v-if="supportOrder" class="support-form">
         <div class="support-order-info">
           <h4>Pedido: #{{ supportOrder.order_number }}</h4>
@@ -275,34 +286,35 @@ import { useAuthStore } from '../store/auth';
 import { apiService } from '../services/api';
 import Modal from '../components/Modal.vue';
 import OrderDetails from '../components/OrderDetails.vue';
-import OrderTracking from '../components/OrderTracking.vue'; // 🆕 NUEVO
+import OrderTracking from '../components/OrderTracking.vue';
+import ProofOfDelivery from '../components/ProofOfDelivery.vue'; // 🆕 NUEVO
 
 const auth = useAuthStore();
 const user = computed(() => auth.user);
 
-// Estado existente
+// Estado de la página
 const orders = ref([]);
 const channels = ref([]);
-const pagination = ref({ page: 1, limit: 12, total: 0, totalPages: 1 });
+const pagination = ref({ page: 1, limit: 20, total: 0, totalPages: 1 }); // Más pedidos por página
 const filters = ref({ status: '', channel_id: '', date_from: '', date_to: '', search: '' });
 const loadingOrders = ref(true);
+
+// Estados de modales
 const selectedOrder = ref(null);
 const showOrderDetailsModal = ref(false);
-
-// NUEVO: Estado para tracking
-const showTrackingModal = ref(false);
 const selectedTrackingOrder = ref(null);
-
-// Estado para soporte (existente)
-const showSupportModal = ref(false);
+const showTrackingModal = ref(false);
+const selectedProofOrder = ref(null); // 🆕 NUEVO
+const showProofModal = ref(false); // 🆕 NUEVO
 const supportOrder = ref(null);
+const showSupportModal = ref(false);
 
 onMounted(() => {
   fetchOrders();
   fetchChannels();
 });
 
-// Funciones existentes mejoradas
+// Funciones principales
 async function fetchOrders() {
   loadingOrders.value = true;
   try {
@@ -316,7 +328,6 @@ async function fetchOrders() {
     pagination.value = data.pagination;
   } catch (error) {
     console.error('Error fetching orders:', error);
-    // TODO: Mostrar notificación de error más elegante
   } finally {
     loadingOrders.value = false;
   }
@@ -333,6 +344,39 @@ async function fetchChannels() {
   }
 }
 
+// 🆕 NUEVAS FUNCIONES PARA TRACKING Y PRUEBAS DE ENTREGA
+
+function hasTrackingInfo(order) {
+  return order.shipday_tracking_url || order.shipday_driver_id || order.delivery_date || 
+         ['processing', 'shipped', 'delivered'].includes(order.status);
+}
+
+function hasProofOfDelivery(order) {
+  return order.proof_of_delivery?.photo_url || 
+         order.proof_of_delivery?.signature_url ||
+         order.podUrls?.length > 0 ||
+         order.signatureUrl;
+}
+
+function openLiveTracking(order) {
+  if (order.shipday_tracking_url) {
+    window.open(order.shipday_tracking_url, '_blank');
+    console.log('📍 Abriendo tracking en vivo:', order.order_number);
+  }
+}
+
+function openTrackingModal(order) {
+  selectedTrackingOrder.value = order;
+  showTrackingModal.value = true;
+  console.log('🚚 Abriendo modal de tracking:', order.order_number);
+}
+
+function showProofOfDelivery(order) {
+  selectedProofOrder.value = order;
+  showProofModal.value = true;
+  console.log('📸 Mostrando prueba de entrega:', order.order_number);
+}
+
 async function openOrderDetailsModal(order) {
   selectedOrder.value = null;
   showOrderDetailsModal.value = true;
@@ -345,27 +389,13 @@ async function openOrderDetailsModal(order) {
   }
 }
 
-// NUEVAS funciones para tracking y UI mejorada
-function hasTrackingInfo(order) {
-  return order.shipday_tracking_url || order.shipday_driver_id || order.delivery_date || 
-         ['processing', 'shipped', 'delivered'].includes(order.status);
+function contactSupport(order) {
+  supportOrder.value = order;
+  showSupportModal.value = true;
 }
 
-// 🆕 NUEVA: Abrir modal de tracking
-function openTrackingModal(order) {
-  selectedTrackingOrder.value = order;
-  showTrackingModal.value = true;
-  console.log('🚚 Abriendo tracking para pedido:', order.order_number);
-}
-
-// 🆕 NUEVA: Manejar soporte desde tracking
 function handleTrackingSupport(supportData) {
-  console.log('💬 Solicitud de soporte desde tracking:', supportData);
-  
-  // Cerrar modal de tracking
   showTrackingModal.value = false;
-  
-  // Abrir modal de soporte con los datos
   supportOrder.value = {
     _id: supportData.orderId,
     order_number: supportData.orderNumber,
@@ -375,30 +405,53 @@ function handleTrackingSupport(supportData) {
   showSupportModal.value = true;
 }
 
-function trackOrderClick(order) {
-  console.log(`🔍 Usuario rastreando pedido: #${order.order_number}`);
-  // Aquí puedes agregar analytics si necesitas
+// Funciones de soporte
+function emailSupport(order) {
+  const subject = `Consulta sobre Pedido #${order.order_number}`;
+  const body = `Hola,\n\nTengo una consulta sobre mi pedido #${order.order_number}.\n\nDetalles:\n- Cliente: ${order.customer_name}\n- Estado: ${getStatusName(order.status)}\n\nMi consulta es:\n\n[Describe tu consulta aquí]\n\nGracias.`;
+  window.location.href = `mailto:soporte@tuempresa.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  showSupportModal.value = false;
 }
 
-function openTrackingInNewTab(order) {
-  if (order.shipday_tracking_url) {
-    window.open(order.shipday_tracking_url, '_blank');
-    console.log(`📍 Abriendo tracking para pedido: #${order.order_number}`);
-  }
+function whatsappSupport(order) {
+  const message = `Hola, tengo una consulta sobre mi pedido #${order.order_number}. Estado: ${getStatusName(order.status)}`;
+  const whatsappNumber = '56912345678';
+  window.open(`https://wa.me/${whatsappNumber}?text=${encodeURIComponent(message)}`, '_blank');
+  showSupportModal.value = false;
 }
 
-function getDriverDisplayName(order) {
-  // Si tienes información del conductor, muéstrala; sino, solo el ID
-  return order.driver_name || `ID: ${order.shipday_driver_id}`;
+function callSupport(order) {
+  const phoneNumber = '+56912345678';
+  window.location.href = `tel:${phoneNumber}`;
+  showSupportModal.value = false;
 }
 
-function getOrderCardClass(order) {
-  const classes = ['order-card'];
-  if (order.status === 'delivered') classes.push('delivered');
-  if (order.status === 'shipped') classes.push('in-transit');
-  if (order.status === 'cancelled') classes.push('cancelled');
-  if (order.shipday_tracking_url) classes.push('trackable');
+// Funciones utilitarias
+function getOrdersByStatus(status) {
+  return orders.value.filter(order => order.status === status);
+}
+
+function getRowClass(order) {
+  const classes = [];
+  if (order.status === 'delivered') classes.push('delivered-row');
+  if (order.status === 'shipped') classes.push('shipped-row');
+  if (order.shipday_tracking_url) classes.push('live-tracking-row');
   return classes.join(' ');
+}
+
+function truncateAddress(address) {
+  if (!address) return 'Sin dirección';
+  return address.length > 30 ? address.substring(0, 30) + '...' : address;
+}
+
+function getChannelIcon(channelType) {
+  const icons = {
+    shopify: '🛍️',
+    woocommerce: '🏪',
+    mercadolibre: '🛒',
+    manual: '📝'
+  };
+  return icons[channelType] || '🏬';
 }
 
 function getStatusIcon(status) {
@@ -412,73 +465,18 @@ function getStatusIcon(status) {
   return icons[status] || '📦';
 }
 
-function getChannelIcon(channelType) {
-  const icons = {
-    shopify: '🛍️',
-    woocommerce: '🏪',
-    mercadolibre: '🛒',
-    manual: '📝'
+function getStatusName(status) {
+  const names = {
+    pending: 'Pendiente',
+    processing: 'Procesando',
+    shipped: 'En Tránsito',
+    delivered: 'Entregado',
+    cancelled: 'Cancelado'
   };
-  return icons[channelType] || '🏬';
+  return names[status] || status;
 }
 
-function getCustomerInitials(name) {
-  if (!name) return '?';
-  const words = name.trim().split(' ');
-  if (words.length >= 2) {
-    return (words[0][0] + words[1][0]).toUpperCase();
-  }
-  return name.charAt(0).toUpperCase();
-}
-
-function formatDeliveryTime(dateStr) {
-  if (!dateStr) return 'N/A';
-  const date = new Date(dateStr);
-  const now = new Date();
-  const diffHours = Math.abs(now - date) / (1000 * 60 * 60);
-  
-  if (diffHours < 24) {
-    return date.toLocaleString('es-CL', {
-      hour: '2-digit',
-      minute: '2-digit'
-    }) + ' (hoy)';
-  } else {
-    return date.toLocaleDateString('es-CL', {
-      day: '2-digit',
-      month: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  }
-}
-
-function getOrdersByStatus(status) {
-  return orders.value.filter(order => order.status === status);
-}
-
-function getVisiblePages() {
-  const current = pagination.value.page;
-  const total = pagination.value.totalPages;
-  const pages = [];
-  
-  // Mostrar máximo 5 páginas
-  let start = Math.max(1, current - 2);
-  let end = Math.min(total, start + 4);
-  
-  if (end - start < 4) {
-    start = Math.max(1, end - 4);
-  }
-  
-  for (let i = start; i <= end; i++) {
-    pages.push(i);
-  }
-  
-  return pages;
-}
-
-// NUEVAS funciones de soporte
 function canContactSupport(order) {
-  // Mostrar soporte para pedidos que no sean entregados hace más de 7 días
   if (order.status === 'delivered') {
     const deliveryDate = new Date(order.delivery_date);
     const now = new Date();
@@ -488,34 +486,7 @@ function canContactSupport(order) {
   return ['pending', 'processing', 'shipped'].includes(order.status);
 }
 
-function contactSupport(order) {
-  supportOrder.value = order;
-  showSupportModal.value = true;
-}
-
-function emailSupport(order) {
-  const subject = `Consulta sobre Pedido #${order.order_number}`;
-  const body = `Hola,\n\nTengo una consulta sobre mi pedido #${order.order_number}.\n\nDetalles del pedido:\n- Cliente: ${order.customer_name}\n- Estado: ${getStatusName(order.status)}\n- Fecha: ${formatDate(order.order_date)}\n\nMi consulta es:\n\n[Describe tu consulta aquí]\n\nGracias.`;
-  
-  window.location.href = `mailto:soporte@tuempresa.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-  showSupportModal.value = false;
-}
-
-function whatsappSupport(order) {
-  const message = `Hola, tengo una consulta sobre mi pedido #${order.order_number}. Estado: ${getStatusName(order.status)}`;
-  const whatsappNumber = '56912345678'; // Tu número de WhatsApp
-  
-  window.open(`https://wa.me/${whatsappNumber}?text=${encodeURIComponent(message)}`, '_blank');
-  showSupportModal.value = false;
-}
-
-function callSupport(order) {
-  const phoneNumber = '+56912345678'; // Tu número de teléfono
-  window.location.href = `tel:${phoneNumber}`;
-  showSupportModal.value = false;
-}
-
-// Funciones utilitarias existentes
+// Funciones de navegación
 let searchTimeout;
 function debounceSearch() {
   clearTimeout(searchTimeout);
@@ -539,42 +510,27 @@ function formatCurrency(amount) {
 function formatDate(dateStr) {
   if (!dateStr) return 'N/A';
   return new Date(dateStr).toLocaleDateString('es-CL', {
-    day: '2-digit', month: '2-digit', year: 'numeric'
+    day: '2-digit', month: '2-digit', year: '2-digit'
   });
-}
-
-function getStatusName(status) {
-  const names = {
-    pending: 'Pendiente',
-    processing: 'Procesando',
-    shipped: 'En Tránsito',
-    delivered: 'Entregado',
-    cancelled: 'Cancelado'
-  };
-  return names[status] || status;
 }
 </script>
 
 <style scoped>
-/* Estilos base mejorados */
-.page-container {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+.orders-page {
   padding: 20px;
-  max-width: 1400px;
-  margin: 0 auto;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
 
+/* Header */
 .page-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 30px;
-  flex-wrap: wrap;
-  gap: 20px;
+  margin-bottom: 24px;
 }
 
 .page-title {
-  font-size: 32px;
+  font-size: 28px;
   font-weight: 700;
   color: #1f2937;
   margin: 0;
@@ -585,83 +541,69 @@ function getStatusName(status) {
   gap: 16px;
 }
 
-.stat-card {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+.stat-item {
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
   color: white;
-  padding: 16px 24px;
+  padding: 12px 20px;
   border-radius: 12px;
   text-align: center;
-  min-width: 100px;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  min-width: 80px;
 }
 
 .stat-number {
   display: block;
-  font-size: 24px;
+  font-size: 20px;
   font-weight: 700;
-  margin-bottom: 4px;
+  margin-bottom: 2px;
 }
 
 .stat-label {
-  font-size: 12px;
+  font-size: 11px;
   opacity: 0.9;
 }
 
-/* Filtros mejorados */
+/* Filtros */
 .filters-section {
   background: white;
-  padding: 24px;
-  border-radius: 16px;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-  border: 1px solid #e5e7eb;
-  margin-bottom: 30px;
+  padding: 20px;
+  border-radius: 12px;
+  margin-bottom: 24px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
-.filters {
+.filters-row {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
   align-items: center;
 }
 
 .filter-select,
-.filter-input {
-  padding: 12px 16px;
-  border: 2px solid #e5e7eb;
-  border-radius: 8px;
+.filter-input,
+.search-input {
+  padding: 8px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
   font-size: 14px;
-  transition: border-color 0.2s ease;
-  background: white;
-}
-
-.filter-select:focus,
-.filter-input:focus {
-  outline: none;
-  border-color: #6366f1;
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
 }
 
 .search-input {
   grid-column: span 2;
-  padding: 12px 16px;
-  border: 2px solid #e5e7eb;
-  border-radius: 8px;
-  font-size: 14px;
-  background: white;
 }
 
-/* Estados de carga y vacío */
-.loading-state {
+/* Estados de carga */
+.loading-state,
+.empty-state {
   text-align: center;
   padding: 60px 20px;
   color: #6b7280;
 }
 
 .loading-spinner {
-  width: 40px;
-  height: 40px;
-  border: 4px solid #f3f4f6;
-  border-top: 4px solid #6366f1;
+  width: 32px;
+  height: 32px;
+  border: 3px solid #f3f4f6;
+  border-top: 3px solid #6366f1;
   border-radius: 50%;
   animation: spin 1s linear infinite;
   margin: 0 auto 16px;
@@ -672,92 +614,128 @@ function getStatusName(status) {
   100% { transform: rotate(360deg); }
 }
 
-.empty-state {
-  text-align: center;
-  padding: 60px 20px;
-  color: #6b7280;
-}
-
 .empty-icon {
-  font-size: 64px;
+  font-size: 48px;
   margin-bottom: 16px;
 }
 
-.empty-state h3 {
-  margin: 16px 0 8px;
-  color: #374151;
-}
-
-/* Grid de pedidos */
-.orders-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
-  gap: 24px;
-  margin-bottom: 30px;
-}
-
-.order-card {
+/* Tabla */
+.orders-table-section {
   background: white;
-  border-radius: 16px;
-  padding: 24px;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-  border: 1px solid #e5e7eb;
-  transition: all 0.2s ease;
-  position: relative;
+  border-radius: 12px;
   overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
-.order-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 25px -5px rgba(0, 0, 0, 0.1);
+.table-container {
+  overflow-x: auto;
 }
 
-.order-card.delivered {
-  border-left: 4px solid #10b981;
+.orders-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
 }
 
-.order-card.in-transit {
-  border-left: 4px solid #6366f1;
-}
-
-.order-card.trackable::before {
-  content: '📍';
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  background: #f0f9ff;
-  padding: 4px 8px;
-  border-radius: 8px;
+.orders-table th {
+  background: #f8fafc;
+  padding: 12px 8px;
+  text-align: left;
+  font-weight: 600;
+  color: #374151;
+  border-bottom: 1px solid #e5e7eb;
   font-size: 12px;
+  white-space: nowrap;
 }
 
-/* Header de la tarjeta */
-.order-header {
+.orders-table td {
+  padding: 12px 8px;
+  border-bottom: 1px solid #f3f4f6;
+  vertical-align: top;
+}
+
+.order-row:hover {
+  background-color: #f9fafb;
+}
+
+.order-row.delivered-row {
+  background-color: #f0fdf4;
+}
+
+.order-row.shipped-row {
+  background-color: #eff6ff;
+}
+
+.order-row.live-tracking-row {
+  border-left: 3px solid #f59e0b;
+}
+
+/* Columnas específicas */
+.col-order { width: 120px; }
+.col-customer { width: 180px; }
+.col-address { width: 200px; }
+.col-status { width: 140px; }
+.col-tracking { width: 140px; }
+.col-amount { width: 100px; }
+.col-date { width: 100px; }
+.col-actions { width: 120px; }
+
+/* Celdas */
+.order-number-cell {
   display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 20px;
+  align-items: center;
+  gap: 6px;
 }
 
 .order-number {
-  font-size: 20px;
-  font-weight: 700;
+  font-weight: 600;
   color: #1f2937;
-  margin: 0 0 4px 0;
 }
 
-.order-date {
+.channel-badge {
   font-size: 12px;
+  padding: 2px 4px;
+  border-radius: 4px;
+  background: #f3f4f6;
+}
+
+.customer-cell .customer-name {
+  font-weight: 500;
+  color: #1f2937;
+  margin-bottom: 2px;
+}
+
+.customer-contact {
+  font-size: 11px;
   color: #6b7280;
 }
 
+.address-cell .address-text {
+  color: #374151;
+  margin-bottom: 4px;
+  line-height: 1.3;
+}
+
+.commune-tag {
+  font-size: 11px;
+  color: #0369a1;
+  background: #e0f2fe;
+  padding: 2px 6px;
+  border-radius: 10px;
+  display: inline-block;
+}
+
+.status-cell {
+  text-align: center;
+}
+
 .status-badge {
-  padding: 6px 12px;
-  border-radius: 20px;
-  font-size: 12px;
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-size: 11px;
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
+  display: inline-block;
+  margin-bottom: 4px;
 }
 
 .status-badge.pending { background: #fef3c7; color: #92400e; }
@@ -766,343 +744,161 @@ function getStatusName(status) {
 .status-badge.delivered { background: #d1fae5; color: #065f46; }
 .status-badge.cancelled { background: #fee2e2; color: #991b1b; }
 
-/* Información del cliente */
-.order-customer {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 16px;
-  padding: 12px;
-  background: #f9fafb;
-  border-radius: 12px;
-}
-
-.customer-avatar {
-  width: 40px;
-  height: 40px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 600;
-  font-size: 14px;
-  flex-shrink: 0;
-}
-
-.customer-name {
-  font-weight: 600;
-  color: #1f2937;
-  margin-bottom: 4px;
-}
-
-.customer-contact {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.customer-email,
-.customer-phone {
-  font-size: 12px;
-  color: #6b7280;
-}
-
-/* Dirección de entrega */
-.order-delivery {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  margin-bottom: 16px;
-  padding: 12px;
-  background: #f0f9ff;
-  border-radius: 12px;
-}
-
-.delivery-icon {
-  font-size: 20px;
-  flex-shrink: 0;
-}
-
-.delivery-address {
-  font-weight: 500;
-  color: #374151;
-  margin-bottom: 4px;
-}
-
-.delivery-location {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.commune-tag {
-  background: #3b82f6;
-  color: white;
-  padding: 2px 8px;
-  border-radius: 12px;
-  font-size: 11px;
-  font-weight: 600;
-}
-
-.region {
-  font-size: 12px;
-  color: #6b7280;
-}
-
-/* NUEVO: Sección de tracking mejorada */
-.order-tracking {
-  background: linear-gradient(135deg, #fef3c7 0%, #fed7aa 100%);
-  border: 1px solid #f59e0b;
-  border-radius: 12px;
-  padding: 16px;
-  margin-bottom: 16px;
-  position: relative;
-}
-
-.tracking-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 12px;
-  justify-content: space-between;
-}
-
-.tracking-icon {
-  font-size: 16px;
-}
-
-.tracking-title {
-  font-weight: 600;
-  color: #92400e;
-  flex: 1;
-}
-
-.live-indicator {
-  background: #dc2626;
-  color: white;
-  padding: 2px 6px;
-  border-radius: 8px;
+.driver-info {
   font-size: 10px;
-  font-weight: 600;
-  animation: pulse 2s infinite;
+  color: #6b7280;
 }
 
-.tracking-quick-info {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-bottom: 12px;
-}
-
-.tracking-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-}
-
-.tracking-label {
-  font-weight: 500;
-  color: #92400e;
-  min-width: 80px;
-}
-
-.tracking-value {
-  color: #451a03;
-  font-weight: 500;
-}
-
-.tracking-value.in-transit {
-  color: #7c3aed;
-  font-weight: 600;
-}
-
-.tracking-value.delivered {
-  color: #059669;
-  font-weight: 600;
-}
-
-.tracking-value.processing {
-  color: #0ea5e9;
-  font-weight: 600;
-}
-
-.tracking-cta {
+/* Tracking cell */
+.tracking-cell {
   text-align: center;
 }
 
-.quick-track-btn {
-  background: linear-gradient(135deg, #f59e0b 0%, #dc2626 100%);
-  color: white;
-  border: none;
-  padding: 8px 16px;
-  border-radius: 8px;
-  font-size: 11px;
+.tracking-live {
+  margin-bottom: 4px;
+}
+
+.live-indicator {
+  display: block;
+  font-size: 10px;
+  color: #dc2626;
   font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  box-shadow: 0 2px 4px rgba(245, 158, 11, 0.3);
+  margin-bottom: 4px;
+  animation: pulse 2s infinite;
 }
 
-.quick-track-btn:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 8px rgba(245, 158, 11, 0.4);
-}
-
-/* Detalles del pedido */
-.order-details {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 16px;
-}
-
-.channel-badge {
+.track-live-btn,
+.proof-btn,
+.tracking-btn {
   padding: 4px 8px;
-  border-radius: 16px;
-  font-size: 11px;
-  font-weight: 500;
-}
-
-.channel-badge.shopify { background: #95f3d9; color: #065f46; }
-.channel-badge.woocommerce { background: #c7d2fe; color: #312e81; }
-.channel-badge.mercadolibre { background: #fed7aa; color: #9a3412; }
-.channel-badge.manual { background: #f3f4f6; color: #374151; }
-
-.amount-label {
-  font-size: 12px;
-  color: #6b7280;
-}
-
-.amount-value {
-  font-size: 18px;
-  font-weight: 700;
-  color: #059669;
-}
-
-/* Notas del pedido */
-.order-notes {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  padding: 12px;
-  background: #fffbeb;
-  border: 1px solid #fed7aa;
-  border-radius: 8px;
-  margin-bottom: 16px;
-}
-
-.notes-icon {
-  font-size: 14px;
-  color: #d97706;
-  flex-shrink: 0;
-}
-
-.notes-text {
-  font-size: 13px;
-  color: #92400e;
-  line-height: 1.4;
-}
-
-/* Acciones */
-.order-actions {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.action-btn {
-  padding: 8px 16px;
-  border-radius: 8px;
   border: none;
+  border-radius: 4px;
   cursor: pointer;
-  font-size: 12px;
+  font-size: 10px;
   font-weight: 500;
-  transition: all 0.2s ease;
-  flex: 1;
-  min-width: 100px;
 }
 
-.action-btn.primary {
-  background: #6366f1;
-  color: white;
-}
-
-.action-btn.primary:hover {
-  background: #5b21b6;
-}
-
-.action-btn.tracking {
+.track-live-btn {
   background: #f59e0b;
   color: white;
-  position: relative;
-  overflow: hidden;
 }
 
-.action-btn.tracking:hover {
-  background: #d97706;
-}
-
-.action-btn.tracking.live-tracking {
-  background: linear-gradient(135deg, #f59e0b 0%, #dc2626 100%);
-  animation: trackingPulse 2s infinite;
-}
-
-.action-btn.tracking.live-tracking::before {
-  content: '📡';
-  position: absolute;
-  top: 2px;
-  right: 2px;
-  font-size: 8px;
-  animation: pulse 1.5s infinite;
-}
-
-@keyframes trackingPulse {
-  0%, 100% { 
-    box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.7);
-  }
-  50% { 
-    box-shadow: 0 0 0 8px rgba(245, 158, 11, 0);
-  }
-}
-
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
-}
-
-.action-btn.support {
+.proof-btn {
   background: #10b981;
   color: white;
 }
 
-.action-btn.support:hover {
-  background: #059669;
+.tracking-btn {
+  background: #6366f1;
+  color: white;
 }
 
-/* Paginación mejorada */
+.proof-indicator,
+.tracking-indicator {
+  display: block;
+  font-size: 10px;
+  color: #6b7280;
+  margin-bottom: 4px;
+}
+
+.no-tracking-text {
+  font-size: 11px;
+  color: #9ca3af;
+  font-style: italic;
+}
+
+.amount-cell {
+  text-align: right;
+}
+
+.amount {
+  font-weight: 600;
+  color: #059669;
+}
+
+.date-cell {
+  font-size: 12px;
+}
+
+.order-date {
+  color: #374151;
+  margin-bottom: 2px;
+}
+
+.delivery-date {
+  color: #059669;
+  font-size: 10px;
+}
+
+/* Acciones */
+.actions-cell {
+  display: flex;
+  gap: 4px;
+  justify-content: center;
+}
+
+.action-btn {
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.action-btn.details {
+  background: #f3f4f6;
+  color: #374151;
+}
+
+.action-btn.tracking {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.action-btn.tracking.live {
+  background: #fed7aa;
+  color: #9a3412;
+  animation: pulse 2s infinite;
+}
+
+.action-btn.proof {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.action-btn.support {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.action-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* Paginación */
 .pagination {
   display: flex;
-  justify-content: center;
+  justify-content: space-between;
   align-items: center;
-  gap: 8px;
-  padding: 20px;
-  background: white;
-  border-radius: 12px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  padding: 16px 20px;
+  background: #f8fafc;
+  border-top: 1px solid #e5e7eb;
 }
 
 .page-btn {
   background: #6366f1;
   color: white;
   border: none;
-  padding: 10px 16px;
-  border-radius: 8px;
+  padding: 8px 16px;
+  border-radius: 6px;
   cursor: pointer;
   font-size: 14px;
-  font-weight: 500;
   transition: background 0.2s ease;
 }
 
@@ -1116,36 +912,9 @@ function getStatusName(status) {
   color: #9ca3af;
 }
 
-.page-numbers {
-  display: flex;
-  gap: 4px;
-}
-
-.page-number {
-  width: 40px;
-  height: 40px;
-  border: 1px solid #e5e7eb;
-  background: white;
-  color: #374151;
-  border-radius: 8px;
-  cursor: pointer;
+.page-info {
+  color: #6b7280;
   font-size: 14px;
-  font-weight: 500;
-  transition: all 0.2s ease;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.page-number:hover {
-  background: #f3f4f6;
-  border-color: #d1d5db;
-}
-
-.page-number.active {
-  background: #6366f1;
-  color: white;
-  border-color: #6366f1;
 }
 
 /* Modal de soporte */
@@ -1199,19 +968,21 @@ function getStatusName(status) {
   transform: translateY(-1px);
 }
 
-.support-option:active {
-  transform: translateY(0);
+/* Responsive */
+@media (max-width: 1200px) {
+  .col-address { width: 150px; }
+  .col-customer { width: 150px; }
 }
 
-/* Responsive */
 @media (max-width: 768px) {
-  .page-container {
-    padding: 16px;
+  .orders-page {
+    padding: 12px;
   }
   
   .page-header {
     flex-direction: column;
     align-items: flex-start;
+    gap: 16px;
   }
   
   .header-stats {
@@ -1219,11 +990,7 @@ function getStatusName(status) {
     justify-content: space-between;
   }
   
-  .orders-grid {
-    grid-template-columns: 1fr;
-  }
-  
-  .filters {
+  .filters-row {
     grid-template-columns: 1fr;
   }
   
@@ -1231,45 +998,48 @@ function getStatusName(status) {
     grid-column: span 1;
   }
   
-  .order-actions {
+  .orders-table {
+    font-size: 12px;
+  }
+  
+  .orders-table th,
+  .orders-table td {
+    padding: 8px 4px;
+  }
+  
+  .col-address,
+  .col-customer {
+    display: none;
+  }
+  
+  .actions-cell {
     flex-direction: column;
+    gap: 2px;
   }
   
   .action-btn {
-    min-width: auto;
-  }
-  
-  .pagination {
-    flex-wrap: wrap;
-    gap: 4px;
-  }
-  
-  .page-numbers {
-    order: 3;
-    width: 100%;
-    justify-content: center;
+    width: 24px;
+    height: 24px;
+    font-size: 10px;
   }
 }
 
 @media (max-width: 480px) {
   .page-title {
-    font-size: 24px;
+    font-size: 22px;
   }
   
-  .stat-card {
-    padding: 12px 16px;
+  .stat-item {
+    padding: 8px 12px;
   }
   
   .stat-number {
-    font-size: 20px;
+    font-size: 16px;
   }
   
-  .order-card {
-    padding: 16px;
-  }
-  
-  .order-number {
-    font-size: 18px;
+  .col-tracking,
+  .col-date {
+    display: none;
   }
 }
 </style>
