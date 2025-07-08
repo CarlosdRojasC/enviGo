@@ -363,161 +363,92 @@ class ShipdayController {
  * ✅ WEBHOOK MEJORADO: Procesa webhooks de Shipday y actualiza tracking
  */
 async handleWebhook(req, res) {
-  try {
-    const webhookData = req.body;
-    console.log('📥 Webhook recibido de Shipday:', JSON.stringify(webhookData, null, 2));
+    try {
+      const webhookData = req.body;
+      console.log('📥 Webhook recibido de Shipday:', JSON.stringify(webhookData, null, 2));
 
-    // 1. Extraer los datos del payload
-    const shipdayOrderId = webhookData.order?.id;
-    const shipdayStatus = webhookData.order_status;
-    const eventType = webhookData.event;
-    const trackingUrl = webhookData.trackingUrl; // 🆕 NUEVO: URL de tracking
-    const carrierInfo = webhookData.carrier; // 🆕 NUEVO: Info del conductor
-    const deliveryDetails = webhookData.delivery_details; // 🆕 NUEVO: Detalles de entrega
+      // 1. Extraer el ID de la orden de Shipday, que es lo común en todos los eventos.
+      const shipdayOrderId = webhookData.order?.id;
+      const eventType = webhookData.event;
 
-    // Validar que tenemos la información necesaria
-    if (!shipdayOrderId || !eventType) {
-      console.warn('⚠️ Webhook ignorado: Faltan order.id o event.');
-      return res.status(400).json({ success: false, error: 'Payload inválido.' });
-    }
-
-    console.log(`🔄 Procesando evento: ${eventType} para orden Shipday ID: ${shipdayOrderId}`);
-
-    // 2. Buscar la orden en la base de datos
-    const order = await Order.findOne({ shipday_order_id: shipdayOrderId.toString() });
-
-    if (!order) {
-      console.warn(`⚠️ No se encontró una orden local correspondiente al Shipday ID: ${shipdayOrderId}`);
-      return res.status(200).json({ success: true, message: 'Orden no encontrada en sistema local.' });
-    }
-
-    console.log(`📦 Orden encontrada: #${order.order_number} (DB ID: ${order._id})`);
-
-    // 3. 🆕 ACTUALIZAR INFORMACIÓN DE TRACKING SIEMPRE
-    let orderUpdated = false;
-
-    // Actualizar URL de tracking si está disponible
-    if (trackingUrl && trackingUrl !== order.shipday_tracking_url) {
-      order.shipday_tracking_url = trackingUrl;
-      orderUpdated = true;
-      console.log(`📍 URL de tracking actualizada: ${trackingUrl}`);
-    }
-
-    // Actualizar información del conductor si está disponible
-    if (carrierInfo) {
-      if (carrierInfo.id && carrierInfo.id !== order.shipday_driver_id) {
-        order.shipday_driver_id = carrierInfo.id.toString();
-        orderUpdated = true;
-        console.log(`👨‍💼 Conductor actualizado: ${carrierInfo.name} (ID: ${carrierInfo.id})`);
+      if (!shipdayOrderId || !eventType) {
+        console.warn('⚠️ Webhook ignorado: Payload no contiene order.id o event.');
+        return res.status(400).json({ success: false, error: 'Payload inválido.' });
       }
-      
-      // 🆕 NUEVO: Almacenar información adicional del conductor
-      if (carrierInfo.name || carrierInfo.phone || carrierInfo.email) {
-        order.driver_info = {
-          name: carrierInfo.name,
-          phone: carrierInfo.phone,
-          email: carrierInfo.email,
-          status: carrierInfo.status
-        };
-        orderUpdated = true;
-        console.log(`📱 Info del conductor almacenada: ${carrierInfo.name}`);
-      }
-    }
 
-    // 4. Actualizar estado según el evento
-    if (eventType === 'ORDER_COMPLETED' || shipdayStatus === 'ALREADY_DELIVERED') {
-      if (order.status !== 'delivered') {
-        order.status = 'delivered';
+      // 2. Buscar la orden en tu base de datos.
+      const order = await Order.findOne({ shipday_order_id: shipdayOrderId.toString() });
+
+      if (!order) {
+        console.warn(`⚠️ No se encontró una orden local para Shipday ID: ${shipdayOrderId}`);
+        return res.status(200).json({ success: true, message: 'Orden no encontrada, pero webhook procesado.' });
+      }
+
+      console.log(`🔄 Procesando evento "${eventType}" para la orden #${order.order_number}`);
+      let orderUpdated = false;
+
+      // 3. Procesar el evento específico.
+      switch (eventType) {
         
-        // Usar fecha de entrega desde Shipday si está disponible
-        if (webhookData.order?.delivery_time) {
-          order.delivery_date = new Date(webhookData.order.delivery_time);
-        } else {
-          order.delivery_date = new Date();
-        }
-        
-        orderUpdated = true;
-        console.log(`✅ Orden marcada como entregada: ${order.delivery_date}`);
+        // Caso: Se sube la prueba de entrega (fotos/firma)
+        case 'ORDER_POD_UPLOAD':
+          console.log('📸 Evento de Prueba de Entrega detectado.');
+          
+          order.proof_of_delivery = {
+            photo_url: webhookData.order?.podUrls?.[0] || webhookData.pods?.[0] || null,
+            signature_url: webhookData.order?.signatureUrl || order.proof_of_delivery?.signature_url || null,
+            notes: webhookData.delivery_note || '',
+            location: {
+              coordinates: [
+                webhookData.delivery_details?.location?.lng || 0,
+                webhookData.delivery_details?.location?.lat || 0
+              ]
+            }
+          };
+          orderUpdated = true;
+          console.log('📝 Prueba de entrega guardada.');
+          break;
+
+        // Caso: La orden se marca como completada
+        case 'ORDER_COMPLETED':
+          console.log('✅ Evento de Orden Completada detectado.');
+          if (order.status !== 'delivered') {
+            order.status = 'delivered';
+            order.delivery_date = webhookData.order?.delivery_time ? new Date(webhookData.order.delivery_time) : new Date();
+            orderUpdated = true;
+            console.log(`📦 Orden #${order.order_number} marcada como "entregado".`);
+          }
+          break;
+
+        // Otros eventos para un seguimiento completo
+        case 'ORDER_ASSIGNED':
+        case 'ORDER_PICKED_UP':
+          if (order.status !== 'shipped') {
+            order.status = 'shipped';
+            orderUpdated = true;
+            console.log(`🚚 Orden #${order.order_number} marcada como "enviado".`);
+          }
+          break;
+          
+        default:
+          console.log(`ℹ️  Evento "${eventType}" recibido, no se requieren acciones adicionales.`);
+          break;
       }
-       // Guardar la prueba de entrega (fotos, firma, notas, etc.)
-      order.proof_of_delivery = {
-        photo_url: webhookData.pods?.[0]?.url || null,
-        signature_url: webhookData.signatures?.[0]?.url || null,
-        notes: webhookData.delivery_note || '',
-        location: {
-          coordinates: [
-            webhookData.delivery_details?.location?.lng || 0,
-            webhookData.delivery_details?.location?.lat || 0
-          ]
-        }
-      };
-      orderUpdated = true; // Asegurarse de que se guarde
-      console.log('📝 Prueba de entrega actualizada en la orden.');
-      
-    } else if (eventType === 'ORDER_ASSIGNED' || carrierInfo) {
-      if (order.status === 'processing') {
-        order.status = 'shipped';
-        orderUpdated = true;
-        console.log(`🚚 Orden marcada como enviada (conductor asignado)`);
+
+      // 4. Guardar los cambios en la base de datos si algo cambió.
+      if (orderUpdated) {
+        order.updated_at = new Date();
+        await order.save();
+        console.log(`💾 Cambios guardados para la orden #${order.order_number}.`);
       }
-    } else if (eventType === 'ORDER_PICKED_UP') {
-      if (order.status !== 'shipped') {
-        order.status = 'shipped';
-        orderUpdated = true;
-        console.log(`📦 Orden marcada como recogida`);
-      }
+
+      // 5. Responder a Shipday para confirmar la recepción.
+      res.status(200).json({ success: true, message: 'Webhook procesado exitosamente.' });
+
+    } catch (error) {
+      console.error('❌ Error fatal procesando el webhook de Shipday:', error);
+      res.status(500).json({ success: false, error: error.message });
     }
-
-    // 5. 🆕 ALMACENAR INFORMACIÓN ADICIONAL DE ENTREGA
-    if (webhookData.delivery_details) {
-      order.delivery_location = {
-        lat: webhookData.delivery_details.location?.lat,
-        lng: webhookData.delivery_details.location?.lng,
-        formatted_address: webhookData.delivery_details.formatted_address
-      };
-      orderUpdated = true;
-      console.log(`📍 Ubicación de entrega almacenada`);
-    }
-
-    // 6. Actualizar estado en Shipday y timestamp
-    if (shipdayStatus && shipdayStatus !== order.shipday_status) {
-      order.shipday_status = shipdayStatus;
-      orderUpdated = true;
-    }
-
-    if (orderUpdated) {
-      order.updated_at = new Date();
-      await order.save();
-      console.log(`✅ Orden local actualizada: #${order.order_number}`);
-    } else {
-      console.log(`ℹ️ No se requirieron cambios en la orden #${order.order_number}`);
-    }
-
-    // 7. 🆕 RESPUESTA DETALLADA
-    res.status(200).json({
-      success: true,
-      message: 'Webhook procesado exitosamente.',
-      order_number: order.order_number,
-      event_processed: eventType,
-      updates_applied: {
-        status_changed: orderUpdated && ['delivered', 'shipped'].includes(order.status),
-        tracking_url_updated: !!trackingUrl,
-        driver_info_updated: !!carrierInfo,
-        delivery_location_updated: !!webhookData.delivery_details
-      },
-      current_status: order.status,
-      tracking_url: order.shipday_tracking_url,
-      timestamp: new Date().toISOString()
-    });
-
-  } catch (error) {
-    console.error('❌ Error fatal procesando el webhook de Shipday:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message,
-      timestamp: new Date().toISOString()
-    });
-  }
 }
 }
 // IMPORTANTE: Exportar una instancia, no la clase
