@@ -30,11 +30,15 @@
         <span class="value">{{ order.shipping_address || 'No especificada' }}</span>
       </div>
       <div class="detail-item">
-        <span class="label">Comuna:</span>
-        <span class="value commune-highlight">{{ order.shipping_city || 'No especificada' }}</span>
+        <span class="label">Comuna (Ciudad):</span>
+        <span class="value commune-highlight">{{ order.shipping_commune || 'No especificada' }}</span>
       </div>
       <div class="detail-item">
-        <span class="label">Región:</span>
+        <span class="label">Región/Área:</span>
+        <span class="value">{{ order.shipping_city || 'No especificada' }}</span>
+      </div>
+      <div class="detail-item">
+        <span class="label">Estado/Provincia:</span>
         <span class="value">{{ order.shipping_state || 'No especificada' }}</span>
       </div>
       <div class="detail-item">

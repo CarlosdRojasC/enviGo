@@ -164,7 +164,7 @@ router.get('/orders/stats', authenticateToken, orderController.getStats);
 router.get('/orders/trend', authenticateToken, orderController.getOrdersTrend);
 router.get('/orders/export', authenticateToken, isAdmin, orderController.exportForOptiRoute);
 
-// NUEVA: Ruta para obtener todas las comunas disponibles
+// NUEVA: Ruta para obtener todas las ciudades (comunas) disponibles
 router.get('/orders/communes', authenticateToken, async (req, res) => {
   try {
     const { company_id } = req.query;
@@ -182,9 +182,9 @@ router.get('/orders/communes', authenticateToken, async (req, res) => {
       }
     }
     
-    console.log('🏘️ Obteniendo comunas con filtros:', filters);
+    console.log('🏙️ Obteniendo ciudades con filtros:', filters);
     
-    // Agregar pipeline de agregación para obtener comunas únicas
+    // Pipeline de agregación para obtener ciudades únicas (shipping_commune)
     const communes = await Order.aggregate([
       { $match: filters },
       {
@@ -210,7 +210,7 @@ router.get('/orders/communes', authenticateToken, async (req, res) => {
       }
     ]);
     
-    console.log('✅ Comunas encontradas:', communes.length);
+    console.log('✅ Ciudades encontradas:', communes.length);
     
     res.json({
       communes: communes.map(c => c.commune),
@@ -219,8 +219,8 @@ router.get('/orders/communes', authenticateToken, async (req, res) => {
     });
     
   } catch (error) {
-    console.error('❌ Error obteniendo comunas:', error);
-    res.status(500).json({ error: 'Error obteniendo comunas disponibles' });
+    console.error('❌ Error obteniendo ciudades:', error);
+    res.status(500).json({ error: 'Error obteniendo ciudades disponibles' });
   }
 });
 

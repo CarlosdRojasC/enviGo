@@ -1,27 +1,49 @@
-const { body, validationResult } = require('express-validator');
-const { ORDER_STATUS } = require('../../config/constants');
+// Si tienes un archivo backend/src/middlewares/validators/order.validator.js
+// Asegúrate de que tenga algo así:
 
-exports.validateOrderCreation = [
-  body('channel_id').isMongoId().withMessage('El ID del canal no es válido'),
-  body('customer_name').notEmpty().withMessage('El nombre del cliente es requerido'),
-  body('shipping_address').notEmpty().withMessage('La dirección de envío es requerida'),
-  body('total_amount').isNumeric().withMessage('El monto total debe ser un número'),
-  (req, res, next) => {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
-    }
-    next();
-  }
+const { body } = require('express-validator');
+
+const validateOrderCreation = [
+  body('channel_id')
+    .notEmpty()
+    .withMessage('El canal de venta es requerido'),
+  
+  body('order_number')
+    .notEmpty()
+    .withMessage('El número de orden es requerido'),
+  
+  body('customer_name')
+    .notEmpty()
+    .withMessage('El nombre del cliente es requerido'),
+  
+  body('shipping_address')
+    .notEmpty()
+    .withMessage('La dirección de envío es requerida'),
+  
+  // CORREGIDO: Permitir 0 como valor válido
+  body('total_amount')
+    .optional({ nullable: true, checkFalsy: false })
+    .isNumeric()
+    .withMessage('El monto total debe ser un número')
+    .custom((value) => {
+      if (value !== null && value !== undefined && value < 0) {
+        throw new Error('El monto total no puede ser negativo');
+      }
+      return true;
+    }),
+  
+  body('shipping_cost')
+    .optional({ nullable: true, checkFalsy: false })
+    .isNumeric()
+    .withMessage('El costo de envío debe ser un número')
+    .custom((value) => {
+      if (value !== null && value !== undefined && value < 0) {
+        throw new Error('El costo de envío no puede ser negativo');
+      }
+      return true;
+    }),
 ];
 
-exports.validateStatusUpdate = [
-    body('status').isIn(Object.values(ORDER_STATUS)).withMessage('Estado no válido'),
-    (req, res, next) => {
-        const errors = validationResult(req);
-        if (!errors.isEmpty()) {
-            return res.status(400).json({ errors: errors.array() });
-        }
-        next();
-    }
-];
+module.exports = {
+  validateOrderCreation
+};
