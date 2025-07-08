@@ -279,19 +279,6 @@ async function openAssignModal(order) {
   await fetchAvailableDrivers();
 }
 
-async function fetchAvailableDrivers() {
-  loadingDrivers.value = true;
-  try {
-    const response = await shipdayService.getDrivers();
-    availableDrivers.value = response.data.data.filter(driver => driver.isActive && !driver.isOnShift);
-  } catch (error) {
-    alert("Error al cargar los conductores desde Shipday.");
-    console.error(error);
-  } finally {
-    loadingDrivers.value = false;
-  }
-}
-
 async function confirmAssignment() {
   if (!selectedDriverId.value) {
     alert("Por favor, selecciona un conductor.");
