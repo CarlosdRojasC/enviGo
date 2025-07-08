@@ -200,11 +200,24 @@ const orders = {
   getTracking: async (orderId) => {
     try {
       console.log('📍 API: Obteniendo tracking para orden:', orderId);
+      
       const response = await api.get(`/orders/${orderId}/tracking`);
-      console.log('✅ API: Tracking obtenido:', response.data);
+      
+      console.log('✅ API: Tracking obtenido:', {
+        order_number: response.data.tracking?.order_number,
+        has_tracking_url: !!response.data.tracking?.tracking_url,
+        current_status: response.data.tracking?.current_status,
+        timeline_events: response.data.tracking?.timeline?.length || 0
+      });
+      
       return response;
+      
     } catch (error) {
-      console.error('❌ API: Error obteniendo tracking:', error.response || error);
+      console.error('❌ API: Error obteniendo tracking:', {
+        orderId,
+        status: error.response?.status,
+        message: error.response?.data?.error || error.message
+      });
       throw error;
     }
   }

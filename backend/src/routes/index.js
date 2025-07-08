@@ -700,21 +700,37 @@ router.get('/orders/:orderId/shipday-status', authenticateToken, async (req, res
 /**
  * 🆕 NUEVA RUTA: Obtener información completa de tracking
  */
+// ==================== AGREGAR AL FINAL DE: backend/src/routes/index.js ====================
+
+/**
+ * 🆕 NUEVA RUTA: Obtener información completa de tracking
+ */
+// ==================== AGREGAR AL FINAL DE: backend/src/routes/index.js ====================
+
+/**
+ * 🆕 NUEVA RUTA: Obtener información completa de tracking
+ */
 router.get('/orders/:orderId/tracking', authenticateToken, async (req, res) => {
   try {
     const { orderId } = req.params;
+    console.log(`📍 Solicitando tracking para orden: ${orderId}`);
+    
     const order = await Order.findById(orderId)
-      .populate('company_id', 'name')
+      .populate('company_id', 'name phone address')
       .populate('channel_id', 'channel_name channel_type');
     
     if (!order) {
+      console.log(`❌ Orden no encontrada: ${orderId}`);
       return res.status(404).json({ error: 'Pedido no encontrado' });
     }
 
     // Verificar permisos (admin o dueño del pedido)
     if (req.user.role !== 'admin' && req.user.company_id.toString() !== order.company_id._id.toString()) {
+      console.log(`🚫 Sin permisos para ver orden: ${orderId}`);
       return res.status(403).json({ error: 'Sin permisos para ver este pedido' });
     }
+
+    console.log(`✅ Generando tracking info para orden: #${order.order_number}`);
 
     // 🆕 INFORMACIÓN COMPLETA DE TRACKING
     const trackingInfo = {
@@ -729,14 +745,14 @@ router.get('/orders/:orderId/tracking', authenticateToken, async (req, res) => {
       // Información del conductor
       driver: order.driver_info || {
         id: order.shipday_driver_id,
-        name: null,
-        phone: null,
-        email: null,
-        status: null
+        name: order.driver_info?.name || null,
+        phone: order.driver_info?.phone || null,
+        email: order.driver_info?.email || null,
+        status: order.driver_info?.status || null
       },
       
       // Ubicaciones
-      pickup_address: order.pickup_address || order.company_id?.address,
+      pickup_address: order.pickup_address || order.company_id?.address || 'Dirección no especificada',
       delivery_address: order.shipping_address,
       delivery_location: order.delivery_location,
       
@@ -762,6 +778,12 @@ router.get('/orders/:orderId/tracking', authenticateToken, async (req, res) => {
       }
     };
 
+    console.log(`🚚 Tracking generado para #${order.order_number}:`, {
+      has_tracking_url: !!trackingInfo.tracking_url,
+      has_driver: !!trackingInfo.driver?.name,
+      timeline_events: trackingInfo.timeline.length
+    });
+
     res.json({
       success: true,
       tracking: trackingInfo,
@@ -769,10 +791,188 @@ router.get('/orders/:orderId/tracking', authenticateToken, async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Error obteniendo tracking:', error);
+    console.error('❌ Error obteniendo tracking:', error);
     res.status(500).json({ error: error.message });
   }
 });
+
+/**
+ * ✅ FUNCIÓN AUXILIAR: Generar timeline de eventos
+ */
+function generateTimeline(order) {
+  const events = [];
+  
+  try {
+    // Pedido creado
+    events.push({
+      event: 'order_created',
+      title: 'Pedido Creado',
+      description: `Pedido #${order.order_number} recibido desde ${order.channel_id?.channel_name || 'tienda'}`,
+      timestamp: order.order_date,
+      icon: '📦',
+      status: 'completed'
+    });
+    
+    // En procesamiento
+    if (order.status !== 'pending') {
+      events.push({
+        event: 'order_processing',
+        title: 'En Procesamiento',
+        description: 'Tu pedido está siendo preparado para el envío',
+        timestamp: order.shipday_times?.placement_time || order.created_at,
+        icon: '⚙️',
+        status: 'completed'
+      });
+    }
+    
+    // Conductor asignado
+    if (order.shipday_driver_id || order.driver_info?.name) {
+      const driverName = order.driver_info?.name || `Conductor ID: ${order.shipday_driver_id}`;
+      events.push({
+        event: 'driver_assigned',
+        title: 'Conductor Asignado',
+        description: `${driverName} se encargará de tu entrega`,
+        timestamp: order.shipday_times?.assigned_time || order.updated_at,
+        icon: '👨‍💼',
+        status: 'completed'
+      });
+    }
+    
+    // Recogido
+    if (order.status === 'shipped' || order.status === 'delivered') {
+      events.push({
+        event: 'order_picked_up',
+        title: 'Pedido Recogido',
+        description: 'El conductor ha recogido tu pedido y está en camino',
+        timestamp: order.shipday_times?.pickup_time || order.updated_at,
+        icon: '📋',
+        status: 'completed'
+      });
+    }
+    
+    // En tránsito
+    if (order.status === 'shipped' || order.status === 'delivered') {
+      events.push({
+        event: 'in_transit',
+        title: 'En Tránsito',
+        description: `Tu pedido está en camino hacia ${order.shipping_commune || 'tu dirección'}`,
+        timestamp: order.shipday_times?.pickup_time || order.updated_at,
+        icon: '🚚',
+        status: order.status === 'delivered' ? 'completed' : 'current'
+      });
+    }
+    
+    // Entregado
+    if (order.status === 'delivered') {
+      events.push({
+        event: 'delivered',
+        title: '¡Entregado Exitosamente!',
+        description: 'Tu pedido ha sido entregado en la dirección indicada',
+        timestamp: order.delivery_date,
+        icon: '✅',
+        status: 'completed'
+      });
+    }
+    
+    // Cancelado
+    if (order.status === 'cancelled') {
+      events.push({
+        event: 'cancelled',
+        title: 'Pedido Cancelado',
+        description: 'El pedido ha sido cancelado',
+        timestamp: order.updated_at,
+        icon: '❌',
+        status: 'cancelled'
+      });
+    }
+    
+    // Agregar evento futuro si está pendiente
+    if (!['delivered', 'cancelled'].includes(order.status)) {
+      let nextEventTitle = 'Entrega Programada';
+      let nextEventDescription = 'Tu pedido será entregado pronto';
+      let nextEventIcon = '🎯';
+      
+      if (order.status === 'pending') {
+        nextEventTitle = 'Preparando Pedido';
+        nextEventDescription = 'Procesaremos tu pedido en las próximas horas';
+        nextEventIcon = '⏳';
+      } else if (order.status === 'processing') {
+        nextEventTitle = 'Asignando Conductor';
+        nextEventDescription = 'Asignaremos un conductor para tu entrega';
+        nextEventIcon = '🔍';
+      } else if (order.status === 'shipped') {
+        nextEventTitle = 'Entrega en Proceso';
+        nextEventDescription = 'Tu pedido llegará pronto a su destino';
+        nextEventIcon = '🎯';
+      }
+      
+      events.push({
+        event: 'next_step',
+        title: nextEventTitle,
+        description: nextEventDescription,
+        timestamp: order.shipday_times?.expected_delivery_time || null,
+        icon: nextEventIcon,
+        status: 'pending'
+      });
+    }
+    
+    // Ordenar eventos por fecha
+    const eventsWithTimestamp = events.filter(event => event.timestamp);
+    const eventsWithoutTimestamp = events.filter(event => !event.timestamp);
+    
+    return eventsWithTimestamp
+      .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
+      .concat(eventsWithoutTimestamp);
+      
+  } catch (error) {
+    console.error('❌ Error generando timeline:', error);
+    
+    // Timeline básico en caso de error
+    return [
+      {
+        event: 'order_created',
+        title: 'Pedido Creado',
+        description: `Pedido #${order.order_number} recibido`,
+        timestamp: order.order_date,
+        icon: '📦',
+        status: 'completed'
+      },
+      {
+        event: 'current_status',
+        title: getStatusDisplayName(order.status),
+        description: `Estado actual: ${getStatusDisplayName(order.status)}`,
+        timestamp: order.updated_at,
+        icon: getStatusIcon(order.status),
+        status: 'current'
+      }
+    ];
+  }
+}
+
+/**
+ * ✅ FUNCIONES AUXILIARES PARA TIMELINE
+ */
+function getStatusDisplayName(status) {
+  const names = {
+    pending: 'Pendiente',
+    processing: 'Procesando',
+    shipped: 'En Tránsito',
+    delivered: 'Entregado',
+    cancelled: 'Cancelado'
+  };
+  return names[status] || status;
+}
+
+function getStatusIcon(status) {
+  const icons = {
+    pending: '⏳',
+    processing: '⚙️',
+    shipped: '🚚',
+    delivered: '✅',
+    cancelled: '❌'
+  };
+  return icons[status] || '📦';
+}
 
 // ==================== FACTURACIÓN (BILLING) ====================
 
