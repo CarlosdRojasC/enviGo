@@ -67,10 +67,28 @@ const orderSchema = new mongoose.Schema({
   shipday_tracking_url: { type: String }, // URL de tracking de Shipday
   shipday_status: { type: String }, // Estado en Shipday
   proof_of_delivery: { type: evidenceSchema, default: null },
-  // NUEVOS CAMPOS PARA SHIPDAY
-  pickup_address: { type: String }, // Dirección de recogida (restaurante/tienda)
-  pickup_city: { type: String },
-  pickup_phone: { type: String },
+  // Información del conductor expandida
+  driver_info: {
+    name: { type: String },
+    phone: { type: String },
+    email: { type: String },
+    status: { type: String } // ONLINE, OFFLINE, etc.
+  },
+  
+  // Ubicación de entrega
+  delivery_location: {
+    lat: { type: Number },
+    lng: { type: Number },
+    formatted_address: { type: String }
+  },
+  
+  // Tiempos detallados de Shipday
+  shipday_times: {
+    placement_time: { type: Date },
+    assigned_time: { type: Date },
+    pickup_time: { type: Date },
+    delivery_time: { type: Date }
+  },
 
   // Estados y fechas
   status: { 

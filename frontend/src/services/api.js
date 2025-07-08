@@ -195,6 +195,18 @@ const orders = {
       console.error('❌ API: Error en preview:', error.response || error);
       throw error;
     }
+  },
+   // 🆕 NUEVO: Método para tracking
+  getTracking: async (orderId) => {
+    try {
+      console.log('📍 API: Obteniendo tracking para orden:', orderId);
+      const response = await api.get(`/orders/${orderId}/tracking`);
+      console.log('✅ API: Tracking obtenido:', response.data);
+      return response;
+    } catch (error) {
+      console.error('❌ API: Error obteniendo tracking:', error.response || error);
+      throw error;
+    }
   }
 }
 
