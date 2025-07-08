@@ -113,8 +113,8 @@
               <td>{{ order.customer_name }}</td>
               <!-- NUEVA: Columna de comuna -->
               <td class="commune-cell">
-                <span class="commune-badge" :class="getCommuneClass(order.shipping_commune)">
-                  {{ order.shipping_commune || 'Sin comuna' }}
+                <span class="commune-badge" :class="getCommuneClass(order.shipping_city)">
+                  {{ order.shipping_city || 'Sin comuna' }}
                 </span>
               </td>
               <td class="date-cell">
@@ -185,8 +185,7 @@
           <div class="form-group"><label>Nombre del Cliente *</label><input v-model="newOrder.customer_name" type="text" required /></div>
           <div class="form-group"><label>Email del Cliente</label><input v-model="newOrder.customer_email" type="email" /></div>
           <div class="form-group full-width"><label>Dirección de Envío *</label><input v-model="newOrder.shipping_address" type="text" required /></div>
-          <div class="form-group"><label>Comuna</label><input v-model="newOrder.shipping_commune" type="text" /></div>
-          <div class="form-group"><label>Ciudad</label><input v-model="newOrder.shipping_city" type="text" /></div>
+          <div class="form-group"><label>Comuna</label><input v-model="newOrder.shipping_city" type="text" /></div>
           <div class="form-group"><label>Costo de Envío</label><input v-model.number="newOrder.shipping_cost" type="number" /></div>
           
           <div class="form-group full-width section-header"><h4>Datos para Logística (OptiRoute)</h4></div>
@@ -474,8 +473,8 @@ async function fetchAvailableCommunes() {
 function updateAvailableCommunes(orders) {
   const communes = new Set();
   orders.forEach(order => {
-    if (order.shipping_commune && order.shipping_commune.trim()) {
-      communes.add(order.shipping_commune.trim());
+    if (order.shipping_city && order.shipping_commune.trim()) {
+      communes.add(order.shipping_city.trim());
     }
   });
   availableCommunes.value = [...communes].sort();

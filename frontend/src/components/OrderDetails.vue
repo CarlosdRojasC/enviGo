@@ -31,11 +31,7 @@
       </div>
       <div class="detail-item">
         <span class="label">Comuna:</span>
-        <span class="value commune-highlight">{{ order.shipping_commune || 'No especificada' }}</span>
-      </div>
-      <div class="detail-item">
-        <span class="label">Ciudad:</span>
-        <span class="value">{{ order.shipping_city || 'No especificada' }}</span>
+        <span class="value commune-highlight">{{ order.shipping_city || 'No especificada' }}</span>
       </div>
       <div class="detail-item">
         <span class="label">Región:</span>
