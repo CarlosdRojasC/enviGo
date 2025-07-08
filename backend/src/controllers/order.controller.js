@@ -203,6 +203,47 @@ class OrderController {
     }
   }
 
+  async exportForOptiRoute(req, res) {
+    try {
+      const { date_from, date_to, company_id, status } = req.query;
+
+      const filters = {};
+
+      if (status) {
+        filters.status = status;
+      }
+      
+      if (company_id) {
+        filters.company_id = company_id;
+      }
+
+      if (date_from || date_to) {
+        filters.order_date = {};
+        if (date_from) filters.order_date.$gte = new Date(date_from);
+        if (date_to) filters.order_date.$lte = new Date(date_to);
+      }
+
+      const orders = await Order.find(filters)
+        .populate('company_id', 'name')
+        .populate('channel_id', 'channel_name')
+        .sort({ shipping_city: 1, shipping_address: 1 })
+        .lean();
+
+      if (orders.length === 0) {
+        return res.status(404).json({ error: 'No se encontraron pedidos para exportar con los filtros aplicados' });
+      }
+
+      const excelBuffer = await ExcelService.generateOptiRouteExport(orders);
+
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename=optiroute_export_${Date.now()}.xlsx`);
+      res.send(excelBuffer);
+    } catch (error) {
+      console.error('Error exportando para OptiRoute:', error);
+      res.status(500).json({ error: 'Error interno del servidor' });
+    }
+  }
+
 async exportForOptiRoute(req, res) {
     // Esta ruta ahora es solo para administradores
     try {
@@ -389,7 +430,7 @@ async getOrdersTrend(req, res) {
         return res.status(400).json({ error: 'Se requiere el ID del conductor de Shipday.' });
       }
 
-      // ✅ CAMBIO CLAVE: Hacemos "populate" para traer los datos de la empresa
+      // Hacemos "populate" para traer los datos de la empresa
       const order = await Order.findById(orderId).populate('company_id');
 
       if (!order) {
@@ -401,29 +442,62 @@ async getOrdersTrend(req, res) {
       }
 
       if (order.shipday_order_id) {
-        return res.status(400).json({ error: 'Este pedido ya ha sido enviado a Shipday.' });
+        return res.status(400).json({ error: 'Este pedido ya fue enviado a Shipday.' });
       }
 
       if (req.user.role !== 'admin' && req.user.company_id.toString() !== order.company_id._id.toString()) {
         return res.status(403).json({ error: ERRORS.FORBIDDEN });
       }
 
-      // Se llama al servicio con el pedido completo, que ahora incluye los datos de la empresa
-      const shipdayResult = await ShipdayService.createAndAssignOrder(order, driverId);
+      // Paso 1: Crear la orden en Shipday con todos los datos necesarios
+      const orderDataForShipday = {
+        orderNumber: order.order_number,
+        customerName: order.customer_name,
+        customerAddress: order.shipping_address,
+        restaurantName: order.company_id.name,
+        restaurantAddress: order.company_id.address,
+        customerPhoneNumber: order.customer_phone || '',
+        deliveryInstruction: order.notes || '',
+      };
+      
+      const createdShipdayOrder = await ShipdayService.createOrder(orderDataForShipday);
+      
+      if (!createdShipdayOrder || !createdShipdayOrder.orderId) {
+        throw new Error('No se pudo crear la orden en Shipday o la respuesta no incluyó un orderId.');
+      }
+      
+      const shipdayOrderId = createdShipdayOrder.orderId;
+      console.log(`✅ Orden creada en Shipday con ID: ${shipdayOrderId}`);
+
+      // Paso 2: Asignar la orden recién creada al conductor
+      const assignmentResult = await ShipdayService.assignOrder(shipdayOrderId, driverId);
+      
+      if (!assignmentResult || assignmentResult.success === false) {
+        console.error('❌ Fallo al asignar la orden en Shipday. Respuesta:', assignmentResult);
+        throw new Error(`La orden se creó en Shipday (ID: ${shipdayOrderId}), pero falló la asignación al conductor.`);
+      }
+      
+      console.log(`✅ Orden ${shipdayOrderId} asignada al conductor ${driverId}.`);
+
+      // Paso 3: Actualizar nuestro pedido local
+      order.shipday_order_id = shipdayOrderId;
+      order.shipday_driver_id = driverId;
+      order.status = 'processing';
+      await order.save();
 
       res.status(200).json({ 
-        message: 'Pedido asignado a Shipday exitosamente.',
-        order: shipdayResult.order 
+        message: 'Pedido creado y asignado en Shipday exitosamente.',
+        order: order 
       });
 
     } catch (error) {
-      console.error('Error asignando pedido a conductor:', error);
-      res.status(500).json({ error: error.message || ERRORS.SERVER_ERROR });
+      console.error('Error en el proceso de asignación:', error);
+      res.status(500).json({ error: error.message || 'Error interno del servidor' });
     }
   }
 
   /**
-   * ✅ NUEVO: Crea una orden en Shipday sin asignar conductor.
+   * Crea una orden en Shipday sin asignar conductor.
    */
   async createInShipday(req, res) {
     try {
@@ -439,14 +513,12 @@ async getOrdersTrend(req, res) {
         return res.status(400).json({ error: 'Este pedido ya está en Shipday.' });
       }
 
-      // Crear en Shipday sin asignar conductor
       const shipdayData = {
         orderNumber: order.order_number,
         customerName: order.customer_name,
         customerAddress: order.shipping_address,
         restaurantName: order.company_id.name,
         restaurantAddress: order.company_id.address,
-        // ... otros campos que quieras enviar
       };
 
       const shipdayOrder = await ShipdayService.createOrder(shipdayData);
@@ -455,7 +527,6 @@ async getOrdersTrend(req, res) {
         return res.status(400).json({ error: 'Error en Shipday: ' + (shipdayOrder.response || 'Error desconocido') });
       }
 
-      // Actualizar orden local
       order.shipday_order_id = shipdayOrder.orderId;
       order.status = 'processing';
       await order.save();
