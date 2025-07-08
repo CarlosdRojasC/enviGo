@@ -21,7 +21,7 @@
         <span class="value">{{ order.customer_document || 'No disponible' }}</span>
       </div>
       
-      <!-- NUEVO: Dirección separada en campos específicos -->
+      <!-- Dirección separada en campos específicos -->
       <div class="detail-item full-width section-header">
         <h4>Dirección de Envío</h4>
       </div>
@@ -30,16 +30,12 @@
         <span class="value">{{ order.shipping_address || 'No especificada' }}</span>
       </div>
       <div class="detail-item">
-        <span class="label">Comuna (Ciudad):</span>
+        <span class="label">Comuna:</span>
         <span class="value commune-highlight">{{ order.shipping_commune || 'No especificada' }}</span>
       </div>
       <div class="detail-item">
-        <span class="label">Región/Área:</span>
-        <span class="value">{{ order.shipping_city || 'No especificada' }}</span>
-      </div>
-      <div class="detail-item">
-        <span class="label">Estado/Provincia:</span>
-        <span class="value">{{ order.shipping_state || 'No especificada' }}</span>
+        <span class="label">Región:</span>
+        <span class="value">{{ order.shipping_state || 'Región Metropolitana' }}</span>
       </div>
       <div class="detail-item">
         <span class="label">Código Postal:</span>

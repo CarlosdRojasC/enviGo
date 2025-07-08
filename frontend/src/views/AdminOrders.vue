@@ -1,4 +1,7 @@
-<template>
+if (!newOrder.value.shipping_commune) {
+    alert("Por favor, ingrese la comuna.");
+    return;
+  }<template>
   <div class="page-container">
     <div class="page-header">
       <h1 class="page-title">Pedidos Globales</h1>
@@ -31,9 +34,9 @@
           <option value="delivered">Entregados</option>
           <option value="cancelled">Cancelados</option>
         </select>
-        <!-- NUEVO: Filtro por comuna (ciudad) -->
+        <!-- Filtro por comuna -->
         <select v-model="filters.commune" @change="fetchOrders" class="commune-filter">
-          <option value="">Todas las Ciudades</option>
+          <option value="">Todas las Comunas</option>
           <option v-for="commune in availableCommunes" :key="commune" :value="commune">
             {{ commune }}
           </option>
@@ -44,7 +47,7 @@
           type="text" 
           v-model="filters.search" 
           @input="debounceSearch"
-          placeholder="Buscar por pedido, cliente, dirección o ciudad..."
+          placeholder="Buscar por pedido, cliente, dirección o comuna..."
           class="search-input"
         />
       </div>
@@ -83,7 +86,7 @@
               <th>Pedido</th>
               <th>Empresa</th>
               <th>Cliente</th>
-              <th>Ciudad</th>
+              <th>Comuna</th>
               <th>Fechas (Creación / Entrega)</th>
               <th>Estado</th>
               <th>Costo de Envío</th>
@@ -111,10 +114,10 @@
               <td class="order-number">{{ order.order_number }}</td>
               <td>{{ order.company_id.name }}</td>
               <td>{{ order.customer_name }}</td>
-              <!-- NUEVA: Columna de ciudad (comuna) -->
+              <!-- Columna de comuna -->
               <td class="commune-cell">
                 <span class="commune-badge" :class="getCommuneClass(order.shipping_commune)">
-                  {{ order.shipping_commune || 'Sin ciudad' }}
+                  {{ order.shipping_commune || 'Sin comuna' }}
                 </span>
               </td>
               <td class="date-cell">
@@ -185,8 +188,8 @@
           <div class="form-group"><label>Nombre del Cliente *</label><input v-model="newOrder.customer_name" type="text" required /></div>
           <div class="form-group"><label>Email del Cliente</label><input v-model="newOrder.customer_email" type="email" /></div>
           <div class="form-group full-width"><label>Dirección de Envío *</label><input v-model="newOrder.shipping_address" type="text" required /></div>
-          <div class="form-group"><label>Ciudad (Comuna)</label><input v-model="newOrder.shipping_commune" type="text" placeholder="ej: Las Condes, Providencia, Santiago" /></div>
-          <div class="form-group"><label>Región/Área</label><input v-model="newOrder.shipping_city" type="text" placeholder="ej: Región Metropolitana" /></div>
+          <div class="form-group"><label>Comuna *</label><input v-model="newOrder.shipping_commune" type="text" placeholder="ej: Las Condes, Providencia, Santiago" required /></div>
+          <div class="form-group"><label>Región</label><input v-model="newOrder.shipping_state" type="text" placeholder="Región Metropolitana" /></div>
           
           <div class="form-group full-width section-header"><h4>Información Financiera</h4></div>
           <div class="form-group"><label>Monto Total *</label><input v-model.number="newOrder.total_amount" type="number" step="0.01" min="0" required placeholder="0.00" /></div>
@@ -447,14 +450,14 @@ async function fetchOrders() {
   } 
 }
 
-// NUEVA: Función mejorada para obtener ciudades disponibles
+// Función mejorada para obtener comunas disponibles
 async function fetchAvailableCommunes() {
   try {
-    console.log('🏙️ Obteniendo ciudades disponibles...');
+    console.log('🏘️ Obteniendo comunas disponibles...');
     
     const params = {};
     
-    // Si hay filtro de empresa, aplicarlo también para las ciudades
+    // Si hay filtro de empresa, aplicarlo también para las comunas
     if (filters.value.company_id) {
       params.company_id = filters.value.company_id;
     }
@@ -462,18 +465,18 @@ async function fetchAvailableCommunes() {
     const { data } = await apiService.orders.getAvailableCommunes(params);
     availableCommunes.value = data.communes || [];
     
-    console.log('✅ Ciudades cargadas:', availableCommunes.value.length);
+    console.log('✅ Comunas cargadas:', availableCommunes.value.length);
     
   } catch (error) {
     console.error('❌ Error fetching communes:', error);
-    // Fallback: extraer ciudades de las órdenes actuales
+    // Fallback: extraer comunas de las órdenes actuales
     if (orders.value.length > 0) {
       updateAvailableCommunes(orders.value);
     }
   }
 }
 
-// NUEVA: Función para actualizar la lista de ciudades (fallback)
+// Función para actualizar la lista de comunas (fallback)
 function updateAvailableCommunes(orders) {
   const communes = new Set();
   orders.forEach(order => {
@@ -482,7 +485,7 @@ function updateAvailableCommunes(orders) {
     }
   });
   availableCommunes.value = [...communes].sort();
-  console.log('📍 Ciudades actualizadas desde órdenes locales:', availableCommunes.value.length);
+  console.log('📍 Comunas actualizadas desde órdenes locales:', availableCommunes.value.length);
 }
 
 async function exportOrders() { 
@@ -540,7 +543,7 @@ function goToPage(page) {
 function openCreateOrderModal() { 
   newOrder.value = { 
     company_id: '', customer_name: '', customer_email: '', shipping_address: '',
-    shipping_commune: '', shipping_city: '', total_amount: 0, shipping_cost: 0, 
+    shipping_commune: '', shipping_state: 'Región Metropolitana', total_amount: 0, shipping_cost: 0, 
     priority: 'Normal', serviceTime: 5, timeWindowStart: '09:00', timeWindowEnd: '18:00', 
     load1Packages: 1, load2WeightKg: 1 
   }; 
@@ -661,12 +664,16 @@ function getStatusName(status) {
   return names[status] || status; 
 }
 
-// NUEVA: Función para obtener clase CSS de ciudad
+// Función para obtener clase CSS de comuna
 function getCommuneClass(commune) {
-  if (!commune || commune === 'Sin ciudad') return 'commune-empty';
-  // Podrías agregar lógica específica para ciertas ciudades importantes
-  const importantCities = ['Santiago', 'Valparaíso', 'Concepción', 'La Serena', 'Antofagasta'];
-  if (importantCities.some(city => commune.toLowerCase().includes(city.toLowerCase()))) {
+  if (!commune || commune === 'Sin comuna') return 'commune-empty';
+  // Comunas importantes de Santiago y otras regiones
+  const importantCommunes = [
+    'Las Condes', 'Providencia', 'Santiago', 'Ñuñoa', 'La Reina', 'Vitacura',
+    'Valparaíso', 'Viña del Mar', 'Concepción', 'La Serena', 'Antofagasta',
+    'Temuco', 'Puerto Montt', 'Iquique', 'Arica'
+  ];
+  if (importantCommunes.some(important => commune.toLowerCase().includes(important.toLowerCase()))) {
     return 'commune-important';
   }
   return 'commune-filled';
@@ -1023,7 +1030,7 @@ function closeBulkAssignModal() {
 .filters select, .filters input { padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; }
 .search-input { grid-column: span 2; }
 
-/* NUEVO: Estilos para filtro de ciudad */
+/* Estilos para filtro de comuna */
 .commune-filter {
   background-color: #f0f9ff;
   border-color: #0ea5e9;
