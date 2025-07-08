@@ -84,84 +84,30 @@ class ShipDayService {
   async getDrivers() {
     try {
       const headers = this.workingFormat || this.getHeaders(1);
-      console.log('🔍 Obteniendo conductores desde ShipDay...');
-      
       const res = await axios.get(`${BASE_URL}/carriers`, { headers });
-      console.log('✅ Respuesta cruda de ShipDay:', JSON.stringify(res.data, null, 2));
-      
-      // Verificar si res.data es un array o tiene un wrapper
       const driversData = Array.isArray(res.data) ? res.data : res.data.data || res.data.carriers || [];
-      
       if (!Array.isArray(driversData)) {
-        console.error('❌ Los datos de conductores no son un array:', typeof driversData);
+        console.error('❌ Los datos de conductores de Shipday no son un array.');
         return [];
       }
-      
-      console.log(`📊 Procesando ${driversData.length} conductores...`);
-      
-      // Mapear la respuesta de ShipDay al formato esperado
-      const mappedDrivers = driversData.map((driver, index) => {
-        console.log(`🔍 Conductor ${index + 1}:`, {
-          name: driver.name,
-          isActive: driver.isActive,
-          isOnShift: driver.isOnShift,
-          email: driver.email
-        });
-        
-        return {
-          ...driver,
-          // Campos principales de ShipDay
-          id: driver.id,
-          carrierId: driver.id,
-          email: driver.email,
-          name: driver.name,
-          phoneNumber: driver.phoneNumber,
-          companyId: driver.companyId,
-          
-          // Estados importantes de ShipDay (con conversión explícita a boolean)
-          isActive: Boolean(driver.isActive), // Habilitado para recibir órdenes
-          isOnShift: Boolean(driver.isOnShift), // Trabajando actualmente
-          
-          // Ubicación GPS de ShipDay (campos originales + mapeados)
-          carrrierLocationLat: driver.carrrierLocationLat,
-          carrrierLocationLng: driver.carrrierLocationLng,
-          location: {
-            lat: driver.carrrierLocationLat || null,
-            lng: driver.carrrierLocationLng || null
-          },
-          
-          // Campos adicionales
-          codeName: driver.codeName || '',
-          carrierPhoto: driver.carrierPhoto || null,
-          personalId: driver.personalId || '',
-          areaId: driver.areaId || null,
-          
-          // Estado calculado para la UI
-          status: this.calculateDriverStatus(driver)
-        };
-      });
-      
-      console.log('✅ Conductores mapeados:', mappedDrivers.length);
-      return mappedDrivers;
+      return driversData.map(driver => ({
+        ...driver,
+        id: driver.id,
+        carrierId: driver.id,
+        isActive: Boolean(driver.isActive),
+        isOnShift: Boolean(driver.isOnShift),
+        status: this.calculateDriverStatus(driver)
+      }));
     } catch (error) {
       console.error('❌ Error obteniendo conductores:', error.response?.data);
       throw this.handleError(error);
     }
   }
 
-  /**
-   * Calcular el estado del conductor para la UI
-   */
   calculateDriverStatus(driver) {
-    if (!driver.isActive) {
-      return 'inactive'; // Deshabilitado
-    }
-    
-    if (driver.isOnShift) {
-      return 'working'; // Trabajando/En turno
-    }
-    
-    return 'available'; // Disponible para trabajar
+    if (!driver.isActive) return 'inactive';
+    if (driver.isOnShift) return 'working';
+    return 'available';
   }
 
   async getDriver(email) {
@@ -213,72 +159,52 @@ class ShipDayService {
   }
 
   // ==================== ORDERS ====================
-
+/**
+   * ✅ CORREGIDO: Crea una orden en Shipday asegurando que los campos obligatorios estén presentes.
+   */
   async createOrder(orderData) {
     try {
       const headers = this.workingFormat || this.getHeaders(1);
-      const res = await axios.post(`${BASE_URL}/orders`, orderData, { headers });
+      
+      const payload = {
+        orderNumber: orderData.orderNumber,
+        customerName: orderData.customerName,
+        customerAddress: orderData.customerAddress,
+        restaurantName: orderData.restaurantName,
+        restaurantAddress: orderData.restaurantAddress,
+        ...orderData, // Incluye el resto de los datos opcionales
+      };
+
+      console.log('📦 Enviando payload de creación de orden a Shipday:', JSON.stringify(payload, null, 2));
+      const res = await axios.post(`${BASE_URL}/orders`, payload, { headers });
+      
       return res.data;
     } catch (error) {
-      console.error('❌ Error creando orden en Shipday:', error.response?.data);
+      console.error('❌ Error creando la orden en Shipday:', error.response?.data);
       throw this.handleError(error);
     }
   }
-  
+
   /**
-   * ✅ CORREGIDO Y MEJORADO:
-   * Crea la orden en Shipday y la asigna a un conductor, asegurando que todos los campos requeridos estén presentes.
+   * ✅ CORREGIDO: Asigna una orden ya creada a un conductor.
+   * Sigue la documentación oficial: POST /orders/assign/{orderId}
    */
-  async createAndAssignOrder(order, driverId) {
+  async assignOrder(orderId, driverId) {
     try {
-      // 1. Prepara el payload con valores por defecto para evitar errores
-      const payload = {
-        orderNumber: order.order_number,
-        
-        // --- Datos del punto de recogida (CRÍTICO) ---
-        restaurantName: order.company_id.name || 'Punto de Recogida',
-        restaurantAddress: order.company_id.address || 'Dirección de la empresa no especificada',
-        restaurantPhoneNumber: order.company_id.phone || '',
+      const headers = this.workingFormat || this.getHeaders(1);
+      const payload = { carrierId: driverId };
 
-        // --- Datos del cliente final ---
-        customerName: order.customer_name,
-        customerAddress: order.shipping_address,
-        customerEmail: order.customer_email || '',
-        customerPhoneNumber: order.customer_phone || '',
-        
-        // --- Asignación y detalles ---
-        carrierId: driverId,
-        deliveryInstruction: order.notes || 'Sin instrucciones.',
-        
-        // Para que la orden sea inmediata y no programada, no incluimos fechas de entrega
-        // expectedDeliveryDate: 'YYYY-MM-DD', 
-        // expectedDeliveryTime: 'HH:mm:ss',
-      };
+      console.log(`🔗 Asignando orden ${orderId} al conductor ${driverId}...`);
 
-      console.log('📦 Enviando este payload a Shipday:', JSON.stringify(payload, null, 2));
-
-      // 2. Llama al método para crear la orden
-      const createdOrder = await this.createOrder(payload);
-
-      // 3. Verifica la respuesta de Shipday antes de continuar
-      if (!createdOrder || createdOrder.success === false) {
-        throw new Error(`Shipday devolvió un error: ${createdOrder.response || 'Error desconocido'}`);
-      }
-
-      // 4. Actualiza tu pedido local con el ID de Shipday y el nuevo estado
-      order.shipday_order_id = createdOrder.orderId;
-      order.shipday_driver_id = driverId;
-      order.status = 'processing'; // Marcar como "Procesando"
-      await order.save();
-
-      return { success: true, order: createdOrder };
-
+      const res = await axios.post(`${BASE_URL}/orders/assign/${orderId}`, payload, { headers });
+      return res.data;
     } catch (error) {
-      console.error('❌ Error en createAndAssignOrder:', error.message);
-      // Lanza el error para que el controlador lo maneje y envíe una respuesta clara al frontend
-      throw error;
+      console.error('❌ Error asignando la orden en Shipday:', error.response?.data);
+      throw this.handleError(error);
     }
   }
+
+  
   async getOrders() {
     try {
       const headers = this.workingFormat || this.getHeaders(1);
@@ -301,110 +227,7 @@ class ShipDayService {
     }
   }
 
- async assignOrder(orderId, email) {
-    try {
-      console.log('🔗 Iniciando asignación de orden:', { orderId, email });
-      
-      // Verificar que tenemos los datos necesarios
-      if (!orderId) {
-        throw new Error('orderId es requerido para asignar orden');
-      }
-      
-      if (!email) {
-        throw new Error('email del conductor es requerido para asignar orden');
-      }
-      
-      const headers = this.workingFormat || this.getHeaders(1);
-      
-      // Probar diferentes formatos de payload para asignación
-      const payloadFormats = [
-        // Formato 1: Objeto con orderId y email
-        { orderId: orderId, email: email },
-        
-        // Formato 2: Objeto con carrierEmail
-        { orderId: orderId, carrierEmail: email },
-        
-        // Formato 3: Solo el email
-        { email: email },
-        
-        // Formato 4: carrierId si lo tenemos
-        // { carrierId: driverId } // Lo agregaremos si es necesario
-      ];
-      
-      let lastError;
-      
-      for (let i = 0; i < payloadFormats.length; i++) {
-        const payload = payloadFormats[i];
-        
-        try {
-          console.log(`🔍 Probando formato ${i + 1} para asignación:`, payload);
-          
-          const res = await axios.post(`${BASE_URL}/assignorder`, payload, { headers });
-          console.log(`✅ Asignación exitosa con formato ${i + 1}:`, res.data);
-          
-          return res.data;
-          
-        } catch (error) {
-          console.log(`❌ Formato ${i + 1} falló:`, error.response?.status, error.response?.data?.errorMessage);
-          lastError = error;
-          continue;
-        }
-      }
-      
-      // Si todos los formatos fallaron
-      console.error('❌ Todos los formatos de asignación fallaron');
-      console.error('Último error:', lastError.response?.data);
-      throw this.handleError(lastError);
-      
-    } catch (error) {
-      console.error('❌ Error asignando orden:', error.response?.data);
-      throw this.handleError(error);
-    }
-  }
-
-  /**
-   * MÉTODO ALTERNATIVO: Asignar usando PUT en lugar de POST
-   */
-  async assignOrderPUT(orderId, email) {
-    try {
-      console.log('🔄 Intentando asignación con PUT:', { orderId, email });
-      
-      const headers = this.workingFormat || this.getHeaders(1);
-      const payload = { email: email };
-      
-      console.log('📤 PUT payload:', payload);
-      
-      const res = await axios.put(`${BASE_URL}/orders/${orderId}/assign`, payload, { headers });
-      console.log('✅ Asignación PUT exitosa:', res.data);
-      
-      return res.data;
-    } catch (error) {
-      console.error('❌ Error en asignación PUT:', error.response?.data);
-      throw this.handleError(error);
-    }
-  }
-
-  /**
-   * MÉTODO DE VERIFICACIÓN: Obtener orden para verificar asignación
-   */
-  async verifyOrderAssignment(orderId) {
-    try {
-      console.log('🔍 Verificando asignación de orden:', orderId);
-      
-      const order = await this.getOrder(orderId);
-      console.log('📋 Estado de la orden:', {
-        orderId: order.orderId,
-        carrierId: order.carrierId,
-        carrierEmail: order.carrierEmail,
-        status: order.status
-      });
-      
-      return order;
-    } catch (error) {
-      console.error('❌ Error verificando orden:', error);
-      return null;
-    }
-  }
+ 
   // ==================== UTILITIES ====================
 
   async testConnection() {
