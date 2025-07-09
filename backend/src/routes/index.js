@@ -28,12 +28,12 @@ const driverController = require('../controllers/driver.controller');
 const shipdayRoutes = require('./shipday.routes');
 const comunasRoutes = require('./comunas.routes');
 const channelRoutes = require('./channels.routes');
-
+const driverRoutes = require('./drivers.routes');
 // ==================== USAR RUTAS SEPARADAS ====================
 router.use('/shipday', shipdayRoutes);
 router.use('/communes', comunasRoutes);
 router.use('/channels', channelRoutes);
-
+router.use('/driversOrders', driverRoutes);
 // Importar modelos para dashboard
 const Company = require('../models/Company');
 const Order = require('../models/Order');

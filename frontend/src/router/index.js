@@ -2,7 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '../store/auth'
 import DashboardLayout from '../layouts/DashboardLayout.vue'
 import Login from '../views/login.vue'
-
+import DriverOrders from '../views/DriverOrders.vue'
 const routes = [
   {
     path: '/login',
@@ -65,6 +65,12 @@ const routes = [
         component: () => import('../views/Drivers.vue'),
         meta: { roles: ['admin'] }
       },
+      {
+  path: '/admin/driver-orders',
+  name: 'AdminDriverOrders',
+  component: () => import('../views/DriverOrders.vue'),
+  meta: {roles: ['admin']  }
+},
     {
     path: 'admin/orders',
     name: 'AdminOrders',
