@@ -1,55 +1,181 @@
 const axios = require('axios');
-// Se importan los modelos de Mongoose necesarios
 const Order = require('../models/Order');
 const Channel = require('../models/Channel');
-const Company = require('../models/Company'); // <-- Modelo de empresa para el costo de envío
+const Company = require('../models/Company');
+const mongoose = require('mongoose');
+const crypto = require('crypto');
 
 class WooCommerceService {
-  // Construir headers de autenticación
+  static getApiUrl(channel) {
+    return `${channel.store_url}/wp-json/wc/v3`;
+  }
+  
   static getAuthHeader(channel) {
-    const auth = Buffer.from(`${channel.api_key}:${channel.api_secret}`).toString('base64');
+    const credentials = `${channel.api_key}:${channel.api_secret}`;
+    const encoded = Buffer.from(credentials).toString('base64');
     return {
-      'Authorization': `Basic ${auth}`,
+      'Authorization': `Basic ${encoded}`,
       'Content-Type': 'application/json'
     };
   }
-  
-  // Obtener URL base de la API
-  static getApiUrl(channel) {
-    const baseUrl = channel.store_url.replace(/\/$/, '');
-    return `${baseUrl}/wp-json/wc/v3`;
-  }
-  
-  // Probar conexión (sin cambios)
-  static async testConnection(channel) {
-    try {
-      const response = await axios.get(
-        `${this.getApiUrl(channel)}/system_status`,
-        { headers: this.getAuthHeader(channel) }
-      );
+
+  // 🏘️ FUNCIÓN MEJORADA: Normalizar nombre de comuna
+  static normalizeCommune(commune) {
+    if (!commune) return '';
+    
+    // Limpiar espacios y caracteres especiales
+    let normalized = commune.trim().replace(/[^\w\sáéíóúÁÉÍÓÚñÑ]/g, '');
+    
+    // Mapeo de variaciones comunes de las comunas que manejas
+    const communeMap = {
+      // Macul
+      'macul': 'Macul',
       
-      return {
-        success: true,
-        message: `Conectado exitosamente a WooCommerce`,
-        store_info: {
-          environment: response.data.environment,
-          version: response.data.database.wc_database_version,
-          currency: response.data.settings.currency
-        }
-      };
+      // San Miguel
+      'san miguel': 'San Miguel',
+      'sanmiguel': 'San Miguel',
+      
+      // Santiago Centro
+      'santiago centro': 'Santiago Centro',
+      'santiago': 'Santiago Centro',
+      'centro': 'Santiago Centro',
+      'stgo centro': 'Santiago Centro',
+      'stgo': 'Santiago Centro',
+      
+      // La Florida
+      'la florida': 'La Florida',
+      'florida': 'La Florida',
+      'laflorida': 'La Florida',
+      
+      // Peñalolén
+      'penalolen': 'Peñalolén',
+      'peñalolen': 'Peñalolén',
+      'penalolén': 'Peñalolén',
+      'peñalolén': 'Peñalolén',
+      
+      // Las Condes
+      'las condes': 'Las Condes',
+      'las conde': 'Las Condes',
+      'conde': 'Las Condes',
+      'condes': 'Las Condes',
+      
+      // Vitacura
+      'vitacura': 'Vitacura',
+      'vita': 'Vitacura',
+      
+      // Quinta Normal
+      'quinta normal': 'Quinta Normal',
+      'quintanormal': 'Quinta Normal',
+      '5ta normal': 'Quinta Normal',
+      
+      // Independencia
+      'independencia': 'Independencia',
+      'indep': 'Independencia',
+      
+      // Recoleta
+      'recoleta': 'Recoleta',
+      
+      // Huechuraba
+      'huechuraba': 'Huechuraba',
+      
+      // Quilicura
+      'quilicura': 'Quilicura',
+      
+      // Estación Central
+      'estacion central': 'Estación Central',
+      'estación central': 'Estación Central',
+      'estacioncentral': 'Estación Central',
+      
+      // Ñuñoa
+      'nunoa': 'Ñuñoa',
+      'ñunoa': 'Ñuñoa',
+      'noa': 'Ñuñoa',
+      
+      // La Reina
+      'la reina': 'La Reina',
+      'reina': 'La Reina',
+      'lareina': 'La Reina',
+      
+      // San Joaquín
+      'san joaquin': 'San Joaquín',
+      'sanjoaquin': 'San Joaquín',
+      'san joaquín': 'San Joaquín',
+      
+      // Pedro Aguirre Cerda
+      'pedro aguirre cerda': 'Pedro Aguirre Cerda',
+      'pedroaguirrecerda': 'Pedro Aguirre Cerda',
+      'pac': 'Pedro Aguirre Cerda',
+      
+      // Cerrillos
+      'cerrillos': 'Cerrillos',
+      
+      // Renca
+      'renca': 'Renca',
+      
+      // La Granja
+      'la granja': 'La Granja',
+      'granja': 'La Granja',
+      'lagranja': 'La Granja',
+      
+      // La Cisterna
+      'la cisterna': 'La Cisterna',
+      'cisterna': 'La Cisterna',
+      'lacisterna': 'La Cisterna',
+      
+      // San Ramón
+      'san ramon': 'San Ramón',
+      'sanramon': 'San Ramón',
+      'san ramón': 'San Ramón',
+      
+      // Cerro Navia
+      'cerro navia': 'Cerro Navia',
+      'cerronavia': 'Cerro Navia'
+    };
+    
+    const lowerNormalized = normalized.toLowerCase();
+    return communeMap[lowerNormalized] || normalized;
+  }
+
+  // 🏘️ FUNCIÓN MEJORADA: Validar si comuna está permitida
+  static isCommuneAllowed(orderCommune, allowedCommunes) {
+    if (!allowedCommunes || allowedCommunes.length === 0) {
+      return true; // Si no hay restricciones, permitir todas
+    }
+    
+    if (!orderCommune || orderCommune.trim() === '') {
+      return false; // Si no hay comuna en el pedido, rechazar
+    }
+    
+    const normalizedOrderCommune = this.normalizeCommune(orderCommune).toLowerCase();
+    
+    return allowedCommunes.some(allowedCommune => 
+      this.normalizeCommune(allowedCommune).toLowerCase() === normalizedOrderCommune
+    );
+  }
+
+  // Validar webhook de WooCommerce
+  static validateWebhook(data, signature, secret) {
+    try {
+      const expectedSignature = crypto
+        .createHmac('sha256', secret)
+        .update(JSON.stringify(data))
+        .digest('base64');
+      
+      return signature === expectedSignature;
     } catch (error) {
-      return {
-        success: false,
-        message: error.response?.data?.message || error.message
-      };
+      console.error('❌ Error validando webhook:', error);
+      return false;
     }
   }
-  
-  // Registrar webhook (sin cambios)
-  static async registerWebhook(channel) {
+
+  // Registrar webhooks en WooCommerce
+  static async registerWebhooks(channel) {
     try {
-      const webhookUrl = `${process.env.BACKEND_URL}/api/webhooks/woocommerce/${channel.id}`;
+      console.log('🔗 Registrando webhooks de WooCommerce para canal:', channel.store_url);
       
+      const webhookUrl = `${process.env.WEBHOOK_BASE_URL || 'https://your-domain.com'}/api/webhooks/woocommerce/${channel._id}`;
+      
+      // Verificar webhooks existentes
       const existingWebhooks = await axios.get(
         `${this.getApiUrl(channel)}/webhooks`,
         { headers: this.getAuthHeader(channel) }
@@ -70,6 +196,7 @@ class WooCommerceService {
           },
           { headers: this.getAuthHeader(channel) }
         );
+        console.log('✅ Webhook order.created registrado');
       }
       
       const updateWebhook = existingWebhooks.data.find(
@@ -87,148 +214,162 @@ class WooCommerceService {
           },
           { headers: this.getAuthHeader(channel) }
         );
+        console.log('✅ Webhook order.updated registrado');
       }
       
       return true;
     } catch (error) {
-      console.error('Error registrando webhook WooCommerce:', error);
+      console.error('❌ Error registrando webhook WooCommerce:', error);
       throw error;
     }
   }
   
-  // --- MÉTODO SYNCORDERS CORREGIDO CON LOGGING Y MAPEO DE COMUNA ---
+  // Sincronizar pedidos con filtro de comunas mejorado
   static async syncOrders(channel, dateFrom, dateTo) {
     let ordersImported = 0;
+    let ordersRejected = 0;
     let page = 1;
     const perPage = 100;
     let hasMore = true;
     let totalOrdersProcessed = 0;
-    const allowedCommunes = channel.accepted_communes || []
     
     try {
       console.log(`🔄 Iniciando sincronización WooCommerce para canal ${channel._id}`);
       console.log(`📅 Rango de fechas: ${dateFrom || 'Sin límite'} - ${dateTo || 'Sin límite'}`);
       
+      // Obtener comunas permitidas
+      const allowedCommunes = channel.accepted_communes || [];
+      console.log(`📋 Comunas permitidas: ${allowedCommunes.length > 0 ? allowedCommunes.join(', ') : 'Todas'}`);
+      
+      // Obtener información de la empresa para pricing
       const company = await Company.findById(channel.company_id);
-      if (!company) {
-        throw new Error(`No se encontró la empresa con ID: ${channel.company_id}`);
-      }
-      const fixedShippingCost = company.price_per_order || 0;
-      console.log(`💰 Costo de envío fijo de la empresa: $${fixedShippingCost}`);
-
-      while (hasMore) {
-        console.log(`📄 Procesando página ${page} (${perPage} pedidos por página)...`);
-        
-        const params = new URLSearchParams({
-          page: page, 
-          per_page: perPage, 
-          orderby: 'date', 
-          order: 'desc'
-        });
-        
-        if (dateFrom) params.append('after', dateFrom);
-        if (dateTo) params.append('before', dateTo);
-        
-        console.log(`🌐 URL de consulta: ${this.getApiUrl(channel)}/orders?${params}`);
-        
-        const response = await axios.get(
-          `${this.getApiUrl(channel)}/orders?${params}`,
-          { headers: this.getAuthHeader(channel) }
-        );
-        
-        const orders = response.data;
-        console.log(`📦 Recibidos ${orders.length} pedidos en página ${page}`);
-        
-        if (orders.length === 0) {
-          console.log('🛑 No hay más pedidos, finalizando sincronización');
-          hasMore = false;
-          break;
-        }
-        
-        for (const wooOrder of orders) {
-          totalOrdersProcessed++;
-          try {
-             const orderCommune = (wooOrder.shipping.city || wooOrder.billing.city || '').trim().toLowerCase();
-          if (allowedCommunes.length > 0 && !allowedCommunes.map(c => c.toLowerCase()).includes(orderCommune)) {
-            console.log(`📦 Pedido #${wooOrder.number} ignorado en sincronización. Comuna "${orderCommune}" no permitida.`);
-            continue; // Salta al siguiente pedido
-          }
-            const existingOrder = await Order.findOne({ 
-              channel_id: channel._id, 
-              external_order_id: wooOrder.id.toString() 
-            });
-            
-            if (!existingOrder) {
-              // 🇨🇱 MAPEO CORRECTO PARA CHILE
-              const orderData = {
-                company_id: channel.company_id,
-                channel_id: channel._id,
-                external_order_id: wooOrder.id.toString(),
-                order_number: wooOrder.number,
-                customer_name: this.getCustomerName(wooOrder),
-                customer_email: wooOrder.billing.email,
-                customer_phone: wooOrder.billing.phone,
-                shipping_address: this.getShippingAddress(wooOrder),
-                // ✅ CAMBIO PRINCIPAL: WooCommerce shipping.city → Comuna chilena
-                shipping_commune: wooOrder.shipping.city || wooOrder.billing.city,
-                // ✅ NUEVO: Región por defecto para Chile
-                shipping_state: wooOrder.shipping.state || wooOrder.billing.state || 'Región Metropolitana',
-                shipping_zip: wooOrder.shipping.postcode || wooOrder.billing.postcode,
-                shipping_cost: fixedShippingCost,
-                // ✅ AGREGAR: Total del pedido
-                total_amount: parseFloat(wooOrder.total) || 0,
-                status: this.mapOrderStatus(wooOrder),
-                order_date: wooOrder.date_created,
-                notes: wooOrder.customer_note || '',
-                raw_data: wooOrder
-              };
-              
-              console.log(`✅ Creando pedido ${wooOrder.number} - Comuna: ${orderData.shipping_commune}`);
-              
-              await Order.create(orderData);
-              ordersImported++;
-            } else {
-              console.log(`⏭️ Pedido ${wooOrder.number} ya existe, omitiendo`);
-            }
-          } catch (orderError) {
-            console.error(`❌ Error importando pedido WooCommerce ${wooOrder.number}:`, orderError);
-          }
-        }
-        
-        // ✅ CONDICIÓN MEJORADA para continuar paginación
-        if (orders.length < perPage) {
-          console.log(`📄 Página ${page} tiene ${orders.length} pedidos (menos que ${perPage}), finalizando`);
-          hasMore = false;
-        } else {
-          page++;
-          console.log(`➡️ Avanzando a página ${page}`);
+      const fixedShippingCost = company?.price_per_order || 0;
+      
+      while (hasMore && page <= 50) { // Límite de seguridad
+        try {
+          console.log(`📄 Procesando página ${page}...`);
           
-          // ✅ PROTECCIÓN: Evitar bucle infinito
-          if (page > 50) {
-            console.log('⚠️ Límite de seguridad alcanzado (50 páginas), finalizando');
+          // Construir parámetros de consulta
+          const params = {
+            per_page: perPage,
+            page: page,
+            orderby: 'date',
+            order: 'desc',
+            status: 'any'
+          };
+          
+          if (dateFrom) params.after = dateFrom;
+          if (dateTo) params.before = dateTo;
+          
+          // Obtener pedidos de WooCommerce
+          const response = await axios.get(
+            `${this.getApiUrl(channel)}/orders`,
+            {
+              headers: this.getAuthHeader(channel),
+              params: params
+            }
+          );
+          
+          const orders = response.data;
+          totalOrdersProcessed += orders.length;
+          
+          console.log(`📦 Obtenidos ${orders.length} pedidos de la página ${page}`);
+          
+          if (orders.length === 0) {
+            console.log('📄 No hay más pedidos, finalizando sincronización');
             hasMore = false;
+            break;
           }
+          
+          // Procesar cada pedido
+          for (const wooOrder of orders) {
+            try {
+              // 🏘️ LÓGICA DE FILTRADO MEJORADA
+              const orderCommune = this.normalizeCommune(wooOrder.shipping.city || wooOrder.billing.city || '');
+              
+              if (!this.isCommuneAllowed(orderCommune, allowedCommunes)) {
+                console.log(`🚫 Pedido #${wooOrder.number} rechazado durante sincronización. Comuna "${orderCommune}" no permitida.`);
+                ordersRejected++;
+                continue;
+              }
+              
+              // Verificar si el pedido ya existe
+              const existingOrder = await Order.findOne({ 
+                channel_id: channel._id, 
+                external_order_id: wooOrder.id.toString() 
+              });
+              
+              if (!existingOrder) {
+                // Crear nuevo pedido
+                const orderData = {
+                  company_id: channel.company_id,
+                  channel_id: channel._id,
+                  external_order_id: wooOrder.id.toString(),
+                  order_number: wooOrder.number,
+                  customer_name: this.getCustomerName(wooOrder),
+                  customer_email: wooOrder.billing.email,
+                  customer_phone: wooOrder.billing.phone,
+                  shipping_address: this.getShippingAddress(wooOrder),
+                  shipping_commune: orderCommune,
+                  shipping_state: wooOrder.shipping.state || wooOrder.billing.state || 'Región Metropolitana',
+                  shipping_zip: wooOrder.shipping.postcode || wooOrder.billing.postcode,
+                  shipping_cost: fixedShippingCost,
+                  total_amount: parseFloat(wooOrder.total) || 0,
+                  status: this.mapOrderStatus(wooOrder),
+                  order_date: wooOrder.date_created,
+                  items: this.mapOrderItems(wooOrder.line_items),
+                  items_count: wooOrder.line_items?.length || 0,
+                  notes: wooOrder.customer_note || '',
+                  raw_data: wooOrder
+                };
+                
+                await Order.create(orderData);
+                ordersImported++;
+                console.log(`✅ Pedido #${wooOrder.number} importado - Comuna: ${orderCommune}`);
+              } else {
+                console.log(`⏭️ Pedido #${wooOrder.number} ya existe, omitiendo`);
+              }
+            } catch (orderError) {
+              console.error(`❌ Error importando pedido WooCommerce #${wooOrder.number}:`, orderError);
+            }
+          }
+          
+          // Verificar si hay más páginas
+          if (orders.length < perPage) {
+            console.log(`📄 Página ${page} tiene ${orders.length} pedidos (menos que ${perPage}), finalizando`);
+            hasMore = false;
+          } else {
+            page++;
+            console.log(`➡️ Avanzando a página ${page}`);
+            
+            // Pausa para evitar rate limiting
+            await new Promise(resolve => setTimeout(resolve, 1000));
+          }
+          
+        } catch (pageError) {
+          console.error(`❌ Error procesando página ${page}:`, pageError);
+          hasMore = false;
         }
       }
       
       console.log(`🏁 Sincronización completada:`);
       console.log(`   📊 Total pedidos procesados: ${totalOrdersProcessed}`);
       console.log(`   ✅ Pedidos importados: ${ordersImported}`);
-      console.log(`   ⏭️ Pedidos ya existentes: ${totalOrdersProcessed - ordersImported}`);
+      console.log(`   🚫 Pedidos rechazados por filtro de comuna: ${ordersRejected}`);
+      console.log(`   ⏭️ Pedidos ya existentes: ${totalOrdersProcessed - ordersImported - ordersRejected}`);
       
-      return ordersImported;
+      return {
+        imported: ordersImported,
+        rejected: ordersRejected,
+        total: totalOrdersProcessed
+      };
     } catch (error) {
       console.error('❌ Error sincronizando pedidos WooCommerce:', error);
-      console.error('🔍 Detalles del error:', {
-        message: error.message,
-        status: error.response?.status,
-        data: error.response?.data
-      });
       throw error;
     }
   }
   
-  // --- MÉTODO PROCESSWEBHOOK CORREGIDO CON MAPEO DE COMUNA ---
+  // Procesar webhook con filtro de comunas mejorado
   static async processWebhook(channelId, data, headers) {
     try {
       console.log(`🔔 Procesando webhook WooCommerce para canal ${channelId}`);
@@ -236,39 +377,60 @@ class WooCommerceService {
       const channel = await Channel.findById(channelId);
       if (!channel) throw new Error('Canal no encontrado');
 
-// ---  LÓGICA DE FILTRADO AÑADIDA ---
-      const allowedCommunes = channel.accepted_communes || [];
       const wooOrder = data;
-      const orderCommune = (wooOrder.shipping.city || wooOrder.billing.city || '').trim().toLowerCase();
-      // Si la lista de comunas permitidas no está vacía y la comuna del pedido no está en la lista, lo ignoramos.
-      if (allowedCommunes.length > 0 && !allowedCommunes.map(c => c.toLowerCase()).includes(orderCommune)) {
-        console.log(`📦 Pedido #${wooOrder.number} ignorado. La comuna "${orderCommune}" no está en la lista permitida para el canal "${channel.channel_name}".`);
-        return true; // Devolvemos éxito para que WooCommerce no reintente.
+      
+      // 🏘️ LÓGICA DE FILTRADO MEJORADA
+      const allowedCommunes = channel.accepted_communes || [];
+      const orderCommune = this.normalizeCommune(wooOrder.shipping.city || wooOrder.billing.city || '');
+      
+      if (!this.isCommuneAllowed(orderCommune, allowedCommunes)) {
+        console.log(`🚫 Pedido #${wooOrder.number} rechazado por webhook. Comuna "${orderCommune}" no está permitida para el canal "${channel.channel_name}".`);
+        console.log(`📋 Comunas permitidas: ${allowedCommunes.join(', ')}`);
+        return { success: true, message: 'Pedido rechazado por filtro de comuna' };
       }
-      // --- FIN DE LA LÓGICA DE FILTRADO ---
+      
+      console.log(`✅ Pedido #${wooOrder.number} aceptado por webhook. Comuna "${orderCommune}" está permitida.`);
+      
+      // Obtener información de la empresa para pricing
       const company = await Company.findById(channel.company_id);
       if (!company) throw new Error(`Empresa no encontrada para el canal: ${channelId}`);
+      
       const fixedShippingCost = company.price_per_order || 0;
       
-      
+      // Buscar pedido existente
       const existingOrder = await Order.findOne({ 
         channel_id: channelId, 
         external_order_id: wooOrder.id.toString() 
       });
       
       if (existingOrder) {
-        console.log(`🔄 Actualizando pedido existente ${wooOrder.number}`);
-        existingOrder.status = this.mapOrderStatus(wooOrder);
-        existingOrder.shipping_cost = fixedShippingCost;
-        // ✅ CAMBIO: Actualizar comuna desde WooCommerce
-        existingOrder.shipping_commune = wooOrder.shipping.city || wooOrder.billing.city;
-        existingOrder.shipping_state = wooOrder.shipping.state || wooOrder.billing.state || 'Región Metropolitana';
-        existingOrder.total_amount = parseFloat(wooOrder.total) || 0;
-        existingOrder.raw_data = wooOrder;
-        await existingOrder.save();
-      } else {
-        console.log(`✅ Creando nuevo pedido ${wooOrder.number} desde webhook`);
+        console.log(`🔄 Actualizando pedido existente #${wooOrder.number}`);
         
+        // Actualizar pedido existente
+        const updates = {
+          status: this.mapOrderStatus(wooOrder),
+          shipping_cost: fixedShippingCost,
+          shipping_commune: orderCommune,
+          shipping_state: wooOrder.shipping.state || wooOrder.billing.state || 'Región Metropolitana',
+          total_amount: parseFloat(wooOrder.total) || 0,
+          items: this.mapOrderItems(wooOrder.line_items),
+          items_count: wooOrder.line_items?.length || 0,
+          notes: wooOrder.customer_note || '',
+          raw_data: wooOrder,
+          updated_at: new Date()
+        };
+        
+        // Solo actualizar delivery_date si se marca como entregado
+        if (updates.status === 'delivered' && !existingOrder.delivery_date) {
+          updates.delivery_date = new Date();
+        }
+        
+        await Order.findByIdAndUpdate(existingOrder._id, updates);
+        console.log(`✅ Pedido #${wooOrder.number} actualizado - Comuna: ${orderCommune}`);
+      } else {
+        console.log(`🆕 Creando nuevo pedido #${wooOrder.number} desde webhook`);
+        
+        // Crear nuevo pedido
         const orderData = {
           company_id: channel.company_id,
           channel_id: channelId,
@@ -278,35 +440,127 @@ class WooCommerceService {
           customer_email: wooOrder.billing.email,
           customer_phone: wooOrder.billing.phone,
           shipping_address: this.getShippingAddress(wooOrder),
-          // ✅ CAMBIO PRINCIPAL: WooCommerce city → Comuna chilena
-          shipping_commune: wooOrder.shipping.city || wooOrder.billing.city,
+          shipping_commune: orderCommune,
           shipping_state: wooOrder.shipping.state || wooOrder.billing.state || 'Región Metropolitana',
           shipping_zip: wooOrder.shipping.postcode || wooOrder.billing.postcode,
           shipping_cost: fixedShippingCost,
           total_amount: parseFloat(wooOrder.total) || 0,
           status: this.mapOrderStatus(wooOrder),
           order_date: wooOrder.date_created,
+          items: this.mapOrderItems(wooOrder.line_items),
+          items_count: wooOrder.line_items?.length || 0,
           notes: wooOrder.customer_note || '',
           raw_data: wooOrder
         };
         
-        console.log(`📍 Comuna del pedido: ${orderData.shipping_commune}`);
-        
         const newOrder = await Order.create(orderData);
+        console.log(`✅ Pedido #${wooOrder.number} creado - Comuna: ${orderCommune}`);
         
         // Auto-crear en Shipday si está habilitado
-        if (process.env.AUTO_CREATE_SHIPDAY_ORDERS === 'true') {
-          await this.autoCreateInShipday(newOrder);
+        if (channel.auto_create_shipday && newOrder.status === 'processing') {
+          try {
+            await this.autoCreateInShipday(newOrder);
+          } catch (shipdayError) {
+            console.error('⚠️ Error auto-creando en Shipday:', shipdayError);
+          }
         }
       }
       
-      return true;
+      return { success: true, message: 'Webhook procesado correctamente' };
     } catch (error) {
       console.error('❌ Error procesando webhook WooCommerce:', error);
       throw error;
     }
   }
+
+  // Mapear items del pedido
+  static mapOrderItems(lineItems) {
+    if (!lineItems || lineItems.length === 0) return [];
+    
+    return lineItems.map(item => ({
+      product_id: item.product_id?.toString(),
+      sku: item.sku,
+      name: item.name,
+      variant: item.variation_id ? `Variación ${item.variation_id}` : null,
+      quantity: item.quantity,
+      unit_price: parseFloat(item.price) || 0,
+      total_price: parseFloat(item.total) || 0,
+      image_url: item.image?.src || null
+    }));
+  }
+
+  // Validar configuración del canal
+  static async validateChannel(channel) {
+    try {
+      console.log('🔍 Validando configuración del canal WooCommerce...');
+      
+      // Probar conexión con la API
+      const response = await axios.get(
+        `${this.getApiUrl(channel)}/system_status`,
+        { headers: this.getAuthHeader(channel) }
+      );
+      
+      const systemStatus = response.data;
+      
+      console.log('✅ Conexión exitosa con WooCommerce');
+      
+      return {
+        valid: true,
+        version: systemStatus.version,
+        environment: systemStatus.environment,
+        database_version: systemStatus.database_version
+      };
+    } catch (error) {
+      console.error('❌ Error validando canal WooCommerce:', error);
+      
+      let errorMessage = 'Error de conexión';
+      if (error.response?.status === 401) {
+        errorMessage = 'Credenciales inválidas';
+      } else if (error.response?.status === 403) {
+        errorMessage = 'Permisos insuficientes';
+      } else if (error.response?.status === 404) {
+        errorMessage = 'Endpoint no encontrado';
+      }
+      
+      return {
+        valid: false,
+        error: errorMessage,
+        details: error.response?.data || error.message
+      };
+    }
+  }
+
+  // Obtener información de la tienda
+  static async getShopInfo(channel) {
+    try {
+      const response = await axios.get(
+        `${this.getApiUrl(channel)}/settings/general`,
+        { headers: this.getAuthHeader(channel) }
+      );
+      
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error obteniendo información de la tienda:', error);
+      throw error;
+    }
+  }
+
+  // Obtener pedidos recientes
+  static async getRecentOrders(channel, limit = 10) {
+    try {
+      const response = await axios.get(
+        `${this.getApiUrl(channel)}/orders?per_page=${limit}&orderby=date&order=desc`,
+        { headers: this.getAuthHeader(channel) }
+      );
+      
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error obteniendo pedidos recientes:', error);
+      throw error;
+    }
+  }
   
+  // Helpers
   static getCustomerName(order) {
     const billing = order.billing;
     return `${billing.first_name} ${billing.last_name}`.trim() || 
@@ -344,6 +598,7 @@ class WooCommerceService {
     return statusMap[status] || 'pending';
   }
 
+  // Auto-crear en Shipday
   static async autoCreateInShipday(order) {
     try {
       const ShipdayService = require('./shipday.service');
@@ -367,6 +622,7 @@ class WooCommerceService {
       
     } catch (error) {
       console.error('❌ Error creando orden WooCommerce en Shipday:', error);
+      throw error;
     }
   }
 }

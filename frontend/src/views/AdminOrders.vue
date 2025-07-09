@@ -16,6 +16,20 @@ if (!newOrder.value.shipping_commune) {
           {{ isExporting ? 'Exportando...' : 'Exportar para OptiRoute' }}
         </button>
       </div>
+      <div class="admin-orders">
+    <!-- Botón para abrir configuración -->
+    <button @click="showCommuneFilter = true" class="btn-config">
+      🏘️ Configurar Comunas
+    </button>
+    
+    <!-- Modal -->
+    <div v-if="showCommuneFilter" class="modal-overlay" @click="showCommuneFilter = false">
+      <div class="modal-content" @click.stop>
+        <CommuneFilter @saved="onCommunesSaved" @synced="onOrdersSynced" />
+        <button @click="showCommuneFilter = false" class="btn-close">Cerrar</button>
+      </div>
+    </div>
+  </div>
     </div>
     
     <div class="filters-section">
@@ -384,6 +398,8 @@ import Modal from '../components/Modal.vue';
 import UpdateOrderStatus from '../components/UpdateOrderStatus.vue';
 import OrderDetails from '../components/OrderDetails.vue';
 import { useRoute } from 'vue-router';
+import CommuneFilter from '@/components/CommuneFilter.vue';
+
 
 const route = useRoute();
 const orders = ref([]);
@@ -435,7 +451,28 @@ const availableCommunes = computed(() => {
   return Array.from(communes).sort(); // Convertimos a array y ordenamos alfabéticamente
 });
 
-
+export default {
+  components: {
+    CommuneFilter
+  },
+  data() {
+    return {
+      showCommuneFilter: false
+    };
+  },
+  methods: {
+    onCommunesSaved(data) {
+      console.log('Comunas guardadas:', data);
+      // Recargar pedidos si es necesario
+      this.fetchOrders();
+    },
+    onOrdersSynced(data) {
+      console.log('Órdenes sincronizadas:', data);
+      // Recargar pedidos
+      this.fetchOrders();
+    }
+  }
+};
 // NUEVO: Computed properties para selección masiva
 const selectAllChecked = computed(() => {
   const selectableOrders = orders.value.filter(order => !order.shipday_order_id);
@@ -510,6 +547,8 @@ async function fetchAvailableCommunes() {
     }
   }
 }
+
+
 
 // Función para actualizar la lista de comunas (fallback)
 function updateAvailableCommunes(orders) {

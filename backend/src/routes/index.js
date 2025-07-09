@@ -24,16 +24,25 @@ const { validateOrderCreation, validateStatusUpdate } = require('../middlewares/
 const billingController = require('../controllers/billing.controller')
 const driverController = require('../controllers/driver.controller');
 
+// ==================== IMPORTAR RUTAS SEPARADAS ====================
 const shipdayRoutes = require('./shipday.routes');
-const ShipdayService = require('../services/shipday.service');
+const comunasRoutes = require('./comunas.routes');
+const channelRoutes = require('./channels.routes');
+
+// ==================== USAR RUTAS SEPARADAS ====================
+router.use('/shipday', shipdayRoutes);
+router.use('/communes', comunasRoutes);
+router.use('/channels', channelRoutes);
 
 // Importar modelos para dashboard
 const Company = require('../models/Company');
 const Order = require('../models/Order');
 const Channel = require('../models/Channel');
 
-const multer = require('multer'); // Middleware para manejar subida de archivos
-const upload = multer({ storage: multer.memoryStorage() }); // Configuración para recibir el archivo en memoria
+const multer = require('multer');
+const upload = multer({ storage: multer.memoryStorage() });
+const ShipdayService = require('../services/shipday.service');
+
 // ==================== RUTAS PÚBLICAS ====================
 
 router.post('/auth/login', authController.login);
@@ -110,28 +119,11 @@ router.put('/companies/:id', authenticateToken, validateMongoId('id'), companyCo
 router.get('/companies/:id/users', authenticateToken, validateMongoId('id'), companyController.getUsers);
 router.get('/companies/:id/stats', authenticateToken, validateMongoId('id'), companyController.getStats);
 
-// ==================== CANALES DE VENTA ====================
+// ==================== CANALES DE VENTA (RUTAS BÁSICAS) ====================
+// Las rutas avanzadas de comunas están en channels.routes.js
 
 router.get('/companies/:companyId/channels', authenticateToken, validateMongoId('companyId'), channelController.getByCompany);
 router.post('/companies/:companyId/channels', authenticateToken, validateMongoId('companyId'), channelController.create);
-
-router.get('/channels/:id', authenticateToken, validateMongoId('id'), channelController.getById);
-router.put('/channels/:id', authenticateToken, validateMongoId('id'), channelController.update);
-router.delete('/channels/:id', authenticateToken, validateMongoId('id'), channelController.delete);
-router.post('/channels/:id/sync', authenticateToken, validateMongoId('id'), channelController.syncOrders);
-router.post('/channels/:id/test', authenticateToken, validateMongoId('id'), channelController.testConnection);
-
-// ==================== USUARIOS ====================
-
-router.post('/users', authenticateToken, isAdmin, authController.register);
-router.get('/users/company/:companyId', authenticateToken, isAdmin, userController.getByCompany);
-router.patch('/users/:id', authenticateToken, isAdmin, userController.updateUser);
-
-// ==================== CONDUCTORES ====================
-
-router.get('/drivers', authenticateToken, isAdmin, driverController.getAllDrivers);
-router.post('/drivers', authenticateToken, isAdmin, driverController.createDriver);
-router.delete('/drivers/:driverId', authenticateToken, isAdmin, driverController.deleteDriver);
 
 // OAuth MercadoLibre
 router.get('/channels/mercadolibre/auth', authenticateToken, async (req, res) => {
@@ -159,6 +151,18 @@ router.get('/channels/mercadolibre/callback', async (req, res) => {
   }
 });
 
+// ==================== USUARIOS ====================
+
+router.post('/users', authenticateToken, isAdmin, authController.register);
+router.get('/users/company/:companyId', authenticateToken, isAdmin, userController.getByCompany);
+router.patch('/users/:id', authenticateToken, isAdmin, userController.updateUser);
+
+// ==================== CONDUCTORES ====================
+
+router.get('/drivers', authenticateToken, isAdmin, driverController.getAllDrivers);
+router.post('/drivers', authenticateToken, isAdmin, driverController.createDriver);
+router.delete('/drivers/:driverId', authenticateToken, isAdmin, driverController.deleteDriver);
+
 // ==================== PEDIDOS ====================
 
 router.get('/orders', authenticateToken, orderController.getAll);
@@ -170,11 +174,11 @@ router.post(
   '/orders/bulk-upload', 
   authenticateToken, 
   isAdmin, 
-  upload.single('file'), // Usar multer para procesar un solo archivo llamado 'file'
-  orderController.bulkUpload  // La nueva función que crearemos en el controlador
+  upload.single('file'),
+  orderController.bulkUpload
 );
 
-// Ruta para obtener todas las comunas disponibles
+// Ruta para obtener todas las comunas disponibles (esta puede quedarse aquí ya que es específica de orders)
 router.get('/orders/communes', authenticateToken, async (req, res) => {
   try {
     const { company_id } = req.query;
@@ -235,8 +239,6 @@ router.get('/orders/communes', authenticateToken, async (req, res) => {
 });
 
 router.post('/orders', authenticateToken, validateOrderCreation, orderController.create);
-
-
 router.get('/orders/:id', authenticateToken, validateMongoId('id'), orderController.getById);
 router.patch('/orders/:id/status', authenticateToken, validateMongoId('id'), isAdmin, orderController.updateStatus);
 
@@ -287,7 +289,7 @@ router.post('/orders/:orderId/create-shipday', authenticateToken, isAdmin, async
 // Asignar conductor a pedido (crear+asignar o solo asignar)
 router.post('/orders/:orderId/assign-driver', authenticateToken, isAdmin, orderController.assignToDriver);
 
-// ==================== NUEVAS RUTAS PARA ASIGNACIÓN MASIVA ====================
+// ==================== ASIGNACIÓN MASIVA DE PEDIDOS ====================
 
 // Asignar múltiples pedidos a un conductor de forma masiva
 router.post('/orders/bulk-assign-driver', authenticateToken, isAdmin, async (req, res) => {
@@ -707,19 +709,9 @@ router.get('/orders/:orderId/shipday-status', authenticateToken, async (req, res
     res.status(500).json({ error: error.message });
   }
 });
-/**
- * 🆕 NUEVA RUTA: Obtener información completa de tracking
- */
-// ==================== AGREGAR AL FINAL DE: backend/src/routes/index.js ====================
 
-/**
- * 🆕 NUEVA RUTA: Obtener información completa de tracking
- */
-// ==================== AGREGAR AL FINAL DE: backend/src/routes/index.js ====================
+// ==================== TRACKING DE PEDIDOS ====================
 
-/**
- * 🆕 NUEVA RUTA: Obtener información completa de tracking
- */
 router.get('/orders/:orderId/tracking', authenticateToken, async (req, res) => {
   try {
     const { orderId } = req.params;
@@ -742,12 +734,11 @@ router.get('/orders/:orderId/tracking', authenticateToken, async (req, res) => {
 
     console.log(`✅ Generando tracking info para orden: #${order.order_number}`);
 
-    // 🆕 INTENTAR OBTENER DATOS ACTUALIZADOS DE SHIPDAY SI ES POSIBLE
+    // INTENTAR OBTENER DATOS ACTUALIZADOS DE SHIPDAY SI ES POSIBLE
     let freshShipdayData = null;
     if (order.shipday_order_id) {
       try {
         console.log('🔄 Obteniendo datos actualizados de Shipday...');
-        const ShipdayService = require('../services/shipday.service.js');
         freshShipdayData = await ShipdayService.getOrder(order.shipday_order_id);
         console.log('✅ Datos frescos de Shipday obtenidos');
       } catch (shipdayError) {
@@ -755,13 +746,13 @@ router.get('/orders/:orderId/tracking', authenticateToken, async (req, res) => {
       }
     }
 
-    // 🆕 INFORMACIÓN COMPLETA DE TRACKING
+    // INFORMACIÓN COMPLETA DE TRACKING
     const trackingInfo = {
       order_number: order.order_number,
       customer_name: order.customer_name,
       current_status: order.status,
       
-      // 🆕 URLs de tracking (buscar en múltiples lugares)
+      // URLs de tracking (buscar en múltiples lugares)
       tracking_url: order.shipday_tracking_url || freshShipdayData?.trackingUrl || null,
       shipday_tracking_url: order.shipday_tracking_url || freshShipdayData?.trackingUrl || null,
       has_tracking: !!(order.shipday_tracking_url || freshShipdayData?.trackingUrl),
@@ -801,7 +792,7 @@ router.get('/orders/:orderId/tracking', authenticateToken, async (req, res) => {
         phone: order.company_id?.phone
       },
       
-      // 🆕 DATOS DE DEBUG
+      // DATOS DE DEBUG
       debug_info: {
         has_shipday_order: !!order.shipday_order_id,
         fresh_data_available: !!freshShipdayData,
@@ -829,187 +820,6 @@ router.get('/orders/:orderId/tracking', authenticateToken, async (req, res) => {
   }
 });
 
-/**
- * ✅ FUNCIÓN AUXILIAR: Generar timeline de eventos
- */
-function generateTimeline(order) {
-  const events = [];
-  
-  try {
-    // Pedido creado
-    events.push({
-      event: 'order_created',
-      title: 'Pedido Creado',
-      description: `Pedido #${order.order_number} recibido desde ${order.channel_id?.channel_name || 'tienda'}`,
-      timestamp: order.order_date,
-      icon: '📦',
-      status: 'completed'
-    });
-    
-    // En procesamiento
-    if (order.status !== 'pending') {
-      events.push({
-        event: 'order_processing',
-        title: 'En Procesamiento',
-        description: 'Tu pedido está siendo preparado para el envío',
-        timestamp: order.shipday_times?.placement_time || order.created_at,
-        icon: '⚙️',
-        status: 'completed'
-      });
-    }
-    
-    // Conductor asignado
-    if (order.shipday_driver_id || order.driver_info?.name) {
-      const driverName = order.driver_info?.name || `Conductor ID: ${order.shipday_driver_id}`;
-      events.push({
-        event: 'driver_assigned',
-        title: 'Conductor Asignado',
-        description: `${driverName} se encargará de tu entrega`,
-        timestamp: order.shipday_times?.assigned_time || order.updated_at,
-        icon: '👨‍💼',
-        status: 'completed'
-      });
-    }
-    
-    // Recogido
-    if (order.status === 'shipped' || order.status === 'delivered') {
-      events.push({
-        event: 'order_picked_up',
-        title: 'Pedido Recogido',
-        description: 'El conductor ha recogido tu pedido y está en camino',
-        timestamp: order.shipday_times?.pickup_time || order.updated_at,
-        icon: '📋',
-        status: 'completed'
-      });
-    }
-    
-    // En tránsito
-    if (order.status === 'shipped' || order.status === 'delivered') {
-      events.push({
-        event: 'in_transit',
-        title: 'En Tránsito',
-        description: `Tu pedido está en camino hacia ${order.shipping_commune || 'tu dirección'}`,
-        timestamp: order.shipday_times?.pickup_time || order.updated_at,
-        icon: '🚚',
-        status: order.status === 'delivered' ? 'completed' : 'current'
-      });
-    }
-    
-    // Entregado
-    if (order.status === 'delivered') {
-      events.push({
-        event: 'delivered',
-        title: '¡Entregado Exitosamente!',
-        description: 'Tu pedido ha sido entregado en la dirección indicada',
-        timestamp: order.delivery_date,
-        icon: '✅',
-        status: 'completed'
-      });
-    }
-    
-    // Cancelado
-    if (order.status === 'cancelled') {
-      events.push({
-        event: 'cancelled',
-        title: 'Pedido Cancelado',
-        description: 'El pedido ha sido cancelado',
-        timestamp: order.updated_at,
-        icon: '❌',
-        status: 'cancelled'
-      });
-    }
-    
-    // Agregar evento futuro si está pendiente
-    if (!['delivered', 'cancelled'].includes(order.status)) {
-      let nextEventTitle = 'Entrega Programada';
-      let nextEventDescription = 'Tu pedido será entregado pronto';
-      let nextEventIcon = '🎯';
-      
-      if (order.status === 'pending') {
-        nextEventTitle = 'Preparando Pedido';
-        nextEventDescription = 'Procesaremos tu pedido en las próximas horas';
-        nextEventIcon = '⏳';
-      } else if (order.status === 'processing') {
-        nextEventTitle = 'Asignando Conductor';
-        nextEventDescription = 'Asignaremos un conductor para tu entrega';
-        nextEventIcon = '🔍';
-      } else if (order.status === 'shipped') {
-        nextEventTitle = 'Entrega en Proceso';
-        nextEventDescription = 'Tu pedido llegará pronto a su destino';
-        nextEventIcon = '🎯';
-      }
-      
-      events.push({
-        event: 'next_step',
-        title: nextEventTitle,
-        description: nextEventDescription,
-        timestamp: order.shipday_times?.expected_delivery_time || null,
-        icon: nextEventIcon,
-        status: 'pending'
-      });
-    }
-    
-    // Ordenar eventos por fecha
-    const eventsWithTimestamp = events.filter(event => event.timestamp);
-    const eventsWithoutTimestamp = events.filter(event => !event.timestamp);
-    
-    return eventsWithTimestamp
-      .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
-      .concat(eventsWithoutTimestamp);
-      
-  } catch (error) {
-    console.error('❌ Error generando timeline:', error);
-    
-    // Timeline básico en caso de error
-    return [
-      {
-        event: 'order_created',
-        title: 'Pedido Creado',
-        description: `Pedido #${order.order_number} recibido`,
-        timestamp: order.order_date,
-        icon: '📦',
-        status: 'completed'
-      },
-      {
-        event: 'current_status',
-        title: getStatusDisplayName(order.status),
-        description: `Estado actual: ${getStatusDisplayName(order.status)}`,
-        timestamp: order.updated_at,
-        icon: getStatusIcon(order.status),
-        status: 'current'
-      }
-    ];
-  }
-}
-
-/**
- * ✅ FUNCIONES AUXILIARES PARA TIMELINE
- */
-function getStatusDisplayName(status) {
-  const names = {
-    pending: 'Pendiente',
-    processing: 'Procesando',
-    shipped: 'En Tránsito',
-    delivered: 'Entregado',
-    cancelled: 'Cancelado'
-  };
-  return names[status] || status;
-}
-
-function getStatusIcon(status) {
-  const icons = {
-    pending: '⏳',
-    processing: '⚙️',
-    shipped: '🚚',
-    delivered: '✅',
-    cancelled: '❌'
-  };
-  return icons[status] || '📦';
-}
-// Ruta para descargar la plantilla de importación
-
-router.post('/orders', authenticateToken, validateOrderCreation, orderController.create);
-
 // ==================== FACTURACIÓN (BILLING) ====================
 
 router.get('/billing/invoices', authenticateToken, billingController.getInvoices);
@@ -1026,11 +836,7 @@ router.delete('/billing/invoices/:id', authenticateToken, isAdmin, validateMongo
 router.delete('/billing/invoices', authenticateToken, isAdmin, billingController.deleteBulkInvoices);
 router.delete('/billing/invoices/all/development', authenticateToken, isAdmin, billingController.deleteAllInvoices);
 
-// ==================== SHIPDAY ROUTES ====================
-
-router.use('/shipday', shipdayRoutes);
-
-// ==================== DASHBOARD STATS (MONGO) ====================
+// ==================== DASHBOARD STATS ====================
 
 router.get('/stats/dashboard', authenticateToken, async (req, res) => {
   try {
@@ -1190,7 +996,7 @@ router.get('/stats/dashboard', authenticateToken, async (req, res) => {
   }
 });
 
-// ==================== DEBUG: PROBAR ENDPOINT OFICIAL DE SHIPDAY ====================
+// ==================== DEBUG SHIPDAY ====================
 
 // Ruta para probar directamente el endpoint oficial de asignación
 router.post('/shipday/test-assign/:orderId/:driverId', authenticateToken, isAdmin, async (req, res) => {
@@ -1329,8 +1135,7 @@ router.get('/shipday/drivers-detailed', authenticateToken, isAdmin, async (req, 
   }
 });
 
-// ==================== INVESTIGACIÓN COMPLETA DE SHIPDAY API ====================
-
+// INVESTIGACIÓN COMPLETA DE SHIPDAY API
 router.get('/shipday/full-investigation', authenticateToken, isAdmin, async (req, res) => {
   try {
     console.log('🔬 INICIANDO INVESTIGACIÓN COMPLETA DE SHIPDAY API...');
@@ -1395,5 +1200,179 @@ router.get('/shipday/basic-test', authenticateToken, isAdmin, async (req, res) =
     });
   }
 });
+
+// ==================== FUNCIONES AUXILIARES PARA TIMELINE ====================
+
+function generateTimeline(order) {
+  const events = [];
+  
+  try {
+    // Pedido creado
+    events.push({
+      event: 'order_created',
+      title: 'Pedido Creado',
+      description: `Pedido #${order.order_number} recibido desde ${order.channel_id?.channel_name || 'tienda'}`,
+      timestamp: order.order_date,
+      icon: '📦',
+      status: 'completed'
+    });
+    
+    // En procesamiento
+    if (order.status !== 'pending') {
+      events.push({
+        event: 'order_processing',
+        title: 'En Procesamiento',
+        description: 'Tu pedido está siendo preparado para el envío',
+        timestamp: order.shipday_times?.placement_time || order.created_at,
+        icon: '⚙️',
+        status: 'completed'
+      });
+    }
+    
+    // Conductor asignado
+    if (order.shipday_driver_id || order.driver_info?.name) {
+      const driverName = order.driver_info?.name || `Conductor ID: ${order.shipday_driver_id}`;
+      events.push({
+        event: 'driver_assigned',
+        title: 'Conductor Asignado',
+        description: `${driverName} se encargará de tu entrega`,
+        timestamp: order.shipday_times?.assigned_time || order.updated_at,
+        icon: '👨‍💼',
+        status: 'completed'
+      });
+    }
+    
+    // Recogido
+    if (order.status === 'shipped' || order.status === 'delivered') {
+      events.push({
+        event: 'order_picked_up',
+        title: 'Pedido Recogido',
+        description: 'El conductor ha recogido tu pedido y está en camino',
+        timestamp: order.shipday_times?.pickup_time || order.updated_at,
+        icon: '📋',
+        status: 'completed'
+      });
+    }
+    
+    // En tránsito
+    if (order.status === 'shipped' || order.status === 'delivered') {
+      events.push({
+        event: 'in_transit',
+        title: 'En Tránsito',
+        description: `Tu pedido está en camino hacia ${order.shipping_commune || 'tu dirección'}`,
+        timestamp: order.shipday_times?.pickup_time || order.updated_at,
+        icon: '🚚',
+        status: order.status === 'delivered' ? 'completed' : 'current'
+      });
+    }
+    
+    // Entregado
+    if (order.status === 'delivered') {
+      events.push({
+        event: 'delivered',
+        title: '¡Entregado Exitosamente!',
+        description: 'Tu pedido ha sido entregado en la dirección indicada',
+        timestamp: order.delivery_date,
+        icon: '✅',
+        status: 'completed'
+      });
+    }
+    
+    // Cancelado
+    if (order.status === 'cancelled') {
+      events.push({
+        event: 'cancelled',
+        title: 'Pedido Cancelado',
+        description: 'El pedido ha sido cancelado',
+        timestamp: order.updated_at,
+        icon: '❌',
+        status: 'cancelled'
+      });
+    }
+    
+    // Agregar evento futuro si está pendiente
+    if (!['delivered', 'cancelled'].includes(order.status)) {
+      let nextEventTitle = 'Entrega Programada';
+      let nextEventDescription = 'Tu pedido será entregado pronto';
+      let nextEventIcon = '🎯';
+      
+      if (order.status === 'pending') {
+        nextEventTitle = 'Preparando Pedido';
+        nextEventDescription = 'Procesaremos tu pedido en las próximas horas';
+        nextEventIcon = '⏳';
+      } else if (order.status === 'processing') {
+        nextEventTitle = 'Asignando Conductor';
+        nextEventDescription = 'Asignaremos un conductor para tu entrega';
+        nextEventIcon = '🔍';
+      } else if (order.status === 'shipped') {
+        nextEventTitle = 'Entrega en Proceso';
+        nextEventDescription = 'Tu pedido llegará pronto a su destino';
+        nextEventIcon = '🎯';
+      }
+      
+      events.push({
+        event: 'next_step',
+        title: nextEventTitle,
+        description: nextEventDescription,
+        timestamp: order.shipday_times?.expected_delivery_time || null,
+        icon: nextEventIcon,
+        status: 'pending'
+      });
+    }
+    
+    // Ordenar eventos por fecha
+    const eventsWithTimestamp = events.filter(event => event.timestamp);
+    const eventsWithoutTimestamp = events.filter(event => !event.timestamp);
+    
+    return eventsWithTimestamp
+      .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
+      .concat(eventsWithoutTimestamp);
+      
+  } catch (error) {
+    console.error('❌ Error generando timeline:', error);
+    
+    // Timeline básico en caso de error
+    return [
+      {
+        event: 'order_created',
+        title: 'Pedido Creado',
+        description: `Pedido #${order.order_number} recibido`,
+        timestamp: order.order_date,
+        icon: '📦',
+        status: 'completed'
+      },
+      {
+        event: 'current_status',
+        title: getStatusDisplayName(order.status),
+        description: `Estado actual: ${getStatusDisplayName(order.status)}`,
+        timestamp: order.updated_at,
+        icon: getStatusIcon(order.status),
+        status: 'current'
+      }
+    ];
+  }
+}
+
+function getStatusDisplayName(status) {
+  const names = {
+    pending: 'Pendiente',
+    processing: 'Procesando',
+    shipped: 'En Tránsito',
+    delivered: 'Entregado',
+    cancelled: 'Cancelado'
+  };
+  return names[status] || status;
+}
+
+function getStatusIcon(status) {
+  const icons = {
+    pending: '⏳',
+    processing: '⚙️',
+    shipped: '🚚',
+    delivered: '✅',
+    cancelled: '❌'
+  };
+  return icons[status] || '📦';
+}
 
 module.exports = router;
