@@ -1,375 +1,346 @@
 <template>
   <div class="admin-orders-container">
-    <!-- Header mejorado -->
+    <!-- Header Section -->
     <div class="page-header">
-      <div class="header-left">
+      <div class="header-content">
         <h1 class="page-title">
-          <span class="title-icon">📊</span>
-          Gestión Global de Pedidos
+          <span class="title-icon">📦</span>
+          Gestión de Pedidos
         </h1>
         <div class="header-stats">
-          <div class="stat-chip">
-            <span class="stat-value">{{ pagination.total || 0 }}</span>
+          <div class="stat-item">
+            <span class="stat-number">{{ orders.length }}</span>
             <span class="stat-label">Total</span>
           </div>
-          <div class="stat-chip" v-if="selectedOrders.length > 0">
-            <span class="stat-value">{{ selectedOrders.length }}</span>
+          <div class="stat-item">
+            <span class="stat-number">{{ selectedOrders.length }}</span>
             <span class="stat-label">Seleccionados</span>
           </div>
         </div>
       </div>
+      
       <div class="header-actions">
-        <button @click="refreshOrders" class="btn-action btn-ghost" :disabled="loadingOrders">
-          <span class="btn-icon">🔄</span>
-          {{ loadingOrders ? 'Actualizando...' : 'Actualizar' }}
-        </button>
-        <button @click="openCreateOrderModal" class="btn-action btn-secondary">
+        <button @click="showCreateOrderModal = true" class="btn-action btn-primary">
           <span class="btn-icon">➕</span>
-          Crear Pedido
+          Nuevo Pedido
         </button>
-        <div class="action-group">
-          <button @click="openBulkUploadModal" class="btn-action btn-secondary">
-            <span class="btn-icon">📁</span>
-            Subida Masiva
-          </button>
-          <button @click="exportOrders" class="btn-action btn-primary" :disabled="isExporting">
-            <span class="btn-icon">📊</span>
-            {{ isExporting ? 'Exportando...' : 'Exportar' }}
-          </button>
-        </div>
+        <button @click="showBulkUploadModal = true" class="btn-action btn-secondary">
+          <span class="btn-icon">📁</span>
+          Subida Masiva
+        </button>
+        <button @click="exportOrders" :disabled="isExporting" class="btn-action btn-export">
+          <span class="btn-icon">📊</span>
+          {{ isExporting ? 'Exportando...' : 'Exportar Excel' }}
+        </button>
+        <button @click="fetchOrders" class="btn-action btn-refresh">
+          <span class="btn-icon">🔄</span>
+          Actualizar
+        </button>
       </div>
     </div>
-    
-    <!-- Filtros mejorados -->
+
+    <!-- Advanced Filters Section -->
     <div class="filters-section">
       <div class="filters-header">
-        <h3>Filtros de Búsqueda</h3>
-        <div class="filters-actions">
-          <button @click="clearFilters" class="btn-clear-filters">Limpiar Filtros</button>
-          <button @click="toggleAdvancedFilters" class="btn-toggle-filters">
-            {{ showAdvancedFilters ? 'Ocultar' : 'Más Filtros' }}
-            <span class="toggle-icon">{{ showAdvancedFilters ? '▼' : '▶' }}</span>
-          </button>
-        </div>
+        <h3>🔍 Filtros Avanzados</h3>
+        <button @click="clearAllFilters" class="btn-clear-filters">
+          <span class="btn-icon">🗑️</span>
+          Limpiar Filtros
+        </button>
       </div>
       
-      <!-- Filtros básicos -->
-      <div class="filters-row filters-basic">
+      <div class="filters-grid">
         <div class="filter-group">
-          <label>Empresa</label>
-          <select v-model="filters.company_id" @change="applyFilters" class="filter-select">
-            <option value="">Todas las Empresas</option>
+          <label class="filter-label">Empresa</label>
+          <select v-model="filters.company_id" @change="fetchOrders" class="filter-select">
+            <option value="">Todas las empresas</option>
             <option v-for="company in companies" :key="company._id" :value="company._id">
-              {{ company.name }} ({{ getCompanyOrderCount(company._id) }})
+              {{ company.name }}
             </option>
           </select>
         </div>
-        
+
         <div class="filter-group">
-          <label>Estado</label>
-          <select v-model="filters.status" @change="applyFilters" class="filter-select">
+          <label class="filter-label">Estado</label>
+          <select v-model="filters.status" @change="fetchOrders" class="filter-select">
             <option value="">Todos los estados</option>
-            <option value="pending">🟡 Pendientes</option>
-            <option value="processing">🔵 Procesando</option>
-            <option value="shipped">🟠 Enviados</option>
-            <option value="delivered">🟢 Entregados</option>
-            <option value="cancelled">🔴 Cancelados</option>
+            <option value="pending">Pendiente</option>
+            <option value="processing">Procesando</option>
+            <option value="shipped">Enviado</option>
+            <option value="delivered">Entregado</option>
+            <option value="cancelled">Cancelado</option>
           </select>
         </div>
-        
+
         <div class="filter-group">
-          <label>Comuna</label>
-          <select v-model="filters.shipping_commune" @change="applyFilters" class="filter-select">
-            <option value="">Todas las Comunas</option>
+          <label class="filter-label">Comuna</label>
+          <select v-model="filters.shipping_commune" @change="fetchOrders" class="filter-select commune-filter">
+            <option value="">Todas las comunas</option>
             <option v-for="commune in availableCommunes" :key="commune" :value="commune">
-              {{ commune }} ({{ getCommuneOrderCount(commune) }})
+              {{ commune }}
             </option>
           </select>
         </div>
-        
-        <div class="filter-group search-group">
-          <label>Búsqueda</label>
-          <div class="search-input-container">
+
+        <div class="filter-group">
+          <label class="filter-label">Desde</label>
+          <input 
+            v-model="filters.date_from" 
+            @change="fetchOrders" 
+            type="date" 
+            class="filter-input"
+          />
+        </div>
+
+        <div class="filter-group">
+          <label class="filter-label">Hasta</label>
+          <input 
+            v-model="filters.date_to" 
+            @change="fetchOrders" 
+            type="date" 
+            class="filter-input"
+          />
+        </div>
+
+        <div class="filter-group filter-search">
+          <label class="filter-label">Búsqueda</label>
+          <div class="search-wrapper">
             <input 
-              type="text" 
               v-model="filters.search" 
               @input="debounceSearch"
-              placeholder="Buscar pedido, cliente, dirección..."
-              class="search-input"
+              type="text" 
+              placeholder="Cliente, número de pedido, dirección..." 
+              class="filter-input search-input"
             />
             <span class="search-icon">🔍</span>
           </div>
         </div>
       </div>
-      
-      <!-- Filtros avanzados -->
-      <div v-if="showAdvancedFilters" class="filters-row filters-advanced">
-        <div class="filter-group">
-          <label>Fecha Desde</label>
-          <input type="date" v-model="filters.date_from" @change="applyFilters" class="filter-input" />
-        </div>
-        
-        <div class="filter-group">
-          <label>Fecha Hasta</label>
-          <input type="date" v-model="filters.date_to" @change="applyFilters" class="filter-input" />
-        </div>
-        
-        <div class="filter-group">
-          <label>Monto Mínimo</label>
-          <input type="number" v-model="filters.min_amount" @change="applyFilters" 
-                 placeholder="$0" class="filter-input" />
-        </div>
-        
-        <div class="filter-group">
-          <label>Monto Máximo</label>
-          <input type="number" v-model="filters.max_amount" @change="applyFilters" 
-                 placeholder="Sin límite" class="filter-input" />
-        </div>
-        
-        <div class="filter-group">
-          <label>Con Conductor</label>
-          <select v-model="filters.has_driver" @change="applyFilters" class="filter-select">
-            <option value="">Ambos</option>
-            <option value="true">Con conductor asignado</option>
-            <option value="false">Sin conductor asignado</option>
-          </select>
-        </div>
-      </div>
-      
-      <!-- Resumen de filtros activos -->
-      <div v-if="activeFiltersCount > 0" class="active-filters-summary">
-        <span class="active-filters-label">Filtros activos ({{ activeFiltersCount }}):</span>
-        <div class="active-filters-chips">
-          <span v-if="filters.company_id" class="filter-chip">
-            Empresa: {{ getCompanyName(filters.company_id) }}
-            <button @click="clearFilter('company_id')" class="chip-remove">×</button>
-          </span>
-          <span v-if="filters.status" class="filter-chip">
-            Estado: {{ getStatusName(filters.status) }}
-            <button @click="clearFilter('status')" class="chip-remove">×</button>
-          </span>
-          <span v-if="filters.shipping_commune" class="filter-chip">
-            Comuna: {{ filters.shipping_commune }}
-            <button @click="clearFilter('shipping_commune')" class="chip-remove">×</button>
-          </span>
-          <span v-if="filters.search" class="filter-chip">
-            Búsqueda: "{{ filters.search }}"
-            <button @click="clearFilter('search')" class="chip-remove">×</button>
-          </span>
-        </div>
-      </div>
     </div>
 
-    <!-- Acciones masivas mejoradas -->
-    <div v-if="selectedOrders.length > 0" class="bulk-actions-bar">
-      <div class="bulk-selection-info">
-        <span class="selection-count">
-          <span class="count-number">{{ selectedOrders.length }}</span>
-          pedido{{ selectedOrders.length !== 1 ? 's' : '' }} seleccionado{{ selectedOrders.length !== 1 ? 's' : '' }}
-        </span>
-        <button @click="clearSelection" class="btn-clear-selection">Limpiar selección</button>
+    <!-- Bulk Actions Section -->
+    <Transition name="slide-down">
+      <div v-if="selectedOrders.length > 0" class="bulk-actions-section">
+        <div class="bulk-actions-header">
+          <div class="bulk-selection-info">
+            <span class="selection-count">
+              {{ selectedOrders.length }} pedido{{ selectedOrders.length !== 1 ? 's' : '' }} seleccionado{{ selectedOrders.length !== 1 ? 's' : '' }}
+            </span>
+            <span class="selection-details">
+              de {{ orders.filter(order => !order.shipday_order_id).length }} disponibles para selección
+            </span>
+          </div>
+          
+          <div class="bulk-actions">
+            <button @click="openBulkAssignModal" class="btn-bulk-assign">
+              <span class="btn-icon">🚚</span>
+              Asignar Conductor
+            </button>
+            <button @click="bulkUpdateStatus" class="btn-bulk-update">
+              <span class="btn-icon">📝</span>
+              Cambiar Estado
+            </button>
+            <button @click="clearSelection" class="btn-clear-selection">
+              <span class="btn-icon">✖️</span>
+              Limpiar Selección
+            </button>
+          </div>
+        </div>
       </div>
-      
-      <div class="bulk-actions">
-        <button @click="openBulkAssignModal" class="btn-bulk-action btn-assign" 
-                :disabled="!canAssignSelected">
-          <span class="btn-icon">🚚</span>
-          Asignar Conductor
-        </button>
-        <button @click="openBulkStatusModal" class="btn-bulk-action btn-status">
-          <span class="btn-icon">📝</span>
-          Cambiar Estado
-        </button>
-        <button @click="exportSelected" class="btn-bulk-action btn-export">
-          <span class="btn-icon">📊</span>
-          Exportar Seleccionados
-        </button>
-      </div>
-    </div>
+    </Transition>
 
-    <!-- Tabla mejorada -->
-    <div class="orders-section">
+    <!-- Orders Table Section -->
+    <div class="content-section">
+      <div class="table-header">
+        <div class="table-title">
+          <h3>📋 Lista de Pedidos</h3>
+          <span class="orders-count">{{ pagination.total }} pedidos total</span>
+        </div>
+        <div class="table-controls">
+          <div class="view-options">
+            <button 
+              @click="viewMode = 'table'" 
+              :class="['view-btn', { active: viewMode === 'table' }]"
+            >
+              📊 Tabla
+            </button>
+            <button 
+              @click="viewMode = 'cards'" 
+              :class="['view-btn', { active: viewMode === 'cards' }]"
+            >
+              🎴 Tarjetas
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Loading State -->
       <div v-if="loadingOrders" class="loading-state">
         <div class="loading-spinner"></div>
         <p>Cargando pedidos...</p>
       </div>
-      
-      <div v-else-if="orders.length === 0" class="empty-state">
-        <div class="empty-icon">📦</div>
-        <h3>No se encontraron pedidos</h3>
-        <p>{{ hasActiveFilters ? 'Prueba ajustando los filtros de búsqueda' : 'Crea tu primer pedido para comenzar' }}</p>
-        <button v-if="!hasActiveFilters" @click="openCreateOrderModal" class="btn-action btn-primary">
-          Crear Primer Pedido
-        </button>
-      </div>
-      
-      <div v-else class="table-container">
-        <table class="orders-table">
+
+      <!-- Table View -->
+      <div v-else-if="viewMode === 'table'" class="table-wrapper">
+        <table class="data-table">
           <thead>
             <tr>
               <th class="checkbox-column">
-                <label class="checkbox-container">
-                  <input 
-                    type="checkbox" 
-                    :checked="selectAllChecked"
-                    :indeterminate="selectAllIndeterminate"
-                    @change="toggleSelectAll"
-                    :disabled="!hasSelectableOrders"
-                  />
-                  <span class="checkmark"></span>
-                </label>
+                <input 
+                  type="checkbox"
+                  :checked="selectAllChecked"
+                  :indeterminate="selectAllIndeterminate"
+                  @change="toggleSelectAll"
+                  class="checkbox-input master-checkbox"
+                />
               </th>
-              <th class="sortable" @click="sortBy('order_number')">
-                Pedido
-                <span class="sort-indicator" :class="getSortClass('order_number')">⇅</span>
+              <th class="sortable-header" @click="sortBy('order_number')">
+                Número
+                <span class="sort-indicator">⇅</span>
               </th>
-              <th class="sortable" @click="sortBy('company_id')">
-                Empresa
-                <span class="sort-indicator" :class="getSortClass('company_id')">⇅</span>
+              <th class="sortable-header" @click="sortBy('customer_name')">
+                Cliente
+                <span class="sort-indicator">⇅</span>
               </th>
-              <th>Cliente</th>
-              <th class="sortable" @click="sortBy('shipping_commune')">
-                Comuna
-                <span class="sort-indicator" :class="getSortClass('shipping_commune')">⇅</span>
+              <th>Estado</th>
+              <th>Comuna</th>
+              <th class="sortable-header" @click="sortBy('total_amount')">
+                Total
+                <span class="sort-indicator">⇅</span>
               </th>
-              <th class="sortable" @click="sortBy('order_date')">
-                Fechas
-                <span class="sort-indicator" :class="getSortClass('order_date')">⇅</span>
+              <th class="sortable-header" @click="sortBy('order_date')">
+                Fecha
+                <span class="sort-indicator">⇅</span>
               </th>
-              <th class="sortable" @click="sortBy('status')">
-                Estado
-                <span class="sort-indicator" :class="getSortClass('status')">⇅</span>
-              </th>
-              <th class="sortable" @click="sortBy('shipping_cost')">
-                Costo
-                <span class="sort-indicator" :class="getSortClass('shipping_cost')">⇅</span>
-              </th>
+              <th>Empresa</th>
               <th>Conductor</th>
-              <th>Acciones</th>
+              <th class="actions-column">Acciones</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="order in orders" :key="order._id" 
-                class="order-row"
-                :class="{
-                  'selected': selectedOrders.includes(order._id),
-                  'has-driver': order.shipday_order_id,
-                  'delivered': order.status === 'delivered',
-                  'cancelled': order.status === 'cancelled'
-                }">
+            <tr 
+              v-for="order in orders" 
+              :key="order._id"
+              :class="['order-row', { 
+                'selected-row': selectedOrders.includes(order._id),
+                'highlighted-row': highlightedOrderId === order._id
+              }]"
+            >
               <td class="checkbox-column">
-                <label class="checkbox-container" v-if="!order.shipday_order_id">
-                  <input 
-                    type="checkbox" 
-                    :value="order._id"
-                    v-model="selectedOrders"
-                  />
-                  <span class="checkmark"></span>
-                </label>
-                <span v-else class="checkbox-disabled" title="Ya tiene conductor asignado">🚚</span>
+                <input 
+                  v-if="!order.shipday_order_id"
+                  type="checkbox"
+                  :value="order._id"
+                  v-model="selectedOrders"
+                  class="checkbox-input"
+                />
+                <span v-else class="checkbox-disabled" title="Este pedido ya está en Shipday">🔒</span>
               </td>
               
               <td class="order-number-cell">
-                <div class="order-number">{{ order.order_number }}</div>
-                <div class="order-id">ID: {{ order.external_order_id }}</div>
-              </td>
-              
-              <td class="company-cell">
-                <div class="company-info">
-                  <div class="company-name">{{ order.company_id?.name || 'Sin empresa' }}</div>
-                  <div class="company-price">${{ formatCurrency(order.company_id?.price_per_order || 0) }}/envío</div>
+                <div class="order-number-wrapper">
+                  <span class="order-number">#{{ order.order_number }}</span>
+                  <span v-if="order.shipday_order_id" class="shipday-badge">
+                    Shipday: {{ order.shipday_order_id }}
+                  </span>
                 </div>
               </td>
               
               <td class="customer-cell">
                 <div class="customer-info">
-                  <div class="customer-name">{{ order.customer_name }}</div>
-                  <div class="customer-contact">
-                    <span v-if="order.customer_email" class="contact-item">📧 {{ order.customer_email }}</span>
-                    <span v-if="order.customer_phone" class="contact-item">📱 {{ order.customer_phone }}</span>
-                  </div>
-                  <div class="shipping-address">{{ order.shipping_address }}</div>
-                </div>
-              </td>
-              
-              <td class="commune-cell">
-                <span class="commune-badge" :class="getCommuneClass(order.shipping_commune)">
-                  {{ order.shipping_commune || 'Sin comuna' }}
-                </span>
-              </td>
-              
-              <td class="date-cell">
-                <div class="date-creation">
-                  <span class="date-label">Creado:</span>
-                  <span class="date-value">{{ formatDate(order.order_date, true) }}</span>
-                </div>
-                <div v-if="order.delivery_date" class="date-delivery">
-                  <span class="date-label">Entregado:</span>
-                  <span class="date-value">{{ formatDate(order.delivery_date, true) }}</span>
-                </div>
-                <div v-if="order.updated_at" class="date-updated">
-                  <span class="date-label">Actualizado:</span>
-                  <span class="date-value">{{ formatDate(order.updated_at, true) }}</span>
+                  <span class="customer-name">{{ order.customer_name || 'Sin nombre' }}</span>
+                  <span class="customer-phone">{{ order.customer_phone || 'Sin teléfono' }}</span>
                 </div>
               </td>
               
               <td class="status-cell">
-                <span class="status-badge" :class="order.status">
-                  <span class="status-icon">{{ getStatusIcon(order.status) }}</span>
-                  {{ getStatusName(order.status) }}
+                <span :class="['status-badge', `status-${order.status}`]">
+                  {{ getStatusLabel(order.status) }}
                 </span>
               </td>
               
-              <td class="cost-cell">
-                <div class="cost-info">
-                  <div class="shipping-cost">${{ formatCurrency(order.shipping_cost) }}</div>
-                  <div class="total-amount">${{ formatCurrency(order.total_amount) }} total</div>
+              <td class="commune-cell">
+                <span :class="['commune-badge', order.shipping_commune ? 'commune-filled' : 'commune-empty']">
+                  {{ order.shipping_commune || 'Sin comuna' }}
+                </span>
+              </td>
+              
+              <td class="amount-cell">
+                <span class="amount">{{ formatCurrency(order.total_amount) }}</span>
+              </td>
+              
+              <td class="date-cell">
+                <div class="date-info">
+                  <span class="date">{{ formatDate(order.order_date) }}</span>
+                  <span class="time">{{ formatTime(order.order_date) }}</span>
+                </div>
+              </td>
+              
+              <td class="company-cell">
+                <div class="company-info">
+                  <span class="company-name">{{ getCompanyName(order.company_id) }}</span>
                 </div>
               </td>
               
               <td class="driver-cell">
-                <div v-if="order.driver_info?.name" class="driver-info">
-                  <div class="driver-name">{{ order.driver_info.name }}</div>
-                  <div class="driver-status">{{ order.driver_info.status || 'Asignado' }}</div>
-                </div>
-                <div v-else-if="order.shipday_order_id" class="driver-pending">
-                  <span class="driver-status">Shipday: {{ order.shipday_order_id }}</span>
-                </div>
-                <span v-else class="no-driver">Sin asignar</span>
+                <span v-if="order.assigned_driver" class="driver-assigned">
+                  👨‍💼 {{ order.assigned_driver }}
+                </span>
+                <span v-else class="driver-unassigned">Sin asignar</span>
               </td>
               
               <td class="actions-cell">
-                <div class="action-buttons">
-                  <button @click="openOrderDetailsModal(order)" class="btn-table-action view" title="Ver detalles">
-                    👁️
+                <div class="actions-menu">
+                  <button @click="viewOrderDetails(order)" class="action-btn action-view">
+                    <span class="btn-icon">👁️</span>
+                    Ver
                   </button>
-                  <button @click="openUpdateStatusModal(order)" class="btn-table-action edit" title="Cambiar estado">
-                    📝
-                  </button>
-                  <button 
-                    @click="openAssignModal(order)" 
-                    class="btn-table-action assign" 
-                    :disabled="order.shipday_order_id"
-                    :title="order.shipday_order_id ? 'Ya tiene conductor asignado' : 'Asignar conductor'">
-                    🚚
-                  </button>
-                  <div class="action-dropdown">
-                    <button class="btn-table-action more" @click="toggleActionMenu(order._id)">
-                      ⋯
-                    </button>
-                    <div v-if="activeActionMenu === order._id" class="action-menu">
-                      <button @click="debugOrder(order)" class="action-menu-item">
-                        🔍 Debug
+                  
+                  <div class="actions-dropdown">
+                    <button class="action-btn action-more">⋮</button>
+                    <div class="dropdown-menu">
+                      <button @click="openUpdateStatusModal(order)" class="dropdown-item">
+                        <span class="item-icon">📝</span>
+                        Cambiar Estado
                       </button>
-                      <button @click="duplicateOrder(order)" class="action-menu-item">
-                        📋 Duplicar
+                      
+                      <button 
+                        v-if="!order.shipday_order_id" 
+                        @click="createShipdayOrder(order)" 
+                        class="dropdown-item"
+                      >
+                        <span class="item-icon">🚀</span>
+                        Enviar a Shipday
                       </button>
-                      <button v-if="order.shipday_tracking_url" @click="openTrackingUrl(order)" class="action-menu-item">
-                        📍 Tracking
+                      
+                      <button 
+                        v-if="!order.shipday_order_id" 
+                        @click="openAssignModal(order)" 
+                        class="dropdown-item"
+                      >
+                        <span class="item-icon">🚚</span>
+                        Asignar Conductor
                       </button>
-                      <button @click="downloadProofOfDelivery(order)" class="action-menu-item" 
-                              :disabled="order.status !== 'delivered'">
-                        📄 Prueba de Entrega
+                      
+                      <button 
+                        v-if="order.status === 'delivered'" 
+                        @click="viewProofOfDelivery(order)" 
+                        class="dropdown-item"
+                      >
+                        <span class="item-icon">📸</span>
+                        Ver Prueba Entrega
+                      </button>
+                      
+                      <div class="dropdown-divider"></div>
+                      
+                      <button @click="debugOrder(order)" class="dropdown-item debug-item">
+                        <span class="item-icon">🔧</span>
+                        Debug Info
+                      </button>
+                      
+                      <button @click="deleteOrder(order)" class="dropdown-item danger-item">
+                        <span class="item-icon">🗑️</span>
+                        Eliminar
                       </button>
                     </div>
                   </div>
@@ -379,322 +350,460 @@
           </tbody>
         </table>
       </div>
-      
-      <!-- Paginación mejorada -->
-      <div v-if="pagination.totalPages > 1" class="pagination-container">
+
+      <!-- Cards View -->
+      <div v-else-if="viewMode === 'cards'" class="cards-container">
+        <div 
+          v-for="order in orders" 
+          :key="order._id"
+          :class="['order-card', { 
+            'selected-card': selectedOrders.includes(order._id),
+            'highlighted-card': highlightedOrderId === order._id
+          }]"
+        >
+          <div class="card-header">
+            <div class="card-title">
+              <input 
+                v-if="!order.shipday_order_id"
+                type="checkbox"
+                :value="order._id"
+                v-model="selectedOrders"
+                class="card-checkbox"
+              />
+              <span class="order-number">#{{ order.order_number }}</span>
+              <span :class="['status-badge', `status-${order.status}`]">
+                {{ getStatusLabel(order.status) }}
+              </span>
+            </div>
+            <div class="card-actions">
+              <button @click="viewOrderDetails(order)" class="card-action-btn">👁️</button>
+              <button class="card-action-btn">⋮</button>
+            </div>
+          </div>
+          
+          <div class="card-content">
+            <div class="card-field">
+              <span class="field-label">Cliente:</span>
+              <span class="field-value">{{ order.customer_name || 'Sin nombre' }}</span>
+            </div>
+            <div class="card-field">
+              <span class="field-label">Comuna:</span>
+              <span class="field-value">{{ order.shipping_commune || 'Sin comuna' }}</span>
+            </div>
+            <div class="card-field">
+              <span class="field-label">Total:</span>
+              <span class="field-value amount">{{ formatCurrency(order.total_amount) }}</span>
+            </div>
+            <div class="card-field">
+              <span class="field-label">Fecha:</span>
+              <span class="field-value">{{ formatDate(order.order_date) }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Empty State -->
+      <div v-else-if="orders.length === 0" class="empty-state">
+        <div class="empty-icon">📦</div>
+        <h3>No hay pedidos</h3>
+        <p>No se encontraron pedidos con los filtros actuales.</p>
+        <button @click="clearAllFilters" class="btn-action btn-primary">
+          Limpiar Filtros
+        </button>
+      </div>
+
+      <!-- Pagination -->
+      <div v-if="orders.length > 0" class="pagination-section">
         <div class="pagination-info">
-          Mostrando {{ ((pagination.page - 1) * pagination.limit) + 1 }} - 
-          {{ Math.min(pagination.page * pagination.limit, pagination.total) }} 
-          de {{ pagination.total }} pedidos
+          <span>
+            Mostrando {{ ((pagination.page - 1) * pagination.limit) + 1 }} a 
+            {{ Math.min(pagination.page * pagination.limit, pagination.total) }} 
+            de {{ pagination.total }} pedidos
+          </span>
         </div>
         
-        <div class="pagination">
-          <button @click="goToPage(1)" :disabled="pagination.page === 1" class="btn-page">
-            ⏮️
-          </button>
-          <button @click="goToPage(pagination.page - 1)" :disabled="pagination.page === 1" class="btn-page">
-            ◀️
+        <div class="pagination-controls">
+          <button 
+            @click="changePage(pagination.page - 1)"
+            :disabled="pagination.page <= 1"
+            class="page-btn"
+          >
+            ← Anterior
           </button>
           
           <div class="page-numbers">
             <button 
-              v-for="page in visiblePages" 
+              v-for="page in getVisiblePages()"
               :key="page"
-              @click="goToPage(page)"
-              class="btn-page"
-              :class="{ active: page === pagination.page }"
+              @click="changePage(page)"
+              :class="['page-number', { active: page === pagination.page }]"
             >
               {{ page }}
             </button>
           </div>
           
-          <button @click="goToPage(pagination.page + 1)" :disabled="pagination.page === pagination.totalPages" class="btn-page">
-            ▶️
+          <button 
+            @click="changePage(pagination.page + 1)"
+            :disabled="pagination.page >= pagination.totalPages"
+            class="page-btn"
+          >
+            Siguiente →
           </button>
-          <button @click="goToPage(pagination.totalPages)" :disabled="pagination.page === pagination.totalPages" class="btn-page">
-            ⏭️
-          </button>
-        </div>
-        
-        <div class="pagination-controls">
-          <select v-model="pagination.limit" @change="changePageSize" class="page-size-select">
-            <option value="10">10 por página</option>
-            <option value="25">25 por página</option>
-            <option value="50">50 por página</option>
-            <option value="100">100 por página</option>
-          </select>
         </div>
       </div>
     </div>
 
-    <!-- Modales existentes mejorados -->
+    <!-- Modals -->
+    <!-- Update Status Modal -->
+    <Modal v-model="showUpdateStatusModal" title="Actualizar Estado del Pedido" width="500px">
+      <UpdateOrderStatus 
+        v-if="selectedOrder"
+        :order="selectedOrder"
+        @close="showUpdateStatusModal = false"
+        @updated="onOrderUpdated"
+      />
+    </Modal>
+
+    <!-- Order Details Modal -->
+    <Modal v-model="showOrderDetailsModal" title="Detalles del Pedido" width="800px">
+      <OrderDetails 
+        v-if="selectedOrder"
+        :order="selectedOrder"
+        @close="showOrderDetailsModal = false"
+      />
+    </Modal>
+
+    <!-- Create Order Modal -->
+    <Modal v-model="showCreateOrderModal" title="Crear Nuevo Pedido" width="900px">
+      <form @submit.prevent="createOrder" class="create-order-form">
+        <div class="form-grid">
+          <!-- Customer Information -->
+          <div class="form-section">
+            <h4>👤 Información del Cliente</h4>
+            <div class="form-row">
+              <div class="form-group">
+                <label>Nombre Completo *</label>
+                <input v-model="newOrder.customer_name" type="text" required />
+              </div>
+              <div class="form-group">
+                <label>Teléfono *</label>
+                <input v-model="newOrder.customer_phone" type="tel" required />
+              </div>
+            </div>
+            <div class="form-group">
+              <label>Email</label>
+              <input v-model="newOrder.customer_email" type="email" />
+            </div>
+          </div>
+
+          <!-- Shipping Information -->
+          <div class="form-section">
+            <h4>📍 Información de Envío</h4>
+            <div class="form-group">
+              <label>Dirección Completa *</label>
+              <textarea v-model="newOrder.shipping_address" required></textarea>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label>Comuna *</label>
+                <input v-model="newOrder.shipping_commune" type="text" required />
+              </div>
+              <div class="form-group">
+                <label>Región</label>
+                <input v-model="newOrder.shipping_state" type="text" />
+              </div>
+            </div>
+          </div>
+
+          <!-- Financial Information -->
+          <div class="form-section">
+            <h4>💰 Información Financiera</h4>
+            <div class="form-row">
+              <div class="form-group">
+                <label>Monto Total *</label>
+                <input v-model.number="newOrder.total_amount" type="number" step="0.01" required />
+              </div>
+              <div class="form-group">
+                <label>Costo de Envío</label>
+                <input v-model.number="newOrder.shipping_cost" type="number" step="0.01" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-actions">
+          <button type="button" @click="showCreateOrderModal = false" class="btn-cancel">
+            Cancelar
+          </button>
+          <button type="submit" :disabled="isCreatingOrder" class="btn-save">
+            {{ isCreatingOrder ? 'Creando...' : 'Crear Pedido' }}
+          </button>
+        </div>
+      </form>
+    </Modal>
+
+    <!-- Other existing modals... -->
+    <!-- (Bulk Upload, Assign Driver, Bulk Assign modals remain the same) -->
+  
+<Modal v-model="showBulkUploadModal" title="Subida Masiva de Pedidos" width="600px">
+  <div class="bulk-upload-content">
+     <div class="form-group">
+        <label for="bulk-company-select">Asignar pedidos a la empresa:</label>
+        <select id="bulk-company-select" v-model="bulkUploadCompanyId" required>
+            <option disabled value="">-- Seleccione una empresa --</option>
+            <option v-for="company in companies" :key="company._id" :value="company._id">
+                {{ company.name }}
+            </option>
+        </select>
+    </div>
+    <p>Sube un archivo Excel para crear múltiples pedidos a la vez. Asegúrate de que el archivo siga la plantilla requerida.</p>
+    <div class="template-download-section">
+        <a href="#" @click.prevent="downloadTemplate" class="download-template-link">
+            ⬇️ Descargar Plantilla de Ejemplo
+        </a>
+    </div>
     
-    <!-- Modal de creación de pedido -->
-    <Modal v-if="showCreateOrderModal" @close="showCreateOrderModal = false">
-      <div class="modal-content create-order-modal">
-        <h2>Crear Pedido Manual</h2>
-        <form @submit.prevent="createOrder" class="order-form">
-          <div class="form-row">
-            <div class="form-group">
-              <label>Empresa *</label>
-              <select v-model="newOrder.company_id" required class="form-input">
-                <option value="">Seleccionar empresa</option>
-                <option v-for="company in companies" :key="company._id" :value="company._id">
-                  {{ company.name }}
-                </option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label>Comuna *</label>
-              <select v-model="newOrder.shipping_commune" required class="form-input">
-                <option value="">Seleccionar comuna</option>
-                <option v-for="commune in availableCommunes" :key="commune" :value="commune">
-                  {{ commune }}
-                </option>
-              </select>
-            </div>
-          </div>
+    <div class="form-group">
+      <label for="file-upload" class="file-upload-label">Seleccionar archivo Excel</label>
+      <input id="file-upload" type="file" @change="handleFileSelect" accept=".xlsx, .xls" />
+    </div>
+    
+    <div v-if="selectedFile" class="file-name">
+      Archivo seleccionado: {{ selectedFile.name }}
+    </div>
+    
+    <div v-if="uploadFeedback" class="upload-feedback" :class="uploadStatus">
+      {{ uploadFeedback }}
+    </div>
+
+    <div class="modal-actions">
+      <button @click="showBulkUploadModal = false" class="btn-cancel">Cerrar</button>
+      
+      <button @click="handleBulkUpload" 
+              :disabled="!selectedFile || isUploading" 
+              class="btn-save">
+        {{ isUploading ? 'Subiendo...' : 'Iniciar Subida' }}
+      </button>
+    </div>
+    </div>
+</Modal>
+
+    <!-- Modal de asignación individual (existente) -->
+    <Modal v-model="showAssignModal" title="Asignar Conductor" width="500px">
+      <div v-if="selectedOrder">
+        <p>Asignando pedido <strong>#{{ selectedOrder.order_number }}</strong> a un conductor de Shipday.</p>
+        
+        <div class="debug-section">
+          <button @click="debugDrivers" class="btn-debug" type="button">
+            🔍 Debug Conductores
+          </button>
+        </div>
+        
+        <div v-if="loadingDrivers" class="loading-state">Cargando conductores...</div>
+        
+        <div v-else class="form-group">
+          <label>Conductor Disponible</label>
+          <select v-model="selectedDriverId">
+            <option disabled value="">-- Selecciona un conductor --</option>
+            <option v-for="driver in availableDrivers" :key="driver.id" :value="driver.id">
+              {{ driver.name }} ({{ driver.email }}) - {{ driver.isActive ? 'Activo' : 'Inactivo' }}
+            </option>
+          </select>
           
-          <div class="form-row">
-            <div class="form-group">
-              <label>Nombre del Cliente *</label>
-              <input type="text" v-model="newOrder.customer_name" required class="form-input" />
-            </div>
-            <div class="form-group">
-              <label>Email del Cliente</label>
-              <input type="email" v-model="newOrder.customer_email" class="form-input" />
-            </div>
+          <div v-if="selectedDriverId" class="driver-info">
+            <p><strong>Conductor seleccionado:</strong></p>
+            <pre>{{ JSON.stringify(availableDrivers.find(d => d.id === selectedDriverId), null, 2) }}</pre>
           </div>
-          
-          <div class="form-row">
-            <div class="form-group">
-              <label>Teléfono del Cliente</label>
-              <input type="tel" v-model="newOrder.customer_phone" class="form-input" />
-            </div>
-            <div class="form-group">
-              <label>Documento del Cliente</label>
-              <input type="text" v-model="newOrder.customer_document" class="form-input" />
-            </div>
-          </div>
-          
-          <div class="form-group">
-            <label>Dirección de Envío *</label>
-            <textarea v-model="newOrder.shipping_address" required class="form-input" rows="2"></textarea>
-          </div>
-          
-          <div class="form-row">
-            <div class="form-group">
-              <label>Monto Total *</label>
-              <input type="number" v-model="newOrder.total_amount" required min="0" step="0.01" class="form-input" />
-            </div>
-            <div class="form-group">
-              <label>Costo de Envío</label>
-              <input type="number" v-model="newOrder.shipping_cost" min="0" step="0.01" class="form-input" />
-            </div>
-          </div>
-          
-          <div class="form-group">
-            <label>Notas del Pedido</label>
-            <textarea v-model="newOrder.notes" class="form-input" rows="3"></textarea>
-          </div>
-          
-          <div class="modal-actions">
-            <button type="button" @click="showCreateOrderModal = false" class="btn-secondary">
-              Cancelar
-            </button>
-            <button type="submit" :disabled="isCreatingOrder" class="btn-primary">
-              {{ isCreatingOrder ? 'Creando...' : 'Crear Pedido' }}
-            </button>
-          </div>
-        </form>
+        </div>
+
+        <div class="modal-actions">
+          <button @click="showAssignModal = false" class="btn-cancel">Cancelar</button>
+          <button @click="confirmAssignment" :disabled="!selectedDriverId || isAssigning" class="btn-save">
+            {{ isAssigning ? 'Asignando...' : 'Confirmar Asignación' }}
+          </button>
+        </div>
       </div>
     </Modal>
 
-    <!-- Modal de asignación masiva mejorado -->
-    <Modal v-if="showBulkAssignModal" @close="closeBulkAssignModal">
-      <div class="modal-content bulk-assign-modal">
-        <h2>Asignación Masiva de Conductor</h2>
-        
-        <!-- Resumen de selección -->
+    <!-- NUEVO: Modal de asignación masiva -->
+    <Modal v-model="showBulkAssignModal" title="Asignación Masiva de Conductor" width="600px">
+      <div class="bulk-assign-content">
         <div class="selection-summary">
-          <h4>Pedidos Seleccionados ({{ selectedOrders.length }})</h4>
-          <div class="selected-orders-preview">
-            <div v-for="orderId in selectedOrders.slice(0, 5)" :key="orderId" class="selected-order-item">
-              {{ getOrderById(orderId)?.order_number || orderId }}
-            </div>
-            <div v-if="selectedOrders.length > 5" class="more-orders">
-              +{{ selectedOrders.length - 5 }} más...
+          <h4>📋 Pedidos seleccionados ({{ selectedOrders.length }})</h4>
+          <div class="selected-orders-list">
+            <div v-for="orderId in selectedOrders" :key="orderId" class="selected-order-item">
+              {{ getOrderById(orderId)?.order_number }} - {{ getOrderById(orderId)?.customer_name }}
             </div>
           </div>
         </div>
-        
-        <!-- Selector de conductor -->
+
         <div class="driver-selection">
-          <h4>Seleccionar Conductor</h4>
-          <div v-if="loadingDrivers" class="loading-drivers">
-            Cargando conductores disponibles...
+          <div v-if="loadingDrivers" class="loading-state">Cargando conductores...</div>
+          
+          <div v-else class="form-group">
+            <label>Conductor para asignar a todos los pedidos</label>
+            <select v-model="bulkSelectedDriverId">
+              <option disabled value="">-- Selecciona un conductor --</option>
+              <option v-for="driver in availableDrivers" :key="driver.id" :value="driver.id">
+                {{ driver.name }} ({{ driver.email }}) - {{ driver.isActive ? 'Activo' : 'Inactivo' }}
+              </option>
+            </select>
           </div>
-          <select v-else v-model="bulkSelectedDriverId" class="form-input">
-            <option value="">Seleccionar conductor</option>
-            <option v-for="driver in availableDrivers" :key="driver.id" :value="driver.id">
-              {{ driver.name }} - {{ driver.email }} ({{ driver.isOnShift ? 'En turno' : 'Fuera de turno' }})
-            </option>
-          </select>
+
+          <div v-if="bulkSelectedDriverId" class="bulk-driver-info">
+            <p><strong>Se asignará:</strong> {{ availableDrivers.find(d => d.id === bulkSelectedDriverId)?.name }}</p>
+          </div>
         </div>
-        
-        <!-- Progreso de asignación -->
-        <div v-if="isBulkAssigning" class="assignment-progress">
-          <h4>Progreso de Asignación</h4>
+
+        <!-- Progreso de asignación masiva -->
+        <div v-if="isBulkAssigning" class="bulk-progress">
+          <h4>Progreso de asignación:</h4>
           <div class="progress-bar">
             <div class="progress-fill" :style="{ width: bulkProgressPercentage + '%' }"></div>
           </div>
-          <div class="progress-text">
-            {{ bulkAssignmentCompleted }} de {{ selectedOrders.length }} completados ({{ Math.round(bulkProgressPercentage) }}%)
+          <p>{{ bulkAssignmentCompleted }} / {{ selectedOrders.length }} pedidos procesados</p>
+          
+          <div v-if="bulkAssignmentResults.length > 0" class="results-preview">
+            <div v-for="result in bulkAssignmentResults.slice(-3)" :key="result.orderId" class="result-item">
+              <span :class="result.success ? 'success-icon' : 'error-icon'">
+                {{ result.success ? '✅' : '❌' }}
+              </span>
+              {{ result.orderNumber }}: {{ result.message }}
+            </div>
           </div>
         </div>
-        
-        <!-- Resultados -->
-        <div v-if="bulkAssignmentResults.length > 0" class="assignment-results">
-          <h4>Resultados de Asignación</h4>
+
+        <!-- Resultados finales -->
+        <div v-if="bulkAssignmentFinished" class="bulk-results">
+          <h4>📊 Resultados de la asignación masiva:</h4>
           <div class="results-summary">
             <div class="result-stat success">
-              ✅ {{ bulkAssignmentResults.filter(r => r.success).length }} exitosos
+              <span class="stat-number">{{ bulkAssignmentResults.filter(r => r.success).length }}</span>
+              <span class="stat-label">Exitosos</span>
             </div>
             <div class="result-stat error">
-              ❌ {{ bulkAssignmentResults.filter(r => !r.success).length }} fallidos
+              <span class="stat-number">{{ bulkAssignmentResults.filter(r => !r.success).length }}</span>
+              <span class="stat-label">Fallidos</span>
             </div>
           </div>
-          
-          <div v-if="bulkAssignmentResults.filter(r => !r.success).length > 0" class="failed-assignments">
-            <h5>Asignaciones Fallidas:</h5>
-            <div v-for="result in bulkAssignmentResults.filter(r => !r.success)" :key="result.orderId" class="failed-item">
-              {{ result.orderNumber }}: {{ result.error }}
+
+          <div v-if="bulkAssignmentResults.filter(r => !r.success).length > 0" class="error-details">
+            <h5>❌ Pedidos que fallaron:</h5>
+            <div v-for="result in bulkAssignmentResults.filter(r => !r.success)" :key="result.orderId" class="error-item">
+              <strong>{{ result.orderNumber }}:</strong> {{ result.message }}
             </div>
           </div>
         </div>
-        
+
         <div class="modal-actions">
-          <button @click="closeBulkAssignModal" class="btn-secondary">
-            {{ bulkAssignmentFinished ? 'Cerrar' : 'Cancelar' }}
+          <button @click="closeBulkAssignModal" class="btn-cancel">
+            {{ isBulkAssigning ? 'Cerrar después de completar' : 'Cerrar' }}
           </button>
           <button 
             v-if="!isBulkAssigning && !bulkAssignmentFinished"
             @click="confirmBulkAssignment" 
             :disabled="!bulkSelectedDriverId" 
-            class="btn-primary">
-            Asignar {{ selectedOrders.length }} pedidos
+            class="btn-save">
+            🚚 Asignar {{ selectedOrders.length }} pedidos
           </button>
         </div>
       </div>
     </Modal>
-
-    <!-- Otros modales existentes -->
-    <UpdateOrderStatus 
-      v-if="showUpdateStatusModal"
-      :order="selectedOrder"
-      @close="showUpdateStatusModal = false"
-      @updated="handleOrderUpdated"
-    />
-    
-    <OrderDetails 
-      v-if="showOrderDetailsModal"
-      :order="selectedOrder"
-      @close="showOrderDetailsModal = false"
-    />
-  </div>
+    </div>
 </template>
 
 <script setup>
 import { ref, onMounted, computed, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { apiService } from '../services/api';
 import { shipdayService } from '../services/shipday';
 import Modal from '../components/Modal.vue';
 import UpdateOrderStatus from '../components/UpdateOrderStatus.vue';
 import OrderDetails from '../components/OrderDetails.vue';
 
-// Estado de datos
+// Router and Route
+const route = useRoute();
+const router = useRouter();
+
+// Core data
 const orders = ref([]);
 const companies = ref([]);
 const availableCommunes = ref([]);
-const pagination = ref({ page: 1, limit: 25, total: 0, totalPages: 1 });
 
-// Estado de filtros mejorado
-const filters = ref({
-  company_id: '',
-  status: '',
-  shipping_commune: '',
-  date_from: '',
-  date_to: '',
-  search: '',
-  min_amount: '',
-  max_amount: '',
-  has_driver: ''
+// Pagination and filters
+const pagination = ref({ 
+  page: 1, 
+  limit: 15, 
+  total: 0, 
+  totalPages: 1 
 });
 
-const showAdvancedFilters = ref(false);
-const sortField = ref('order_date');
-const sortDirection = ref('desc');
+const filters = ref({ 
+  company_id: '', 
+  status: '', 
+  shipping_commune: '', 
+  date_from: '', 
+  date_to: '', 
+  search: '' 
+});
 
-// Estado de UI
+// UI State
 const loadingOrders = ref(true);
 const isExporting = ref(false);
-const activeActionMenu = ref(null);
+const viewMode = ref('table'); // 'table' or 'cards'
+const sortField = ref('order_date');
+const sortDirection = ref('desc');
+const highlightedOrderId = ref(null);
 
-// Estado de modales
-const showCreateOrderModal = ref(false);
+// Modal states
 const showUpdateStatusModal = ref(false);
 const showOrderDetailsModal = ref(false);
+const showCreateOrderModal = ref(false);
 const showBulkUploadModal = ref(false);
+const showAssignModal = ref(false);
 const showBulkAssignModal = ref(false);
-const showBulkStatusModal = ref(false);
 
-// Estado de pedido seleccionado
-const selectedOrder = ref(null);
-
-// Estado de creación
+// Form states
 const isCreatingOrder = ref(false);
+const selectedOrder = ref(null);
 const newOrder = ref({});
 
-// Estado de selección masiva
-const selectedOrders = ref([]);
+// Bulk upload
+const bulkUploadCompanyId = ref('');
+const selectedFile = ref(null);
+const isUploading = ref(false);
+const uploadFeedback = ref('');
+const uploadStatus = ref('');
 
-// Estado de asignación
+// Driver assignment
 const availableDrivers = ref([]);
 const loadingDrivers = ref(false);
 const selectedDriverId = ref('');
 const isAssigning = ref(false);
+
+// Bulk selection and assignment
+const selectedOrders = ref([]);
 const bulkSelectedDriverId = ref('');
 const isBulkAssigning = ref(false);
 const bulkAssignmentCompleted = ref(0);
 const bulkAssignmentResults = ref([]);
 const bulkAssignmentFinished = ref(false);
 
-// Computed properties mejorados
-const activeFiltersCount = computed(() => {
-  return Object.values(filters.value).filter(value => value !== '').length;
-});
+// Debounce timer for search
+let searchTimeout = null;
 
-const hasActiveFilters = computed(() => activeFiltersCount.value > 0);
-
-const hasSelectableOrders = computed(() => {
-  return orders.value.some(order => !order.shipday_order_id);
-});
-
-const canAssignSelected = computed(() => {
-  return selectedOrders.value.length > 0 && selectedOrders.value.every(orderId => {
-    const order = orders.value.find(o => o._id === orderId);
-    return order && !order.shipday_order_id;
-  });
-});
-
+// Computed properties
 const selectAllChecked = computed(() => {
   const selectableOrders = orders.value.filter(order => !order.shipday_order_id);
-  return selectableOrders.length > 0 && selectableOrders.every(order => selectedOrders.value.includes(order._id));
+  return selectableOrders.length > 0 && 
+         selectableOrders.every(order => selectedOrders.value.includes(order._id));
 });
 
 const selectAllIndeterminate = computed(() => {
   const selectableOrders = orders.value.filter(order => !order.shipday_order_id);
-  const selectedCount = selectableOrders.filter(order => selectedOrders.value.includes(order._id)).length;
+  const selectedCount = selectableOrders.filter(order => 
+    selectedOrders.value.includes(order._id)
+  ).length;
   return selectedCount > 0 && selectedCount < selectableOrders.length;
 });
 
@@ -703,95 +812,57 @@ const bulkProgressPercentage = computed(() => {
   return (bulkAssignmentCompleted.value / selectedOrders.value.length) * 100;
 });
 
-const visiblePages = computed(() => {
-  const current = pagination.value.page;
-  const total = pagination.value.totalPages;
-  const delta = 2;
-  
-  const range = [];
-  const rangeWithDots = [];
-  
-  for (let i = Math.max(2, current - delta); i <= Math.min(total - 1, current + delta); i++) {
-    range.push(i);
-  }
-  
-  if (current - delta > 2) {
-    rangeWithDots.push(1, '...');
-  } else {
-    rangeWithDots.push(1);
-  }
-  
-  rangeWithDots.push(...range);
-  
-  if (current + delta < total - 1) {
-    rangeWithDots.push('...', total);
-  } else {
-    rangeWithDots.push(total);
-  }
-  
-  return rangeWithDots.filter((item, index, arr) => arr.indexOf(item) === index);
-});
-
 // Watchers
-watch(() => filters.value.company_id, () => {
-  fetchAvailableCommunes();
-});
+watch(() => route.query.highlight, (newValue) => {
+  if (newValue) {
+    highlightedOrderId.value = newValue;
+    // Remove highlight after 3 seconds
+    setTimeout(() => {
+      highlightedOrderId.value = null;
+    }, 3000);
+  }
+}, { immediate: true });
 
-// Debounce para búsqueda
-let searchTimeout;
-function debounceSearch() {
-  clearTimeout(searchTimeout);
-  searchTimeout = setTimeout(() => {
-    pagination.value.page = 1;
-    fetchOrders();
-  }, 500);
-}
-
-// Funciones de inicialización
+// Lifecycle
 onMounted(() => {
   fetchCompanies();
   fetchOrders();
   fetchAvailableCommunes();
 });
 
-async function fetchCompanies() {
-  try {
-    const { data } = await apiService.companies.getAll();
-    companies.value = data;
-  } catch (error) {
-    console.error("Error fetching companies:", error);
-  }
+// Core functions
+async function fetchCompanies() { 
+  try { 
+    const { data } = await apiService.companies.getAll(); 
+    companies.value = data; 
+  } catch (error) { 
+    console.error("Error fetching companies:", error); 
+  } 
 }
 
-async function fetchOrders() {
-  loadingOrders.value = true;
-  try {
-    const params = {
-      page: pagination.value.page,
-      limit: pagination.value.limit,
+async function fetchOrders() { 
+  loadingOrders.value = true; 
+  try { 
+    const params = { 
+      page: pagination.value.page, 
+      limit: pagination.value.limit, 
       sort_field: sortField.value,
       sort_direction: sortDirection.value,
-      ...filters.value
-    };
+      ...filters.value 
+    }; 
     
-    // Limpiar parámetros vacíos
-    Object.keys(params).forEach(key => {
-      if (params[key] === '') delete params[key];
-    });
-    
-    const { data } = await apiService.orders.getAll(params);
-    orders.value = data.orders;
+    const { data } = await apiService.orders.getAll(params); 
+    orders.value = data.orders; 
     pagination.value = data.pagination;
     
-    // Limpiar selección si cambiamos de página o filtros
+    // Clear selection when changing pages or filters
     selectedOrders.value = [];
-    activeActionMenu.value = null;
-  } catch (error) {
-    console.error('Error fetching orders:', error);
-    alert('Error al cargar pedidos');
-  } finally {
-    loadingOrders.value = false;
-  }
+  } catch (error) { 
+    console.error('Error fetching orders:', error); 
+    showNotification('Error al cargar pedidos', 'error');
+  } finally { 
+    loadingOrders.value = false; 
+  } 
 }
 
 async function fetchAvailableCommunes() {
@@ -801,37 +872,70 @@ async function fetchAvailableCommunes() {
       params.company_id = filters.value.company_id;
     }
     
-    const { data } = await apiService.communes.getAvailable(params);
+    const { data } = await apiService.orders.getAvailableCommunes(params);
     availableCommunes.value = data.communes || [];
   } catch (error) {
     console.error('Error fetching communes:', error);
   }
 }
 
-// Funciones de filtros
-function applyFilters() {
-  pagination.value.page = 1;
-  fetchOrders();
+// Utility functions
+function getStatusLabel(status) {
+  const statusLabels = {
+    pending: 'Pendiente',
+    processing: 'Procesando',
+    shipped: 'Enviado',
+    delivered: 'Entregado',
+    cancelled: 'Cancelado'
+  };
+  return statusLabels[status] || status;
 }
 
-function clearFilters() {
-  Object.keys(filters.value).forEach(key => {
-    filters.value[key] = '';
+function getCompanyName(companyId) {
+  const company = companies.value.find(c => c._id === companyId);
+  return company ? company.name : 'Sin empresa';
+}
+
+function formatCurrency(amount) {
+  return new Intl.NumberFormat('es-CL', {
+    style: 'currency',
+    currency: 'CLP',
+    minimumFractionDigits: 0
+  }).format(amount || 0);
+}
+
+function formatDate(dateString) {
+  return new Date(dateString).toLocaleDateString('es-CL');
+}
+
+function formatTime(dateString) {
+  return new Date(dateString).toLocaleTimeString('es-CL', {
+    hour: '2-digit',
+    minute: '2-digit'
   });
-  pagination.value.page = 1;
+}
+
+// Search and filtering
+function debounceSearch() {
+  clearTimeout(searchTimeout);
+  searchTimeout = setTimeout(() => {
+    fetchOrders();
+  }, 500);
+}
+
+function clearAllFilters() {
+  filters.value = {
+    company_id: '',
+    status: '',
+    shipping_commune: '',
+    date_from: '',
+    date_to: '',
+    search: ''
+  };
   fetchOrders();
 }
 
-function clearFilter(filterKey) {
-  filters.value[filterKey] = '';
-  applyFilters();
-}
-
-function toggleAdvancedFilters() {
-  showAdvancedFilters.value = !showAdvancedFilters.value;
-}
-
-// Funciones de ordenamiento
+// Sorting
 function sortBy(field) {
   if (sortField.value === field) {
     sortDirection.value = sortDirection.value === 'asc' ? 'desc' : 'asc';
@@ -842,26 +946,55 @@ function sortBy(field) {
   fetchOrders();
 }
 
-function getSortClass(field) {
-  if (sortField.value !== field) return '';
-  return sortDirection.value === 'asc' ? 'asc' : 'desc';
+// Pagination
+function changePage(page) {
+  if (page >= 1 && page <= pagination.value.totalPages) {
+    pagination.value.page = page;
+    fetchOrders();
+  }
 }
 
-// Funciones de selección
+function getVisiblePages() {
+  const current = pagination.value.page;
+  const total = pagination.value.totalPages;
+  const delta = 2;
+  
+  let start = Math.max(1, current - delta);
+  let end = Math.min(total, current + delta);
+  
+  // Adjust range to always show 5 pages when possible
+  if (end - start < 4) {
+    if (start === 1) {
+      end = Math.min(total, start + 4);
+    } else {
+      start = Math.max(1, end - 4);
+    }
+  }
+  
+  const pages = [];
+  for (let i = start; i <= end; i++) {
+    pages.push(i);
+  }
+  
+  return pages;
+}
+
+// Selection functions
 function toggleSelectAll() {
   const selectableOrders = orders.value.filter(order => !order.shipday_order_id);
   
   if (selectAllChecked.value) {
-    // Deseleccionar todos
-    selectedOrders.value = selectedOrders.value.filter(orderId => 
-      !selectableOrders.find(order => order._id === orderId)
+    // Deselect all selectable orders from current page
+    selectedOrders.value = selectedOrders.value.filter(id => 
+      !selectableOrders.some(order => order._id === id)
     );
   } else {
-    // Seleccionar todos los que no están ya seleccionados
-    const newSelections = selectableOrders
-      .filter(order => !selectedOrders.value.includes(order._id))
-      .map(order => order._id);
-    selectedOrders.value.push(...newSelections);
+    // Select all selectable orders from current page
+    selectableOrders.forEach(order => {
+      if (!selectedOrders.value.includes(order._id)) {
+        selectedOrders.value.push(order._id);
+      }
+    });
   }
 }
 
@@ -869,46 +1002,12 @@ function clearSelection() {
   selectedOrders.value = [];
 }
 
-// Funciones de paginación
-function goToPage(page) {
-  if (page >= 1 && page <= pagination.value.totalPages) {
-    pagination.value.page = page;
-    fetchOrders();
-  }
+function getOrderById(orderId) {
+  return orders.value.find(order => order._id === orderId);
 }
 
-function changePageSize() {
-  pagination.value.page = 1;
-  fetchOrders();
-}
-
-// Funciones de UI
-function refreshOrders() {
-  fetchOrders();
-}
-
-function toggleActionMenu(orderId) {
-  activeActionMenu.value = activeActionMenu.value === orderId ? null : orderId;
-}
-
-// Funciones de modales
-function openCreateOrderModal() {
-  newOrder.value = {
-    company_id: '',
-    shipping_commune: '',
-    customer_name: '',
-    customer_email: '',
-    customer_phone: '',
-    customer_document: '',
-    shipping_address: '',
-    total_amount: '',
-    shipping_cost: '',
-    notes: ''
-  };
-  showCreateOrderModal.value = true;
-}
-
-function openOrderDetailsModal(order) {
+// Modal functions
+function viewOrderDetails(order) {
   selectedOrder.value = order;
   showOrderDetailsModal.value = true;
 }
@@ -918,112 +1017,160 @@ function openUpdateStatusModal(order) {
   showUpdateStatusModal.value = true;
 }
 
-async function openAssignModal(order) {
-  selectedOrder.value = order;
-  selectedDriverId.value = '';
-  await loadDrivers();
-  // Aquí podrías abrir un modal de asignación individual si lo necesitas
+function onOrderUpdated() {
+  showUpdateStatusModal.value = false;
+  fetchOrders();
+  showNotification('Estado del pedido actualizado correctamente', 'success');
 }
 
-async function openBulkAssignModal() {
-  if (selectedOrders.value.length === 0) {
-    alert('Selecciona al menos un pedido para asignar');
-    return;
-  }
-  
-  bulkSelectedDriverId.value = '';
-  bulkAssignmentCompleted.value = 0;
-  bulkAssignmentResults.value = [];
-  bulkAssignmentFinished.value = false;
-  
-  await loadDrivers();
-  showBulkAssignModal.value = true;
-}
-
-function closeBulkAssignModal() {
-  showBulkAssignModal.value = false;
-  if (bulkAssignmentFinished.value) {
-    fetchOrders(); // Refrescar para ver los cambios
-  }
-}
-
-function openBulkStatusModal() {
-  // Implementar modal de cambio de estado masivo
-  alert('Funcionalidad de cambio de estado masivo en desarrollo');
-}
-
-// Funciones de acciones
+// Order management functions
 async function createOrder() {
-  if (!newOrder.value.company_id) {
-    alert("Por favor, seleccione una empresa.");
+  if (!newOrder.value.customer_name || !newOrder.value.customer_phone || 
+      !newOrder.value.shipping_address || !newOrder.value.total_amount) {
+    showNotification('Por favor, completa todos los campos obligatorios', 'error');
     return;
   }
-  
-  if (!newOrder.value.shipping_commune) {
-    alert("Por favor, seleccione la comuna.");
-    return;
-  }
-  
-  if (!newOrder.value.customer_name) {
-    alert("Por favor, ingrese el nombre del cliente.");
-    return;
-  }
-  
-  if (!newOrder.value.shipping_address) {
-    alert("Por favor, ingrese la dirección de envío.");
-    return;
-  }
-  
-  if (!newOrder.value.total_amount || newOrder.value.total_amount <= 0) {
-    alert("Por favor, ingrese un monto total válido.");
-    return;
-  }
-  
+
   isCreatingOrder.value = true;
   try {
-    const channelsResponse = await apiService.channels.getByCompany(newOrder.value.company_id);
-    if (!channelsResponse.data || channelsResponse.data.length === 0) {
-      alert("La empresa seleccionada no tiene canales. Configure uno primero.");
-      return;
-    }
-    
-    const orderData = {
-      ...newOrder.value,
-      channel_id: channelsResponse.data[0]._id,
-      order_number: `MANUAL-${Date.now()}`,
-      external_order_id: `manual-admin-${Date.now()}`,
-      total_amount: parseFloat(newOrder.value.total_amount) || 0,
-      shipping_cost: parseFloat(newOrder.value.shipping_cost) || 0,
-    };
-    
-    await apiService.orders.create(orderData);
-    alert('Pedido manual creado con éxito.');
+    await apiService.orders.create(newOrder.value);
     showCreateOrderModal.value = false;
-    await fetchOrders();
+    newOrder.value = {};
+    fetchOrders();
+    showNotification('Pedido creado exitosamente', 'success');
   } catch (error) {
-    console.error('Error creando pedido:', error);
-    alert(`Error al crear pedido: ${error.response?.data?.error || error.message}`);
+    console.error('Error creating order:', error);
+    showNotification('Error al crear el pedido', 'error');
   } finally {
     isCreatingOrder.value = false;
   }
 }
 
-async function loadDrivers() {
+async function deleteOrder(order) {
+  if (!confirm(`¿Estás seguro de que quieres eliminar el pedido #${order.order_number}?`)) {
+    return;
+  }
+
+  try {
+    await apiService.orders.delete(order._id);
+    fetchOrders();
+    showNotification('Pedido eliminado correctamente', 'success');
+  } catch (error) {
+    console.error('Error deleting order:', error);
+    showNotification('Error al eliminar el pedido', 'error');
+  }
+}
+
+// Export function
+async function exportOrders() {
+  isExporting.value = true;
+  try {
+    const params = { ...filters.value, export: true };
+    const response = await apiService.orders.export(params);
+    
+    // Download the file
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `pedidos_${new Date().toISOString().split('T')[0]}.xlsx`);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+    
+    showNotification('Archivo exportado correctamente', 'success');
+  } catch (error) {
+    console.error('Error exporting orders:', error);
+    showNotification('Error al exportar los pedidos', 'error');
+  } finally {
+    isExporting.value = false;
+  }
+}
+
+// Shipday integration
+async function createShipdayOrder(order) {
+  try {
+    const response = await apiService.orders.createInShipday(order._id);
+    showNotification('Pedido enviado a Shipday correctamente', 'success');
+    fetchOrders();
+  } catch (error) {
+    console.error('Error creating Shipday order:', error);
+    showNotification(`Error al enviar a Shipday: ${error.response?.data?.error || error.message}`, 'error');
+  }
+}
+
+// Driver assignment functions
+async function fetchAvailableDrivers() {
   loadingDrivers.value = true;
   try {
-    const { data } = await shipdayService.getDrivers();
-    availableDrivers.value = data.drivers || [];
+    const response = await shipdayService.getDrivers();
+    const allDrivers = response.data?.data || response.data || [];
+    availableDrivers.value = allDrivers.filter(driver => driver.isActive);
   } catch (error) {
-    console.error('Error loading drivers:', error);
-    alert('Error al cargar conductores');
+    console.error('Error fetching drivers:', error);
+    showNotification('Error al cargar los conductores desde Shipday', 'error');
   } finally {
     loadingDrivers.value = false;
   }
 }
 
+async function openAssignModal(order) {
+  selectedOrder.value = order;
+  showAssignModal.value = true;
+  selectedDriverId.value = '';
+  
+  if (availableDrivers.value.length === 0) {
+    await fetchAvailableDrivers();
+  }
+}
+
+async function confirmAssignment() {
+  if (!selectedDriverId.value) {
+    showNotification('Por favor, selecciona un conductor', 'error');
+    return;
+  }
+  
+  isAssigning.value = true;
+  try {
+    await apiService.orders.assignDriver(selectedOrder.value._id, selectedDriverId.value);
+    showAssignModal.value = false;
+    fetchOrders();
+    showNotification('Conductor asignado exitosamente', 'success');
+  } catch (error) {
+    console.error('Error assigning driver:', error);
+    showNotification(`Error al asignar conductor: ${error.response?.data?.error || error.message}`, 'error');
+  } finally {
+    isAssigning.value = false;
+  }
+}
+
+// Bulk assignment functions
+async function openBulkAssignModal() {
+  if (selectedOrders.value.length === 0) {
+    showNotification('Por favor, selecciona al menos un pedido', 'error');
+    return;
+  }
+  
+  showBulkAssignModal.value = true;
+  bulkSelectedDriverId.value = '';
+  bulkAssignmentCompleted.value = 0;
+  bulkAssignmentResults.value = [];
+  bulkAssignmentFinished.value = false;
+  isBulkAssigning.value = false;
+  
+  if (availableDrivers.value.length === 0) {
+    await fetchAvailableDrivers();
+  }
+}
+
 async function confirmBulkAssignment() {
   if (!bulkSelectedDriverId.value) {
-    alert('Selecciona un conductor');
+    showNotification('Por favor, selecciona un conductor', 'error');
+    return;
+  }
+  
+  if (selectedOrders.value.length === 0) {
+    showNotification('No hay pedidos seleccionados', 'error');
     return;
   }
   
@@ -1031,191 +1178,254 @@ async function confirmBulkAssignment() {
   bulkAssignmentCompleted.value = 0;
   bulkAssignmentResults.value = [];
   
+  const driver = availableDrivers.value.find(d => d.id === bulkSelectedDriverId.value);
+  
   for (const orderId of selectedOrders.value) {
-    const order = orders.value.find(o => o._id === orderId);
-    if (!order) continue;
-    
     try {
-      await shipdayService.assignDriver(order.shipday_order_id || orderId, bulkSelectedDriverId.value);
+      await apiService.orders.assignDriver(orderId, bulkSelectedDriverId.value);
       bulkAssignmentResults.value.push({
         orderId,
-        orderNumber: order.order_number,
-        success: true
+        success: true,
+        message: `Asignado a ${driver?.name || 'conductor'}`
       });
     } catch (error) {
+      console.error(`Error assigning driver to order ${orderId}:`, error);
       bulkAssignmentResults.value.push({
         orderId,
-        orderNumber: order.order_number,
         success: false,
-        error: error.message
+        message: error.response?.data?.error || error.message
       });
     }
     
     bulkAssignmentCompleted.value++;
+    
+    // Small delay to show progress
+    await new Promise(resolve => setTimeout(resolve, 100));
   }
   
-  isBulkAssigning.value = false;
   bulkAssignmentFinished.value = true;
-}
-
-async function exportOrders() {
-  isExporting.value = true;
-  try {
-    const params = { ...filters.value };
-    await apiService.orders.export(params);
-    alert('Exportación completada');
-  } catch (error) {
-    console.error('Error exporting orders:', error);
-    alert('Error al exportar pedidos');
-  } finally {
-    isExporting.value = false;
-  }
-}
-
-async function exportSelected() {
-  if (selectedOrders.value.length === 0) {
-    alert('Selecciona pedidos para exportar');
-    return;
-  }
-  
-  try {
-    await apiService.orders.exportSelected(selectedOrders.value);
-    alert('Exportación de seleccionados completada');
-  } catch (error) {
-    console.error('Error exporting selected orders:', error);
-    alert('Error al exportar pedidos seleccionados');
-  }
-}
-
-function debugOrder(order) {
-  console.log('🔍 Debug de pedido:', order);
-  alert(`Debug del pedido ${order.order_number}. Ver consola para detalles.`);
-}
-
-function duplicateOrder(order) {
-  newOrder.value = {
-    company_id: order.company_id._id || order.company_id,
-    shipping_commune: order.shipping_commune,
-    customer_name: order.customer_name,
-    customer_email: order.customer_email,
-    customer_phone: order.customer_phone,
-    customer_document: order.customer_document,
-    shipping_address: order.shipping_address,
-    total_amount: order.total_amount,
-    shipping_cost: order.shipping_cost,
-    notes: order.notes
-  };
-  openCreateOrderModal();
-}
-
-function openTrackingUrl(order) {
-  if (order.shipday_tracking_url) {
-    window.open(order.shipday_tracking_url, '_blank');
-  }
-}
-
-function downloadProofOfDelivery(order) {
-  if (order.status !== 'delivered') {
-    alert('El pedido debe estar entregado para descargar la prueba de entrega');
-    return;
-  }
-  
-  // Implementar descarga de prueba de entrega
-  alert('Funcionalidad de descarga de prueba de entrega en desarrollo');
-}
-
-function handleOrderUpdated() {
-  showUpdateStatusModal.value = false;
   fetchOrders();
-}
-
-// Funciones auxiliares
-function getOrderById(orderId) {
-  return orders.value.find(order => order._id === orderId);
-}
-
-function getCompanyName(companyId) {
-  const company = companies.value.find(c => c._id === companyId);
-  return company ? company.name : 'Empresa Desconocida';
-}
-
-function getCompanyOrderCount(companyId) {
-  return orders.value.filter(order => 
-    (order.company_id?._id || order.company_id) === companyId
-  ).length;
-}
-
-function getCommuneOrderCount(commune) {
-  return orders.value.filter(order => order.shipping_commune === commune).length;
-}
-
-function getCommuneClass(commune) {
-  // Agregar clases CSS según la comuna
-  if (!commune) return 'commune-none';
   
-  // Comunas de enviGo (podrías obtener esta lista desde una API)
-  const envigoCommunes = ['Las Condes', 'Vitacura', 'Providencia', 'Santiago', 'Ñuñoa'];
-  return envigoCommunes.includes(commune) ? 'commune-envigo' : 'commune-other';
-}
-
-function getStatusIcon(status) {
-  const icons = {
-    pending: '🟡',
-    processing: '🔵',
-    shipped: '🟠',
-    delivered: '🟢',
-    cancelled: '🔴'
-  };
-  return icons[status] || '⚪';
-}
-
-function getStatusName(status) {
-  const names = {
-    pending: 'Pendiente',
-    processing: 'Procesando',
-    shipped: 'Enviado',
-    delivered: 'Entregado',
-    cancelled: 'Cancelado'
-  };
-  return names[status] || status;
-}
-
-function formatCurrency(amount) {
-  return new Intl.NumberFormat('es-CL', {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0
-  }).format(amount || 0);
-}
-
-function formatDate(dateString, includeTime = false) {
-  if (!dateString) return '-';
+  const successCount = bulkAssignmentResults.value.filter(r => r.success).length;
+  const failCount = bulkAssignmentResults.value.length - successCount;
   
-  const date = new Date(dateString);
-  const options = {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    timeZone: 'America/Santiago'
-  };
+  if (failCount === 0) {
+    showNotification(`¡Todos los ${successCount} pedidos fueron asignados exitosamente!`, 'success');
+  } else {
+    showNotification(`${successCount} pedidos asignados, ${failCount} fallaron. Revisa los detalles.`, 'warning');
+  }
+}
+
+function closeBulkAssignModal() {
+  showBulkAssignModal.value = false;
   
-  if (includeTime) {
-    options.hour = '2-digit';
-    options.minute = '2-digit';
+  if (bulkAssignmentFinished.value) {
+    const successfulOrderIds = bulkAssignmentResults.value
+      .filter(r => r.success)
+      .map(r => r.orderId);
+    
+    selectedOrders.value = selectedOrders.value.filter(id => 
+      !successfulOrderIds.includes(id)
+    );
   }
   
-  return date.toLocaleDateString('es-CL', options);
+  // Reset states
+  bulkSelectedDriverId.value = '';
+  bulkAssignmentCompleted.value = 0;
+  bulkAssignmentResults.value = [];
+  bulkAssignmentFinished.value = false;
+  isBulkAssigning.value = false;
+}
+
+// Bulk status update
+async function bulkUpdateStatus() {
+  if (selectedOrders.value.length === 0) {
+    showNotification('Por favor, selecciona al menos un pedido', 'error');
+    return;
+  }
+  
+  const newStatus = prompt('Ingresa el nuevo estado (pending, processing, shipped, delivered, cancelled):');
+  if (!newStatus) return;
+  
+  const validStatuses = ['pending', 'processing', 'shipped', 'delivered', 'cancelled'];
+  if (!validStatuses.includes(newStatus)) {
+    showNotification('Estado no válido', 'error');
+    return;
+  }
+  
+  try {
+    await apiService.orders.bulkUpdateStatus(selectedOrders.value, newStatus);
+    fetchOrders();
+    clearSelection();
+    showNotification(`Estado actualizado para ${selectedOrders.value.length} pedidos`, 'success');
+  } catch (error) {
+    console.error('Error updating status:', error);
+    showNotification('Error al actualizar el estado', 'error');
+  }
+}
+
+// Proof of delivery
+function viewProofOfDelivery(order) {
+  // Navigate to proof of delivery component or open modal
+  router.push(`/proof-of-delivery/${order._id}`);
+}
+
+// Debug functions
+async function debugOrder(order) {
+  try {
+    const response = await apiService.orders.debugShipday(order._id);
+    console.log('Debug Info:', response.data);
+    
+    const debugInfo = response.data.debug_info;
+    const validations = debugInfo.validations;
+    const companyData = debugInfo.company_data;
+    const orderData = debugInfo.order_basics;
+    
+    alert(`
+🔍 DEBUG ORDEN: ${orderData.order_number}
+
+📊 DATOS BÁSICOS:
+• Cliente: ${orderData.customer_name || 'NO DEFINIDO'}
+• Dirección: ${orderData.shipping_address || 'NO DEFINIDA'}
+• Total: ${orderData.total_amount || orderData.shipping_cost || 0}
+
+🏢 DATOS EMPRESA:
+• ID: ${companyData.company_id || 'NO DEFINIDO'}
+• Nombre: ${companyData.company_name || 'NO DEFINIDO'}
+• Teléfono: ${companyData.company_phone || 'NO DEFINIDO'}
+
+✅ VALIDACIONES:
+• Tiene empresa: ${validations.has_company ? '✅' : '❌'}
+• Nombre empresa: ${validations.has_company_name ? '✅' : '❌'}
+• Nombre no vacío: ${validations.company_name_not_empty ? '✅' : '❌'}
+• Todo OK: ${validations.all_required_fields_ok ? '✅' : '❌'}
+
+🚀 NOMBRE RESTAURANTE FINAL: 
+"${validations.restaurant_name_final}"
+
+Ver consola para detalles completos.
+    `);
+  } catch (error) {
+    console.error('Error in debug:', error);
+    showNotification(`Error: ${error.response?.data?.error || error.message}`, 'error');
+  }
+}
+
+// Notification system (you'll need to implement this based on your notification component)
+function showNotification(message, type = 'info') {
+  // Implementation depends on your notification system
+  // For now, using alert as fallback
+  if (type === 'error') {
+    alert(`❌ ${message}`);
+  } else if (type === 'success') {
+    alert(`✅ ${message}`);
+  } else if (type === 'warning') {
+    alert(`⚠️ ${message}`);
+  } else {
+    alert(`ℹ️ ${message}`);
+  }
+}
+
+// File upload functions
+async function downloadTemplate() {
+  try {
+    const response = await apiService.orders.downloadImportTemplate();
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', 'plantilla_importacion_pedidos.xlsx');
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  } catch (error) {
+    console.error("Error downloading template:", error);
+    showNotification('No se pudo descargar la plantilla', 'error');
+  }
+}
+
+function handleFileSelect(event) {
+  selectedFile.value = event.target.files[0];
+}
+
+async function uploadBulkOrders() {
+  if (!selectedFile.value) {
+    showNotification('Por favor, selecciona un archivo', 'error');
+    return;
+  }
+  
+  if (!bulkUploadCompanyId.value) {
+    showNotification('Por favor, selecciona una empresa', 'error');
+    return;
+  }
+  
+  isUploading.value = true;
+  uploadStatus.value = 'uploading';
+  
+  try {
+    const formData = new FormData();
+    formData.append('file', selectedFile.value);
+    formData.append('company_id', bulkUploadCompanyId.value);
+    
+    const response = await apiService.orders.bulkUpload(formData);
+    
+    uploadStatus.value = 'success';
+    uploadFeedback.value = `✅ ${response.data.created_count} pedidos creados exitosamente`;
+    
+    setTimeout(() => {
+      showBulkUploadModal.value = false;
+      fetchOrders();
+    }, 2000);
+    
+  } catch (error) {
+    console.error('Error uploading file:', error);
+    uploadStatus.value = 'error';
+    uploadFeedback.value = `❌ Error: ${error.response?.data?.error || error.message}`;
+  } finally {
+    isUploading.value = false;
+  }
 }
 </script>
 
 <style scoped>
-/* Estilos base */
-.admin-orders-container {
-  padding: 24px;
-  background-color: #f8fafc;
-  min-height: 100vh;
+/* Variables CSS */
+:root {
+  --primary-color: #6366f1;
+  --primary-hover: #4f46e5;
+  --secondary-color: #10b981;
+  --secondary-hover: #059669;
+  --danger-color: #ef4444;
+  --danger-hover: #dc2626;
+  --warning-color: #f59e0b;
+  --warning-hover: #d97706;
+  --gray-50: #f9fafb;
+  --gray-100: #f3f4f6;
+  --gray-200: #e5e7eb;
+  --gray-300: #d1d5db;
+  --gray-400: #9ca3af;
+  --gray-500: #6b7280;
+  --gray-600: #4b5563;
+  --gray-700: #374151;
+  --gray-800: #1f2937;
+  --gray-900: #111827;
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  --border-radius: 8px;
+  --border-radius-lg: 12px;
+  --transition: all 0.2s ease;
 }
 
-/* Header mejorado */
+/* Base Container */
+.admin-orders-container {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+  background: #f8fafc;
+  min-height: 100vh;
+  padding: 24px;
+}
+
+/* Header Section */
 .page-header {
   display: flex;
   justify-content: space-between;
@@ -1223,183 +1433,187 @@ function formatDate(dateString, includeTime = false) {
   margin-bottom: 32px;
   background: white;
   padding: 24px;
-  border-radius: 12px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  border-radius: var(--border-radius-lg);
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--gray-200);
 }
 
-.header-left {
+.header-content {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 16px;
 }
 
 .page-title {
   display: flex;
   align-items: center;
   gap: 12px;
-  font-size: 28px;
+  font-size: 32px;
   font-weight: 700;
-  color: #1e293b;
+  color: var(--gray-800);
   margin: 0;
 }
 
 .title-icon {
-  font-size: 32px;
+  font-size: 28px;
 }
 
 .header-stats {
   display: flex;
-  gap: 16px;
+  gap: 24px;
 }
 
-.stat-chip {
+.stat-item {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 8px 16px;
-  background: #f1f5f9;
-  border-radius: 8px;
+  padding: 12px 20px;
+  background: var(--gray-50);
+  border-radius: var(--border-radius);
+  border: 1px solid var(--gray-200);
 }
 
-.stat-value {
-  font-size: 20px;
-  font-weight: 600;
-  color: #3b82f6;
+.stat-number {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--primary-color);
 }
 
 .stat-label {
   font-size: 12px;
-  color: #64748b;
+  color: var(--gray-500);
   text-transform: uppercase;
   letter-spacing: 0.5px;
+  font-weight: 500;
 }
 
 .header-actions {
   display: flex;
   gap: 12px;
-  align-items: center;
+  flex-wrap: wrap;
 }
 
-.action-group {
-  display: flex;
-  gap: 8px;
-}
-
+/* Buttons */
 .btn-action {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 16px;
-  border-radius: 8px;
-  font-weight: 500;
-  font-size: 14px;
+  padding: 12px 20px;
+  border-radius: var(--border-radius);
   border: none;
   cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.btn-action:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.btn-primary {
-  background: #3b82f6;
-  color: white;
-}
-
-.btn-primary:hover:not(:disabled) {
-  background: #2563eb;
-}
-
-.btn-secondary {
-  background: #f1f5f9;
-  color: #475569;
-  border: 1px solid #e2e8f0;
-}
-
-.btn-secondary:hover:not(:disabled) {
-  background: #e2e8f0;
-}
-
-.btn-ghost {
-  background: transparent;
-  color: #64748b;
-  border: 1px solid #e2e8f0;
-}
-
-.btn-ghost:hover:not(:disabled) {
-  background: #f8fafc;
+  font-weight: 600;
+  font-size: 14px;
+  transition: var(--transition);
+  white-space: nowrap;
+  text-decoration: none;
 }
 
 .btn-icon {
   font-size: 16px;
 }
 
-/* Filtros mejorados */
+.btn-primary {
+  background: var(--primary-color);
+  color: white;
+  box-shadow: var(--shadow-sm);
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--primary-hover);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+.btn-secondary {
+  background: var(--secondary-color);
+  color: white;
+  box-shadow: var(--shadow-sm);
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: var(--secondary-hover);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+.btn-export {
+  background: var(--warning-color);
+  color: white;
+  box-shadow: var(--shadow-sm);
+}
+
+.btn-export:hover:not(:disabled) {
+  background: var(--warning-hover);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+.btn-refresh {
+  background: var(--gray-100);
+  color: var(--gray-700);
+  border: 1px solid var(--gray-300);
+}
+
+.btn-refresh:hover:not(:disabled) {
+  background: var(--gray-200);
+  transform: translateY(-1px);
+}
+
+.btn-action:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none !important;
+}
+
+/* Filters Section */
 .filters-section {
   background: white;
-  border-radius: 12px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  padding: 24px;
+  border-radius: var(--border-radius-lg);
   margin-bottom: 24px;
-  overflow: hidden;
+  border: 1px solid var(--gray-200);
+  box-shadow: var(--shadow-sm);
 }
 
 .filters-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 20px 24px 16px;
-  border-bottom: 1px solid #e2e8f0;
+  margin-bottom: 20px;
 }
 
 .filters-header h3 {
+  margin: 0;
+  color: var(--gray-800);
   font-size: 18px;
   font-weight: 600;
-  color: #1e293b;
-  margin: 0;
 }
 
-.filters-actions {
+.btn-clear-filters {
   display: flex;
-  gap: 12px;
-}
-
-.btn-clear-filters, .btn-toggle-filters {
-  padding: 6px 12px;
-  font-size: 14px;
-  border: 1px solid #e2e8f0;
-  background: white;
-  color: #64748b;
-  border-radius: 6px;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  background: var(--gray-100);
+  color: var(--gray-600);
+  border: 1px solid var(--gray-300);
+  border-radius: var(--border-radius);
   cursor: pointer;
-  transition: all 0.2s ease;
+  font-size: 13px;
+  font-weight: 500;
+  transition: var(--transition);
 }
 
-.btn-clear-filters:hover, .btn-toggle-filters:hover {
-  background: #f8fafc;
-  border-color: #cbd5e1;
+.btn-clear-filters:hover {
+  background: var(--gray-200);
 }
 
-.toggle-icon {
-  margin-left: 4px;
-  font-size: 12px;
-}
-
-.filters-row {
+.filters-grid {
   display: grid;
-  gap: 16px;
-  padding: 20px 24px;
-}
-
-.filters-basic {
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-}
-
-.filters-advanced {
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  border-top: 1px solid #e2e8f0;
-  background: #fafbfc;
+  gap: 20px;
+  align-items: end;
 }
 
 .filter-group {
@@ -1408,37 +1622,45 @@ function formatDate(dateString, includeTime = false) {
   gap: 6px;
 }
 
-.filter-group label {
-  font-size: 13px;
-  font-weight: 500;
-  color: #374151;
+.filter-search {
+  grid-column: span 2;
 }
 
-.filter-select, .filter-input {
-  padding: 10px 12px;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
+.filter-label {
+  font-weight: 500;
+  color: var(--gray-700);
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.filter-select,
+.filter-input {
+  padding: 12px;
+  border: 1px solid var(--gray-300);
+  border-radius: var(--border-radius);
   font-size: 14px;
   background: white;
-  transition: border-color 0.2s ease;
+  transition: var(--transition);
 }
 
-.filter-select:focus, .filter-input:focus {
+.filter-select:focus,
+.filter-input:focus {
   outline: none;
-  border-color: #3b82f6;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
 }
 
-.search-group {
-  min-width: 250px;
+.commune-filter {
+  background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+  border-color: var(--primary-color);
 }
 
-.search-input-container {
+.search-wrapper {
   position: relative;
 }
 
 .search-input {
-  width: 100%;
   padding-right: 40px;
 }
 
@@ -1447,164 +1669,188 @@ function formatDate(dateString, includeTime = false) {
   right: 12px;
   top: 50%;
   transform: translateY(-50%);
-  color: #9ca3af;
-  pointer-events: none;
+  color: var(--gray-400);
+  font-size: 16px;
 }
 
-/* Filtros activos */
-.active-filters-summary {
-  padding: 16px 24px;
-  background: #fef3c7;
-  border-top: 1px solid #f59e0b;
+/* Bulk Actions Section */
+.bulk-actions-section {
+  background: linear-gradient(135deg, var(--primary-color) 0%, #8b5cf6 100%);
+  color: white;
+  padding: 20px 24px;
+  border-radius: var(--border-radius-lg);
+  margin-bottom: 24px;
+  box-shadow: var(--shadow-lg);
 }
 
-.active-filters-label {
-  font-size: 13px;
-  font-weight: 500;
-  color: #92400e;
-  margin-bottom: 8px;
-  display: block;
-}
-
-.active-filters-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.filter-chip {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 8px;
-  background: #fbbf24;
-  color: #92400e;
-  border-radius: 4px;
-  font-size: 12px;
-}
-
-.chip-remove {
-  background: none;
-  border: none;
-  color: #92400e;
-  cursor: pointer;
-  font-weight: bold;
-  padding: 0;
-  margin-left: 4px;
-}
-
-/* Barra de acciones masivas */
-.bulk-actions-bar {
+.bulk-actions-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  background: #1e40af;
-  color: white;
-  padding: 16px 24px;
-  border-radius: 8px;
-  margin-bottom: 16px;
-  animation: slideDown 0.3s ease;
-}
-
-@keyframes slideDown {
-  from {
-    opacity: 0;
-    transform: translateY(-10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  flex-wrap: wrap;
+  gap: 16px;
 }
 
 .bulk-selection-info {
   display: flex;
-  align-items: center;
-  gap: 16px;
+  flex-direction: column;
+  gap: 4px;
 }
 
-.count-number {
+.selection-count {
   font-weight: 700;
   font-size: 18px;
 }
 
-.btn-clear-selection {
-  background: rgba(255, 255, 255, 0.2);
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  color: white;
-  padding: 6px 12px;
-  border-radius: 4px;
-  font-size: 12px;
-  cursor: pointer;
+.selection-details {
+  font-size: 14px;
+  opacity: 0.9;
 }
 
 .bulk-actions {
   display: flex;
   gap: 12px;
+  flex-wrap: wrap;
 }
 
-.btn-bulk-action {
+.btn-bulk-assign,
+.btn-bulk-update,
+.btn-clear-selection {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 16px;
-  border-radius: 6px;
-  border: none;
-  font-size: 14px;
-  font-weight: 500;
+  padding: 10px 16px;
+  border-radius: var(--border-radius);
   cursor: pointer;
-  transition: all 0.2s ease;
+  font-weight: 500;
+  font-size: 14px;
+  transition: var(--transition);
+  border: 1px solid rgba(255, 255, 255, 0.3);
 }
 
-.btn-assign {
-  background: #16a34a;
+.btn-bulk-assign,
+.btn-bulk-update {
+  background: rgba(255, 255, 255, 0.2);
   color: white;
 }
 
-.btn-assign:hover:not(:disabled) {
-  background: #15803d;
+.btn-bulk-assign:hover,
+.btn-bulk-update:hover {
+  background: rgba(255, 255, 255, 0.3);
+  transform: translateY(-1px);
 }
 
-.btn-status {
-  background: #8b5cf6;
+.btn-clear-selection {
+  background: transparent;
   color: white;
 }
 
-.btn-status:hover:not(:disabled) {
-  background: #7c3aed;
+.btn-clear-selection:hover {
+  background: rgba(255, 255, 255, 0.1);
 }
 
-.btn-export {
-  background: #f59e0b;
-  color: white;
+/* Transitions */
+.slide-down-enter-active,
+.slide-down-leave-active {
+  transition: all 0.3s ease;
 }
 
-.btn-export:hover:not(:disabled) {
-  background: #d97706;
+.slide-down-enter-from {
+  opacity: 0;
+  transform: translateY(-20px);
 }
 
-/* Tabla mejorada */
-.orders-section {
+.slide-down-leave-to {
+  opacity: 0;
+  transform: translateY(-20px);
+}
+
+/* Content Section */
+.content-section {
   background: white;
-  border-radius: 12px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  border-radius: var(--border-radius-lg);
+  border: 1px solid var(--gray-200);
   overflow: hidden;
+  box-shadow: var(--shadow-sm);
 }
 
-.loading-state, .empty-state {
+.table-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--gray-200);
+  background: var(--gray-50);
+}
+
+.table-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.table-title h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--gray-800);
+}
+
+.orders-count {
+  background: var(--primary-color);
+  color: white;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.table-controls {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+
+.view-options {
+  display: flex;
+  background: var(--gray-200);
+  border-radius: var(--border-radius);
+  padding: 2px;
+}
+
+.view-btn {
+  padding: 8px 16px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  border-radius: calc(var(--border-radius) - 2px);
+  font-size: 13px;
+  font-weight: 500;
+  transition: var(--transition);
+  color: var(--gray-600);
+}
+
+.view-btn.active {
+  background: white;
+  color: var(--gray-800);
+  box-shadow: var(--shadow-sm);
+}
+
+/* Loading State */
+.loading-state {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 80px 40px;
-  text-align: center;
+  padding: 80px 20px;
+  color: var(--gray-500);
 }
 
 .loading-spinner {
   width: 40px;
   height: 40px;
-  border: 4px solid #e2e8f0;
-  border-top: 4px solid #3b82f6;
+  border: 3px solid var(--gray-200);
+  border-top: 3px solid var(--primary-color);
   border-radius: 50%;
   animation: spin 1s linear infinite;
   margin-bottom: 16px;
@@ -1615,156 +1861,128 @@ function formatDate(dateString, includeTime = false) {
   100% { transform: rotate(360deg); }
 }
 
-.empty-icon {
-  font-size: 64px;
-  margin-bottom: 16px;
-  opacity: 0.5;
-}
-
-.empty-state h3 {
-  font-size: 20px;
-  color: #374151;
-  margin: 0 0 8px 0;
-}
-
-.empty-state p {
-  color: #6b7280;
-  margin: 0 0 24px 0;
-}
-
-.table-container {
+/* Table Styles */
+.table-wrapper {
   overflow-x: auto;
 }
 
-.orders-table {
+.data-table {
   width: 100%;
   border-collapse: collapse;
+  font-size: 14px;
 }
 
-.orders-table th {
-  background: #f8fafc;
-  padding: 16px 12px;
+.data-table th,
+.data-table td {
+  padding: 16px;
   text-align: left;
+  border-bottom: 1px solid var(--gray-200);
+}
+
+.data-table th {
+  background: var(--gray-50);
   font-weight: 600;
-  color: #374151;
-  border-bottom: 1px solid #e5e7eb;
+  color: var(--gray-700);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
   position: sticky;
   top: 0;
   z-index: 10;
 }
 
-.orders-table th.sortable {
+.sortable-header {
   cursor: pointer;
   user-select: none;
-  transition: background-color 0.2s ease;
+  transition: var(--transition);
 }
 
-.orders-table th.sortable:hover {
-  background: #f1f5f9;
+.sortable-header:hover {
+  background: var(--gray-100);
 }
 
 .sort-indicator {
   margin-left: 4px;
-  opacity: 0.5;
-  transition: opacity 0.2s ease;
+  color: var(--gray-400);
+  font-size: 10px;
 }
 
-.sort-indicator.asc::after {
-  content: '↑';
-  opacity: 1;
+.checkbox-column {
+  width: 50px;
+  text-align: center;
 }
 
-.sort-indicator.desc::after {
-  content: '↓';
-  opacity: 1;
+.actions-column {
+  width: 120px;
+}
+
+.checkbox-input,
+.master-checkbox {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: var(--primary-color);
 }
 
 .checkbox-disabled {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  font-size: 12px;
-  opacity: 0.5;
+  color: var(--gray-400);
+  font-size: 16px;
 }
 
-.orders-table td {
-  padding: 16px 12px;
-  border-bottom: 1px solid #f3f4f6;
-  vertical-align: top;
-}
-
+/* Table Row Styles */
 .order-row {
-  transition: background-color 0.2s ease;
+  transition: var(--transition);
+  cursor: pointer;
 }
 
 .order-row:hover {
-  background-color: #f8fafc;
+  background: var(--gray-50);
 }
 
-.order-row.selected {
-  background-color: #eff6ff;
+.selected-row {
+  background: linear-gradient(90deg, #f0f9ff 0%, #e0f2fe 100%);
+  border-left: 4px solid var(--primary-color);
 }
 
-.order-row.has-driver {
-  border-left: 4px solid #16a34a;
+.highlighted-row {
+  background: linear-gradient(90deg, #fef3c7 0%, #fde68a 100%);
+  animation: highlight-fade 3s ease-out;
 }
 
-.order-row.delivered {
-  background-color: #f0fdf4;
+@keyframes highlight-fade {
+  0% { background: linear-gradient(90deg, #fbbf24 0%, #f59e0b 100%); }
+  100% { background: linear-gradient(90deg, #fef3c7 0%, #fde68a 100%); }
 }
 
-.order-row.cancelled {
-  background-color: #fef2f2;
-  opacity: 0.7;
-}
-
-/* Estilos de celdas específicas */
+/* Cell Styles */
 .order-number-cell {
-  min-width: 140px;
-}
-
-.order-number {
   font-weight: 600;
-  color: #1e293b;
-  font-size: 14px;
 }
 
-.order-id {
-  font-size: 11px;
-  color: #64748b;
-  margin-top: 2px;
-}
-
-.company-cell {
-  min-width: 160px;
-}
-
-.company-info {
+.order-number-wrapper {
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
 
-.company-name {
-  font-weight: 500;
-  color: #1e293b;
-  font-size: 13px;
+.order-number {
+  color: var(--gray-800);
+  font-size: 15px;
 }
 
-.company-price {
-  font-size: 11px;
-  color: #059669;
-  background: #d1fae5;
-  padding: 2px 6px;
+.shipday-badge {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: white;
+  padding: 2px 8px;
   border-radius: 12px;
-  display: inline-block;
-  width: fit-content;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 .customer-cell {
-  min-width: 200px;
+  min-width: 180px;
 }
 
 .customer-info {
@@ -1775,363 +1993,494 @@ function formatDate(dateString, includeTime = false) {
 
 .customer-name {
   font-weight: 500;
-  color: #1e293b;
-  font-size: 13px;
+  color: var(--gray-800);
 }
 
-.customer-contact {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+.customer-phone {
+  font-size: 12px;
+  color: var(--gray-500);
 }
 
-.contact-item {
-  font-size: 11px;
-  color: #64748b;
-}
-
-.shipping-address {
-  font-size: 11px;
-  color: #64748b;
-  line-height: 1.3;
-  margin-top: 4px;
-}
-
-.commune-cell {
-  min-width: 120px;
-}
-
-.commune-badge {
-  display: inline-block;
-  padding: 4px 8px;
-  border-radius: 6px;
-  font-size: 11px;
-  font-weight: 500;
+.status-cell {
   text-align: center;
 }
 
-.commune-badge.commune-envigo {
-  background: #dcfce7;
-  color: #166534;
-  border: 1px solid #bbf7d0;
-}
-
-.commune-badge.commune-other {
-  background: #fef3c7;
-  color: #92400e;
-  border: 1px solid #fde68a;
-}
-
-.commune-badge.commune-none {
-  background: #f3f4f6;
-  color: #6b7280;
-  border: 1px solid #e5e7eb;
-}
-
-.date-cell {
-  min-width: 140px;
+.status-badge {
+  display: inline-block;
+  padding: 6px 12px;
+  border-radius: 20px;
   font-size: 11px;
-}
-
-.date-creation, .date-delivery, .date-updated {
-  display: flex;
-  flex-direction: column;
-  margin-bottom: 4px;
-}
-
-.date-label {
-  font-weight: 500;
-  color: #6b7280;
+  font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
 
-.date-value {
-  color: #374151;
-  margin-top: 1px;
+.status-pending {
+  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+  color: #92400e;
+  border: 1px solid #f59e0b;
 }
 
-.status-cell {
-  min-width: 110px;
+.status-processing {
+  background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+  color: #1e40af;
+  border: 1px solid #3b82f6;
 }
 
-.status-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 6px 10px;
-  border-radius: 6px;
-  font-size: 12px;
+.status-shipped {
+  background: linear-gradient(135deg, #e0e7ff 0%, #c7d2fe 100%);
+  color: #4338ca;
+  border: 1px solid #6366f1;
+}
+
+.status-delivered {
+  background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%);
+  color: #166534;
+  border: 1px solid #10b981;
+}
+
+.status-cancelled {
+  background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
+  color: #991b1b;
+  border: 1px solid #ef4444;
+}
+
+.commune-cell {
+  text-align: center;
+}
+
+.commune-badge {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 11px;
   font-weight: 500;
   text-transform: capitalize;
 }
 
-.status-badge.pending {
-  background: #fef3c7;
-  color: #92400e;
-}
-
-.status-badge.processing {
-  background: #dbeafe;
+.commune-badge.commune-filled {
+  background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
   color: #1e40af;
+  border: 1px solid #3b82f6;
 }
 
-.status-badge.shipped {
-  background: #fed7aa;
-  color: #9a3412;
-}
-
-.status-badge.delivered {
-  background: #dcfce7;
-  color: #166534;
-}
-
-.status-badge.cancelled {
-  background: #fee2e2;
-  color: #991b1b;
-}
-
-.status-icon {
-  font-size: 14px;
-}
-
-.cost-cell {
-  min-width: 100px;
-  text-align: right;
-}
-
-.cost-info {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.shipping-cost {
-  font-weight: 600;
-  color: #059669;
-  font-size: 14px;
-}
-
-.total-amount {
-  font-size: 11px;
-  color: #64748b;
-}
-
-.driver-cell {
-  min-width: 130px;
-}
-
-.driver-info {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.driver-name {
-  font-weight: 500;
-  color: #1e293b;
-  font-size: 12px;
-}
-
-.driver-status {
-  font-size: 10px;
-  color: #059669;
-  background: #d1fae5;
-  padding: 2px 6px;
-  border-radius: 10px;
-  text-align: center;
-}
-
-.driver-pending .driver-status {
-  color: #1e40af;
-  background: #dbeafe;
-}
-
-.no-driver {
-  font-size: 11px;
-  color: #9ca3af;
+.commune-badge.commune-empty {
+  background: var(--gray-100);
+  color: var(--gray-500);
+  border: 1px solid var(--gray-300);
   font-style: italic;
 }
 
-.actions-cell {
-  min-width: 140px;
+.amount-cell {
+  text-align: right;
+  font-weight: 600;
+  color: var(--gray-800);
 }
 
-.action-buttons {
+.amount {
+  font-size: 15px;
+}
+
+.date-cell {
+  min-width: 120px;
+}
+
+.date-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.date {
+  font-weight: 500;
+  color: var(--gray-800);
+}
+
+.time {
+  font-size: 11px;
+  color: var(--gray-500);
+}
+
+.company-cell {
+  min-width: 150px;
+}
+
+.company-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.company-name {
+  font-weight: 500;
+  color: var(--gray-700);
+  font-size: 13px;
+}
+
+.driver-cell {
+  text-align: center;
+}
+
+.driver-assigned {
+  background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%);
+  color: #166534;
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid #10b981;
+}
+
+.driver-unassigned {
+  color: var(--gray-500);
+  font-style: italic;
+  font-size: 12px;
+}
+
+/* Actions Menu */
+.actions-cell {
+  position: relative;
+}
+
+.actions-menu {
   display: flex;
   gap: 4px;
   align-items: center;
 }
 
-.btn-table-action {
-  padding: 6px 8px;
-  border: 1px solid #e5e7eb;
-  background: white;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 12px;
-  transition: all 0.2s ease;
+.action-btn {
   display: flex;
   align-items: center;
-  justify-content: center;
-  min-width: 28px;
-  height: 28px;
+  gap: 4px;
+  padding: 6px 10px;
+  border: none;
+  border-radius: var(--border-radius);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  transition: var(--transition);
 }
 
-.btn-table-action:hover:not(:disabled) {
-  background: #f3f4f6;
-  border-color: #d1d5db;
-}
-
-.btn-table-action:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.btn-table-action.view:hover:not(:disabled) {
-  background: #3b82f6;
+.action-view {
+  background: var(--primary-color);
   color: white;
-  border-color: #3b82f6;
 }
 
-.btn-table-action.edit:hover:not(:disabled) {
-  background: #8b5cf6;
-  color: white;
-  border-color: #8b5cf6;
+.action-view:hover {
+  background: var(--primary-hover);
+  transform: translateY(-1px);
 }
 
-.btn-table-action.assign:hover:not(:disabled) {
-  background: #16a34a;
-  color: white;
-  border-color: #16a34a;
+.action-more {
+  background: var(--gray-100);
+  color: var(--gray-600);
+  padding: 6px 8px;
 }
 
-.action-dropdown {
+.action-more:hover {
+  background: var(--gray-200);
+}
+
+.actions-dropdown {
   position: relative;
 }
 
-.btn-table-action.more {
-  font-weight: bold;
-}
-
-.action-menu {
+.dropdown-menu {
   position: absolute;
   top: 100%;
   right: 0;
   background: white;
-  border: 1px solid #e5e7eb;
-  border-radius: 6px;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-  z-index: 20;
-  min-width: 140px;
-  overflow: hidden;
+  border: 1px solid var(--gray-200);
+  border-radius: var(--border-radius);
+  box-shadow: var(--shadow-lg);
+  z-index: 1000;
+  min-width: 180px;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-10px);
+  transition: var(--transition);
 }
 
-.action-menu-item {
-  display: block;
+.actions-dropdown:hover .dropdown-menu {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+
+.dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   width: 100%;
-  padding: 8px 12px;
-  background: none;
+  padding: 12px 16px;
   border: none;
-  text-align: left;
-  font-size: 12px;
+  background: none;
   cursor: pointer;
-  transition: background-color 0.2s ease;
+  font-size: 13px;
+  color: var(--gray-700);
+  transition: var(--transition);
+  text-align: left;
 }
 
-.action-menu-item:hover:not(:disabled) {
-  background: #f3f4f6;
+.dropdown-item:hover {
+  background: var(--gray-50);
 }
 
-.action-menu-item:disabled {
+.dropdown-item.debug-item {
+  color: var(--warning-color);
+}
+
+.dropdown-item.danger-item {
+  color: var(--danger-color);
+}
+
+.dropdown-item.danger-item:hover {
+  background: #fef2f2;
+}
+
+.dropdown-divider {
+  height: 1px;
+  background: var(--gray-200);
+  margin: 4px 0;
+}
+
+.item-icon {
+  font-size: 14px;
+}
+
+/* Cards View */
+.cards-container {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 20px;
+  padding: 24px;
+}
+
+.order-card {
+  background: white;
+  border: 1px solid var(--gray-200);
+  border-radius: var(--border-radius-lg);
+  padding: 20px;
+  transition: var(--transition);
+  cursor: pointer;
+}
+
+.order-card:hover {
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
+}
+
+.selected-card {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+.highlighted-card {
+  border-color: var(--warning-color);
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.2);
+  animation: card-highlight 3s ease-out;
+}
+
+@keyframes card-highlight {
+  0% { transform: scale(1.02); }
+  100% { transform: scale(1); }
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.card-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.card-checkbox {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--primary-color);
+}
+
+.card-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.card-action-btn {
+  padding: 6px;
+  border: none;
+  background: var(--gray-100);
+  border-radius: var(--border-radius);
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.card-action-btn:hover {
+  background: var(--gray-200);
+}
+
+.card-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.card-field {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.field-label {
+  font-weight: 500;
+  color: var(--gray-600);
+  font-size: 13px;
+}
+
+.field-value {
+  color: var(--gray-800);
+  font-weight: 500;
+}
+
+.field-value.amount {
+  color: var(--primary-color);
+  font-weight: 600;
+}
+
+/* Empty State */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 20px;
+  text-align: center;
+}
+
+.empty-icon {
+  font-size: 64px;
+  margin-bottom: 16px;
   opacity: 0.5;
-  cursor: not-allowed;
 }
 
-/* Paginación mejorada */
-.pagination-container {
+.empty-state h3 {
+  margin: 0 0 8px 0;
+  color: var(--gray-600);
+  font-size: 20px;
+}
+
+.empty-state p {
+  margin: 0 0 24px 0;
+  color: var(--gray-500);
+  font-size: 14px;
+}
+
+/* Pagination */
+.pagination-section {
   display: flex;
   justify-content: space-between;
   align-items: center;
   padding: 20px 24px;
-  border-top: 1px solid #e5e7eb;
-  background: #fafbfc;
+  border-top: 1px solid var(--gray-200);
+  background: var(--gray-50);
 }
 
 .pagination-info {
+  color: var(--gray-600);
   font-size: 14px;
-  color: #64748b;
+  font-weight: 500;
 }
 
-.pagination {
+.pagination-controls {
   display: flex;
-  gap: 4px;
+  gap: 8px;
   align-items: center;
 }
 
-.btn-page {
-  padding: 8px 12px;
-  border: 1px solid #e5e7eb;
+.page-btn {
+  padding: 8px 16px;
+  border: 1px solid var(--gray-300);
   background: white;
-  border-radius: 6px;
+  color: var(--gray-700);
+  border-radius: var(--border-radius);
   cursor: pointer;
   font-size: 14px;
-  transition: all 0.2s ease;
-  min-width: 40px;
-  height: 36px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  font-weight: 500;
+  transition: var(--transition);
 }
 
-.btn-page:hover:not(:disabled) {
-  background: #f3f4f6;
-  border-color: #d1d5db;
+.page-btn:hover:not(:disabled) {
+  background: var(--gray-50);
+  border-color: var(--gray-400);
 }
 
-.btn-page:disabled {
+.page-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
 
-.btn-page.active {
-  background: #3b82f6;
-  color: white;
-  border-color: #3b82f6;
-}
-
 .page-numbers {
   display: flex;
-  gap: 2px;
+  gap: 4px;
 }
 
-.page-size-select {
-  padding: 6px 8px;
-  border: 1px solid #e5e7eb;
-  border-radius: 4px;
-  font-size: 12px;
+.page-number {
+  min-width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--gray-300);
   background: white;
+  color: var(--gray-700);
+  border-radius: var(--border-radius);
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  transition: var(--transition);
 }
 
-/* Modales mejorados */
-.modal-content {
-  max-width: 600px;
-  max-height: 90vh;
+.page-number:hover {
+  background: var(--gray-50);
+  border-color: var(--gray-400);
+}
+
+.page-number.active {
+  background: var(--primary-color);
+  color: white;
+  border-color: var(--primary-color);
+}
+
+/* Modal Styles */
+.create-order-form {
+  max-height: 70vh;
   overflow-y: auto;
 }
 
-.create-order-modal {
-  max-width: 700px;
-}
-
-.bulk-assign-modal {
-  max-width: 500px;
-}
-
-.order-form {
+.form-grid {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 24px;
+}
+
+.form-section {
+  padding: 20px;
+  border: 1px solid var(--gray-200);
+  border-radius: var(--border-radius);
+  background: var(--gray-50);
+}
+
+.form-section h4 {
+  margin: 0 0 16px 0;
+  color: var(--gray-800);
+  font-size: 16px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .form-row {
@@ -2147,237 +2496,160 @@ function formatDate(dateString, includeTime = false) {
 }
 
 .form-group label {
-  font-size: 14px;
   font-weight: 500;
-  color: #374151;
+  color: var(--gray-700);
+  font-size: 13px;
 }
 
-.form-input {
-  padding: 10px 12px;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
+.form-group input,
+.form-group textarea,
+.form-group select {
+  padding: 12px;
+  border: 1px solid var(--gray-300);
+  border-radius: var(--border-radius);
   font-size: 14px;
-  transition: border-color 0.2s ease;
+  transition: var(--transition);
 }
 
-.form-input:focus {
+.form-group input:focus,
+.form-group textarea:focus,
+.form-group select:focus {
   outline: none;
-  border-color: #3b82f6;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+.form-group textarea {
+  resize: vertical;
+  min-height: 80px;
 }
 
 .modal-actions {
   display: flex;
   justify-content: flex-end;
   gap: 12px;
+  padding: 20px 0 0 0;
+  border-top: 1px solid var(--gray-200);
   margin-top: 24px;
-  padding-top: 20px;
-  border-top: 1px solid #e5e7eb;
 }
 
-/* Asignación masiva */
-.selection-summary {
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  padding: 16px;
-  margin-bottom: 20px;
-}
-
-.selection-summary h4 {
-  margin: 0 0 12px 0;
-  color: #1e293b;
-  font-size: 16px;
-}
-
-.selected-orders-preview {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  max-height: 100px;
-  overflow-y: auto;
-}
-
-.selected-order-item {
-  background: #e0e7ff;
-  color: #3730a3;
-  padding: 4px 8px;
-  border-radius: 4px;
-  font-size: 12px;
+.btn-cancel {
+  padding: 10px 20px;
+  border: 1px solid var(--gray-300);
+  background: white;
+  color: var(--gray-700);
+  border-radius: var(--border-radius);
+  cursor: pointer;
   font-weight: 500;
+  transition: var(--transition);
 }
 
-.more-orders {
-  background: #f3f4f6;
-  color: #6b7280;
-  padding: 4px 8px;
-  border-radius: 4px;
-  font-size: 12px;
-  font-style: italic;
+.btn-cancel:hover {
+  background: var(--gray-50);
 }
 
-.driver-selection {
-  margin-bottom: 20px;
-}
-
-.driver-selection h4 {
-  margin: 0 0 12px 0;
-  color: #1e293b;
-  font-size: 16px;
-}
-
-.loading-drivers {
-  padding: 20px;
-  text-align: center;
-  color: #6b7280;
-  font-style: italic;
-}
-
-.assignment-progress {
-  margin-bottom: 20px;
-}
-
-.assignment-progress h4 {
-  margin: 0 0 12px 0;
-  color: #1e293b;
-  font-size: 16px;
-}
-
-.progress-bar {
-  width: 100%;
-  height: 8px;
-  background: #e5e7eb;
-  border-radius: 4px;
-  overflow: hidden;
-  margin-bottom: 8px;
-}
-
-.progress-fill {
-  height: 100%;
-  background: #3b82f6;
-  transition: width 0.3s ease;
-}
-
-.progress-text {
-  font-size: 14px;
-  color: #6b7280;
-  text-align: center;
-}
-
-.assignment-results {
-  margin-bottom: 20px;
-}
-
-.assignment-results h4 {
-  margin: 0 0 12px 0;
-  color: #1e293b;
-  font-size: 16px;
-}
-
-.results-summary {
-  display: flex;
-  gap: 16px;
-  margin-bottom: 16px;
-}
-
-.result-stat {
-  padding: 8px 12px;
-  border-radius: 6px;
-  font-size: 14px;
+.btn-save {
+  padding: 10px 20px;
+  border: none;
+  background: var(--primary-color);
+  color: white;
+  border-radius: var(--border-radius);
+  cursor: pointer;
   font-weight: 500;
+  transition: var(--transition);
 }
 
-.result-stat.success {
-  background: #dcfce7;
-  color: #166534;
+.btn-save:hover:not(:disabled) {
+  background: var(--primary-hover);
 }
 
-.result-stat.error {
-  background: #fee2e2;
-  color: #991b1b;
+.btn-save:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
-.failed-assignments {
-  background: #fef2f2;
-  border: 1px solid #fecaca;
-  border-radius: 6px;
-  padding: 12px;
-}
-
-.failed-assignments h5 {
-  margin: 0 0 8px 0;
-  color: #991b1b;
-  font-size: 14px;
-}
-
-.failed-item {
-  font-size: 12px;
-  color: #7f1d1d;
-  margin-bottom: 4px;
-}
-
-/* Responsive */
+/* Responsive Design */
 @media (max-width: 1200px) {
-  .filters-basic {
-    grid-template-columns: repeat(2, 1fr);
-  }
-  
-  .header-actions {
-    flex-direction: column;
-    gap: 8px;
-  }
-  
-  .action-group {
-    flex-direction: column;
-  }
-}
-
-@media (max-width: 768px) {
   .admin-orders-container {
     padding: 16px;
   }
   
+  .filters-grid {
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  }
+  
+  .filter-search {
+    grid-column: span 1;
+  }
+}
+
+@media (max-width: 768px) {
   .page-header {
     flex-direction: column;
     gap: 20px;
+    align-items: stretch;
   }
   
-  .filters-basic, .filters-advanced {
+  .header-actions {
+    justify-content: center;
+  }
+  
+  .bulk-actions-header {
+    flex-direction: column;
+    gap: 16px;
+  }
+  
+  .table-header {
+    flex-direction: column;
+    gap: 16px;
+  }
+  
+  .pagination-section {
+    flex-direction: column;
+    gap: 16px;
+    text-align: center;
+  }
+  
+  .data-table {
+    font-size: 12px;
+  }
+  
+  .data-table th,
+  .data-table td {
+    padding: 8px;
+  }
+  
+  .cards-container {
     grid-template-columns: 1fr;
+    padding: 16px;
   }
   
   .form-row {
     grid-template-columns: 1fr;
   }
-  
-  .bulk-actions-bar {
-    flex-direction: column;
-    gap: 12px;
+}
+
+/* Print Styles */
+@media print {
+  .admin-orders-container {
+    background: white;
+    padding: 0;
   }
   
-  .bulk-actions {
-    justify-content: center;
+  .page-header,
+  .filters-section,
+  .bulk-actions-section,
+  .pagination-section {
+    display: none;
   }
   
-  .pagination-container {
-    flex-direction: column;
-    gap: 16px;
+  .content-section {
+    box-shadow: none;
+    border: none;
   }
   
-  .table-container {
-    font-size: 12px;
-  }
-  
-  .orders-table th,
-  .orders-table td {
-    padding: 8px 6px;
-  }
-  
-  /* Ocultar algunas columnas en móvil */
-  .orders-table th:nth-child(6),
-  .orders-table td:nth-child(6),
-  .orders-table th:nth-child(9),
-  .orders-table td:nth-child(9) {
+  .actions-column,
+  .checkbox-column {
     display: none;
   }
 }
