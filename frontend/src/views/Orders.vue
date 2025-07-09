@@ -18,7 +18,7 @@
         </div>
       </div>
     </div>
-    
+
     <!-- Filtros compactos -->
     <div class="filters-section">
       <div class="filters-row">
@@ -30,24 +30,19 @@
           <option value="delivered">✅ Entregados</option>
           <option value="cancelled">❌ Cancelados</option>
         </select>
-        
+
         <select v-model="filters.channel_id" @change="fetchOrders" class="filter-select">
           <option value="">🏪 Todos los canales</option>
           <option v-for="channel in channels" :key="channel._id" :value="channel._id">
             {{ channel.channel_name }}
           </option>
         </select>
-        
+
         <input type="date" v-model="filters.date_from" @change="fetchOrders" class="filter-input" />
         <input type="date" v-model="filters.date_to" @change="fetchOrders" class="filter-input" />
-        
-        <input 
-          type="text" 
-          v-model="filters.search" 
-          @input="debounceSearch"
-          placeholder="🔍 Buscar pedidos..."
-          class="search-input"
-        />
+
+        <input type="text" v-model="filters.search" @input="debounceSearch" placeholder="🔍 Buscar pedidos..."
+          class="search-input" />
       </div>
     </div>
 
@@ -57,13 +52,13 @@
         <div class="loading-spinner"></div>
         <p>Cargando pedidos...</p>
       </div>
-      
+
       <div v-else-if="orders.length === 0" class="empty-state">
         <div class="empty-icon">📦</div>
         <h3>No hay pedidos</h3>
         <p>No se encontraron pedidos con los filtros actuales.</p>
       </div>
-      
+
       <div v-else class="table-container">
         <table class="orders-table">
           <thead>
@@ -80,7 +75,7 @@
           </thead>
           <tbody>
             <tr v-for="order in orders" :key="order._id" class="order-row" :class="getRowClass(order)">
-              
+
               <!-- Número de pedido -->
               <td class="col-order">
                 <div class="order-number-cell">
@@ -90,7 +85,7 @@
                   </span>
                 </div>
               </td>
-              
+
               <!-- Cliente -->
               <td class="col-customer">
                 <div class="customer-cell">
@@ -100,7 +95,7 @@
                   </div>
                 </div>
               </td>
-              
+
               <!-- Dirección -->
               <td class="col-address">
                 <div class="address-cell">
@@ -110,7 +105,7 @@
                   </div>
                 </div>
               </td>
-              
+
               <!-- Estado -->
               <td class="col-status">
                 <div class="status-cell">
@@ -122,46 +117,50 @@
                   </div>
                 </div>
               </td>
-              
-              <!-- Tracking -->
-             <td class="col-tracking">
-                      <div class="tracking-cell">
-          
-          <div v-if="order.status === 'delivered' && order.shipday_order_id" class="proof-delivery">
-            <span class="proof-indicator">📋 Prueba</span>
-            <button @click="showProofOfDelivery(order)" class="proof-btn">
-              📸 Ver Prueba
-            </button>
-          </div>
-          
-          <div v-else-if="order.shipday_tracking_url" class="tracking-live">
-            <span class="live-indicator">🔴 Live</span>
-            <button @click="openLiveTracking(order)" class="track-live-btn">
-              📍 Ver Mapa
-            </button>
-          </div>
-          
-          <div v-else-if="hasTrackingInfo(order)" class="tracking-available">
-            <span class="tracking-indicator">📦 Info</span>
-            <button @click="openTrackingModal(order)" class="tracking-btn">
-              🚚 Seguimiento
-            </button>
-          </div>
-          
-          <div v-else class="no-tracking">
-            <span class="no-tracking-text">Sin tracking</span>
-          </div>
 
-        </div>
-              </td>
-              
+              <!-- Tracking -->
+  <td class="col-tracking">
+  <div class="tracking-cell">
+    
+    <!-- PRIORIDAD 1: Pedido entregado - SIEMPRE mostrar prueba de entrega -->
+    <div v-if="order.status === 'delivered'" class="proof-delivery">
+      <span class="proof-indicator">📋 Prueba</span>
+      <button @click="showProofOfDelivery(order)" class="proof-btn">
+        📸 Ver Prueba
+      </button>
+    </div>
+    
+    <!-- PRIORIDAD 2: Tracking en vivo (solo para pedidos NO entregados) -->
+    <div v-else-if="order.shipday_tracking_url" class="tracking-live">
+      <span class="live-indicator">🔴 Live</span>
+      <button @click="openLiveTracking(order)" class="track-live-btn">
+        📍 Ver Mapa
+      </button>
+    </div>
+    
+    <!-- PRIORIDAD 3: Tracking general (para pedidos sincronizados pero sin live tracking) -->
+    <div v-else-if="hasTrackingInfo(order)" class="tracking-available">
+      <span class="tracking-indicator">📦 Info</span>
+      <button @click="openTrackingModal(order)" class="tracking-btn">
+        🚚 Seguimiento
+      </button>
+    </div>
+    
+    <!-- PRIORIDAD 4: Sin información de tracking -->
+    <div v-else class="no-tracking">
+      <span class="no-tracking-text">Sin tracking</span>
+    </div>
+
+  </div>
+</td>
+
               <!-- Total -->
               <td class="col-amount">
                 <div class="amount-cell">
                   <span class="amount">${{ formatCurrency(order.total_amount || order.shipping_cost) }}</span>
                 </div>
               </td>
-              
+
               <!-- Fecha -->
               <td class="col-date">
                 <div class="date-cell">
@@ -171,42 +170,30 @@
                   </div>
                 </div>
               </td>
-              
+
               <!-- Acciones -->
               <td class="col-actions">
                 <div class="actions-cell">
                   <button @click="openOrderDetailsModal(order)" class="action-btn details" title="Ver detalles">
                     👁️
                   </button>
-                  
-                  <button 
-                    v-if="order.shipday_tracking_url" 
-                    @click="openLiveTracking(order)" 
-                    class="action-btn tracking live" 
-                    title="Tracking en vivo">
+
+                  <button v-if="order.shipday_tracking_url" @click="openLiveTracking(order)"
+                    class="action-btn tracking live" title="Tracking en vivo">
                     🚚
                   </button>
-                  
-                  <button 
-                    v-else-if="hasTrackingInfo(order)"
-                    @click="openTrackingModal(order)" 
-                    class="action-btn tracking" 
-                    title="Ver seguimiento">
+
+                  <button v-else-if="hasTrackingInfo(order)" @click="openTrackingModal(order)"
+                    class="action-btn tracking" title="Ver seguimiento">
                     📍
                   </button>
-                  
-                  <button 
-                    v-if="hasProofOfDelivery(order)"
-                    @click="showProofOfDelivery(order)" 
-                    class="action-btn proof" 
+
+                  <button v-if="hasProofOfDelivery(order)" @click="showProofOfDelivery(order)" class="action-btn proof"
                     title="Ver prueba de entrega">
                     📸
                   </button>
-                  
-                  <button 
-                    v-if="canContactSupport(order)" 
-                    @click="contactSupport(order)" 
-                    class="action-btn support" 
+
+                  <button v-if="canContactSupport(order)" @click="contactSupport(order)" class="action-btn support"
                     title="Contactar soporte">
                     💬
                   </button>
@@ -216,7 +203,7 @@
           </tbody>
         </table>
       </div>
-      
+
       <!-- Paginación -->
       <div v-if="pagination.totalPages > 1" class="pagination">
         <button @click="goToPage(pagination.page - 1)" :disabled="pagination.page <= 1" class="page-btn">
@@ -225,24 +212,29 @@
         <span class="page-info">
           Página {{ pagination.page }} de {{ pagination.totalPages }} ({{ pagination.total }} pedidos)
         </span>
-        <button @click="goToPage(pagination.page + 1)" :disabled="pagination.page >= pagination.totalPages" class="page-btn">
+        <button @click="goToPage(pagination.page + 1)" :disabled="pagination.page >= pagination.totalPages"
+          class="page-btn">
           Siguiente →
         </button>
       </div>
     </div>
 
     <!-- Modales -->
-    
+
     <Modal v-model="showOrderDetailsModal" :title="`Pedido #${selectedOrder?.order_number}`" width="800px">
       <OrderDetails v-if="selectedOrder" :order="selectedOrder" />
     </Modal>
 
-    <Modal v-model="showTrackingModal" :title="`🚚 Tracking - Pedido #${selectedTrackingOrder?.order_number}`" width="700px">
+    <Modal v-model="showTrackingModal" :title="`🚚 Tracking - Pedido #${selectedTrackingOrder?.order_number}`"
+      width="700px">
       <OrderTracking v-if="selectedTrackingOrder" :order-id="selectedTrackingOrder._id" />
     </Modal>
 
-    <Modal v-model="showProofModal" :title="`📋 Prueba de Entrega - #${selectedProofOrder?.order_number}`" width="700px">
-      <div v-if="loadingOrderDetails" class="loading-state"><div class="loading-spinner"></div></div>
+    <Modal v-model="showProofModal" :title="`📋 Prueba de Entrega - #${selectedProofOrder?.order_number}`"
+      width="700px">
+      <div v-if="loadingOrderDetails" class="loading-state">
+        <div class="loading-spinner"></div>
+      </div>
       <ProofOfDelivery v-else-if="selectedProofOrder" :order="selectedProofOrder" />
     </Modal>
 
@@ -254,7 +246,7 @@
           <p>Cliente: {{ supportOrder.customer_name }}</p>
           <p>Estado: {{ getStatusName(supportOrder.status) }}</p>
         </div>
-        
+
         <div class="support-options">
           <button @click="emailSupport(supportOrder)" class="support-option">
             📧 Enviar Email
@@ -338,15 +330,20 @@ async function fetchChannels() {
 // 🆕 NUEVAS FUNCIONES PARA TRACKING Y PRUEBAS DE ENTREGA
 
 function hasTrackingInfo(order) {
-   return order.shipday_driver_id || 
-         ['processing', 'shipped'].includes(order.status);
+  // Solo mostrar tracking general si NO está entregado y tiene información de Shipday
+  return order.status !== 'delivered' && 
+         (order.shipday_driver_id || 
+          order.shipday_order_id ||
+          ['processing', 'shipped'].includes(order.status));
 }
-
 function hasProofOfDelivery(order) {
-  return order.proof_of_delivery?.photo_url || 
-         order.proof_of_delivery?.signature_url ||
-         order.podUrls?.length > 0 ||
-         order.signatureUrl;
+  // Solo verificar pruebas si el pedido está entregado
+  return order.status === 'delivered' && 
+         (order.proof_of_delivery?.photo_url || 
+          order.proof_of_delivery?.signature_url ||
+          order.podUrls?.length > 0 ||
+          order.signatureUrl ||
+          order.shipday_order_id); // Si está en Shipday, puede tener pruebas
 }
 
 function openLiveTracking(order) {
