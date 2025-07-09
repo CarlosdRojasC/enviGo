@@ -8,6 +8,7 @@ const {
 const Channel = require('../models/Channel');
 const Order = require('../models/Order');
 const mongoose = require('mongoose');
+const channelController = require('../controllers/channel.controller');
 
 // ==================== RUTAS DE CANALES ====================
 
@@ -440,7 +441,6 @@ router.post('/:channelId/sync-with-communes', authenticateToken, isAdmin, async 
 router.post(
   '/:id/sync',
   authenticateToken,
-  channelController.syncOrders // Asegúrate de que tu controlador tenga este método
-);
+  channelController.syncOrders);
 
 module.exports = router;
