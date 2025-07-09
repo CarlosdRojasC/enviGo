@@ -125,7 +125,7 @@
 
 <script>
 import { ref, computed, onMounted } from 'vue';
-import apiService from '@/services/apiService';
+import apiService from '../services/api';
 
 export default {
   name: 'CommuneFilter',

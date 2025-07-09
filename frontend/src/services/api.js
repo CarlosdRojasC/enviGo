@@ -492,6 +492,7 @@ export const apiService = {
   companies,
   orders,
   channels,
+  communes,
   drivers,
   billing,
   dashboard,
