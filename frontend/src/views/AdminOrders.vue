@@ -451,28 +451,7 @@ const availableCommunes = computed(() => {
   return Array.from(communes).sort(); // Convertimos a array y ordenamos alfabéticamente
 });
 
-export default {
-  components: {
-    CommuneFilter
-  },
-  data() {
-    return {
-      showCommuneFilter: false
-    };
-  },
-  methods: {
-    onCommunesSaved(data) {
-      console.log('Comunas guardadas:', data);
-      // Recargar pedidos si es necesario
-      this.fetchOrders();
-    },
-    onOrdersSynced(data) {
-      console.log('Órdenes sincronizadas:', data);
-      // Recargar pedidos
-      this.fetchOrders();
-    }
-  }
-};
+
 // NUEVO: Computed properties para selección masiva
 const selectAllChecked = computed(() => {
   const selectableOrders = orders.value.filter(order => !order.shipday_order_id);
