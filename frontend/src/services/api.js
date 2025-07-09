@@ -42,6 +42,8 @@ api.interceptors.response.use(
   }
 )
 
+
+
 // Servicios de autenticación
 const auth = {
   login: (email, password) => api.post('/auth/login', { email, password }),
@@ -54,6 +56,10 @@ const auth = {
   }
 }
 
+const communes ={
+    getEnvigo: () => api.get('/communes/envigo'),
+    validate: (data) => api.post('/communes/validate', data)
+  }
 // Servicios de empresas
 const companies = {
   getAll: () => api.get('/companies'),
@@ -239,7 +245,11 @@ const channels = {
   update: (id, channelData) => api.put(`/channels/${id}`, channelData),
   delete: (id) => api.delete(`/channels/${id}`),
   syncOrders: (id, syncData) => api.post(`/channels/${id}/sync`, syncData),
-  testConnection: (id) => api.post(`/channels/${id}/test`)
+  testConnection: (id) => api.post(`/channels/${id}/test`),
+  getCommunes: (channelId) => api.get(`/channels/${channelId}/communes`),
+    updateCommunes: (channelId, data) => api.put(`/channels/${channelId}/communes`, data),
+    testCommune: (channelId, data) => api.post(`/channels/${channelId}/communes/test`, data),
+    syncWithCommunes: (channelId, data) => api.post(`/channels/${channelId}/sync-with-communes`, data)
 }
 
 // Servicios de facturación

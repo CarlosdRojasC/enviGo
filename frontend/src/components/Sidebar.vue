@@ -17,6 +17,8 @@
       <router-link v-if="auth.isAdmin" to="/admin/channels" class="nav-item">📡 <span>Canales de Venta</span></router-link>
       <router-link v-if="auth.isAdmin" to="/admin/billing" class="nav-item">🧾 <span>Facturación</span></router-link>
       <router-link v-if="auth.isAdmin" to="/admin/drivers" class="nav-item">🚚 <span>Conductores</span></router-link>
+      <router-link v-if="auth.isAdmin" to="/admin/communes" class="nav-item">🏘️ <span>Conductores</span></router-link>
+
 
 
 
