@@ -125,32 +125,34 @@
               
               <!-- Tracking -->
              <td class="col-tracking">
-                <div class="tracking-cell">
-                  <div v-if="order.status === 'delivered' && order.shipday_order_id" class="proof-delivery">
-                    <span class="proof-indicator">📋 Prueba</span>
-                    <button @click="openProofOfDeliveryModal(order)" class="proof-btn">
-                      📸 Ver Prueba
-                    </button>
-                  </div>
-                  
-                  <div v-else-if="order.shipday_tracking_url" class="tracking-live">
-                    <span class="live-indicator">🔴 Live</span>
-                    <button @click="openLiveTracking(order)" class="track-live-btn">
-                      📍 Ver Mapa
-                    </button>
-                  </div>
-                  
-                  <div v-else-if="hasTrackingInfo(order)" class="tracking-available">
-                    <span class="tracking-indicator">📦 Info</span>
-                    <button @click="openTrackingModal(order)" class="tracking-btn">
-                      🚚 Seguimiento
-                    </button>
-                  </div>
-                  
-                  <div v-else class="no-tracking">
-                    <span class="no-tracking-text">Sin tracking</span>
-                  </div>
-                </div>
+                      <div class="tracking-cell">
+          
+          <div v-if="order.status === 'delivered' && order.shipday_order_id" class="proof-delivery">
+            <span class="proof-indicator">📋 Prueba</span>
+            <button @click="showProofOfDelivery(order)" class="proof-btn">
+              📸 Ver Prueba
+            </button>
+          </div>
+          
+          <div v-else-if="order.shipday_tracking_url" class="tracking-live">
+            <span class="live-indicator">🔴 Live</span>
+            <button @click="openLiveTracking(order)" class="track-live-btn">
+              📍 Ver Mapa
+            </button>
+          </div>
+          
+          <div v-else-if="hasTrackingInfo(order)" class="tracking-available">
+            <span class="tracking-indicator">📦 Info</span>
+            <button @click="openTrackingModal(order)" class="tracking-btn">
+              🚚 Seguimiento
+            </button>
+          </div>
+          
+          <div v-else class="no-tracking">
+            <span class="no-tracking-text">Sin tracking</span>
+          </div>
+
+        </div>
               </td>
               
               <!-- Total -->
@@ -336,8 +338,8 @@ async function fetchChannels() {
 // 🆕 NUEVAS FUNCIONES PARA TRACKING Y PRUEBAS DE ENTREGA
 
 function hasTrackingInfo(order) {
-  return order.shipday_tracking_url || order.shipday_driver_id || order.delivery_date || 
-         ['processing', 'shipped', 'delivered'].includes(order.status);
+   return order.shipday_driver_id || 
+         ['processing', 'shipped'].includes(order.status);
 }
 
 function hasProofOfDelivery(order) {
