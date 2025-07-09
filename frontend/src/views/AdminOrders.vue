@@ -211,6 +211,15 @@ if (!newOrder.value.shipping_commune) {
     </Modal>
 <Modal v-model="showBulkUploadModal" title="Subida Masiva de Pedidos" width="600px">
   <div class="bulk-upload-content">
+     <div class="form-group">
+        <label for="bulk-company-select">Asignar pedidos a la empresa:</label>
+        <select id="bulk-company-select" v-model="bulkUploadCompanyId" required>
+            <option disabled value="">-- Seleccione una empresa --</option>
+            <option v-for="company in companies" :key="company._id" :value="company._id">
+                {{ company.name }}
+            </option>
+        </select>
+    </div>
     <p>Sube un archivo Excel para crear múltiples pedidos a la vez. Asegúrate de que el archivo siga la plantilla requerida.</p>
     <div class="template-download-section">
         <a href="#" @click.prevent="downloadTemplate" class="download-template-link">
@@ -389,6 +398,7 @@ const showOrderDetailsModal = ref(false);
 const showCreateOrderModal = ref(false);
 const isCreatingOrder = ref(false);
 const newOrder = ref({});
+const bulkUploadCompanyId = ref('');
 const showBulkUploadModal = ref(false);
 const selectedFile = ref(null);
 const isUploading = ref(false);
@@ -632,6 +642,15 @@ function handleFileSelect(event) {
 }
 
 async function handleBulkUpload() {
+
+   if (!bulkUploadCompanyId.value) { // <--- Añade esta validación
+    alert('Por favor, selecciona una empresa para la subida masiva.');
+    return;
+  }
+  if (!selectedFile.value) {
+    alert('Por favor, selecciona un archivo.');
+    return;
+  }
   if (!selectedFile.value) {
     alert('Por favor, selecciona un archivo.');
     return;
@@ -642,6 +661,7 @@ async function handleBulkUpload() {
 
   const formData = new FormData();
   formData.append('file', selectedFile.value);
+  formData.append('company_id', bulkUploadCompanyId.value); // <--- Envía el ID de la empresa
 
   try {
     // Esta llamada a la API necesita ser creada

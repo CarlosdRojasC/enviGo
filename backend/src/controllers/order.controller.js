@@ -605,7 +605,13 @@ async bulkUpload(req, res) {
     if (!req.file) {
       return res.status(400).json({ error: 'No se ha subido ningún archivo.' });
     }
-
+ 
+    // ===== CORRECCIÓN: Obtener el company_id desde el body =====
+    const { company_id } = req.body;
+    if (!company_id) {
+        return res.status(400).json({ error: 'No se especificó la empresa para la subida masiva.' });
+    }
+    // ==========================================================
     try {
       const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
       const sheetName = workbook.SheetNames[0];
@@ -618,17 +624,21 @@ async bulkUpload(req, res) {
         errors: []
       };
 
+      
+
       for (const row of data) {
         try {
+          
           // Asumimos que el admin selecciona una empresa en el frontend,
           // o se usa la empresa del usuario que sube el archivo.
           // Por ahora, lo dejamos fijo para el ejemplo:
           const company_id = req.user.company_id || 'ID_DE_EMPRESA_POR_DEFECTO';
-          const channel = await Channel.findOne({ company_id: company_id }); // Busca un canal para la empresa
+           // ===== CORRECCIÓN: Usar el company_id real =====
+          const channel = await Channel.findOne({ company_id: company_id });
 
           if (!channel) {
             results.failed++;
-            results.errors.push({ order: row['Número de Pedido*'], reason: 'No se encontró un canal para la empresa.' });
+            results.errors.push({ order: row['Número de Pedido*'], reason: 'No se encontró un canal de venta para la empresa seleccionada.' });
             continue;
           }
 
