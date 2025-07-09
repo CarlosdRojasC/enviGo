@@ -12,7 +12,7 @@ class OrderController {
     try {
       const { 
         status, date_from, date_to, company_id, channel_id,
-        search, page = 1, limit = 50 
+        search, shipping_commune, page = 1, limit = 50 
       } = req.query;
 
       const filters = {};
@@ -36,6 +36,10 @@ class OrderController {
         if (date_to) filters.order_date.$lte = new Date(date_to);
       }
 
+ if (shipping_commune) {
+        // Usamos una expresión regular para que la búsqueda no sea sensible a mayúsculas/minúsculas
+        filters.shipping_commune = new RegExp(shipping_commune, 'i');
+      }
       if (search) {
         const searchRegex = new RegExp(search, 'i');
         filters.$or = [
@@ -45,6 +49,7 @@ class OrderController {
           { external_order_id: searchRegex }
         ];
       }
+      
 
       const skip = (page - 1) * limit;
 

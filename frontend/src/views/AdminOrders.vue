@@ -35,12 +35,12 @@ if (!newOrder.value.shipping_commune) {
           <option value="cancelled">Cancelados</option>
         </select>
         <!-- Filtro por comuna -->
-        <select v-model="filters.commune" @change="fetchOrders" class="commune-filter">
-          <option value="">Todas las Comunas</option>
-          <option v-for="commune in availableCommunes" :key="commune" :value="commune">
-            {{ commune }}
-          </option>
-        </select>
+   <select v-model="filters.shipping_commune" @change="fetchOrders" class="filter-select">
+      <option value="">Todas las Comunas</option>
+      <option v-for="commune in availableCommunes" :key="commune" :value="commune">
+        {{ commune }}
+      </option>
+    </select>
         <input type="date" v-model="filters.date_from" @change="fetchOrders" />
         <input type="date" v-model="filters.date_to" @change="fetchOrders" />
                   <input 
@@ -389,7 +389,7 @@ const route = useRoute();
 const orders = ref([]);
 const companies = ref([]);
 const pagination = ref({ page: 1, limit: 15, total: 0, totalPages: 1 });
-const filters = ref({ company_id: '', status: '', commune: '', date_from: '', date_to: '', search: '' });
+const filters = ref({ company_id: '', status: '', shipping_commune: '', date_from: '', date_to: '', search: '' });
 const loadingOrders = ref(true);
 const isExporting = ref(false);
 const selectedOrder = ref(null);
@@ -422,7 +422,19 @@ const bulkAssignmentResults = ref([]);
 const bulkAssignmentFinished = ref(false);
 
 // NUEVO: Estados para filtros y comunas
-const availableCommunes = ref([]);
+const availableCommunes = computed(() => {
+  if (!orders.value || orders.value.length === 0) {
+    return [];
+  }
+  // Usamos Set para obtener valores únicos automáticamente
+  const communes = new Set(
+    orders.value
+      .map(order => order.shipping_commune)
+      .filter(commune => !!commune) // Filtramos valores nulos o vacíos
+  );
+  return Array.from(communes).sort(); // Convertimos a array y ordenamos alfabéticamente
+});
+
 
 // NUEVO: Computed properties para selección masiva
 const selectAllChecked = computed(() => {
