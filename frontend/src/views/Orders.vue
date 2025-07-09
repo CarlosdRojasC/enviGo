@@ -129,15 +129,8 @@
         📸 Ver Prueba
       </button>
     </div>
-    <!-- DEBUG TEMPORAL - agregar después del botón Ver Prueba -->
-<div v-if="order.status === 'delivered'" style="font-size: 10px; color: #666; margin-top: 4px;">
-  Status: {{ order.status }}<br>
-  Has URL: {{ !!order.shipday_tracking_url }}<br>
-  Has Proof: {{ hasProofOfDelivery(order) }}
-</div>
-    
     <!-- PRIORIDAD 2: Tracking en vivo (solo para pedidos NO entregados) -->
-    <div v-else-if="order.shipday_tracking_url" class="tracking-live">
+    <div v-if="order.status !== 'delivered'" class="tracking-live">
       <span class="live-indicator">🔴 Live</span>
       <button @click="openLiveTracking(order)" class="track-live-btn">
         📍 Ver Mapa
