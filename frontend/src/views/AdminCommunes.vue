@@ -123,14 +123,10 @@
   </div>
 </template>
 
-<script>
+<script setup>
 import { ref, computed, onMounted } from 'vue';
 import apiService from '../services/api';
 
-export default {
-  name: 'CommuneFilter',
-  emits: ['saved', 'synced'],
-  setup(props, { emit }) {
     // Estados
     const channels = ref([]);
     const selectedChannelId = ref('');
@@ -368,9 +364,7 @@ export default {
       runTest,
       saveConfiguration,
       syncOrders
-    };
-  }
-};
+    }
 </script>
 
 <style scoped>

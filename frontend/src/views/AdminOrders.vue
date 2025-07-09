@@ -1,7 +1,4 @@
-if (!newOrder.value.shipping_commune) {
-    alert("Por favor, ingrese la comuna.");
-    return;
-  }<template>
+<template>
   <div class="page-container">
     <div class="page-header">
       <h1 class="page-title">Pedidos Globales</h1>
