@@ -1,7 +1,10 @@
 // backend/src/routes/channels.routes.js
 const express = require('express');
 const router = express.Router();
-const { authenticateToken, isAdmin } = require('../middleware/auth');
+const {
+  authenticateToken,
+  isAdmin
+} = require('../middlewares/auth.middleware');
 const Channel = require('../models/Channel');
 const Order = require('../models/Order');
 const mongoose = require('mongoose');

@@ -1,7 +1,12 @@
 // backend/src/routes/communes.routes.js
 const express = require('express');
 const router = express.Router();
-const { authenticateToken, isAdmin } = require('../middleware/auth');
+const {
+  authenticateToken,
+  isAdmin,
+  isCompanyOwner,
+  hasCompanyAccess
+} = require('../middlewares/auth.middleware');
 const Order = require('../models/Order');
 const Channel = require('../models/Channel');
 const mongoose = require('mongoose');
