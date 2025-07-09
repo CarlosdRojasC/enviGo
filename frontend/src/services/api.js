@@ -84,6 +84,9 @@ const orders = {
     params,
     responseType: 'blob'
   }),
+    downloadImportTemplate: () => api.get('/orders/import-template', {
+    responseType: 'blob'
+  }),
   
   // ==================== MÉTODOS SHIPDAY EXISTENTES ====================
   
