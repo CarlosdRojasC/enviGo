@@ -1,43 +1,65 @@
 const mongoose = require('mongoose');
+const { CHANNEL_TYPES } = require('../config/constants');
 
 const channelSchema = new mongoose.Schema({
-  company_id: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Company',
-    required: true
+  company_id: { 
+    type: mongoose.Schema.Types.ObjectId, 
+    ref: 'Company', 
+    required: true 
   },
-  
-  // Información básica del canal
-  channel_name: {
+  channel_type: { 
+    type: String, 
+    required: [true, 'El tipo de canal es obligatorio'],
+    enum: {
+      values: Object.values(CHANNEL_TYPES),
+      message: 'Tipo de canal no válido. Valores permitidos: {VALUE}'
+    }
+  },
+  channel_name: { 
+    type: String, 
+    required: [true, 'El nombre del canal es obligatorio'],
+    trim: true,
+    maxlength: [100, 'El nombre del canal no puede exceder 100 caracteres']
+  },
+  api_key: { 
     type: String,
-    required: true,
     trim: true
   },
-  
-  platform: {
+  api_secret: { 
     type: String,
-    enum: ['shopify', 'woocommerce', 'mercadolibre', 'manual'],
-    required: true
-  },
-  
-  // Configuración de conexión
-  store_url: {
-    type: String,
-    required: true,
     trim: true
   },
-  
-  api_key: {
+  store_url: { 
     type: String,
-    required: true
+    trim: true,
+    validate: {
+      validator: function(v) {
+        // Solo validar URL si se proporciona
+        if (!v) return true;
+        return /^https?:\/\/.+/.test(v);
+      },
+      message: 'La URL de la tienda debe ser válida'
+    }
   },
-  
-  api_secret: {
+  webhook_secret: { 
     type: String,
-    required: true
+    trim: true
   },
-  
-  // 🏘️ NUEVO CAMPO: Comunas aceptadas
+  is_active: { 
+    type: Boolean, 
+    default: true 
+  },
+  last_sync: { 
+    type: Date 
+  },
+  created_at: { 
+    type: Date, 
+    default: Date.now 
+  },
+  updated_at: { 
+    type: Date, 
+    default: Date.now 
+  },
   accepted_communes: {
     type: [String],
     default: [],
@@ -48,247 +70,95 @@ const channelSchema = new mongoose.Schema({
           typeof commune === 'string' && commune.trim().length > 0
         );
       },
-      message: 'Todas las comunas deben ser strings no vacíos'
+      message: 'Todas las comunas deben ser strings válidos'
     }
-  },
-  
-  // Configuración de webhooks
-  webhook_secret: {
-    type: String,
-    default: ''
-  },
-  
-  // Configuración de automatización
-  auto_create_shipday: {
-    type: Boolean,
-    default: false
-  },
-  
-  auto_assign_driver: {
-    type: Boolean,
-    default: false
-  },
-  
-  // Estado del canal
-  is_active: {
-    type: Boolean,
-    default: true
-  },
-  
-  // Configuración de importación
-  sync_enabled: {
-    type: Boolean,
-    default: true
-  },
-  
-  last_sync: {
-    type: Date,
-    default: null
-  },
-  
-  sync_frequency: {
-    type: String,
-    enum: ['manual', 'hourly', 'daily', 'weekly'],
-    default: 'manual'
-  },
-  
-  // Configuración de filtros adicionales
-  status_filter: {
-    type: [String],
-    default: ['processing', 'completed', 'shipped'],
-    validate: {
-      validator: function(statuses) {
-        const allowedStatuses = ['pending', 'processing', 'on-hold', 'completed', 'cancelled', 'refunded', 'failed', 'shipped'];
-        return statuses.every(status => allowedStatuses.includes(status));
-      },
-      message: 'Estado de filtro inválido'
-    }
-  },
-  
-  // Configuración de precios
-  use_fixed_shipping_cost: {
-    type: Boolean,
-    default: true
-  },
-  
-  // Configuración de notificaciones
-  notify_new_orders: {
-    type: Boolean,
-    default: true
-  },
-  
-  notify_status_changes: {
-    type: Boolean,
-    default: false
-  },
-  
-  // Información de conexión
-  connection_status: {
-    type: String,
-    enum: ['connected', 'disconnected', 'error', 'testing'],
-    default: 'disconnected'
-  },
-  
-  last_connection_test: {
-    type: Date,
-    default: null
-  },
-  
-  connection_error: {
-    type: String,
-    default: ''
-  },
-  
-  // Estadísticas
-  total_orders_synced: {
-    type: Number,
-    default: 0
-  },
-  
-  total_orders_rejected: {
-    type: Number,
-    default: 0
-  },
-  
-  // Metadatos
-  created_at: {
-    type: Date,
-    default: Date.now
-  },
-  
-  updated_at: {
-    type: Date,
-    default: Date.now
   }
 });
 
-// Middleware para actualizar updated_at
+// Middleware para actualizar updated_at antes de guardar
 channelSchema.pre('save', function(next) {
-  this.updated_at = Date.now();
+  this.updated_at = new Date();
   next();
 });
 
-// Índices para mejorar rendimiento
-channelSchema.index({ company_id: 1, platform: 1 });
-channelSchema.index({ is_active: 1 });
-channelSchema.index({ last_sync: 1 });
-channelSchema.index({ connection_status: 1 });
-
-// Método para obtener comunas normalizadas
-channelSchema.methods.getNormalizedCommunes = function() {
-  const WooCommerceService = require('../services/woocommerce.service');
-  const ShopifyService = require('../services/shopify.service');
-  
-  if (this.platform === 'woocommerce') {
-    return this.accepted_communes.map(commune => 
-      WooCommerceService.normalizeCommune(commune)
-    );
-  } else if (this.platform === 'shopify') {
-    return this.accepted_communes.map(commune => 
-      ShopifyService.normalizeCommune(commune)
-    );
-  }
-  
-  return this.accepted_communes;
-};
-
-// Método para verificar si una comuna está permitida
-channelSchema.methods.isCommuneAllowed = function(commune) {
-  if (!this.accepted_communes || this.accepted_communes.length === 0) {
-    return true;
-  }
-  
-  const WooCommerceService = require('../services/woocommerce.service');
-  const ShopifyService = require('../services/shopify.service');
-  
-  if (this.platform === 'woocommerce') {
-    return WooCommerceService.isCommuneAllowed(commune, this.accepted_communes);
-  } else if (this.platform === 'shopify') {
-    return ShopifyService.isCommuneAllowed(commune, this.accepted_communes);
-  }
-  
-  return this.accepted_communes.includes(commune);
-};
-
-// Método para obtener estadísticas del canal
-channelSchema.methods.getStats = async function() {
-  const Order = require('./Order');
-  
-  const stats = await Order.aggregate([
-    { $match: { channel_id: this._id } },
-    {
-      $group: {
-        _id: null,
-        total_orders: { $sum: 1 },
-        total_amount: { $sum: '$total_amount' },
-        pending: { $sum: { $cond: [{ $eq: ['$status', 'pending'] }, 1, 0] } },
-        processing: { $sum: { $cond: [{ $eq: ['$status', 'processing'] }, 1, 0] } },
-        shipped: { $sum: { $cond: [{ $eq: ['$status', 'shipped'] }, 1, 0] } },
-        delivered: { $sum: { $cond: [{ $eq: ['$status', 'delivered'] }, 1, 0] } },
-        cancelled: { $sum: { $cond: [{ $eq: ['$status', 'cancelled'] }, 1, 0] } },
-        orders_this_month: {
-          $sum: {
-            $cond: [
-              {
-                $gte: [
-                  '$order_date',
-                  new Date(new Date().getFullYear(), new Date().getMonth(), 1)
-                ]
-              },
-              1,
-              0
-            ]
-          }
-        }
-      }
+// Middleware para validar campos requeridos según el tipo de canal
+channelSchema.pre('save', function(next) {
+  if (this.channel_type === CHANNEL_TYPES.SHOPIFY) {
+    if (!this.api_key || !this.api_secret || !this.store_url) {
+      return next(new Error('Shopify requiere API key, secret y URL de la tienda'));
     }
-  ]);
+  }
   
-  return stats[0] || {
-    total_orders: 0,
-    total_amount: 0,
-    pending: 0,
-    processing: 0,
-    shipped: 0,
-    delivered: 0,
-    cancelled: 0,
-    orders_this_month: 0
+  if (this.channel_type === CHANNEL_TYPES.WOOCOMMERCE) {
+    if (!this.api_key || !this.api_secret || !this.store_url) {
+      return next(new Error('WooCommerce requiere API key, secret y URL de la tienda'));
+    }
+  }
+  
+  next();
+});
+
+// Índice compuesto para evitar nombres duplicados dentro de la misma empresa
+channelSchema.index({ company_id: 1, channel_name: 1 }, { unique: true });
+
+// Índice para búsquedas por tipo de canal
+channelSchema.index({ channel_type: 1 });
+
+// Índice para búsquedas por estado activo
+channelSchema.index({ is_active: 1 });
+
+// Método para obtener configuración completa del canal
+channelSchema.methods.getConfig = function() {
+  return {
+    id: this._id,
+    type: this.channel_type,
+    name: this.channel_name,
+    api_key: this.api_key,
+    api_secret: this.api_secret,
+    store_url: this.store_url,
+    webhook_secret: this.webhook_secret,
+    accepted_communes: this.accepted_communes
   };
 };
 
-// Método para probar la conexión
-channelSchema.methods.testConnection = async function() {
-  try {
-    const WooCommerceService = require('../services/woocommerce.service');
-    const ShopifyService = require('../services/shopify.service');
-    
-    let result;
-    
-    if (this.platform === 'woocommerce') {
-      result = await WooCommerceService.validateChannel(this);
-    } else if (this.platform === 'shopify') {
-      result = await ShopifyService.validateChannel(this);
-    } else {
-      throw new Error('Plataforma no soportada');
+// Método para verificar si el canal está configurado correctamente
+channelSchema.methods.isConfiguredCorrectly = function() {
+  const requiredFields = ['channel_type', 'channel_name'];
+  
+  // Verificar campos básicos
+  for (const field of requiredFields) {
+    if (!this[field]) {
+      return { valid: false, error: `Campo requerido faltante: ${field}` };
     }
-    
-    // Actualizar estado de conexión
-    this.connection_status = result.valid ? 'connected' : 'error';
-    this.last_connection_test = new Date();
-    this.connection_error = result.valid ? '' : result.error;
-    
-    await this.save();
-    
-    return result;
-  } catch (error) {
-    this.connection_status = 'error';
-    this.last_connection_test = new Date();
-    this.connection_error = error.message;
-    
-    await this.save();
-    
-    throw error;
   }
+  
+  // Verificar campos específicos según el tipo de canal
+  switch (this.channel_type) {
+    case CHANNEL_TYPES.SHOPIFY:
+    case CHANNEL_TYPES.WOOCOMMERCE:
+      if (!this.api_key || !this.api_secret || !this.store_url) {
+        return { 
+          valid: false, 
+          error: `${this.channel_type} requiere API key, secret y URL de la tienda` 
+        };
+      }
+      break;
+    case CHANNEL_TYPES.MERCADOLIBRE:
+      if (!this.api_key) {
+        return { 
+          valid: false, 
+          error: 'MercadoLibre requiere API key' 
+        };
+      }
+      break;
+  }
+  
+  return { valid: true };
+};
+
+// Método estático para obtener tipos de canal disponibles
+channelSchema.statics.getChannelTypes = function() {
+  return Object.values(CHANNEL_TYPES);
 };
 
 module.exports = mongoose.model('Channel', channelSchema);

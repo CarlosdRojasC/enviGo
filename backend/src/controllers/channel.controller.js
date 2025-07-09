@@ -84,6 +84,11 @@ class ChannelController {
         return res.status(403).json({ error: ERRORS.FORBIDDEN });
       }
 
+      // VALIDACIÓN CRÍTICA: Verificar que el channel_type esté presente
+      if (!channel_type) {
+        return res.status(400).json({ error: 'El tipo de canal es obligatorio' });
+      }
+
       if (!Object.values(CHANNEL_TYPES).includes(channel_type)) {
         return res.status(400).json({ error: 'Tipo de canal no válido' });
       }
@@ -92,7 +97,7 @@ class ChannelController {
         return res.status(400).json({ error: 'Shopify requiere API key, secret y URL de la tienda' });
       }
 
-      // Verificar si canal con mismo nombre existe para la empresa (índice único puede ayudar también)
+      // Verificar si canal con mismo nombre existe para la empresa
       const exists = await Channel.findOne({ company_id: companyId, channel_name });
       if (exists) {
         return res.status(400).json({ error: 'Ya existe un canal con ese nombre para esta empresa' });
@@ -115,14 +120,16 @@ class ChannelController {
           await ShopifyService.registerWebhook(channel);
         } else if (channel_type === CHANNEL_TYPES.WOOCOMMERCE) {
           await WooCommerceService.registerWebhook(channel);
-        } else if (channel_type === CHANNEL_TYPES.MERCADOLIBRE) {
-          await MercadoLibreService.registerWebhook(channel);
         }
       } catch (webhookError) {
-        console.error('Error registrando webhook:', webhookError);
+        console.warn('Error registrando webhook:', webhookError.message);
+        // No fallar la creación del canal por un error de webhook
       }
 
-      res.status(201).json({ message: 'Canal creado exitosamente', channel });
+      res.status(201).json({ 
+        message: 'Canal creado exitosamente', 
+        channel 
+      });
     } catch (error) {
       console.error('Error creando canal:', error);
       res.status(500).json({ error: ERRORS.SERVER_ERROR });
@@ -144,7 +151,13 @@ class ChannelController {
         return res.status(403).json({ error: ERRORS.FORBIDDEN });
       }
 
-      Object.assign(channel, updates, { updated_at: new Date() });
+      // Si se está actualizando el channel_type, validarlo
+      if (updates.channel_type && !Object.values(CHANNEL_TYPES).includes(updates.channel_type)) {
+        return res.status(400).json({ error: 'Tipo de canal no válido' });
+      }
+
+      Object.assign(channel, updates);
+      channel.updated_at = new Date();
       await channel.save();
 
       res.json({ message: 'Canal actualizado exitosamente', channel });
@@ -154,7 +167,7 @@ class ChannelController {
     }
   }
 
-  // Desactivar canal
+  // Eliminar canal (desactivar)
   async delete(req, res) {
     try {
       const { id } = req.params;
@@ -169,7 +182,6 @@ class ChannelController {
       }
 
       channel.is_active = false;
-      channel.updated_at = new Date();
       await channel.save();
 
       res.json({ message: 'Canal desactivado exitosamente' });
@@ -185,14 +197,23 @@ class ChannelController {
       const { id } = req.params;
       const { date_from, date_to } = req.body;
 
+      // VALIDACIÓN MEJORADA: Buscar canal con validación explícita
       const channel = await Channel.findOne({ _id: id, is_active: true });
       if (!channel) {
         return res.status(404).json({ error: 'Canal no encontrado o inactivo' });
       }
 
+      // VALIDACIÓN CRÍTICA: Verificar que channel_type existe
+      if (!channel.channel_type) {
+        console.error(`❌ Canal ${id} no tiene channel_type definido`);
+        return res.status(400).json({ error: 'El canal no tiene un tipo definido' });
+      }
+
       if (req.user.role !== 'admin' && req.user.company_id.toString() !== channel.company_id.toString()) {
         return res.status(403).json({ error: ERRORS.FORBIDDEN });
       }
+
+      console.log(`🚀 Iniciando sincronización para canal ${channel.channel_name} (Tipo: ${channel.channel_type})`);
 
       // Crear registro de sincronización
       const syncLog = new SyncLog({
@@ -206,18 +227,24 @@ class ChannelController {
       let ordersImported = 0;
 
       try {
-        switch (channel.channel_type) {
+        // SWITCH MEJORADO con validación explícita
+        switch (channel.channel_type.toLowerCase()) {
           case CHANNEL_TYPES.SHOPIFY:
+            console.log('📦 Sincronizando con Shopify...');
             ordersImported = await ShopifyService.syncOrders(channel, date_from, date_to);
             break;
           case CHANNEL_TYPES.WOOCOMMERCE:
+            console.log('📦 Sincronizando con WooCommerce...');
             ordersImported = await WooCommerceService.syncOrders(channel, date_from, date_to);
             break;
           case CHANNEL_TYPES.MERCADOLIBRE:
+            console.log('📦 Sincronizando con MercadoLibre...');
             ordersImported = await MercadoLibreService.syncOrders(channel, date_from, date_to);
             break;
           default:
-            throw new Error(`Sincronización no implementada para ${channel.channel_type}`);
+            const errorMsg = `Sincronización no implementada para el tipo de canal: "${channel.channel_type}"`;
+            console.error(`❌ ${errorMsg}`);
+            throw new Error(errorMsg);
         }
 
         syncLog.status = 'success';
@@ -228,8 +255,11 @@ class ChannelController {
         channel.last_sync = new Date();
         await channel.save();
 
+        console.log(`✅ Sincronización completada. Pedidos importados: ${ordersImported}`);
         res.json({ message: 'Sincronización completada', orders_imported: ordersImported });
       } catch (syncError) {
+        console.error(`❌ Error en sincronización:`, syncError);
+        
         syncLog.status = 'failed';
         syncLog.error_message = syncError.message;
         syncLog.completed_at = new Date();
@@ -253,13 +283,21 @@ class ChannelController {
         return res.status(404).json({ error: 'Canal no encontrado' });
       }
 
+      // VALIDACIÓN: Verificar que channel_type existe
+      if (!channel.channel_type) {
+        return res.status(400).json({ 
+          success: false, 
+          message: 'El canal no tiene un tipo definido' 
+        });
+      }
+
       if (req.user.role !== 'admin' && req.user.company_id.toString() !== channel.company_id.toString()) {
         return res.status(403).json({ error: ERRORS.FORBIDDEN });
       }
 
       let testResult = { success: false, message: '' };
 
-      switch (channel.channel_type) {
+      switch (channel.channel_type.toLowerCase()) {
         case CHANNEL_TYPES.SHOPIFY:
           testResult = await ShopifyService.testConnection(channel);
           break;
@@ -270,7 +308,7 @@ class ChannelController {
           testResult = await MercadoLibreService.testConnection(channel);
           break;
         default:
-          testResult.message = 'Prueba no implementada para este tipo de canal';
+          testResult.message = `Prueba no implementada para el tipo de canal: "${channel.channel_type}"`;
       }
 
       res.json(testResult);
