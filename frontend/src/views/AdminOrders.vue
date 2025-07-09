@@ -398,7 +398,7 @@ import Modal from '../components/Modal.vue';
 import UpdateOrderStatus from '../components/UpdateOrderStatus.vue';
 import OrderDetails from '../components/OrderDetails.vue';
 import { useRoute } from 'vue-router';
-import CommuneFilter from '@/components/CommuneFilter.vue';
+import CommuneFilter from '../components/CommuneFilter.vue';
 
 
 const route = useRoute();
