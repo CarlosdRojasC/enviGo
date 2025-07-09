@@ -1,371 +1,210 @@
-<!-- frontend/src/components/CommuneFilter.vue -->
 <template>
   <div class="commune-filter">
     <div class="filter-header">
       <h3>🏘️ Configurar Comunas por Canal</h3>
-      <p>Selecciona las comunas que acepta cada canal de ventas</p>
+      <p>Selecciona una empresa y un canal para definir las comunas donde se aceptarán pedidos.</p>
     </div>
 
-    <!-- Selector de canal -->
-    <div class="channel-selector">
-      <label>Canal de Ventas:</label>
-      <select v-model="selectedChannelId" @change="loadChannelData" class="channel-select">
-        <option value="">Selecciona un canal...</option>
-        <option v-for="channel in channels" :key="channel._id" :value="channel._id">
-          {{ channel.channel_name }} ({{ channel.platform }})
-        </option>
-      </select>
-    </div>
-
-    <!-- Configuración de comunas -->
-    <div v-if="selectedChannelId" class="commune-config">
-      <!-- Estado actual -->
-      <div class="current-status" :class="statusClass">
-        <div class="status-icon">{{ statusIcon }}</div>
-        <div class="status-text">
-          <h4>{{ statusTitle }}</h4>
-          <p>{{ statusDescription }}</p>
-        </div>
+    <div class="selectors-grid">
+      <div class="form-group">
+        <label for="company-select">1. Selecciona una Empresa:</label>
+        <select id="company-select" v-model="selectedCompanyId" @change="loadChannelsForCompany" class="channel-select">
+          <option value="">-- Elige una empresa --</option>
+          <option v-for="company in companies" :key="company._id" :value="company._id">
+            {{ company.name }}
+          </option>
+        </select>
       </div>
 
-      <!-- Selección rápida -->
+      <div class="form-group">
+        <label for="channel-select">2. Selecciona un Canal:</label>
+        <select id="channel-select" v-model="selectedChannelId" @change="loadChannelData" class="channel-select" :disabled="!selectedCompanyId || loading.channels">
+          <option value="">-- Elige un canal --</option>
+          <option v-for="channel in channels" :key="channel._id" :value="channel._id">
+            {{ channel.channel_name }}
+          </option>
+        </select>
+      </div>
+    </div>
+
+    <div v-if="loading.channels || loading.communes" class="loading-state">
+      <div class="loading-spinner"></div>
+      <p>Cargando datos...</p>
+    </div>
+    <div v-else-if="!selectedChannelId" class="empty-state">
+      <div class="empty-icon">☝️</div>
+      <h3>Selecciona un canal para empezar</h3>
+      <p>Una vez que elijas un canal, podrás configurar sus comunas permitidas.</p>
+    </div>
+
+    <div v-else class="commune-config">
       <div class="quick-actions">
-        <button @click="selectAll" class="btn-quick" :disabled="allSelected">
-          ✅ Todas ({{ totalCommunes }})
-        </button>
-        <button @click="clearAll" class="btn-quick" :disabled="noneSelected">
-          ❌ Ninguna
-        </button>
-        <button @click="selectZone('Zona Centro')" class="btn-quick">
-          🏢 Solo Centro
-        </button>
-        <button @click="selectZone('Zona Oriente')" class="btn-quick">
-          🏔️ Solo Oriente
-        </button>
+        <button @click="selectAll" class="btn-quick">✅ Seleccionar Todas</button>
+        <button @click="clearAll" class="btn-quick">❌ Limpiar Selección</button>
       </div>
 
-      <!-- Comunas por zona -->
       <div class="zones-grid">
-        <div v-for="(communes, zone) in envigoCommunes" :key="zone" class="zone-card">
+        <div v-for="(communesInZone, zone) in availableCommunesByZone" :key="zone" class="zone-card">
           <div class="zone-header">
             <h4>{{ zone }}</h4>
-            <span class="zone-count">{{ getSelectedInZone(communes) }}/{{ communes.length }}</span>
+            <span class="zone-count">{{ getSelectedInZone(communesInZone) }}/{{ communesInZone.length }}</span>
           </div>
-          
           <div class="communes-list">
-            <label 
-              v-for="commune in communes" 
-              :key="commune"
-              class="commune-item"
-              :class="{ 'selected': isSelected(commune) }"
-            >
+            <label v-for="commune in communesInZone" :key="commune" class="commune-item" :class="{ 'selected': selectedCommunes.includes(commune) }">
               <input 
                 type="checkbox" 
                 :value="commune"
-                :checked="isSelected(commune)"
+                :checked="selectedCommunes.includes(commune)"
                 @change="toggleCommune(commune)"
               />
               <span class="commune-name">{{ commune }}</span>
-              <span v-if="isSelected(commune)" class="check-mark">✓</span>
             </label>
           </div>
         </div>
       </div>
 
-      <!-- Prueba de filtro -->
-      <div class="test-section">
-        <h4>🧪 Probar Filtro</h4>
-        <div class="test-input-group">
-          <input 
-            v-model="testCommune"
-            type="text"
-            placeholder="Ingresa una comuna para probar..."
-            class="test-input"
-            @keyup.enter="runTest"
-          />
-          <button @click="runTest" class="btn-test" :disabled="!testCommune">
-            Probar
-          </button>
-        </div>
-        
-        <div v-if="testResult" class="test-result" :class="testResult.is_allowed ? 'success' : 'error'">
-          <span class="result-icon">{{ testResult.is_allowed ? '✅' : '❌' }}</span>
-          <span class="result-text">{{ testResult.message }}</span>
-        </div>
-      </div>
-
-      <!-- Acciones -->
       <div class="actions">
-        <button 
-          @click="saveConfiguration" 
-          :disabled="saving"
-          class="btn-save"
-        >
+        <button @click="saveConfiguration" :disabled="saving" class="btn-save">
           {{ saving ? 'Guardando...' : 'Guardar Configuración' }}
         </button>
-        
-        <button 
-          @click="syncOrders" 
-          :disabled="syncing"
-          class="btn-sync"
-        >
-          {{ syncing ? 'Sincronizando...' : 'Sincronizar Pedidos' }}
-        </button>
       </div>
-    </div>
-
-    <!-- Estado vacío -->
-    <div v-if="!selectedChannelId" class="empty-state">
-      <div class="empty-icon">🏪</div>
-      <h3>Selecciona un Canal</h3>
-      <p>Elige un canal para configurar sus comunas permitidas</p>
     </div>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted } from 'vue';
-import apiService from '../services/api';
+import { apiService } from '../services/api';
 
-    // Estados
-    const channels = ref([]);
-    const selectedChannelId = ref('');
-    const selectedCommunes = ref([]);
-    const envigoCommunes = ref({});
-    const testCommune = ref('');
-    const testResult = ref(null);
-    const saving = ref(false);
-    const syncing = ref(false);
-    const loading = ref(false);
+// --- ESTADO ---
+const companies = ref([]);
+const channels = ref([]);
+const availableCommunes = ref([]); // Lista completa de comunas disponibles en el sistema
+const selectedCompanyId = ref('');
+const selectedChannelId = ref('');
+const selectedCommunes = ref([]);
+const loading = ref({ companies: false, channels: false, communes: false });
+const saving = ref(false);
 
-    // Computeds
-    const totalCommunes = computed(() => {
-      return Object.values(envigoCommunes.value).flat().length;
-    });
-
-    const allSelected = computed(() => {
-      return selectedCommunes.value.length === totalCommunes.value;
-    });
-
-    const noneSelected = computed(() => {
-      return selectedCommunes.value.length === 0;
-    });
-
-    const statusClass = computed(() => {
-      const count = selectedCommunes.value.length;
-      if (count === 0) return 'status-all';
-      if (count <= 5) return 'status-restrictive';
-      if (count === totalCommunes.value) return 'status-complete';
-      return 'status-moderate';
-    });
-
-    const statusIcon = computed(() => {
-      const count = selectedCommunes.value.length;
-      if (count === 0) return '🌍';
-      if (count <= 5) return '🎯';
-      if (count === totalCommunes.value) return '✅';
-      return '📍';
-    });
-
-    const statusTitle = computed(() => {
-      const count = selectedCommunes.value.length;
-      if (count === 0) return 'Todas las Comunas';
-      if (count <= 5) return 'Filtro Restrictivo';
-      if (count === totalCommunes.value) return 'Todas las Comunas de enviGo';
-      return 'Filtro Moderado';
-    });
-
-    const statusDescription = computed(() => {
-      const count = selectedCommunes.value.length;
-      if (count === 0) return 'Se aceptarán pedidos de cualquier comuna';
-      if (count === totalCommunes.value) return `Se aceptarán pedidos de las ${totalCommunes.value} comunas de enviGo`;
-      return `Se aceptarán pedidos de ${count} comunas seleccionadas`;
-    });
-
-    // Métodos
-    const loadChannels = async () => {
-      try {
-        // Adaptar según tu estructura de API
-        const response = await apiService.get('/companies/channels'); // Ajustar endpoint
-        channels.value = response.data || [];
-      } catch (error) {
-        console.error('Error cargando canales:', error);
-      }
-    };
-
-    const loadEnvigoCommunes = async () => {
-      try {
-        const response = await apiService.get('/communes/envigo');
-        envigoCommunes.value = response.data.communes_by_zone;
-      } catch (error) {
-        console.error('Error cargando comunas de enviGo:', error);
-        // Fallback con datos hardcodeados
-        envigoCommunes.value = {
-          'Zona Norte': ['Huechuraba', 'Quilicura', 'Recoleta', 'Independencia'],
-          'Zona Centro': ['Santiago Centro', 'Estación Central', 'Quinta Normal'],
-          'Zona Oriente': ['Las Condes', 'Vitacura', 'Ñuñoa', 'La Reina', 'Peñalolén', 'Macul'],
-          'Zona Sur': ['San Miguel', 'San Joaquín', 'Pedro Aguirre Cerda', 'La Cisterna', 'San Ramón', 'La Granja'],
-          'Zona Poniente': ['Cerrillos', 'Renca', 'Cerro Navia'],
-          'Zona Sur-Oriente': ['La Florida']
-        };
-      }
-    };
-
-    const loadChannelData = async () => {
-      if (!selectedChannelId.value) {
-        selectedCommunes.value = [];
-        return;
-      }
-      
-      try {
-        loading.value = true;
-        const response = await apiService.get(`/channels/${selectedChannelId.value}/communes`);
-        selectedCommunes.value = response.data.accepted_communes || [];
-      } catch (error) {
-        console.error('Error cargando datos del canal:', error);
-        selectedCommunes.value = [];
-      } finally {
-        loading.value = false;
-      }
-    };
-
-    const isSelected = (commune) => {
-      return selectedCommunes.value.includes(commune);
-    };
-
-    const toggleCommune = (commune) => {
-      if (isSelected(commune)) {
-        selectedCommunes.value = selectedCommunes.value.filter(c => c !== commune);
-      } else {
-        selectedCommunes.value.push(commune);
-      }
-    };
-
-    const selectAll = () => {
-      selectedCommunes.value = Object.values(envigoCommunes.value).flat();
-    };
-
-    const clearAll = () => {
-      selectedCommunes.value = [];
-    };
-
-    const selectZone = (zoneName) => {
-      const zoneCommunes = envigoCommunes.value[zoneName] || [];
-      zoneCommunes.forEach(commune => {
-        if (!selectedCommunes.value.includes(commune)) {
-          selectedCommunes.value.push(commune);
-        }
-      });
-    };
-
-    const getSelectedInZone = (zoneCommunes) => {
-      return zoneCommunes.filter(commune => isSelected(commune)).length;
-    };
-
-    const runTest = async () => {
-      if (!testCommune.value || !selectedChannelId.value) return;
-      
-      try {
-        const response = await apiService.post(`/channels/${selectedChannelId.value}/communes/test`, {
-          test_commune: testCommune.value
-        });
-        testResult.value = response.data;
-      } catch (error) {
-        console.error('Error probando comuna:', error);
-        testResult.value = {
-          is_allowed: false,
-          message: 'Error al probar la comuna'
-        };
-      }
-    };
-
-    const saveConfiguration = async () => {
-      if (!selectedChannelId.value) return;
-      
-      saving.value = true;
-      try {
-        await apiService.put(`/channels/${selectedChannelId.value}/communes`, {
-          accepted_communes: selectedCommunes.value
-        });
-        
-        emit('saved', {
-          channelId: selectedChannelId.value,
-          communes: selectedCommunes.value
-        });
-        
-        alert('✅ Configuración guardada exitosamente');
-      } catch (error) {
-        console.error('Error guardando configuración:', error);
-        alert('❌ Error guardando configuración');
-      } finally {
-        saving.value = false;
-      }
-    };
-
-    const syncOrders = async () => {
-      if (!selectedChannelId.value) return;
-      
-      syncing.value = true;
-      try {
-        const response = await apiService.post(`/channels/${selectedChannelId.value}/sync-with-communes`, {
-          date_from: null,
-          date_to: null,
-          dry_run: false
-        });
-        
-        const result = response.data.sync_result;
-        
-        emit('synced', {
-          channelId: selectedChannelId.value,
-          result: result
-        });
-        
-        alert(`✅ Sincronización completada:\n${result.imported || 0} pedidos importados\n${result.rejected || 0} pedidos rechazados`);
-      } catch (error) {
-        console.error('Error sincronizando:', error);
-        alert('❌ Error en la sincronización');
-      } finally {
-        syncing.value = false;
-      }
-    };
-
-    // Lifecycle
-    onMounted(async () => {
-      await Promise.all([
-        loadChannels(),
-        loadEnvigoCommunes()
-      ]);
-    });
-
-    return {
-      channels,
-      selectedChannelId,
-      selectedCommunes,
-      envigoCommunes,
-      testCommune,
-      testResult,
-      saving,
-      syncing,
-      loading,
-      totalCommunes,
-      allSelected,
-      noneSelected,
-      statusClass,
-      statusIcon,
-      statusTitle,
-      statusDescription,
-      loadChannelData,
-      isSelected,
-      toggleCommune,
-      selectAll,
-      clearAll,
-      selectZone,
-      getSelectedInZone,
-      runTest,
-      saveConfiguration,
-      syncOrders
+// --- PROPIEDADES COMPUTADAS ---
+const availableCommunesByZone = computed(() => {
+  // Agrupa las comunas por una zona simple (primera letra) para organizarlas
+  const zones = {};
+  for (const commune of availableCommunes.value) {
+    const firstLetter = commune.charAt(0).toUpperCase();
+    if (!zones[firstLetter]) {
+      zones[firstLetter] = [];
     }
+    zones[firstLetter].push(commune);
+  }
+  return zones;
+});
+
+// --- MÉTODOS ---
+async function fetchInitialData() {
+  loading.value.companies = true;
+  loading.value.communes = true;
+  try {
+    const [companiesRes, communesRes] = await Promise.all([
+      apiService.companies.getAll(),
+      apiService.orders.getAll({ limit: 10000 }) // Pedir una gran cantidad para obtener todas las comunas
+    ]);
+    companies.value = companiesRes.data || [];
+    
+    // Extraer y unificar comunas de todos los pedidos
+    const allOrderCommunes = new Set(
+      (communesRes.data.orders || [])
+        .map(order => order.shipping_commune)
+        .filter(Boolean) // Filtra nulos o vacíos
+    );
+    availableCommunes.value = Array.from(allOrderCommunes).sort();
+
+  } catch (error) {
+    console.error('Error cargando datos iniciales:', error);
+    alert('No se pudieron cargar los datos necesarios (empresas y comunas).');
+  } finally {
+    loading.value.companies = false;
+    loading.value.communes = false;
+  }
+}
+
+async function loadChannelsForCompany() {
+  selectedChannelId.value = '';
+  selectedCommunes.value = [];
+  if (!selectedCompanyId.value) {
+    channels.value = [];
+    return;
+  }
+  loading.value.channels = true;
+  try {
+    const { data } = await apiService.channels.getByCompany(selectedCompanyId.value);
+    channels.value = data || [];
+  } catch (error) {
+    console.error(`Error cargando canales para la empresa ${selectedCompanyId.value}:`, error);
+  } finally {
+    loading.value.channels = false;
+  }
+}
+
+async function loadChannelData() {
+  if (!selectedChannelId.value) {
+    selectedCommunes.value = [];
+    return;
+  }
+  try {
+    const { data } = await apiService.channels.getById(selectedChannelId.value);
+    selectedCommunes.value = data.accepted_communes || [];
+  } catch (error) {
+    console.error(`Error cargando datos del canal ${selectedChannelId.value}:`, error);
+  }
+}
+
+function toggleCommune(commune) {
+  const index = selectedCommunes.value.indexOf(commune);
+  if (index > -1) {
+    selectedCommunes.value.splice(index, 1);
+  } else {
+    selectedCommunes.value.push(commune);
+  }
+}
+
+function selectAll() {
+  selectedCommunes.value = [...availableCommunes.value];
+}
+
+function clearAll() {
+  selectedCommunes.value = [];
+}
+
+const getSelectedInZone = (zoneCommunes) => {
+  return zoneCommunes.filter(commune => selectedCommunes.value.includes(commune)).length;
+};
+
+async function saveConfiguration() {
+  if (!selectedChannelId.value) {
+    alert('Por favor, selecciona un canal antes de guardar.');
+    return;
+  }
+  saving.value = true;
+  try {
+    const payload = {
+      accepted_communes: selectedCommunes.value
+    };
+    await apiService.channels.update(selectedChannelId.value, payload);
+    alert('✅ Configuración de comunas guardada exitosamente.');
+  } catch (error) {
+    console.error('Error guardando configuración:', error);
+    alert('❌ Hubo un error al guardar la configuración.');
+  } finally {
+    saving.value = false;
+  }
+}
+
+onMounted(() => {
+  fetchInitialData();
+});
 </script>
+
 
 <style scoped>
 .commune-filter {
