@@ -191,7 +191,7 @@ class ChannelController {
     }
   }
 
-  // Sincronizar pedidos de un canal
+  // Sincronizar pedidos de un canal - MEJORADO PARA MANEJAR RESULTADOS DETALLADOS
   async syncOrders(req, res) {
     try {
       const { id } = req.params;
@@ -215,31 +215,35 @@ class ChannelController {
 
       console.log(`🚀 Iniciando sincronización para canal ${channel.channel_name} (Tipo: ${channel.channel_type})`);
 
-      // Crear registro de sincronización
+      // Crear registro de sincronización con detalles de fechas
       const syncLog = new SyncLog({
         channel_id: id,
         sync_type: 'manual',
         status: 'processing',
-        started_at: new Date()
+        started_at: new Date(),
+        sync_details: {
+          date_from: date_from ? new Date(date_from) : null,
+          date_to: date_to ? new Date(date_to) : null
+        }
       });
       await syncLog.save();
 
-      let ordersImported = 0;
+      let syncResult = null;
 
       try {
         // SWITCH MEJORADO con validación explícita
         switch (channel.channel_type.toLowerCase()) {
           case CHANNEL_TYPES.SHOPIFY:
             console.log('📦 Sincronizando con Shopify...');
-            ordersImported = await ShopifyService.syncOrders(channel, date_from, date_to);
+            syncResult = await ShopifyService.syncOrders(channel, date_from, date_to);
             break;
           case CHANNEL_TYPES.WOOCOMMERCE:
             console.log('📦 Sincronizando con WooCommerce...');
-            ordersImported = await WooCommerceService.syncOrders(channel, date_from, date_to);
+            syncResult = await WooCommerceService.syncOrders(channel, date_from, date_to);
             break;
           case CHANNEL_TYPES.MERCADOLIBRE:
             console.log('📦 Sincronizando con MercadoLibre...');
-            ordersImported = await MercadoLibreService.syncOrders(channel, date_from, date_to);
+            syncResult = await MercadoLibreService.syncOrders(channel, date_from, date_to);
             break;
           default:
             const errorMsg = `Sincronización no implementada para el tipo de canal: "${channel.channel_type}"`;
@@ -247,22 +251,37 @@ class ChannelController {
             throw new Error(errorMsg);
         }
 
-        syncLog.status = 'success';
-        syncLog.orders_synced = ordersImported;
-        syncLog.completed_at = new Date();
+        // MANEJO MEJORADO DE RESULTADOS
+        syncLog.updateWithResult(syncResult);
         await syncLog.save();
 
         channel.last_sync = new Date();
         await channel.save();
 
-        console.log(`✅ Sincronización completada. Pedidos importados: ${ordersImported}`);
-        res.json({ message: 'Sincronización completada', orders_imported: ordersImported });
+        // Determinar el número de pedidos importados para la respuesta
+        const ordersImported = typeof syncResult === 'number' ? 
+          syncResult : 
+          (syncResult?.imported || syncResult?.orders_synced || 0);
+
+        console.log(`✅ Sincronización completada.`);
+        console.log(`📊 Resultado:`, {
+          importados: ordersImported,
+          rechazados: syncLog.orders_rejected,
+          total_procesados: syncLog.orders_total_processed
+        });
+
+        res.json({ 
+          message: 'Sincronización completada', 
+          orders_imported: ordersImported,
+          orders_rejected: syncLog.orders_rejected,
+          orders_total_processed: syncLog.orders_total_processed,
+          sync_id: syncLog._id
+        });
+
       } catch (syncError) {
         console.error(`❌ Error en sincronización:`, syncError);
         
-        syncLog.status = 'failed';
-        syncLog.error_message = syncError.message;
-        syncLog.completed_at = new Date();
+        syncLog.markAsFailed(syncError.message);
         await syncLog.save();
 
         throw syncError;
@@ -315,6 +334,54 @@ class ChannelController {
     } catch (error) {
       console.error('Error probando conexión:', error);
       res.status(500).json({ success: false, message: error.message || 'Error al probar la conexión' });
+    }
+  }
+
+  // NUEVO: Obtener historial de sincronizaciones
+  async getSyncLogs(req, res) {
+    try {
+      const { id } = req.params;
+      const { page = 1, limit = 10 } = req.query;
+
+      const channel = await Channel.findById(id);
+      if (!channel) {
+        return res.status(404).json({ error: 'Canal no encontrado' });
+      }
+
+      if (req.user.role !== 'admin' && req.user.company_id.toString() !== channel.company_id.toString()) {
+        return res.status(403).json({ error: ERRORS.FORBIDDEN });
+      }
+
+      const skip = (page - 1) * limit;
+
+      const [logs, totalCount] = await Promise.all([
+        SyncLog.find({ channel_id: id })
+          .sort({ started_at: -1 })
+          .skip(skip)
+          .limit(parseInt(limit))
+          .lean(),
+        SyncLog.countDocuments({ channel_id: id })
+      ]);
+
+      // Agregar duración calculada
+      const logsWithDuration = logs.map(log => ({
+        ...log,
+        duration_minutes: log.completed_at && log.started_at ? 
+          Math.round((new Date(log.completed_at) - new Date(log.started_at)) / (1000 * 60)) : null
+      }));
+
+      res.json({
+        logs: logsWithDuration,
+        pagination: {
+          current_page: parseInt(page),
+          total_pages: Math.ceil(totalCount / limit),
+          total_count: totalCount,
+          per_page: parseInt(limit)
+        }
+      });
+    } catch (error) {
+      console.error('Error obteniendo logs de sincronización:', error);
+      res.status(500).json({ error: ERRORS.SERVER_ERROR });
     }
   }
 }
