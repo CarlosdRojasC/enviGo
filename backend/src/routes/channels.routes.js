@@ -45,24 +45,31 @@ router.get('/', authenticateToken, async (req, res) => {
 
 // Crear nuevo canal
 router.post('/', authenticateToken, isAdmin, async (req, res) => {
-  try {
-    const channelData = {
-      ...req.body,
-      company_id: req.user.role === 'admin' ? req.body.company_id : req.user.company_id
-    };
+  try {
+    // Copiamos los datos que vienen del frontend
+    const channelDataFromRequest = req.body;
     
-    const channel = new Channel(channelData);
-    await channel.save();
-    
-    res.status(201).json({
-      success: true,
-      channel: channel,
-      message: 'Canal creado exitosamente'
-    });
-  } catch (error) {
-    console.error('❌ Error creando canal:', error);
-    res.status(500).json({ error: 'Error creando canal' });
-  }
+    // Creamos el objeto que se guardará en la base de datos
+    const channelToSave = {
+      ...channelDataFromRequest,
+      // Asignamos el company_id correctamente según el rol
+      company_id: req.user.role === 'admin' ? req.body.company_id : req.user.company_id,
+      // *** CAMBIO CLAVE: Creamos el campo 'platform' a partir de 'channel_type' ***
+      platform: channelDataFromRequest.channel_type 
+    };
+    
+    const channel = new Channel(channelToSave);
+    await channel.save();
+    
+    res.status(201).json({
+      success: true,
+      channel: channel,
+      message: 'Canal creado exitosamente'
+    });
+  } catch (error) {
+    console.error('❌ Error creando canal:', error);
+    res.status(500).json({ error: 'Error creando canal' });
+  }
 });
 
 // Obtener canal por ID
