@@ -113,8 +113,9 @@ const orders = {
   // Obtener estado de sincronización con Shipday
   getShipdayStatus: (orderId) => api.get(`/orders/${orderId}/shipday-status`),
 
-  // NUEVO: Obtener comunas disponibles
-  getAvailableCommunes: (params = {}) => api.get('/orders/communes', { params }),
+   // --- 👇 AÑADE ESTA LÍNEA 👇 ---
+  getAllCommunes: () => api.get('/orders/all-communes'),
+
 
   // ==================== NUEVOS MÉTODOS PARA ASIGNACIÓN MASIVA ====================
   

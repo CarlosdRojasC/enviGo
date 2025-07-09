@@ -6,6 +6,7 @@ const Channel = require('../models/Channel');
 const mongoose = require('mongoose'); // Agregar esta línea
 const ShipdayService = require('../services/shipday.service.js');
 const XLSX = require('xlsx'); // <--- Añade esta línea aquí
+const shippingZone = require('../config/ShippingZone');
 
 class OrderController {
   async getAll(req, res) {
@@ -677,6 +678,21 @@ async getOrdersTrend(req, res) {
     } catch (error) {
       console.error('Error procesando archivo de subida masiva:', error);
       return res.status(500).json({ error: 'Error al leer el archivo Excel.' });
+    }
+  }
+  async getAllCommunes(req, res) {
+    try {
+      // Combina todas las comunas de todas las zonas en una sola lista
+      const allCommunes = Object.values(shippingZones).flat();
+      
+      // Elimina duplicados (por si acaso) y ordena alfabéticamente
+      const uniqueCommunes = [...new Set(allCommunes)].sort();
+      res.json(ShippingZone);
+      res.json(uniqueCommunes);
+
+    } catch (error) {
+      console.error('Error obteniendo la lista de comunas:', error);
+      res.status(500).json({ error: 'Error interno del servidor' });
     }
   }
 }

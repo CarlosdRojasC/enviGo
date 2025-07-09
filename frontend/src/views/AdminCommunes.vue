@@ -88,18 +88,28 @@ const saving = ref(false);
 
 // --- PROPIEDADES COMPUTADAS ---
 const availableCommunesByZone = computed(() => {
-  // Agrupa las comunas por una zona simple (primera letra) para organizarlas
+  // Esta computada ahora simplemente devuelve el objeto que viene de la API,
+  // ya que el backend nos dará las comunas agrupadas por zona.
+  // Para que esto funcione, necesitamos que la API devuelva las zonas.
+  // Vamos a ajustar la API para que devuelva el objeto completo.
+  
+  // (No se necesita cambio aquí si la API devuelve el objeto completo de zonas)
+  // Pero para ser más robustos, podemos agruparlo aquí si la API solo devuelve una lista plana.
   const zones = {};
   for (const commune of availableCommunes.value) {
-    const firstLetter = commune.charAt(0).toUpperCase();
-    if (!zones[firstLetter]) {
-      zones[firstLetter] = [];
+    // Busca a qué zona pertenece la comuna
+    let foundZone = 'Otras';
+    for (const [zoneName, communesInZone] of Object.entries(shippingZones.value)) { // Suponiendo que tienes shippingZones en el front
+        if (communesInZone.includes(commune)) {
+            foundZone = zoneName;
+            break;
+        }
     }
-    zones[firstLetter].push(commune);
+    if (!zones[foundZone]) zones[foundZone] = [];
+    zones[foundZone].push(commune);
   }
   return zones;
 });
-
 // --- MÉTODOS ---
 async function fetchInitialData() {
   loading.value.companies = true;
@@ -107,17 +117,15 @@ async function fetchInitialData() {
   try {
     const [companiesRes, communesRes] = await Promise.all([
       apiService.companies.getAll(),
-      apiService.orders.getAll({ limit: 10000 }) // Pedir una gran cantidad para obtener todas las comunas
+      // --- 👇 CAMBIO CLAVE AQUÍ 👇 ---
+      // Se llama a la nueva ruta que obtiene la lista maestra de comunas
+      apiService.orders.getAllCommunes() 
     ]);
+    
     companies.value = companiesRes.data || [];
     
-    // Extraer y unificar comunas de todos los pedidos
-    const allOrderCommunes = new Set(
-      (communesRes.data.orders || [])
-        .map(order => order.shipping_commune)
-        .filter(Boolean) // Filtra nulos o vacíos
-    );
-    availableCommunes.value = Array.from(allOrderCommunes).sort();
+    // Ahora 'communesRes.data' es directamente el array de comunas
+    availableCommunes.value = communesRes.data || [];
 
   } catch (error) {
     console.error('Error cargando datos iniciales:', error);
