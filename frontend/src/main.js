@@ -8,9 +8,9 @@ import 'vue-toastification/dist/index.css';
 createApp(App)
   .use(router)
   .use(pinia)
-  .mount('#app')
-  .use(Toast, {
+    .use(Toast, {
     transition: "Vue-Toastification__bounce",
   maxToasts: 5,
   newestOnTop: true
-});
+})
+  .mount('#app')
