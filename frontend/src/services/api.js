@@ -84,6 +84,11 @@ const orders = {
     params,
     responseType: 'blob'
   }),
+  bulkUpload: (formData) => api.post('/orders/bulk-upload', formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data'
+    }
+  }),
     downloadImportTemplate: () => api.get('/orders/import-template', {
     responseType: 'blob'
   }),

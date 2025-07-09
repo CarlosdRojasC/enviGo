@@ -210,21 +210,38 @@ if (!newOrder.value.shipping_commune) {
       </form>
     </Modal>
 <Modal v-model="showBulkUploadModal" title="Subida Masiva de Pedidos" width="600px">
-      <div class="bulk-upload-content">
-        <p>Sube un archivo Excel para crear múltiples pedidos a la vez. Asegúrate de que el archivo siga la plantilla requerida.</p>
-        
-        <div class="template-download-section">
-          <a href="#" @click.prevent="downloadTemplate" class="download-template-link">
+  <div class="bulk-upload-content">
+    <p>Sube un archivo Excel para crear múltiples pedidos a la vez. Asegúrate de que el archivo siga la plantilla requerida.</p>
+    <div class="template-download-section">
+        <a href="#" @click.prevent="downloadTemplate" class="download-template-link">
             ⬇️ Descargar Plantilla de Ejemplo
-          </a>
-        </div>
+        </a>
+    </div>
+    
+    <div class="form-group">
+      <label for="file-upload" class="file-upload-label">Seleccionar archivo Excel</label>
+      <input id="file-upload" type="file" @change="handleFileSelect" accept=".xlsx, .xls" />
+    </div>
+    
+    <div v-if="selectedFile" class="file-name">
+      Archivo seleccionado: {{ selectedFile.name }}
+    </div>
+    
+    <div v-if="uploadFeedback" class="upload-feedback" :class="uploadStatus">
+      {{ uploadFeedback }}
+    </div>
 
-        <div class="form-group">
-          <label for="file-upload" class="file-upload-label">Seleccionar archivo Excel</label>
-          <input id="file-upload" type="file" @change="handleFileSelect" accept=".xlsx, .xls" />
-        </div>
-        </div>
-    </Modal>
+    <div class="modal-actions">
+      <button @click="showBulkUploadModal = false" class="btn-cancel">Cerrar</button>
+      
+      <button @click="handleBulkUpload" 
+              :disabled="!selectedFile || isUploading" 
+              class="btn-save">
+        {{ isUploading ? 'Subiendo...' : 'Iniciar Subida' }}
+      </button>
+    </div>
+    </div>
+</Modal>
 
     <!-- Modal de asignación individual (existente) -->
     <Modal v-model="showAssignModal" title="Asignar Conductor" width="500px">
@@ -614,27 +631,30 @@ function handleFileSelect(event) {
   uploadStatus.value = ''; 
 }
 
-async function handleBulkUpload() { 
-  if (!selectedFile.value) { 
-    alert('Por favor, selecciona un archivo.'); 
-    return; 
-  } 
-  isUploading.value = true; 
-  uploadFeedback.value = 'Procesando archivo...'; 
-  uploadStatus.value = 'processing'; 
-  const formData = new FormData(); 
-  formData.append('file', selectedFile.value); 
-  try { 
-    const { data } = await apiService.orders.bulkUpload(formData); 
-    uploadFeedback.value = `Proceso completado: ${data.success} pedidos creados, ${data.failed} fallaron.`; 
-    uploadStatus.value = data.failed > 0 ? 'error' : 'success'; 
-    if (data.success > 0) await fetchOrders(); 
-  } catch (error) { 
-    uploadFeedback.value = `Error: ${error.message}`; 
-    uploadStatus.value = 'error'; 
-  } finally { 
-    isUploading.value = false; 
-  } 
+async function handleBulkUpload() {
+  if (!selectedFile.value) {
+    alert('Por favor, selecciona un archivo.');
+    return;
+  }
+  isUploading.value = true;
+  uploadFeedback.value = 'Procesando archivo...';
+  uploadStatus.value = 'processing';
+
+  const formData = new FormData();
+  formData.append('file', selectedFile.value);
+
+  try {
+    // Esta llamada a la API necesita ser creada
+    const { data } = await apiService.orders.bulkUpload(formData);
+    uploadFeedback.value = `Proceso completado: ${data.success} pedidos creados, ${data.failed} fallaron.`;
+    uploadStatus.value = data.failed > 0 ? 'error' : 'success';
+    if (data.success > 0) await fetchOrders(); // Recargar la tabla si hubo éxito
+  } catch (error) {
+    uploadFeedback.value = `Error: ${error.message}`;
+    uploadStatus.value = 'error';
+  } finally {
+    isUploading.value = false;
+  }
 }
 
 function formatCurrency(amount) { 
