@@ -103,6 +103,7 @@ class WooCommerceService {
     const perPage = 100;
     let hasMore = true;
     let totalOrdersProcessed = 0;
+    const allowedCommunes = channel.accepted_communes || []
     
     try {
       console.log(`🔄 Iniciando sincronización WooCommerce para canal ${channel._id}`);
@@ -147,6 +148,11 @@ class WooCommerceService {
         for (const wooOrder of orders) {
           totalOrdersProcessed++;
           try {
+             const orderCommune = (wooOrder.shipping.city || wooOrder.billing.city || '').trim().toLowerCase();
+          if (allowedCommunes.length > 0 && !allowedCommunes.map(c => c.toLowerCase()).includes(orderCommune)) {
+            console.log(`📦 Pedido #${wooOrder.number} ignorado en sincronización. Comuna "${orderCommune}" no permitida.`);
+            continue; // Salta al siguiente pedido
+          }
             const existingOrder = await Order.findOne({ 
               channel_id: channel._id, 
               external_order_id: wooOrder.id.toString() 
@@ -230,11 +236,20 @@ class WooCommerceService {
       const channel = await Channel.findById(channelId);
       if (!channel) throw new Error('Canal no encontrado');
 
+// ---  LÓGICA DE FILTRADO AÑADIDA ---
+      const allowedCommunes = channel.accepted_communes || [];
+      const wooOrder = data;
+      const orderCommune = (wooOrder.shipping.city || wooOrder.billing.city || '').trim().toLowerCase();
+      // Si la lista de comunas permitidas no está vacía y la comuna del pedido no está en la lista, lo ignoramos.
+      if (allowedCommunes.length > 0 && !allowedCommunes.map(c => c.toLowerCase()).includes(orderCommune)) {
+        console.log(`📦 Pedido #${wooOrder.number} ignorado. La comuna "${orderCommune}" no está en la lista permitida para el canal "${channel.channel_name}".`);
+        return true; // Devolvemos éxito para que WooCommerce no reintente.
+      }
+      // --- FIN DE LA LÓGICA DE FILTRADO ---
       const company = await Company.findById(channel.company_id);
       if (!company) throw new Error(`Empresa no encontrada para el canal: ${channelId}`);
       const fixedShippingCost = company.price_per_order || 0;
       
-      const wooOrder = data;
       
       const existingOrder = await Order.findOne({ 
         channel_id: channelId, 

@@ -11,7 +11,11 @@ const channelSchema = new mongoose.Schema({
   is_active: { type: Boolean, default: true },
   last_sync: { type: Date },
   created_at: { type: Date, default: Date.now },
-  updated_at: { type: Date, default: Date.now }
+  updated_at: { type: Date, default: Date.now },
+   accepted_communes: {
+    type: [String], // Un array de strings
+    default: []     // Por defecto, estará vacío (acepta todas las comunas)
+  },
 });
 
 // Índice para evitar nombres duplicados dentro de la misma empresa
