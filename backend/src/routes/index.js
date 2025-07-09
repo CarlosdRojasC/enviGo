@@ -163,6 +163,7 @@ router.get('/orders', authenticateToken, orderController.getAll);
 router.get('/orders/stats', authenticateToken, orderController.getStats);
 router.get('/orders/trend', authenticateToken, orderController.getOrdersTrend);
 router.get('/orders/export', authenticateToken, isAdmin, orderController.exportForOptiRoute);
+router.get('/orders/import-template', authenticateToken, isAdmin, orderController.downloadImportTemplate);
 
 // Ruta para obtener todas las comunas disponibles
 router.get('/orders/communes', authenticateToken, async (req, res) => {
@@ -974,7 +975,6 @@ function getStatusIcon(status) {
   return icons[status] || '📦';
 }
 // Ruta para descargar la plantilla de importación
-router.get('/orders/import-template', authenticateToken, isAdmin, orderController.downloadImportTemplate);
 
 router.post('/orders', authenticateToken, validateOrderCreation, orderController.create);
 
