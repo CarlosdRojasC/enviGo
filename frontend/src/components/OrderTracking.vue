@@ -29,28 +29,52 @@
     
     <div v-else class="tracking-content">
       
-      <!-- Tracking URL prominente -->
-<div v-if="tracking.tracking_url || tracking.shipday_tracking_url" class="live-tracking-section">
-  <div class="live-tracking-card">
-    <div class="live-tracking-header">
-      <span class="live-icon">🔴</span>
-      <h3>Seguimiento en Vivo</h3>
-    </div>
+      <!-- 🆕 TRACKING EN VIVO - APARECE SIEMPRE QUE HAYA URL (independiente del estado) -->
+      <div v-if="hasTrackingUrl" class="live-tracking-section">
+        <div class="live-tracking-card">
+          <div class="live-tracking-header">
+            <span class="live-icon">🔴</span>
+            <h3>Seguimiento en Vivo</h3>
+          </div>
           <p>Rastrea tu pedido en tiempo real con nuestra tecnología GPS</p>
-              <!-- 🆕 DEBUG INFO TEMPORAL -->
-    <div v-if="true" style="background: #f0f0f0; padding: 8px; margin: 8px 0; font-size: 12px;">
-      <strong>Debug URLs:</strong><br>
-      tracking_url: {{ tracking.tracking_url }}<br>
-      shipday_tracking_url: {{ tracking.shipday_tracking_url }}
-    </div>
-    
+          
+          <!-- 🔍 DEBUG INFO (quitar después de probar) -->
+          <div v-if="showDebugInfo" class="debug-info">
+            <strong>Debug URLs:</strong><br>
+            tracking_url: {{ tracking.tracking_url }}<br>
+            shipday_tracking_url: {{ tracking.shipday_tracking_url }}<br>
+            URL utilizada: {{ getTrackingUrl }}
+          </div>
+          
           <a 
-            :href="tracking.tracking_url" 
+            :href="getTrackingUrl" 
             target="_blank" 
             class="live-tracking-btn"
             @click="trackLiveClick">
             📍 Ver Ubicación en Tiempo Real
           </a>
+        </div>
+      </div>
+
+      <!-- 🆕 PRUEBA DE ENTREGA - SOLO para pedidos entregados -->
+      <div v-if="tracking.current_status === 'delivered' && hasProofOfDelivery" class="proof-section">
+        <div class="section-header">
+          <h3>📸 Prueba de Entrega</h3>
+        </div>
+        <div class="proof-card">
+          <div class="proof-summary">
+            <span class="proof-icon">✅</span>
+            <div class="proof-info">
+              <div class="proof-title">Entrega Confirmada</div>
+              <div class="proof-description">
+                Tu pedido fue entregado exitosamente 
+                {{ formatDate(tracking.delivery_date) }}
+              </div>
+            </div>
+          </div>
+          <button @click="showFullProofModal" class="proof-details-btn">
+            📋 Ver Prueba Completa
+          </button>
         </div>
       </div>
 
@@ -221,7 +245,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue';
+import { ref, onMounted, onUnmounted, computed } from 'vue';
 import { apiService } from '../services/api';
 
 const props = defineProps({
@@ -229,15 +253,35 @@ const props = defineProps({
   orderNumber: { type: String, default: '' }
 });
 
-const emit = defineEmits(['close', 'support-contact']);
+const emit = defineEmits(['close', 'support-contact', 'show-proof']);
 
 // Estado del tracking
 const tracking = ref(null);
 const loadingTracking = ref(true);
 const refreshing = ref(false);
 const lastUpdated = ref(new Date());
+const showDebugInfo = ref(true); // 🔍 Cambiar a false después de probar
 
 let refreshInterval = null;
+
+// 🆕 COMPUTED PROPERTIES PARA TRACKING
+const hasTrackingUrl = computed(() => {
+  return !!(tracking.value?.tracking_url || tracking.value?.shipday_tracking_url);
+});
+
+const getTrackingUrl = computed(() => {
+  return tracking.value?.tracking_url || tracking.value?.shipday_tracking_url || '';
+});
+
+const hasProofOfDelivery = computed(() => {
+  if (!tracking.value) return false;
+  return !!(
+    tracking.value.proof_of_delivery?.photo_url || 
+    tracking.value.proof_of_delivery?.signature_url ||
+    tracking.value.podUrls?.length > 0 ||
+    tracking.value.signatureUrl
+  );
+});
 
 onMounted(() => {
   fetchTracking();
@@ -262,31 +306,20 @@ async function fetchTracking() {
     console.log('📍 Obteniendo tracking para orden:', props.orderId);
     
     const { data } = await apiService.orders.getTracking(props.orderId);
-    tracking.value = data.tracking;
-    lastUpdated.value = new Date(data.last_updated);
     
     // 🔍 DEBUG ESPECÍFICO PARA TRACKING URL
     console.log('🔍 VERIFICANDO TRACKING URL:');
     console.log('- tracking.tracking_url:', data.tracking?.tracking_url);
     console.log('- tracking.shipday_tracking_url:', data.tracking?.shipday_tracking_url);
     console.log('- tracking.has_tracking:', data.tracking?.has_tracking);
-    console.log('- Objeto tracking completo:', data.tracking);
     
-    // 🆕 NORMALIZAR URLs DE TRACKING - Buscar en ambos campos
-    if (data.tracking) {
-      // Asegurar que tengamos la URL en el campo correcto
-      if (data.tracking.shipday_tracking_url && !data.tracking.tracking_url) {
-        data.tracking.tracking_url = data.tracking.shipday_tracking_url;
-        console.log('✅ URL de tracking normalizada desde shipday_tracking_url');
-      }
-      
-      // Actualizar el estado
-      tracking.value = data.tracking;
-    }
+    tracking.value = data.tracking;
+    lastUpdated.value = new Date(data.last_updated);
     
     console.log('✅ Tracking cargado:', {
       order_number: tracking.value?.order_number,
-      has_tracking_url: !!(tracking.value?.tracking_url || tracking.value?.shipday_tracking_url),
+      has_tracking_url: hasTrackingUrl.value,
+      tracking_url_used: getTrackingUrl.value,
       current_status: tracking.value?.current_status,
       timeline_events: tracking.value?.timeline?.length || 0
     });
@@ -310,7 +343,16 @@ async function refreshTracking() {
   }
 }
 
-// Funciones de UI
+// 🆕 FUNCIÓN PARA MOSTRAR MODAL DE PRUEBA COMPLETA
+function showFullProofModal() {
+  emit('show-proof', {
+    orderId: props.orderId,
+    orderNumber: tracking.value?.order_number,
+    order: tracking.value
+  });
+}
+
+// Funciones de UI (mantener las existentes)
 function getStatusIcon(status) {
   const icons = {
     pending: '⏳',
@@ -398,7 +440,7 @@ function formatCurrency(amount) {
 
 // Funciones de acción
 function trackLiveClick() {
-  console.log('📍 Usuario abriendo tracking en vivo');
+  console.log('📍 Usuario abriendo tracking en vivo:', getTrackingUrl.value);
 }
 
 function callDriver(phone) {
@@ -917,6 +959,195 @@ function reportIssue() {
     flex-direction: column;
     gap: 12px;
     text-align: center;
+  }
+}
+/* 🆕 ESTILOS PARA DEBUG INFO */
+.debug-info {
+  background: #f0f0f0;
+  border: 1px solid #ddd;
+  padding: 8px;
+  margin: 8px 0;
+  font-size: 11px;
+  border-radius: 4px;
+  font-family: monospace;
+  color: #555;
+}
+
+/* 🆕 ESTILOS PARA SECCIÓN DE PRUEBA DE ENTREGA */
+.proof-section {
+  margin-bottom: 30px;
+}
+
+.proof-card {
+  background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
+  border: 2px solid #10b981;
+  border-radius: 16px;
+  padding: 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.proof-summary {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.proof-icon {
+  font-size: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 60px;
+  height: 60px;
+  background: rgba(16, 185, 129, 0.1);
+  border-radius: 50%;
+}
+
+.proof-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #065f46;
+  margin-bottom: 4px;
+}
+
+.proof-description {
+  color: #047857;
+  font-size: 14px;
+}
+
+.proof-details-btn {
+  background: #10b981;
+  color: white;
+  border: none;
+  padding: 12px 20px;
+  border-radius: 12px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 14px;
+  transition: all 0.2s ease;
+}
+
+.proof-details-btn:hover {
+  background: #059669;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+}
+
+/* 🆕 MEJORAR TRACKING EN VIVO PARA QUE SE VEA MEJOR */
+.live-tracking-section {
+  margin-bottom: 30px;
+}
+
+.live-tracking-card {
+  background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+  border: 2px solid #0ea5e9;
+  border-radius: 16px;
+  padding: 24px;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.live-tracking-card::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: linear-gradient(45deg, transparent, rgba(14, 165, 233, 0.1), transparent);
+  animation: shimmer 3s infinite;
+}
+
+@keyframes shimmer {
+  0% { transform: translateX(-100%) translateY(-100%) rotate(45deg); }
+  100% { transform: translateX(100%) translateY(100%) rotate(45deg); }
+}
+
+.live-tracking-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  position: relative;
+  z-index: 1;
+}
+
+.live-icon {
+  animation: pulse 2s infinite;
+  font-size: 16px;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.7; transform: scale(1.1); }
+}
+
+.live-tracking-card h3 {
+  margin: 0;
+  color: #0369a1;
+  font-size: 20px;
+  position: relative;
+  z-index: 1;
+}
+
+.live-tracking-card p {
+  color: #0284c7;
+  margin: 12px 0 20px;
+  position: relative;
+  z-index: 1;
+}
+
+.live-tracking-btn {
+  display: inline-block;
+  background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
+  color: white;
+  text-decoration: none;
+  padding: 14px 28px;
+  border-radius: 12px;
+  font-weight: 600;
+  font-size: 16px;
+  transition: all 0.3s ease;
+  position: relative;
+  z-index: 1;
+  box-shadow: 0 4px 15px rgba(14, 165, 233, 0.3);
+}
+
+.live-tracking-btn:hover {
+  background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(14, 165, 233, 0.4);
+}
+
+.live-tracking-btn:active {
+  transform: translateY(0);
+}
+
+/* 🆕 RESPONSIVE IMPROVEMENTS */
+@media (max-width: 768px) {
+  .proof-card {
+    flex-direction: column;
+    gap: 16px;
+    text-align: center;
+  }
+  
+  .proof-summary {
+    flex-direction: column;
+    text-align: center;
+    gap: 12px;
+  }
+  
+  .live-tracking-btn {
+    padding: 12px 24px;
+    font-size: 14px;
+  }
+  
+  .debug-info {
+    font-size: 10px;
+    padding: 6px;
   }
 }
 </style>

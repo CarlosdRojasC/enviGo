@@ -227,7 +227,12 @@
 
     <Modal v-model="showTrackingModal" :title="`🚚 Tracking - Pedido #${selectedTrackingOrder?.order_number}`"
       width="700px">
-      <OrderTracking v-if="selectedTrackingOrder" :order-id="selectedTrackingOrder._id" />
+      <OrderTracking 
+    v-if="selectedTrackingOrder" 
+    :order-id="selectedTrackingOrder._id" 
+    @support-contact="handleTrackingSupport"
+    @show-proof="handleShowProof"
+  />
     </Modal>
 
     <Modal v-model="showProofModal" :title="`📋 Prueba de Entrega - #${selectedProofOrder?.order_number}`"
@@ -500,6 +505,14 @@ function formatDate(dateStr) {
   return new Date(dateStr).toLocaleDateString('es-CL', {
     day: '2-digit', month: '2-digit', year: '2-digit'
   });
+}
+function handleShowProof(proofData) {
+  // Cerrar el modal de tracking
+  showTrackingModal.value = false;
+  
+  // Abrir el modal de prueba de entrega
+  selectedProofOrder.value = proofData.order;
+  showProofModal.value = true;
 }
 </script>
 
