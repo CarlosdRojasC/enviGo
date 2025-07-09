@@ -32,6 +32,8 @@ const Company = require('../models/Company');
 const Order = require('../models/Order');
 const Channel = require('../models/Channel');
 
+const multer = require('multer'); // Middleware para manejar subida de archivos
+const upload = multer({ storage: multer.memoryStorage() }); // Configuración para recibir el archivo en memoria
 // ==================== RUTAS PÚBLICAS ====================
 
 router.post('/auth/login', authController.login);
@@ -164,6 +166,13 @@ router.get('/orders/stats', authenticateToken, orderController.getStats);
 router.get('/orders/trend', authenticateToken, orderController.getOrdersTrend);
 router.get('/orders/export', authenticateToken, isAdmin, orderController.exportForOptiRoute);
 router.get('/orders/import-template', authenticateToken, isAdmin, orderController.downloadImportTemplate);
+router.post(
+  '/orders/bulk-upload', 
+  authenticateToken, 
+  isAdmin, 
+  upload.single('file'), // Usar multer para procesar un solo archivo llamado 'file'
+  orderController.bulkUpload  // La nueva función que crearemos en el controlador
+);
 
 // Ruta para obtener todas las comunas disponibles
 router.get('/orders/communes', authenticateToken, async (req, res) => {

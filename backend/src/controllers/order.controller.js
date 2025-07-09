@@ -600,7 +600,75 @@ async getOrdersTrend(req, res) {
       res.status(500).json({ error: 'Error generando la plantilla de importación' });
     }
   }
+async bulkUpload(req, res) {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No se ha subido ningún archivo.' });
+    }
 
+    try {
+      const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
+      const sheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[sheetName];
+      const data = XLSX.utils.sheet_to_json(worksheet);
+
+      const results = {
+        success: 0,
+        failed: 0,
+        errors: []
+      };
+
+      for (const row of data) {
+        try {
+          // Asumimos que el admin selecciona una empresa en el frontend,
+          // o se usa la empresa del usuario que sube el archivo.
+          // Por ahora, lo dejamos fijo para el ejemplo:
+          const company_id = req.user.company_id || 'ID_DE_EMPRESA_POR_DEFECTO';
+          const channel = await Channel.findOne({ company_id: company_id }); // Busca un canal para la empresa
+
+          if (!channel) {
+            results.failed++;
+            results.errors.push({ order: row['Número de Pedido*'], reason: 'No se encontró un canal para la empresa.' });
+            continue;
+          }
+
+          const orderData = {
+            company_id: channel.company_id,
+            channel_id: channel._id,
+            external_order_id: row['ID Externo*'] || `MANUAL-${Date.now()}`,
+            order_number: row['Número de Pedido*'],
+            customer_name: row['Nombre Cliente*'],
+            shipping_address: row['Dirección*'],
+            shipping_commune: row['Ciudad*'],
+            total_amount: parseFloat(row['Monto Total*']),
+            shipping_cost: parseFloat(row['Costo de Envío'] || 0),
+            order_date: new Date(),
+            status: 'pending'
+          };
+
+          // Validar datos básicos
+          if (!orderData.order_number || !orderData.customer_name || !orderData.shipping_address) {
+            throw new Error('Faltan campos obligatorios en la fila.');
+          }
+
+          await Order.create(orderData);
+          results.success++;
+
+        } catch (error) {
+          results.failed++;
+          results.errors.push({ 
+            order: row['Número de Pedido*'] || 'Desconocido', 
+            reason: error.message 
+          });
+        }
+      }
+
+      res.status(200).json(results);
+
+    } catch (error) {
+      console.error('Error procesando archivo de subida masiva:', error);
+      res.status(500).json({ error: 'Error al procesar el archivo Excel.' });
+    }
+  }
 
 }
 module.exports = new OrderController();
