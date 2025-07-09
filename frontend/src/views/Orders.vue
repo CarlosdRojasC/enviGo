@@ -130,7 +130,7 @@
       </button>
     </div>
     <!-- PRIORIDAD 2: Tracking en vivo (solo para pedidos NO entregados) -->
-    <div v-if="order.status !== 'delivered'" class="tracking-live">
+    <div v-if="order.status === 'shipped'" class="tracking-live">
       <span class="live-indicator">🔴 Live</span>
       <button @click="openLiveTracking(order)" class="track-live-btn">
         📍 Ver Mapa
@@ -177,7 +177,7 @@
                     👁️
                   </button>
 
-                  <button v-if="order.status !== 'delivered'" @click="openLiveTracking(order)"
+                  <button v-if="order.status === 'shipped'" @click="openLiveTracking(order)"
                     class="action-btn tracking live" title="Tracking en vivo">
                     🚚
                   </button>
