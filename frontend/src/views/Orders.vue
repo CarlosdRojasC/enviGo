@@ -120,7 +120,7 @@
 
               <!-- Tracking -->
   <td class="col-tracking">
-  <div class="tracking-cell">
+   <div class="tracking-cell">
     
     <!-- PRIORIDAD 1: Pedido entregado - SIEMPRE mostrar prueba de entrega -->
     <div v-if="order.status === 'delivered'" class="proof-delivery">
@@ -129,6 +129,12 @@
         📸 Ver Prueba
       </button>
     </div>
+    <!-- DEBUG TEMPORAL - agregar después del botón Ver Prueba -->
+<div v-if="order.status === 'delivered'" style="font-size: 10px; color: #666; margin-top: 4px;">
+  Status: {{ order.status }}<br>
+  Has URL: {{ !!order.shipday_tracking_url }}<br>
+  Has Proof: {{ hasProofOfDelivery(order) }}
+</div>
     
     <!-- PRIORIDAD 2: Tracking en vivo (solo para pedidos NO entregados) -->
     <div v-else-if="order.shipday_tracking_url" class="tracking-live">
@@ -335,20 +341,27 @@ async function fetchChannels() {
 // 🆕 NUEVAS FUNCIONES PARA TRACKING Y PRUEBAS DE ENTREGA
 
 function hasTrackingInfo(order) {
-  // Solo mostrar tracking general si NO está entregado y tiene información de Shipday
-  return order.status !== 'delivered' && 
-         (order.shipday_driver_id || 
-          order.shipday_order_id ||
-          ['processing', 'shipped'].includes(order.status));
+  // ✅ EXCLUIR EXPLÍCITAMENTE PEDIDOS ENTREGADOS
+  if (order.status === 'delivered') {
+    return false; // Los pedidos entregados NO deben mostrar tracking general
+  }
+  
+  // Solo mostrar tracking general para pedidos NO entregados
+  return order.shipday_driver_id || 
+         order.shipday_order_id ||
+         ['processing', 'shipped'].includes(order.status);
 }
 function hasProofOfDelivery(order) {
   // Solo verificar pruebas si el pedido está entregado
-  return order.status === 'delivered' && 
-         (order.proof_of_delivery?.photo_url || 
-          order.proof_of_delivery?.signature_url ||
-          order.podUrls?.length > 0 ||
-          order.signatureUrl ||
-          order.shipday_order_id); // Si está en Shipday, puede tener pruebas
+  if (order.status !== 'delivered') {
+    return false;
+  }
+  
+  return order.proof_of_delivery?.photo_url || 
+         order.proof_of_delivery?.signature_url ||
+         order.podUrls?.length > 0 ||
+         order.signatureUrl ||
+         order.shipday_order_id; // Si está en Shipday y entregado, asumimos que puede tener pruebas
 }
 
 function openLiveTracking(order) {
