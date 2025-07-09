@@ -381,7 +381,9 @@ import Modal from '../components/Modal.vue';
 import UpdateOrderStatus from '../components/UpdateOrderStatus.vue';
 import OrderDetails from '../components/OrderDetails.vue';
 import { useRoute } from 'vue-router';
+import { useToast } from 'vue-toastification';
 
+const toast = useToast();
 const route = useRoute();
 const orders = ref([]);
 const companies = ref([]);
@@ -584,28 +586,28 @@ function openCreateOrderModal() {
 
 async function handleCreateOrder() { 
   if (!newOrder.value.company_id) { 
-    alert("Por favor, seleccione una empresa."); 
+    toast.warning("Por favor, seleccione una empresa."); 
     return; 
   }
   
   if (!newOrder.value.customer_name) {
-    alert("Por favor, ingrese el nombre del cliente.");
+    toast.warning("Por favor, ingrese el nombre del cliente.");
     return;
   }
   
   if (!newOrder.value.shipping_address) {
-    alert("Por favor, ingrese la dirección de envío.");
+    toast.warning("Por favor, ingrese la dirección de envío.");
     return;
   }
   
   if (!newOrder.value.total_amount || newOrder.value.total_amount <= 0) {
-    alert("Por favor, ingrese un monto total válido.");
+    toast.warning("Por favor, ingrese un monto total válido.");
     return;
   }
   
   const channelsResponse = await apiService.channels.getByCompany(newOrder.value.company_id); 
   if (!channelsResponse.data || channelsResponse.data.length === 0) { 
-    alert("La empresa seleccionada no tiene canales. Configure uno primero."); 
+    toast.warning("La empresa seleccionada no tiene canales. Configure uno primero."); 
     return; 
   } 
   isCreatingOrder.value = true; 
@@ -754,17 +756,17 @@ async function openAssignModal(order) {
 
 async function confirmAssignment() {
   if (!selectedDriverId.value) {
-    alert("Por favor, selecciona un conductor.");
+    toast.warning("Por favor, selecciona un conductor.");
     return;
   }
   isAssigning.value = true;
   try {
     await apiService.orders.assignDriver(selectedOrder.value._id, selectedDriverId.value);
-    alert('Pedido asignado exitosamente en Shipday.');
+    toast.success('Pedido asignado exitosamente en Shipday.');
     showAssignModal.value = false;
     fetchOrders();
   } catch (error) {
-    alert(`Error al asignar: ${error.response?.data?.error || error.message}`);
+    toast.error(`Error al asignar: ${error.response?.data?.error || error.message}`);
   } finally {
     isAssigning.value = false;
   }
