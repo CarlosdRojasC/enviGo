@@ -209,7 +209,23 @@ if (!newOrder.value.shipping_commune) {
         </div>
       </form>
     </Modal>
-    
+    <Modal v-model="showBulkUploadModal" title="Subida Masiva de Pedidos" width="600px">
+      <div class="bulk-upload-content">
+        <p>Sube un archivo Excel para crear múltiples pedidos a la vez. Asegúrate de que el archivo siga la plantilla requerida.</p>
+        
+        <div class="template-download-section">
+          <a href="#" @click.prevent="downloadTemplate" class="download-template-link">
+            ⬇️ Descargar Plantilla de Ejemplo
+          </a>
+        </div>
+
+        <div class="form-group">
+          <label for="file-upload" class="file-upload-label">Seleccionar archivo Excel</label>
+          <input id="file-upload" type="file" @change="handleFileSelect" accept=".xlsx, .xls" />
+        </div>
+        </div>
+    </Modal>
+
     <Modal v-model="showBulkUploadModal" title="Subida Masiva de Pedidos" width="600px">
       <div class="bulk-upload-content">
         <p>Sube un archivo Excel para crear múltiples pedidos a la vez. Asegúrate de que el archivo siga la plantilla requerida.</p>
@@ -229,6 +245,7 @@ if (!newOrder.value.shipping_commune) {
         </div>
       </div>
     </Modal>
+    
 
     <!-- Modal de asignación individual (existente) -->
     <Modal v-model="showAssignModal" title="Asignar Conductor" width="500px">
@@ -858,7 +875,23 @@ async function openBulkAssignModal() {
     await fetchAvailableDrivers();
   }
 }
-
+async function downloadTemplate() {
+  try {
+    // Suponiendo que tienes un método en apiService para esto
+    // que solicita el archivo como un 'blob'
+    const response = await apiService.orders.downloadImportTemplate();
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', 'plantilla_importacion_pedidos.xlsx');
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  } catch (error) {
+    console.error("Error al descargar la plantilla:", error);
+    alert('No se pudo descargar la plantilla. Inténtelo de nuevo.');
+  }
+}
 async function confirmBulkAssignment() {
   if (!bulkSelectedDriverId.value) {
     alert('Por favor, selecciona un conductor.');

@@ -124,25 +124,22 @@
               </td>
               
               <!-- Tracking -->
-              <td class="col-tracking">
+             <td class="col-tracking">
                 <div class="tracking-cell">
-                  <!-- Live tracking -->
-                  <div v-if="order.shipday_tracking_url" class="tracking-live">
+                  <div v-if="order.status === 'delivered' && order.shipday_order_id" class="proof-delivery">
+                    <span class="proof-indicator">📋 Prueba</span>
+                    <button @click="openProofOfDeliveryModal(order)" class="proof-btn">
+                      📸 Ver Prueba
+                    </button>
+                  </div>
+                  
+                  <div v-else-if="order.shipday_tracking_url" class="tracking-live">
                     <span class="live-indicator">🔴 Live</span>
                     <button @click="openLiveTracking(order)" class="track-live-btn">
                       📍 Ver Mapa
                     </button>
                   </div>
                   
-                  <!-- Proof of delivery -->
-                  <div v-else-if="hasProofOfDelivery(order)" class="proof-delivery">
-                    <span class="proof-indicator">📋 Prueba</span>
-                    <button @click="showProofOfDelivery(order)" class="proof-btn">
-                      📸 Ver Prueba
-                    </button>
-                  </div>
-                  
-                  <!-- Timeline tracking -->
                   <div v-else-if="hasTrackingInfo(order)" class="tracking-available">
                     <span class="tracking-indicator">📦 Info</span>
                     <button @click="openTrackingModal(order)" class="tracking-btn">
@@ -150,7 +147,6 @@
                     </button>
                   </div>
                   
-                  <!-- No tracking -->
                   <div v-else class="no-tracking">
                     <span class="no-tracking-text">Sin tracking</span>
                   </div>
@@ -235,24 +231,17 @@
 
     <!-- Modales -->
     
-    <!-- Modal de detalles -->
     <Modal v-model="showOrderDetailsModal" :title="`Pedido #${selectedOrder?.order_number}`" width="800px">
       <OrderDetails v-if="selectedOrder" :order="selectedOrder" />
     </Modal>
 
-    <!-- Modal de tracking -->
-    <Modal v-model="showTrackingModal" :title="`🚚 Tracking - Pedido #${selectedTrackingOrder?.order_number}`" width="900px">
-      <OrderTracking 
-        v-if="selectedTrackingOrder" 
-        :orderId="selectedTrackingOrder._id" 
-        :orderNumber="selectedTrackingOrder.order_number"
-        @support-contact="handleTrackingSupport" 
-      />
+    <Modal v-model="showTrackingModal" :title="`🚚 Tracking - Pedido #${selectedTrackingOrder?.order_number}`" width="700px">
+      <OrderTracking v-if="selectedTrackingOrder" :order-id="selectedTrackingOrder._id" />
     </Modal>
 
-    <!-- NUEVO: Modal de prueba de entrega -->
     <Modal v-model="showProofModal" :title="`📋 Prueba de Entrega - #${selectedProofOrder?.order_number}`" width="700px">
-      <ProofOfDelivery v-if="selectedProofOrder" :order="selectedProofOrder" />
+      <div v-if="loadingOrderDetails" class="loading-state"><div class="loading-spinner"></div></div>
+      <ProofOfDelivery v-else-if="selectedProofOrder" :order="selectedProofOrder" />
     </Modal>
 
     <!-- Modal de soporte -->

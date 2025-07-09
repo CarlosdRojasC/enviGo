@@ -85,7 +85,7 @@ class OrderController {
         .lean();
 
       if (!order) return res.status(404).json({ error: 'Pedido no encontrado' });
-      
+
 if (order.shipday_order_id) {
         try {
           const shipdayOrderDetails = await ShipdayService.getOrder(order.shipday_order_id);
@@ -589,7 +589,17 @@ async getOrdersTrend(req, res) {
       });
     }
   }
+  async downloadImportTemplate(req, res) {
+    try {
+      const excelBuffer = await ExcelService.generateImportTemplate();
 
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename=plantilla_importacion_pedidos.xlsx`);
+      res.send(excelBuffer);
+    } catch (error) {
+      res.status(500).json({ error: 'Error generando la plantilla de importación' });
+    }
+  }
 
 
 }

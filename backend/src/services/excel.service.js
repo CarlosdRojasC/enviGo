@@ -1,6 +1,59 @@
 const XLSX = require('xlsx');
 
 class ExcelService {
+
+    // Generar plantilla para importar pedidos
+  static async generateImportTemplate() {
+    try {
+      const templateData = [
+        {
+          'ID Externo*': 'EXT-001',
+          'Número de Pedido*': 'ORD-001',
+          'Nombre Cliente*': 'Juan Pérez',
+          'Email Cliente': 'juan@email.com',
+          'Teléfono Cliente': '+56912345678',
+          'Documento Cliente': '12345678-9',
+          'Dirección*': 'Av. Providencia 1234',
+          'Ciudad*': 'Santiago',
+          'Estado/Región': 'RM',
+          'Código Postal': '7500000',
+          'Monto Total*': 25000,
+          'Costo de Envío': 2500,
+          'Notas': 'Entregar en horario de tarde'
+        }
+      ];
+
+      const wb = XLSX.utils.book_new();
+
+      // Hoja de datos
+      const ws = XLSX.utils.json_to_sheet(templateData);
+      ws['!cols'] = [
+        { wch: 15 }, // ID Externo
+        { wch: 20 }, // Número de Pedido
+        // ... (otras columnas)
+      ];
+
+      XLSX.utils.book_append_sheet(wb, ws, 'Pedidos');
+
+      // Hoja de instrucciones
+      const instructions = [
+        ['INSTRUCCIONES PARA IMPORTAR PEDIDOS'],
+        [''],
+        ['1. Los campos marcados con * son obligatorios'],
+        ['2. ID Externo debe ser único para cada pedido en el canal'],
+        // ... (otras instrucciones)
+      ];
+
+      const wsInstructions = XLSX.utils.aoa_to_sheet(instructions);
+      XLSX.utils.book_append_sheet(wb, wsInstructions, 'Instrucciones');
+
+      return XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+    } catch (error) {
+      console.error('Error generando plantilla:', error);
+      throw new Error('Error al generar plantilla de importación');
+    }
+  }
+
   // Generar Excel para OptiRoute
   static async generateOptiRouteExport(orders) {
     try {

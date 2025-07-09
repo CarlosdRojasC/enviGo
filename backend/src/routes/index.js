@@ -973,6 +973,10 @@ function getStatusIcon(status) {
   };
   return icons[status] || '📦';
 }
+// Ruta para descargar la plantilla de importación
+router.get('/orders/import-template', authenticateToken, isAdmin, orderController.downloadImportTemplate);
+
+router.post('/orders', authenticateToken, validateOrderCreation, orderController.create);
 
 // ==================== FACTURACIÓN (BILLING) ====================
 
