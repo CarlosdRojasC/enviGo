@@ -5,6 +5,7 @@ const Company = require('../models/Company');
 const Channel = require('../models/Channel');
 const mongoose = require('mongoose'); // Agregar esta línea
 const ShipdayService = require('../services/shipday.service.js');
+const XLSX = require('xlsx'); // <--- Añade esta línea aquí
 
 class OrderController {
   async getAll(req, res) {
