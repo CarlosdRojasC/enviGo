@@ -714,9 +714,29 @@ function getCommuneClass(commune) {
   if (!commune || commune === 'Sin comuna') return 'commune-empty';
   // Comunas importantes de Santiago y otras regiones
   const importantCommunes = [
-    'Las Condes', 'Providencia', 'Santiago', 'Ñuñoa', 'La Reina', 'Vitacura',
-    'Valparaíso', 'Viña del Mar', 'Concepción', 'La Serena', 'Antofagasta',
-    'Temuco', 'Puerto Montt', 'Iquique', 'Arica'
+   'Macul',
+      'San Miguel', 
+      'Santiago Centro',
+      'La Florida',
+      'Peñalolén',
+      'Las Condes',
+      'Vitacura',
+      'Quinta Normal',
+      'Independencia',
+      'Recoleta',
+      'Huechuraba',
+      'Quilicura',
+      'Estación Central',
+      'Ñuñoa',
+      'La Reina',
+      'San Joaquín',
+      'Pedro Aguirre Cerda',
+      'Cerrillos',
+      'Renca',
+      'La Granja',
+      'La Cisterna',
+      'San Ramón',
+      'Cerro Navia'
   ];
   if (importantCommunes.some(important => commune.toLowerCase().includes(important.toLowerCase()))) {
     return 'commune-important';

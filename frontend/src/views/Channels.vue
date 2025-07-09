@@ -70,33 +70,33 @@
         <form @submit.prevent="addChannel">
           <div class="form-group">
             <label>Tipo de Canal:</label>
-            <select v-model="newChannel.channel_type" required>
+            <select v-model="channelData.channel_type" required>
               <option value="" disabled>Seleccionar...</option>
               <option value="shopify">Shopify</option>
               <option value="woocommerce">WooCommerce</option>
             </select>
           </div>
-          <div v-if="newChannel.channel_type">
+          <div v-if="channelData.channel_type">
             <div class="form-group">
               <label>Nombre del Canal:</label>
-              <input v-model="newChannel.channel_name" type="text" required placeholder="Mi Tienda Shopify">
+              <input v-model="channelData.channel_name" type="text" required placeholder="Mi Tienda Shopify">
             </div>
             <div class="form-group">
               <label>URL de la Tienda:</label>
-              <input v-model="newChannel.store_url" type="text" required placeholder="ejemplo.myshopify.com">
+              <input v-model="channelData.store_url" type="text" required placeholder="ejemplo.myshopify.com">
             </div>
             <div class="form-group">
-              <label>{{ newChannel.channel_type === 'shopify' ? 'Token de Acceso (API Secret)' : 'Consumer Key' }}</label>
-              <input v-model="newChannel.api_key" type="text" required>
+              <label>{{ channelData.channel_type === 'shopify' ? 'Token de Acceso (API Secret)' : 'Consumer Key' }}</label>
+              <input v-model="channelData.api_key" type="text" required>
             </div>
             <div class="form-group">
-              <label>{{ newChannel.channel_type === 'shopify' ? 'API Key' : 'Consumer Secret' }}</label>
-              <input v-model="newChannel.api_secret" type="password" required>
+              <label>{{ channelData.channel_type === 'shopify' ? 'API Key' : 'Consumer Secret' }}</label>
+              <input v-model="channelData.api_secret" type="password" required>
             </div>
           </div>
           <div class="modal-actions">
             <button type="button" @click="showAddChannelModal = false" class="btn-cancel">Cancelar</button>
-            <button type="submit" :disabled="addingChannel || !newChannel.channel_type" class="btn-save">
+            <button type="submit" :disabled="addingChannel || !channelData.channel_type" class="btn-save">
               {{ addingChannel ? 'Agregando...' : 'Agregar' }}
             </button>
           </div>
@@ -104,26 +104,26 @@
     </Modal>
 
     <Modal v-model="showEditChannelModal" title="Editar Canal de Venta" width="500px">
-        <form @submit.prevent="updateChannel" v-if="editingChannel">
+        <form @submit.prevent="updateChannel" v-if="channelData">
           <div class="form-group">
             <label>Tipo de Canal:</label>
-            <input :value="getChannelTypeName(editingChannel.channel_type)" type="text" disabled class="disabled-input">
+            <input :value="getChannelTypeName(channelData.channel_type)" type="text" disabled class="disabled-input">
           </div>
           <div class="form-group">
             <label>Nombre del Canal:</label>
-            <input v-model="editingChannel.channel_name" type="text" required>
+            <input v-model="channelData.channel_name" type="text" required>
           </div>
           <div class="form-group">
             <label>URL de la Tienda:</label>
-            <input v-model="editingChannel.store_url" type="text" required>
+            <input v-model="channelData.store_url" type="text" required>
           </div>
           <div class="form-group">
-            <label>{{ editingChannel.channel_type === 'shopify' ? 'Token de Acceso (API Secret)' : 'Consumer Key' }}</label>
-            <input v-model="editingChannel.api_key" type="text">
+            <label>{{ channelData.channel_type === 'shopify' ? 'Token de Acceso (API Secret)' : 'Consumer Key' }}</label>
+            <input v-model="channelData.api_key" type="text">
           </div>
           <div class="form-group">
-            <label>{{ editingChannel.channel_type === 'shopify' ? 'API Key' : 'Consumer Secret' }}</label>
-            <input v-model="editingChannel.api_secret" type="password" placeholder="Dejar en blanco para no cambiar">
+            <label>{{ channelData.channel_type === 'shopify' ? 'API Key' : 'Consumer Secret' }}</label>
+            <input v-model="channelData.api_secret" type="password" placeholder="Dejar en blanco para no cambiar">
           </div>
           <div class="modal-actions">
             <button type="button" @click="showEditChannelModal = false" class="btn-cancel">Cancelar</button>
@@ -155,12 +155,17 @@ const syncingChannels = ref([]);
 
 const showAddChannelModal = ref(false);
 const addingChannel = ref(false);
-const newChannel = ref({});
-
 const showEditChannelModal = ref(false);
 const isUpdatingChannel = ref(false);
-const editingChannel = ref(null);
-
+const channelData = ref({
+  channel_type: '',
+  channel_name: '',
+  api_key: '',
+  api_secret: '',
+  store_url: '',
+  accepted_communes: '' // Usamos un string para el textarea
+});
+const editingChannelId = ref(null); // Para saber si estamos editando o creando
 const isAdminView = computed(() => route.path.startsWith('/admin'));
 
 const canAddChannel = computed(() => {
@@ -211,61 +216,91 @@ async function fetchChannels() {
 }
 
 function openAddChannelModal() {
-    if (!canAddChannel.value) {
-        alert("Por favor, seleccione una empresa primero.");
-        return;
-    }
-    newChannel.value = { channel_type: '', channel_name: '', api_key: '', api_secret: '', store_url: '' };
-    showAddChannelModal.value = true;
+  if (!canAddChannel.value) {
+    alert("Por favor, seleccione una empresa primero.");
+    return;
+  }
+  
+  editingChannelId.value = null; // Indica que estamos creando
+  // Resetea el objeto del formulario
+  channelData.value = {
+    channel_type: '',
+    channel_name: '',
+    api_key: '',
+    api_secret: '',
+    store_url: '',
+    accepted_communes: '' // El campo de comunas empieza vacío
+  };
+  showAddChannelModal.value = true;
 }
-
 async function addChannel() {
-    addingChannel.value = true;
-    try {
-        const companyId = isAdminView.value 
-          ? selectedCompanyId.value 
-          : (user.value?.company_id || user.value?.company?._id);
+  addingChannel.value = true;
+  try {
+    const companyId = isAdminView.value ? selectedCompanyId.value : (user.value?.company_id || user.value?.company?._id);
+    
+    // Convierte el string de comunas en un array limpio antes de enviar
+    const communesArray = channelData.value.accepted_communes
+      .split(',')
+      .map(c => c.trim())
+      .filter(c => c); // Filtra elementos vacíos
 
-        const { data } = await apiService.channels.create(companyId, newChannel.value);
-        
-        showAddChannelModal.value = false;
-        alert('Canal agregado. Probando conexión...');
+    const payload = { ...channelData.value, accepted_communes: communesArray };
 
-        const testResult = await apiService.channels.testConnection(data.channel._id);
-        if (testResult.data.success) {
-            alert(`¡Conexión exitosa! ${testResult.data.message}`);
-        } else {
-            alert(`Canal creado, pero la prueba de conexión falló: ${testResult.data.message}`);
-        }
-        await fetchChannels();
+    const { data } = await apiService.channels.create(companyId, payload);
+    
+    showAddChannelModal.value = false;
+    alert('Canal agregado. Probando conexión...');
 
-    } catch (error) {
-        alert(`Error al agregar el canal: ${error.message || 'Verifique los datos.'}`);
-    } finally {
-        addingChannel.value = false;
+    const testResult = await apiService.channels.testConnection(data.channel._id);
+    if (testResult.data.success) {
+      alert(`¡Conexión exitosa! ${testResult.data.message}`);
+    } else {
+      alert(`Canal creado, pero la prueba de conexión falló: ${testResult.data.message}`);
     }
+    await fetchChannels();
+
+  } catch (error) {
+    alert(`Error al agregar el canal: ${error.message || 'Verifique los datos.'}`);
+  } finally {
+    addingChannel.value = false;
+  }
 }
 
 function openEditChannelModal(channel) {
-  editingChannel.value = { ...channel, api_secret: '' };
+  editingChannelId.value = channel._id; // Indica que estamos editando
+  
+  // Convierte el array de comunas de la BD a un string para el textarea
+  const communesString = (channel.accepted_communes || []).join(', ');
+  
+  // Llenamos el objeto del formulario con los datos del canal a editar
+  channelData.value = { 
+    ...channel,
+    accepted_communes: communesString, // Usamos el texto convertido
+    api_secret: '' // Limpiar la contraseña por seguridad al editar
+  };
   showEditChannelModal.value = true;
 }
-
 async function updateChannel() {
-  if (!editingChannel.value) return;
+  if (!editingChannelId.value) return;
   isUpdatingChannel.value = true;
   try {
-    const channelId = editingChannel.value._id;
+    // Convierte el string de comunas en un array limpio antes de enviar
+    const communesArray = channelData.value.accepted_communes
+      .split(',')
+      .map(c => c.trim())
+      .filter(c => c);
+
     const updateData = {
-      channel_name: editingChannel.value.channel_name,
-      store_url: editingChannel.value.store_url,
-      api_key: editingChannel.value.api_key,
+      channel_name: channelData.value.channel_name,
+      store_url: channelData.value.store_url,
+      api_key: channelData.value.api_key,
+      accepted_communes: communesArray,
     };
-    if (editingChannel.value.api_secret) {
-      updateData.api_secret = editingChannel.value.api_secret;
+    if (channelData.value.api_secret) {
+      updateData.api_secret = channelData.value.api_secret;
     }
 
-    await apiService.channels.update(channelId, updateData);
+    await apiService.channels.update(editingChannelId.value, updateData);
     alert('Canal actualizado con éxito.');
     showEditChannelModal.value = false;
     await fetchChannels();
