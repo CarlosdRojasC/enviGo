@@ -56,10 +56,11 @@ const auth = {
   }
 }
 
-const communes ={
-    getEnvigo: () => api.get('/communes/envigo'),
-    validate: (data) => api.post('/communes/validate', data)
-  }
+const communes = {
+  // Llama a la ruta /api/communes/envigo que creaste
+  getEnvigoCommunes: () => api.get('/communes/envigo') 
+};
+// --- FIN DEL NUEVO OBJETO ---
 // Servicios de empresas
 const companies = {
   getAll: () => api.get('/companies'),
@@ -455,36 +456,6 @@ const drivers = {
   
   // Obtener conductores por empresa (si necesitas)
   getByCompany: (companyId) => api.get(`/companies/${companyId}/drivers`)
-}
-
-// Helper para verificar conectividad
-export const checkConnection = async () => {
-  try {
-    // Usar la URL base sin /api para health check
-    const baseURL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api'
-    const healthURL = baseURL.replace('/api', '/health')
-    
-    console.log('🔍 Verificando conexión con:', healthURL)
-    
-    const response = await axios.get(healthURL, { timeout: 5000 })
-    console.log('🟢 Conexión con backend exitosa:', response.data)
-    return { success: true, data: response.data }
-  } catch (error) {
-    console.error('🔴 Error de conexión con backend:', {
-      message: error.message,
-      code: error.code,
-      status: error.response?.status
-    })
-    return { 
-      success: false, 
-      error: error.message,
-      details: {
-        code: error.code,
-        status: error.response?.status,
-        url: error.config?.url
-      }
-    }
-  }
 }
 
 // Exportar todos los servicios

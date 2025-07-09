@@ -79,37 +79,19 @@ import { apiService } from '../services/api';
 // --- ESTADO ---
 const companies = ref([]);
 const channels = ref([]);
-const availableCommunes = ref([]); // Lista completa de comunas disponibles en el sistema
+const availableCommunesByZone = ref({}); // <- Almacenará el objeto con zonas
 const selectedCompanyId = ref('');
 const selectedChannelId = ref('');
 const selectedCommunes = ref([]);
-const loading = ref({ companies: false, channels: false, communes: false });
+const loading = ref({ companies: true, channels: false, communes: true });
 const saving = ref(false);
 
 // --- PROPIEDADES COMPUTADAS ---
-const availableCommunesByZone = computed(() => {
-  // Esta computada ahora simplemente devuelve el objeto que viene de la API,
-  // ya que el backend nos dará las comunas agrupadas por zona.
-  // Para que esto funcione, necesitamos que la API devuelva las zonas.
-  // Vamos a ajustar la API para que devuelva el objeto completo.
-  
-  // (No se necesita cambio aquí si la API devuelve el objeto completo de zonas)
-  // Pero para ser más robustos, podemos agruparlo aquí si la API solo devuelve una lista plana.
-  const zones = {};
-  for (const commune of availableCommunes.value) {
-    // Busca a qué zona pertenece la comuna
-    let foundZone = 'Otras';
-    for (const [zoneName, communesInZone] of Object.entries(shippingZones.value)) { // Suponiendo que tienes shippingZones en el front
-        if (communesInZone.includes(commune)) {
-            foundZone = zoneName;
-            break;
-        }
-    }
-    if (!zones[foundZone]) zones[foundZone] = [];
-    zones[foundZone].push(commune);
-  }
-  return zones;
+const allAvailableCommunes = computed(() => {
+  // Crea una lista plana de todas las comunas para los botones "Seleccionar Todas"
+  return Object.values(availableCommunesByZone.value).flat().sort();
 });
+
 // --- MÉTODOS ---
 async function fetchInitialData() {
   loading.value.companies = true;
@@ -117,19 +99,17 @@ async function fetchInitialData() {
   try {
     const [companiesRes, communesRes] = await Promise.all([
       apiService.companies.getAll(),
-      // --- 👇 CAMBIO CLAVE AQUÍ 👇 ---
-      // Se llama a la nueva ruta que obtiene la lista maestra de comunas
-      apiService.orders.getAllCommunes() 
+      // ▼▼▼ CAMBIO CLAVE: Usa el nuevo servicio que apunta a la ruta correcta ▼▼▼
+      apiService.communes.getEnvigoCommunes()
     ]);
     
     companies.value = companiesRes.data || [];
-    
-    // Ahora 'communesRes.data' es directamente el array de comunas
-    availableCommunes.value = communesRes.data || [];
+    // El backend ya nos da las comunas agrupadas por zona
+    availableCommunesByZone.value = communesRes.data.communes_by_zone || {};
 
   } catch (error) {
     console.error('Error cargando datos iniciales:', error);
-    alert('No se pudieron cargar los datos necesarios (empresas y comunas).');
+    alert('No se pudieron cargar los datos necesarios.');
   } finally {
     loading.value.companies = false;
     loading.value.communes = false;
@@ -177,7 +157,7 @@ function toggleCommune(commune) {
 }
 
 function selectAll() {
-  selectedCommunes.value = [...availableCommunes.value];
+  selectedCommunes.value = [...allAvailableCommunes.value];
 }
 
 function clearAll() {
