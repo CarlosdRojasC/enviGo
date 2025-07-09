@@ -16,20 +16,6 @@ if (!newOrder.value.shipping_commune) {
           {{ isExporting ? 'Exportando...' : 'Exportar para OptiRoute' }}
         </button>
       </div>
-      <div class="admin-orders">
-    <!-- Botón para abrir configuración -->
-    <button @click="showCommuneFilter = true" class="btn-config">
-      🏘️ Configurar Comunas
-    </button>
-    
-    <!-- Modal -->
-    <div v-if="showCommuneFilter" class="modal-overlay" @click="showCommuneFilter = false">
-      <div class="modal-content" @click.stop>
-        <CommuneFilter @saved="onCommunesSaved" @synced="onOrdersSynced" />
-        <button @click="showCommuneFilter = false" class="btn-close">Cerrar</button>
-      </div>
-    </div>
-  </div>
     </div>
     
     <div class="filters-section">
@@ -398,8 +384,6 @@ import Modal from '../components/Modal.vue';
 import UpdateOrderStatus from '../components/UpdateOrderStatus.vue';
 import OrderDetails from '../components/OrderDetails.vue';
 import { useRoute } from 'vue-router';
-import CommuneFilter from '../components/CommuneFilter.vue';
-
 
 const route = useRoute();
 const orders = ref([]);
@@ -526,8 +510,6 @@ async function fetchAvailableCommunes() {
     }
   }
 }
-
-
 
 // Función para actualizar la lista de comunas (fallback)
 function updateAvailableCommunes(orders) {

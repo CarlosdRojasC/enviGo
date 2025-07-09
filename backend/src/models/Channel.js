@@ -1,4 +1,3 @@
-// backend/src/models/Channel.js
 const mongoose = require('mongoose');
 
 const channelSchema = new mongoose.Schema({
@@ -38,7 +37,7 @@ const channelSchema = new mongoose.Schema({
     required: true
   },
   
-  // 🆕 CAMPO PARA COMUNAS ACEPTADAS
+  // 🏘️ NUEVO CAMPO: Comunas aceptadas
   accepted_communes: {
     type: [String],
     default: [],
@@ -93,17 +92,6 @@ const channelSchema = new mongoose.Schema({
     default: 'manual'
   },
   
-  // 🆕 ESTADÍSTICAS DE SINCRONIZACIÓN
-  total_orders_synced: {
-    type: Number,
-    default: 0
-  },
-  
-  total_orders_rejected: {
-    type: Number,
-    default: 0
-  },
-  
   // Configuración de filtros adicionales
   status_filter: {
     type: [String],
@@ -151,6 +139,17 @@ const channelSchema = new mongoose.Schema({
     default: ''
   },
   
+  // Estadísticas
+  total_orders_synced: {
+    type: Number,
+    default: 0
+  },
+  
+  total_orders_rejected: {
+    type: Number,
+    default: 0
+  },
+  
   // Metadatos
   created_at: {
     type: Date,
@@ -175,28 +174,19 @@ channelSchema.index({ is_active: 1 });
 channelSchema.index({ last_sync: 1 });
 channelSchema.index({ connection_status: 1 });
 
-// 🆕 MÉTODOS PARA GESTIÓN DE COMUNAS
-
 // Método para obtener comunas normalizadas
 channelSchema.methods.getNormalizedCommunes = function() {
-  if (!this.accepted_communes || this.accepted_communes.length === 0) {
-    return [];
-  }
+  const WooCommerceService = require('../services/woocommerce.service');
+  const ShopifyService = require('../services/shopify.service');
   
-  try {
-    if (this.platform === 'woocommerce') {
-      const WooCommerceService = require('../services/woocommerce.service');
-      return this.accepted_communes.map(commune => 
-        WooCommerceService.normalizeCommune(commune)
-      );
-    } else if (this.platform === 'shopify') {
-      const ShopifyService = require('../services/shopify.service');
-      return this.accepted_communes.map(commune => 
-        ShopifyService.normalizeCommune(commune)
-      );
-    }
-  } catch (error) {
-    console.warn('Error normalizando comunas:', error);
+  if (this.platform === 'woocommerce') {
+    return this.accepted_communes.map(commune => 
+      WooCommerceService.normalizeCommune(commune)
+    );
+  } else if (this.platform === 'shopify') {
+    return this.accepted_communes.map(commune => 
+      ShopifyService.normalizeCommune(commune)
+    );
   }
   
   return this.accepted_communes;
@@ -204,105 +194,79 @@ channelSchema.methods.getNormalizedCommunes = function() {
 
 // Método para verificar si una comuna está permitida
 channelSchema.methods.isCommuneAllowed = function(commune) {
-  // Si no hay restricciones, permitir todas
   if (!this.accepted_communes || this.accepted_communes.length === 0) {
     return true;
   }
   
-  // Si no hay comuna en el pedido, rechazar
-  if (!commune || commune.trim() === '') {
-    return false;
+  const WooCommerceService = require('../services/woocommerce.service');
+  const ShopifyService = require('../services/shopify.service');
+  
+  if (this.platform === 'woocommerce') {
+    return WooCommerceService.isCommuneAllowed(commune, this.accepted_communes);
+  } else if (this.platform === 'shopify') {
+    return ShopifyService.isCommuneAllowed(commune, this.accepted_communes);
   }
   
-  try {
-    if (this.platform === 'woocommerce') {
-      const WooCommerceService = require('../services/woocommerce.service');
-      return WooCommerceService.isCommuneAllowed(commune, this.accepted_communes);
-    } else if (this.platform === 'shopify') {
-      const ShopifyService = require('../services/shopify.service');
-      return ShopifyService.isCommuneAllowed(commune, this.accepted_communes);
-    }
-  } catch (error) {
-    console.warn('Error verificando comuna:', error);
-  }
-  
-  // Fallback: verificación simple
-  const normalizedCommune = commune.trim().toLowerCase();
-  return this.accepted_communes.some(allowedCommune => 
-    allowedCommune.toLowerCase() === normalizedCommune
-  );
+  return this.accepted_communes.includes(commune);
 };
 
 // Método para obtener estadísticas del canal
 channelSchema.methods.getStats = async function() {
-  try {
-    const Order = require('./Order');
-    
-    const stats = await Order.aggregate([
-      { $match: { channel_id: this._id } },
-      {
-        $group: {
-          _id: null,
-          total_orders: { $sum: 1 },
-          total_amount: { $sum: '$total_amount' },
-          pending: { $sum: { $cond: [{ $eq: ['$status', 'pending'] }, 1, 0] } },
-          processing: { $sum: { $cond: [{ $eq: ['$status', 'processing'] }, 1, 0] } },
-          shipped: { $sum: { $cond: [{ $eq: ['$status', 'shipped'] }, 1, 0] } },
-          delivered: { $sum: { $cond: [{ $eq: ['$status', 'delivered'] }, 1, 0] } },
-          cancelled: { $sum: { $cond: [{ $eq: ['$status', 'cancelled'] }, 1, 0] } },
-          orders_this_month: {
-            $sum: {
-              $cond: [
-                {
-                  $gte: [
-                    '$order_date',
-                    new Date(new Date().getFullYear(), new Date().getMonth(), 1)
-                  ]
-                },
-                1,
-                0
-              ]
-            }
+  const Order = require('./Order');
+  
+  const stats = await Order.aggregate([
+    { $match: { channel_id: this._id } },
+    {
+      $group: {
+        _id: null,
+        total_orders: { $sum: 1 },
+        total_amount: { $sum: '$total_amount' },
+        pending: { $sum: { $cond: [{ $eq: ['$status', 'pending'] }, 1, 0] } },
+        processing: { $sum: { $cond: [{ $eq: ['$status', 'processing'] }, 1, 0] } },
+        shipped: { $sum: { $cond: [{ $eq: ['$status', 'shipped'] }, 1, 0] } },
+        delivered: { $sum: { $cond: [{ $eq: ['$status', 'delivered'] }, 1, 0] } },
+        cancelled: { $sum: { $cond: [{ $eq: ['$status', 'cancelled'] }, 1, 0] } },
+        orders_this_month: {
+          $sum: {
+            $cond: [
+              {
+                $gte: [
+                  '$order_date',
+                  new Date(new Date().getFullYear(), new Date().getMonth(), 1)
+                ]
+              },
+              1,
+              0
+            ]
           }
         }
       }
-    ]);
-    
-    return stats[0] || {
-      total_orders: 0,
-      total_amount: 0,
-      pending: 0,
-      processing: 0,
-      shipped: 0,
-      delivered: 0,
-      cancelled: 0,
-      orders_this_month: 0
-    };
-  } catch (error) {
-    console.error('Error obteniendo estadísticas del canal:', error);
-    return {
-      total_orders: 0,
-      total_amount: 0,
-      pending: 0,
-      processing: 0,
-      shipped: 0,
-      delivered: 0,
-      cancelled: 0,
-      orders_this_month: 0
-    };
-  }
+    }
+  ]);
+  
+  return stats[0] || {
+    total_orders: 0,
+    total_amount: 0,
+    pending: 0,
+    processing: 0,
+    shipped: 0,
+    delivered: 0,
+    cancelled: 0,
+    orders_this_month: 0
+  };
 };
 
 // Método para probar la conexión
 channelSchema.methods.testConnection = async function() {
   try {
+    const WooCommerceService = require('../services/woocommerce.service');
+    const ShopifyService = require('../services/shopify.service');
+    
     let result;
     
     if (this.platform === 'woocommerce') {
-      const WooCommerceService = require('../services/woocommerce.service');
       result = await WooCommerceService.validateChannel(this);
     } else if (this.platform === 'shopify') {
-      const ShopifyService = require('../services/shopify.service');
       result = await ShopifyService.validateChannel(this);
     } else {
       throw new Error('Plataforma no soportada');
@@ -323,60 +287,6 @@ channelSchema.methods.testConnection = async function() {
     
     await this.save();
     
-    throw error;
-  }
-};
-
-// Método para obtener resumen de configuración de comunas
-channelSchema.methods.getCommuneSummary = function() {
-  const acceptedCount = this.accepted_communes ? this.accepted_communes.length : 0;
-  
-  return {
-    total_accepted: acceptedCount,
-    allows_all: acceptedCount === 0,
-    accepts_some: acceptedCount > 0,
-    is_restrictive: acceptedCount > 0 && acceptedCount <= 5,
-    is_moderate: acceptedCount > 5 && acceptedCount <= 15,
-    is_permissive: acceptedCount > 15,
-    communes_list: this.accepted_communes || [],
-    filter_enabled: acceptedCount > 0,
-    status_text: acceptedCount === 0 ? 
-      'Acepta todas las comunas' : 
-      `Acepta ${acceptedCount} comunas específicas`
-  };
-};
-
-// Método para sincronizar pedidos con filtro de comunas
-channelSchema.methods.syncWithCommuneFilter = async function(dateFrom = null, dateTo = null) {
-  try {
-    console.log(`🔄 Iniciando sincronización con filtro de comunas para canal ${this._id}`);
-    
-    let result = { imported: 0, rejected: 0, total: 0 };
-    
-    if (this.platform === 'woocommerce') {
-      const WooCommerceService = require('../services/woocommerce.service');
-      result = await WooCommerceService.syncOrders(this, dateFrom, dateTo);
-    } else if (this.platform === 'shopify') {
-      const ShopifyService = require('../services/shopify.service');
-      result = await ShopifyService.syncOrders(this, dateFrom, dateTo);
-    } else {
-      throw new Error('Plataforma no soportada para sincronización');
-    }
-    
-    // Actualizar estadísticas
-    this.last_sync = new Date();
-    if (typeof result.imported === 'number') {
-      this.total_orders_synced = (this.total_orders_synced || 0) + result.imported;
-    }
-    if (typeof result.rejected === 'number') {
-      this.total_orders_rejected = (this.total_orders_rejected || 0) + result.rejected;
-    }
-    
-    await this.save();
-    
-    return result;
-  } catch (error) {
-    console.error('Error en sincronización:', error);
     throw error;
   }
 };
