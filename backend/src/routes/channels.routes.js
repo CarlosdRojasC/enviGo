@@ -436,5 +436,11 @@ router.post('/:channelId/sync-with-communes', authenticateToken, isAdmin, async 
     res.status(500).json({ error: 'Error en sincronización con filtro de comunas' });
   }
 });
+// --- 👇 AÑADE ESTA RUTA AL FINAL DEL ARCHIVO 👇 ---
+router.post(
+  '/:id/sync',
+  authenticateToken,
+  channelController.syncOrders // Asegúrate de que tu controlador tenga este método
+);
 
 module.exports = router;
