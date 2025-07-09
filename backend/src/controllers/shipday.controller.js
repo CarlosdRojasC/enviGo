@@ -387,6 +387,58 @@ async handleWebhook(req, res) {
       console.log(`🔄 Procesando evento "${eventType}" para la orden #${order.order_number}`);
       let orderUpdated = false;
 
+      // 🆕 ACTUALIZAR TRACKING URL Y DATOS DEL CONDUCTOR DESDE CUALQUIER EVENTO
+      if (webhookData.trackingUrl && webhookData.trackingUrl !== order.shipday_tracking_url) {
+        console.log('📍 Actualizando URL de tracking:', webhookData.trackingUrl);
+        order.shipday_tracking_url = webhookData.trackingUrl;
+        orderUpdated = true;
+      }
+
+      // 🆕 ACTUALIZAR INFORMACIÓN DEL CONDUCTOR SI ESTÁ DISPONIBLE
+      if (webhookData.carrier) {
+        console.log('👨‍💼 Actualizando información del conductor:', webhookData.carrier);
+        order.driver_info = {
+          name: webhookData.carrier.name || order.driver_info?.name,
+          phone: webhookData.carrier.phone || order.driver_info?.phone,
+          email: webhookData.carrier.email || order.driver_info?.email,
+          status: webhookData.carrier.status || order.driver_info?.status
+        };
+        
+        // También actualizar el ID del conductor si no lo tenemos
+        if (webhookData.carrier.id && !order.shipday_driver_id) {
+          order.shipday_driver_id = webhookData.carrier.id.toString();
+        }
+        
+        orderUpdated = true;
+      }
+
+      // 🆕 ACTUALIZAR UBICACIÓN DE ENTREGA SI ESTÁ DISPONIBLE
+      if (webhookData.delivery_details?.location) {
+        console.log('📍 Actualizando ubicación de entrega:', webhookData.delivery_details.location);
+        order.delivery_location = {
+          lat: webhookData.delivery_details.location.lat,
+          lng: webhookData.delivery_details.location.lng,
+          formatted_address: webhookData.delivery_details.formatted_address || order.delivery_location?.formatted_address
+        };
+        orderUpdated = true;
+      }
+
+      // 🆕 ACTUALIZAR TIEMPOS DE SHIPDAY SI ESTÁN DISPONIBLES
+      if (webhookData.order) {
+        const shipdayOrder = webhookData.order;
+        const currentTimes = order.shipday_times || {};
+        
+        order.shipday_times = {
+          placement_time: shipdayOrder.placement_time ? new Date(shipdayOrder.placement_time) : currentTimes.placement_time,
+          assigned_time: shipdayOrder.assigned_time ? new Date(shipdayOrder.assigned_time) : currentTimes.assigned_time,
+          pickup_time: shipdayOrder.pickedup_time ? new Date(shipdayOrder.pickedup_time) : currentTimes.pickup_time,
+          delivery_time: shipdayOrder.delivery_time ? new Date(shipdayOrder.delivery_time) : currentTimes.delivery_time,
+          expected_pickup_time: shipdayOrder.expected_pickup_time ? new Date(shipdayOrder.expected_pickup_time) : currentTimes.expected_pickup_time,
+          expected_delivery_time: shipdayOrder.expected_delivery_time ? new Date(shipdayOrder.expected_delivery_time) : currentTimes.expected_delivery_time
+        };
+        orderUpdated = true;
+      }
+
       // 3. Procesar el evento específico.
       switch (eventType) {
         
@@ -395,9 +447,9 @@ async handleWebhook(req, res) {
           console.log('📸 Evento de Prueba de Entrega detectado.');
           
           order.proof_of_delivery = {
-            photo_url: webhookData.order?.podUrls?.[0] || webhookData.pods?.[0] || null,
-            signature_url: webhookData.order?.signatureUrl || order.proof_of_delivery?.signature_url || null,
-            notes: webhookData.delivery_note || '',
+            photo_url: webhookData.order?.podUrls?.[0] || webhookData.pods?.[0] || order.proof_of_delivery?.photo_url,
+            signature_url: webhookData.order?.signatureUrl || webhookData.signatures?.[0] || order.proof_of_delivery?.signature_url,
+            notes: webhookData.delivery_note || order.proof_of_delivery?.notes || '',
             location: {
               coordinates: [
                 webhookData.delivery_details?.location?.lng || 0,
@@ -405,6 +457,15 @@ async handleWebhook(req, res) {
               ]
             }
           };
+          
+          // 🆕 TAMBIÉN GUARDAR LAS URLs EN CAMPOS ADICIONALES PARA COMPATIBILIDAD
+          if (webhookData.order?.podUrls) {
+            order.podUrls = webhookData.order.podUrls;
+          }
+          if (webhookData.order?.signatureUrl) {
+            order.signatureUrl = webhookData.order.signatureUrl;
+          }
+          
           orderUpdated = true;
           console.log('📝 Prueba de entrega guardada.');
           break;
@@ -422,6 +483,13 @@ async handleWebhook(req, res) {
 
         // Otros eventos para un seguimiento completo
         case 'ORDER_ASSIGNED':
+          if (order.status === 'pending') {
+            order.status = 'processing';
+            orderUpdated = true;
+            console.log(`⚙️ Orden #${order.order_number} marcada como "procesando".`);
+          }
+          break;
+          
         case 'ORDER_PICKED_UP':
           if (order.status !== 'shipped') {
             order.status = 'shipped';
@@ -431,7 +499,7 @@ async handleWebhook(req, res) {
           break;
           
         default:
-          console.log(`ℹ️  Evento "${eventType}" recibido, no se requieren acciones adicionales.`);
+          console.log(`ℹ️  Evento "${eventType}" recibido, datos generales actualizados.`);
           break;
       }
 
@@ -440,6 +508,15 @@ async handleWebhook(req, res) {
         order.updated_at = new Date();
         await order.save();
         console.log(`💾 Cambios guardados para la orden #${order.order_number}.`);
+        
+        // 🆕 LOG DE DEBUG PARA VER QUÉ SE GUARDÓ
+        console.log('🔍 Datos actualizados en la orden:', {
+          shipday_tracking_url: order.shipday_tracking_url,
+          driver_info: order.driver_info,
+          delivery_location: order.delivery_location,
+          proof_of_delivery: !!order.proof_of_delivery,
+          shipday_times: order.shipday_times
+        });
       }
 
       // 5. Responder a Shipday para confirmar la recepción.

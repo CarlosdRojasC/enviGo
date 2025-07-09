@@ -742,23 +742,37 @@ router.get('/orders/:orderId/tracking', authenticateToken, async (req, res) => {
 
     console.log(`✅ Generando tracking info para orden: #${order.order_number}`);
 
+    // 🆕 INTENTAR OBTENER DATOS ACTUALIZADOS DE SHIPDAY SI ES POSIBLE
+    let freshShipdayData = null;
+    if (order.shipday_order_id) {
+      try {
+        console.log('🔄 Obteniendo datos actualizados de Shipday...');
+        const ShipdayService = require('../services/shipday.service.js');
+        freshShipdayData = await ShipdayService.getOrder(order.shipday_order_id);
+        console.log('✅ Datos frescos de Shipday obtenidos');
+      } catch (shipdayError) {
+        console.log('⚠️ No se pudieron obtener datos frescos de Shipday:', shipdayError.message);
+      }
+    }
+
     // 🆕 INFORMACIÓN COMPLETA DE TRACKING
     const trackingInfo = {
       order_number: order.order_number,
       customer_name: order.customer_name,
       current_status: order.status,
       
-      // URLs de tracking
-      tracking_url: order.shipday_tracking_url,
-      has_tracking: !!order.shipday_tracking_url,
+      // 🆕 URLs de tracking (buscar en múltiples lugares)
+      tracking_url: order.shipday_tracking_url || freshShipdayData?.trackingUrl || null,
+      shipday_tracking_url: order.shipday_tracking_url || freshShipdayData?.trackingUrl || null,
+      has_tracking: !!(order.shipday_tracking_url || freshShipdayData?.trackingUrl),
       
-      // Información del conductor
+      // Información del conductor (usar datos frescos si están disponibles)
       driver: order.driver_info || {
-        id: order.shipday_driver_id,
-        name: order.driver_info?.name || null,
-        phone: order.driver_info?.phone || null,
-        email: order.driver_info?.email || null,
-        status: order.driver_info?.status || null
+        id: order.shipday_driver_id || freshShipdayData?.carrierId,
+        name: order.driver_info?.name || freshShipdayData?.carrierName || null,
+        phone: order.driver_info?.phone || freshShipdayData?.carrierPhone || null,
+        email: order.driver_info?.email || freshShipdayData?.carrierEmail || null,
+        status: order.driver_info?.status || freshShipdayData?.carrierStatus || null
       },
       
       // Ubicaciones
@@ -785,11 +799,20 @@ router.get('/orders/:orderId/tracking', authenticateToken, async (req, res) => {
       company: {
         name: order.company_id?.name,
         phone: order.company_id?.phone
+      },
+      
+      // 🆕 DATOS DE DEBUG
+      debug_info: {
+        has_shipday_order: !!order.shipday_order_id,
+        fresh_data_available: !!freshShipdayData,
+        tracking_url_source: order.shipday_tracking_url ? 'database' : 
+                             freshShipdayData?.trackingUrl ? 'shipday_api' : 'none'
       }
     };
 
     console.log(`🚚 Tracking generado para #${order.order_number}:`, {
       has_tracking_url: !!trackingInfo.tracking_url,
+      tracking_url_source: trackingInfo.debug_info.tracking_url_source,
       has_driver: !!trackingInfo.driver?.name,
       timeline_events: trackingInfo.timeline.length
     });

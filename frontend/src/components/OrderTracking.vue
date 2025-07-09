@@ -30,13 +30,20 @@
     <div v-else class="tracking-content">
       
       <!-- Tracking URL prominente -->
-      <div v-if="tracking.tracking_url" class="live-tracking-section">
-        <div class="live-tracking-card">
-          <div class="live-tracking-header">
-            <span class="live-icon">🔴</span>
-            <h3>Seguimiento en Vivo</h3>
-          </div>
+<div v-if="tracking.tracking_url || tracking.shipday_tracking_url" class="live-tracking-section">
+  <div class="live-tracking-card">
+    <div class="live-tracking-header">
+      <span class="live-icon">🔴</span>
+      <h3>Seguimiento en Vivo</h3>
+    </div>
           <p>Rastrea tu pedido en tiempo real con nuestra tecnología GPS</p>
+              <!-- 🆕 DEBUG INFO TEMPORAL -->
+    <div v-if="true" style="background: #f0f0f0; padding: 8px; margin: 8px 0; font-size: 12px;">
+      <strong>Debug URLs:</strong><br>
+      tracking_url: {{ tracking.tracking_url }}<br>
+      shipday_tracking_url: {{ tracking.shipday_tracking_url }}
+    </div>
+    
           <a 
             :href="tracking.tracking_url" 
             target="_blank" 
@@ -258,7 +265,31 @@ async function fetchTracking() {
     tracking.value = data.tracking;
     lastUpdated.value = new Date(data.last_updated);
     
-    console.log('✅ Tracking cargado:', tracking.value);
+    // 🔍 DEBUG ESPECÍFICO PARA TRACKING URL
+    console.log('🔍 VERIFICANDO TRACKING URL:');
+    console.log('- tracking.tracking_url:', data.tracking?.tracking_url);
+    console.log('- tracking.shipday_tracking_url:', data.tracking?.shipday_tracking_url);
+    console.log('- tracking.has_tracking:', data.tracking?.has_tracking);
+    console.log('- Objeto tracking completo:', data.tracking);
+    
+    // 🆕 NORMALIZAR URLs DE TRACKING - Buscar en ambos campos
+    if (data.tracking) {
+      // Asegurar que tengamos la URL en el campo correcto
+      if (data.tracking.shipday_tracking_url && !data.tracking.tracking_url) {
+        data.tracking.tracking_url = data.tracking.shipday_tracking_url;
+        console.log('✅ URL de tracking normalizada desde shipday_tracking_url');
+      }
+      
+      // Actualizar el estado
+      tracking.value = data.tracking;
+    }
+    
+    console.log('✅ Tracking cargado:', {
+      order_number: tracking.value?.order_number,
+      has_tracking_url: !!(tracking.value?.tracking_url || tracking.value?.shipday_tracking_url),
+      current_status: tracking.value?.current_status,
+      timeline_events: tracking.value?.timeline?.length || 0
+    });
     
   } catch (error) {
     console.error('❌ Error cargando tracking:', error);
