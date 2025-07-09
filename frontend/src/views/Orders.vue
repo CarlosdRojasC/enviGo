@@ -177,7 +177,7 @@
                     👁️
                   </button>
 
-                  <button v-if="order.shipday_tracking_url" @click="openLiveTracking(order)"
+                  <button v-if="order.status !== 'delivered'" @click="openLiveTracking(order)"
                     class="action-btn tracking live" title="Tracking en vivo">
                     🚚
                   </button>
