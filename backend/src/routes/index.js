@@ -9,7 +9,7 @@ const {
   isCompanyOwner,
   hasCompanyAccess
 } = require('../middlewares/auth.middleware');
-
+const { orderLimiter } = require('../app')
 // Importar validadores
 const { validateMongoId } = require('../middlewares/validators/generic.validator');
 const { validateRegistration } = require('../middlewares/validators/user.validator');
@@ -170,13 +170,7 @@ router.get('/orders/stats', authenticateToken, orderController.getStats);
 router.get('/orders/trend', authenticateToken, orderController.getOrdersTrend);
 router.get('/orders/export', authenticateToken, isAdmin, orderController.exportForOptiRoute);
 router.get('/orders/import-template', authenticateToken, isAdmin, orderController.downloadImportTemplate);
-router.post(
-  '/orders/bulk-upload', 
-  authenticateToken, 
-  isAdmin, 
-  upload.single('file'),
-  orderController.bulkUpload
-);
+router.post('/orders/bulk-upload',authenticateToken,isAdmin,upload.single('file'),orderController.bulkUpload, orderLimiter);
 
 // Ruta para obtener todas las comunas disponibles (esta puede quedarse aquí ya que es específica de orders)
 router.get('/orders/communes', authenticateToken, async (req, res) => {
@@ -238,7 +232,7 @@ router.get('/orders/communes', authenticateToken, async (req, res) => {
   }
 });
 
-router.post('/orders', authenticateToken, validateOrderCreation, orderController.create);
+router.post('/orders', authenticateToken, validateOrderCreation, orderController.create, orderLimiter);
 router.get('/orders/:id', authenticateToken, validateMongoId('id'), orderController.getById);
 router.patch('/orders/:id/status', authenticateToken, validateMongoId('id'), isAdmin, orderController.updateStatus);
 
@@ -683,7 +677,7 @@ router.post('/orders/bulk-unassign-driver', authenticateToken, isAdmin, async (r
 });
 
 // Crear múltiples órdenes en Shipday de una vez
-router.post('/orders/bulk-create-shipday', authenticateToken, isAdmin, async (req, res) => {
+router.post('/orders/bulk-create-shipday', orderLimiter, authenticateToken, isAdmin, async (req, res) => {
   try {
     const { orderIds } = req.body;
 
