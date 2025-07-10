@@ -2,6 +2,7 @@
 import axios from 'axios'
 
 // Configuración base de axios
+// Instancia principal de API
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || 'http://localhost:3001/api',
   timeout: 10000,
@@ -10,38 +11,53 @@ const api = axios.create({
   }
 })
 
-// Interceptor para agregar token
-api.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem('token')
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`
-    }
-    return config
-  },
-  (error) => {
-    return Promise.reject(error)
+// Instancia para operaciones largas (asignaciones masivas)
+const apiLongTimeout = axios.create({
+  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:3001/api',
+  timeout: 180000, // 3 minutos para operaciones masivas
+  headers: {
+    'Content-Type': 'application/json'
   }
-)
+})
 
-// Interceptor para manejar respuestas
-api.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    console.error('API Error:', error.response || error)
-    
-    if (error.response?.status === 401) {
-      // Token expirado o inválido
-      localStorage.removeItem('token')
-      localStorage.removeItem('user')
-      // No redirigir automáticamente para evitar bucles
-      console.warn('Token expirado, el usuario debe hacer login nuevamente')
+// Función para configurar interceptors (reutilizable)
+const setupInterceptors = (instance) => {
+  // Interceptor para agregar token
+  instance.interceptors.request.use(
+    (config) => {
+      const token = localStorage.getItem('token')
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`
+      }
+      return config
+    },
+    (error) => {
+      return Promise.reject(error)
     }
-    
-    return Promise.reject(error)
-  }
-)
+  )
 
+  // Interceptor para manejar respuestas
+  instance.interceptors.response.use(
+    (response) => response,
+    (error) => {
+      console.error('API Error:', error.response || error)
+      
+      if (error.response?.status === 401) {
+        // Token expirado o inválido
+        localStorage.removeItem('token')
+        localStorage.removeItem('user')
+        // No redirigir automáticamente para evitar bucles
+        console.warn('Token expirado, el usuario debe hacer login nuevamente')
+      }
+      
+      return Promise.reject(error)
+    }
+  )
+}
+
+// Aplicar interceptors a ambas instancias
+setupInterceptors(api)
+setupInterceptors(apiLongTimeout)
 
 
 // Servicios de autenticación
