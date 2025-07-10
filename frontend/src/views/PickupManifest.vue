@@ -159,6 +159,7 @@
 import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { apiService } from '../services/api'
+import jsPDF from 'jspdf'
 
 const route = useRoute()
 const router = useRouter()
