@@ -48,18 +48,12 @@
 
     <!-- Sección de acciones masivas -->
     <div v-if="selectedOrders.length > 0" class="actions-header">
-      <button 
-        @click="generateManifest"
-        :disabled="selectedOrders.length === 0"
-        class="btn-manifest">
-        Generar Manifiesto ({{ selectedOrders.length }})
-      </button>
-      <button 
-        @click="markSelectedAsReady"
-        :disabled="isMarkingReady"
-        class="btn-mark-ready">
-        {{ isMarkingReady ? 'Marcando...' : `✔️ Marcar ${selectedOrders.length} como Listo` }}
-      </button>
+        <button 
+      @click="generateManifestAndMarkReady"
+      :disabled="selectedOrders.length === 0 || isMarkingReady"
+      class="btn-manifest">
+      {{ isMarkingReady ? 'Procesando...' : `📋 Generar Manifiesto y Marcar ${selectedOrders.length} como Listos` }}
+    </button>
     </div>
 
     <!-- Tabla de pedidos -->
@@ -397,89 +391,50 @@ function selectAllOrders(event) {
     selectedOrders.value = [];
   }
 }
-async function markSelectedAsReady() {
+async function generateManifestAndMarkReady() {
   if (selectedOrders.value.length === 0) {
-    alert('No hay pedidos seleccionados.');
+    alert('Selecciona al menos un pedido.');
     return;
   }
-  
-  const confirmation = confirm(
-    `¿Estás seguro de marcar ${selectedOrders.value.length} pedido(s) como "Listo para Retiro"?`
-  );
-  
-  if (!confirmation) return;
-  
+
+  const confirmMsg = `¿Deseas generar el manifiesto y marcar ${selectedOrders.value.length} pedido(s) como "Listo para Retiro"?`;
+  if (!confirm(confirmMsg)) return;
+
   isMarkingReady.value = true;
-  
+
   try {
-    console.log('🔄 Marcando pedidos como listos:', selectedOrders.value);
-    
-    // Llamar a la API para marcar múltiples pedidos
-    const response = await apiService.orders.markMultipleAsReady(selectedOrders.value);
-    
-    // Actualizar el estado local de los pedidos
+    // 1. Marcar pedidos seleccionados como listos
+    await apiService.orders.markMultipleAsReady(selectedOrders.value);
+
+    // 2. Actualizar estado local
     selectedOrders.value.forEach(orderId => {
-      const orderIndex = orders.value.findIndex(o => o._id === orderId);
-      if (orderIndex !== -1) {
-        orders.value[orderIndex].status = 'processing'; // o el estado que corresponda
+      const index = orders.value.findIndex(o => o._id === orderId);
+      if (index !== -1) {
+        orders.value[index].status = 'processing'; // O el estado que uses para "Listo para Retiro"
       }
     });
-    
-    console.log('✅ Pedidos marcados como listos:', response.data);
-    
-    alert(`${selectedOrders.value.length} pedido(s) marcado(s) como "Listo para Retiro" exitosamente.`);
-    
-    // Limpiar selección
+
+    // 3. Generar URL y abrir manifiesto en nueva pestaña
+    const ids = selectedOrders.value.join(',');
+    const routeData = router.resolve({ name: 'PickupManifest', query: { ids } });
+    const newWindow = window.open(routeData.href, '_blank');
+
+    if (!newWindow) {
+      alert('No se pudo abrir el manifiesto. Habilita las ventanas emergentes.');
+      return;
+    }
+
+    // 4. Limpiar selección
     selectedOrders.value = [];
-    
+
+    alert('✅ Pedidos marcados como listos y manifiesto generado exitosamente.');
   } catch (error) {
-    console.error('❌ Error marcando pedidos como listos:', error);
-    alert('Error al marcar los pedidos como listos. Por favor, inténtalo de nuevo.');
+    console.error('❌ Error al generar manifiesto y marcar pedidos:', error);
+    alert('Ocurrió un error. Por favor, inténtalo nuevamente.');
   } finally {
     isMarkingReady.value = false;
   }
 }
-// ✅ AGREGADO: Función para generar manifiesto
-function generateManifest() {
-  if (selectedOrders.value.length === 0) {
-    alert('Por favor, selecciona al menos un pedido.');
-    return;
-  }
-  
-  try {
-    // Convertir el array de IDs a un string separado por comas
-    const ids = selectedOrders.value.join(',');
-    
-    console.log('📋 Generando manifiesto para pedidos:', selectedOrders.value);
-    
-    // Crear la URL de la ruta
-    const routeData = router.resolve({ 
-      name: 'PickupManifest', 
-      query: { ids } 
-    });
-    
-    console.log('🔗 URL del manifiesto:', routeData.href);
-    
-    // Abrir en una nueva pestaña
-    const newWindow = window.open(routeData.href, '_blank');
-    
-    // Verificar si la ventana se abrió correctamente
-    if (!newWindow) {
-      alert('No se pudo abrir el manifiesto. Por favor, permite las ventanas emergentes.');
-      return;
-    }
-    
-    console.log('✅ Manifiesto abierto en nueva pestaña');
-    
-    // Limpiar selección después de generar el manifiesto
-    selectedOrders.value = [];
-    
-  } catch (error) {
-    console.error('❌ Error generando manifiesto:', error);
-    alert('Error al generar el manifiesto. Por favor, inténtalo de nuevo.');
-  }
-}
-
 // Funciones de tracking y pruebas de entrega
 function hasTrackingInfo(order) {
   // ✅ EXCLUIR EXPLÍCITAMENTE PEDIDOS ENTREGADOS
