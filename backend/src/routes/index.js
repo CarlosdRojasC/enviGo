@@ -373,7 +373,12 @@ router.post('/orders/bulk-assign-driver', authenticateToken, isAdmin, async (req
       return res.status(400).json({ error: 'Se requiere el ID del conductor.' });
     }
 
-    console.log(`🚀 Iniciando asignación masiva: ${orderIds.length} pedidos al conductor ${driverId}`);
+    console.log(`🚀 BULK ASSIGN: ${orderIds.length} pedidos → conductor ${driverId}`);
+
+    // Configuración de batch processing optimizada
+    const BATCH_SIZE = 2; // Reducido para mayor estabilidad
+    const BATCH_DELAY = 3000; // 3 segundos entre lotes
+    const ITEM_DELAY = 1000; // 1 segundo entre items
 
     const results = {
       successful: [],
@@ -381,124 +386,286 @@ router.post('/orders/bulk-assign-driver', authenticateToken, isAdmin, async (req
       total: orderIds.length
     };
 
-    // Procesar cada orden secuencialmente
-    for (let i = 0; i < orderIds.length; i++) {
-      const orderId = orderIds[i];
+    // Validar conductor antes de empezar
+    try {
+      const driver = await ShipdayService.getValidatedDriver(driverId);
+      console.log(`✅ Conductor validado: ${driver.name} (${driver.email})`);
+    } catch (driverError) {
+      return res.status(400).json({ 
+        error: `Conductor inválido: ${driverError.message}`,
+        driver_id: driverId
+      });
+    }
+
+    // Dividir en lotes
+    const batches = [];
+    for (let i = 0; i < orderIds.length; i += BATCH_SIZE) {
+      batches.push(orderIds.slice(i, i + BATCH_SIZE));
+    }
+
+    console.log(`📦 Configuración: ${batches.length} lotes de ${BATCH_SIZE} items, ${BATCH_DELAY}ms entre lotes`);
+
+    // Procesar lotes secuencialmente
+    for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
+      const batch = batches[batchIndex];
+      const batchNumber = batchIndex + 1;
       
-      try {
-        console.log(`📦 Procesando orden ${i + 1}/${orderIds.length}: ${orderId}`);
+      console.log(`\n🔄 === LOTE ${batchNumber}/${batches.length} ===`);
+      console.log(`📋 Procesando: ${batch.join(', ')}`);
+
+      // Procesar items del lote actual
+      for (let itemIndex = 0; itemIndex < batch.length; itemIndex++) {
+        const orderId = batch[itemIndex];
+        const itemNumber = itemIndex + 1;
         
-        // Obtener información de la orden
+        console.log(`\n📦 Lote ${batchNumber}.${itemNumber}: Orden ${orderId}`);
+        
+        try {
+          // Obtener y validar orden
+          const order = await Order.findById(orderId).populate('company_id');
+          
+          if (!order) {
+            results.failed.push({
+              orderId,
+              orderNumber: 'No encontrado',
+              error: 'Orden no encontrada en BD'
+            });
+            console.log(`❌ Orden ${orderId}: No encontrada`);
+            continue;
+          }
+
+          // Verificar si ya tiene conductor
+          if (order.shipday_driver_id) {
+            results.failed.push({
+              orderId,
+              orderNumber: order.order_number,
+              error: 'Ya tiene conductor asignado'
+            });
+            console.log(`⚠️ Orden ${order.order_number}: Ya asignada`);
+            continue;
+          }
+
+          let shipdayOrderId = order.shipday_order_id;
+
+          // Crear en Shipday si no existe
+          if (!shipdayOrderId) {
+            console.log(`📦 Creando ${order.order_number} en Shipday...`);
+            
+            const orderData = {
+              orderNumber: order.order_number,
+              customerName: order.customer_name,
+              customerAddress: order.shipping_address,
+              customerEmail: order.customer_email,
+              customerPhoneNumber: order.customer_phone,
+              restaurantName: order.company_id?.name || 'enviGo',
+              restaurantAddress: order.company_id?.address || 'santa hilda 1447, quilicura',
+              deliveryInstruction: order.notes || '',
+              deliveryFee: order.shipping_cost || 1800
+            };
+
+            const shipdayOrder = await ShipdayService.createOrder(orderData);
+            shipdayOrderId = shipdayOrder.orderId;
+
+            order.shipday_order_id = shipdayOrderId;
+            await order.save();
+
+            console.log(`✅ ${order.order_number} creada: ${shipdayOrderId}`);
+            
+            // Pausa después de crear
+            await new Promise(resolve => setTimeout(resolve, 500));
+          }
+
+          // Asignar conductor
+          console.log(`🚚 Asignando conductor a ${order.order_number}...`);
+          
+          const assignmentResult = await ShipdayService.assignOrderWithValidation(shipdayOrderId, driverId);
+          
+          // Actualizar orden en BD
+          order.shipday_driver_id = driverId;
+          order.status = 'shipped';
+          await order.save();
+
+          results.successful.push({
+            orderId: order._id,
+            orderNumber: order.order_number,
+            shipdayOrderId: shipdayOrderId,
+            message: 'Asignado exitosamente'
+          });
+
+          console.log(`✅ ${order.order_number}: ÉXITO`);
+
+        } catch (error) {
+          const errorMsg = error.message || 'Error desconocido';
+          
+          results.failed.push({
+            orderId,
+            orderNumber: order?.order_number || 'Error',
+            error: errorMsg.includes('Límite de requests') 
+              ? 'Rate limit alcanzado'
+              : errorMsg
+          });
+
+          console.log(`❌ Orden ${orderId}: ${errorMsg}`);
+
+          // Si es rate limit, pausa extra
+          if (errorMsg.includes('Límite de requests') || errorMsg.includes('rate limit')) {
+            console.log(`⏱️ Rate limit detectado, pausa extra de 5s...`);
+            await new Promise(resolve => setTimeout(resolve, 5000));
+          }
+        }
+
+        // Pausa entre items del lote
+        if (itemIndex < batch.length - 1) {
+          console.log(`⏱️ Pausa entre items: ${ITEM_DELAY}ms`);
+          await new Promise(resolve => setTimeout(resolve, ITEM_DELAY));
+        }
+      }
+
+      // Pausa entre lotes
+      if (batchIndex < batches.length - 1) {
+        console.log(`\n⏱️ PAUSA ENTRE LOTES: ${BATCH_DELAY}ms`);
+        await new Promise(resolve => setTimeout(resolve, BATCH_DELAY));
+      }
+    }
+
+    // Resumen final
+    const successRate = Math.round((results.successful.length / results.total) * 100);
+    
+    console.log(`\n🏁 RESUMEN FINAL:`);
+    console.log(`📊 Total: ${results.total}`);
+    console.log(`✅ Exitosos: ${results.successful.length}`);
+    console.log(`❌ Fallidos: ${results.failed.length}`);
+    console.log(`📈 Tasa de éxito: ${successRate}%`);
+
+    res.status(200).json({
+      message: `Asignación masiva completada: ${results.successful.length}/${results.total} exitosas (${successRate}%)`,
+      results,
+      summary: {
+        total: results.total,
+        successful: results.successful.length,
+        failed: results.failed.length,
+        success_rate: successRate,
+        processing_info: {
+          total_batches: batches.length,
+          batch_size: BATCH_SIZE,
+          batch_delay_ms: BATCH_DELAY,
+          item_delay_ms: ITEM_DELAY,
+          estimated_time_seconds: Math.ceil((results.total / BATCH_SIZE) * (BATCH_DELAY / 1000))
+        }
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ ERROR CRÍTICO en asignación masiva:', error);
+    res.status(500).json({ 
+      error: error.message || 'Error interno del servidor',
+      details: 'Error procesando la asignación masiva con batch processing'
+    });
+  }
+});
+
+// ==================== ENDPOINT PARA LOTES INDIVIDUALES ====================
+
+// Endpoint para procesar un lote específico (para progreso en tiempo real)
+router.post('/orders/bulk-assign-driver-batch', authenticateToken, isAdmin, async (req, res) => {
+  try {
+    const { orderIds, driverId, batchInfo } = req.body;
+
+    if (!Array.isArray(orderIds) || orderIds.length === 0) {
+      return res.status(400).json({ error: 'Se requiere un array de IDs de órdenes.' });
+    }
+
+    console.log(`🔄 LOTE ${batchInfo?.currentBatch || '?'}/${batchInfo?.totalBatches || '?'}: ${orderIds.length} pedidos`);
+
+    const results = {
+      successful: [],
+      failed: [],
+      total: orderIds.length
+    };
+
+    // Procesar cada orden del lote
+    for (const orderId of orderIds) {
+      try {
         const order = await Order.findById(orderId).populate('company_id');
         
         if (!order) {
           results.failed.push({
             orderId,
             orderNumber: 'No encontrado',
-            error: 'Orden no encontrada en la base de datos'
+            error: 'Orden no encontrada'
           });
           continue;
         }
 
-        if (order.shipday_order_id) {
+        if (order.shipday_driver_id) {
           results.failed.push({
             orderId,
             orderNumber: order.order_number,
-            error: 'La orden ya está asignada en Shipday'
+            error: 'Ya asignada'
           });
           continue;
         }
 
-        // Usar el mismo método que funciona individualmente
         let shipdayOrderId = order.shipday_order_id;
 
-        // Si no está en Shipday, crearla primero
+        // Crear en Shipday si no existe
         if (!shipdayOrderId) {
-          const orderDataForShipday = {
+          const orderData = {
             orderNumber: order.order_number,
             customerName: order.customer_name,
             customerAddress: order.shipping_address,
-            restaurantName: "enviGo",
-            restaurantAddress: "Santa hilda 1447, quilicura",
-            customerPhoneNumber: order.customer_phone || '',
+            customerEmail: order.customer_email,
+            customerPhoneNumber: order.customer_phone,
+            restaurantName: order.company_id?.name || 'enviGo',
+            restaurantAddress: order.company_id?.address || 'santa hilda 1447, quilicura',
             deliveryInstruction: order.notes || '',
-            deliveryFee: 1800,
-            total: parseFloat(order.total_amount) || parseFloat(order.shipping_cost) || 1,
-            customerEmail: order.customer_email || '',
+            deliveryFee: order.shipping_cost || 1800
           };
-          
-          const createdShipdayOrder = await ShipdayService.createOrder(orderDataForShipday);
-          
-          if (!createdShipdayOrder || !createdShipdayOrder.orderId) {
-            results.failed.push({
-              orderId,
-              orderNumber: order.order_number,
-              error: 'No se pudo crear la orden en Shipday'
-            });
-            continue;
-          }
-          
-          shipdayOrderId = createdShipdayOrder.orderId;
+
+          const shipdayOrder = await ShipdayService.createOrder(orderData);
+          shipdayOrderId = shipdayOrder.orderId;
+
           order.shipday_order_id = shipdayOrderId;
-          order.status = 'processing';
           await order.save();
         }
 
-        // Asignar conductor usando el método que funciona
-        await ShipdayService.assignOrderNewUrl(shipdayOrderId, driverId);
+        // Asignar conductor
+        await ShipdayService.assignOrderWithValidation(shipdayOrderId, driverId);
         
-        // Actualizar orden local
         order.shipday_driver_id = driverId;
         order.status = 'shipped';
         await order.save();
 
         results.successful.push({
-          orderId,
+          orderId: order._id,
           orderNumber: order.order_number,
           shipdayOrderId: shipdayOrderId,
-          message: 'Asignado exitosamente'
+          message: 'Asignado en lote'
         });
-
-        console.log(`✅ Orden ${order.order_number} asignada exitosamente`);
 
       } catch (error) {
-        console.error(`❌ Error procesando orden ${orderId}:`, error);
-        
         results.failed.push({
           orderId,
-          orderNumber: 'Error',
-          error: error.message || 'Error desconocido'
+          orderNumber: order?.order_number || 'Error',
+          error: error.message
         });
       }
 
-      // Pausa pequeña entre asignaciones para no sobrecargar
-      if (i < orderIds.length - 1) {
-        await new Promise(resolve => setTimeout(resolve, 1200));
-      }
+      // Pausa entre items del lote
+      await new Promise(resolve => setTimeout(resolve, 800));
     }
 
-    console.log('🏁 Asignación masiva completada:', {
-      total: results.total,
-      successful: results.successful.length,
-      failed: results.failed.length
-    });
-
-    res.status(200).json({
-      message: `Asignación masiva completada: ${results.successful.length} exitosas, ${results.failed.length} fallidas.`,
+    res.json({
+      message: `Lote procesado: ${results.successful.length}/${results.total} exitosos`,
       results,
-      summary: {
-        total: results.total,
-        successful: results.successful.length,
-        failed: results.failed.length,
-        success_rate: Math.round((results.successful.length / results.total) * 100)
-      }
+      batchInfo
     });
 
   } catch (error) {
-    console.error('❌ Error en asignación masiva:', error);
+    console.error('❌ Error procesando lote:', error);
     res.status(500).json({ 
-      error: error.message || 'Error interno del servidor en asignación masiva',
-      details: 'Error procesando la asignación masiva'
+      error: error.message,
+      batchInfo: req.body.batchInfo
     });
   }
 });

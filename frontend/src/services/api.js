@@ -1,31 +1,38 @@
 // frontend/src/services/api.js
 import axios from 'axios'
+const baseURL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
 
 // Configuración base de axios
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:3001/api',
-  timeout: 10000,
+  baseURL,
+  timeout: 15000,
   headers: {
     'Content-Type': 'application/json'
   }
 })
+const apiLongTimeout = axios.create({
+  baseURL,
+  timeout: 180000, // 2 minutos para operaciones masivas
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
 
 // Interceptor para agregar token
-api.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem('token')
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`
-    }
-    return config
-  },
-  (error) => {
-    return Promise.reject(error)
-  }
-)
+[api, apiLongTimeout].forEach(instance => {
+  instance.interceptors.request.use(
+    (config) => {
+      const token = localStorage.getItem('auth_token');
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
+      return config;
+    },
+    (error) => Promise.reject(error)
+  );
 
-// Interceptor para manejar respuestas
-api.interceptors.response.use(
+  instance.interceptors.response.use(
   (response) => response,
   (error) => {
     console.error('API Error:', error.response || error)
@@ -40,7 +47,10 @@ api.interceptors.response.use(
     
     return Promise.reject(error)
   }
-)
+);
+});
+// Interceptor para manejar respuestas
+
 
 
 
@@ -178,48 +188,166 @@ getAvailableCommunes: (params = {}) => api.get('/orders/communes', { params }),
    * @param {string} driverId - ID del conductor en Shipday
    * @returns {Promise} Respuesta con resultados de la asignación masiva
    */
-  bulkAssignDriver: async (orderIds, driverId) => {
-    try {
-      console.log('📦 API: Iniciando asignación masiva:', {
-        ordersCount: orderIds.length,
-        driverId
-      });
-      
-      const response = await api.post('/orders/bulk-assign-driver', {
-        orderIds,
-        driverId
-      });
-      
-      console.log('✅ API: Asignación masiva completada:', response.data);
-      return response;
-      
-    } catch (error) {
-      console.error('❌ API: Error en asignación masiva:', error.response || error);
-      throw error;
-    }
-  },
+bulkAssignDriver: async (orderIds, driverId) => {
+      try {
+        console.log('📦 API: Iniciando asignación masiva con timeout extendido:', {
+          ordersCount: orderIds.length,
+          driverId,
+          estimatedTime: `${Math.ceil(orderIds.length / 3) * 2} segundos`
+        });
+        
+        const response = await apiLongTimeout.post('/orders/bulk-assign-driver', {
+          orderIds,
+          driverId
+        });
+        
+        console.log('✅ API: Asignación masiva completada:', response.data);
+        return response;
+        
+      } catch (error) {
+        console.error('❌ API: Error en asignación masiva:', error);
+        
+        // Manejo específico de timeouts
+        if (error.code === 'ECONNABORTED') {
+          throw new Error('La asignación está tardando más de lo esperado. Verifica el estado de los pedidos manualmente.');
+        }
+        
+        throw error;
+      }
+    },
 
-  /**
-   * Verificar el estado de múltiples asignaciones
-   * @param {Array} orderIds - Array de IDs de pedidos
-   * @returns {Promise} Estado de asignación de cada pedido
-   */
-  bulkCheckAssignmentStatus: async (orderIds) => {
-    try {
-      console.log('🔍 API: Verificando estado de asignaciones masivas:', orderIds);
-      
-      const response = await api.post('/orders/bulk-assignment-status', {
-        orderIds
-      });
-      
-      console.log('✅ API: Estados de asignación obtenidos:', response.data);
-      return response;
-      
-    } catch (error) {
-      console.error('❌ API: Error verificando estados:', error.response || error);
-      throw error;
-    }
-  },
+    /**
+     * Verificar el estado de múltiples asignaciones
+     */
+    bulkCheckAssignmentStatus: async (orderIds) => {
+      try {
+        console.log('🔍 API: Verificando estado de asignaciones masivas:', orderIds);
+        
+        const response = await api.post('/orders/bulk-assignment-status', {
+          orderIds
+        });
+        
+        console.log('✅ API: Estados de asignación obtenidos:', response.data);
+        return response;
+        
+      } catch (error) {
+        console.error('❌ API: Error verificando estados:', error.response || error);
+        throw error;
+      }
+    },
+
+    /**
+     * Obtener resumen de capacidad de asignación masiva
+     */
+    bulkAssignmentPreview: async (orderIds) => {
+      try {
+        console.log('🔍 API: Obteniendo preview de asignación masiva:', orderIds);
+        
+        const response = await api.post('/orders/bulk-assignment-preview', {
+          orderIds
+        });
+        
+        console.log('✅ API: Preview obtenido:', response.data);
+        return response;
+        
+      } catch (error) {
+        console.error('❌ API: Error en preview:', error.response || error);
+        throw error;
+      }
+    },
+
+    /**
+     * ========== NUEVO: ASIGNACIÓN MASIVA CON PROGRESO EN TIEMPO REAL ==========
+     * Procesa lotes de pedidos y reporta progreso
+     */
+    bulkAssignDriverWithProgress: async (orderIds, driverId, onProgress) => {
+      try {
+        console.log('📦 API: Iniciando asignación masiva con progreso:', {
+          ordersCount: orderIds.length,
+          driverId
+        });
+
+        // Dividir en lotes pequeños para procesar
+        const BATCH_SIZE = 3;
+        const batches = [];
+        for (let i = 0; i < orderIds.length; i += BATCH_SIZE) {
+          batches.push(orderIds.slice(i, i + BATCH_SIZE));
+        }
+
+        const results = {
+          successful: [],
+          failed: [],
+          total: orderIds.length
+        };
+
+        // Procesar cada lote
+        for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
+          const batch = batches[batchIndex];
+          
+          console.log(`🔄 Procesando lote ${batchIndex + 1}/${batches.length}`);
+
+          try {
+            // Procesar lote individual
+            const batchResponse = await apiLongTimeout.post('/orders/bulk-assign-driver-batch', {
+              orderIds: batch,
+              driverId,
+              batchInfo: {
+                currentBatch: batchIndex + 1,
+                totalBatches: batches.length
+              }
+            });
+
+            // Agregar resultados del lote
+            results.successful.push(...batchResponse.data.results.successful);
+            results.failed.push(...batchResponse.data.results.failed);
+
+            // Reportar progreso
+            if (onProgress) {
+              onProgress({
+                completed: results.successful.length + results.failed.length,
+                total: orderIds.length,
+                currentBatch: batchIndex + 1,
+                totalBatches: batches.length,
+                batchResults: batchResponse.data.results
+              });
+            }
+
+          } catch (batchError) {
+            console.error(`❌ Error en lote ${batchIndex + 1}:`, batchError);
+            
+            // Marcar todo el lote como fallido
+            batch.forEach(orderId => {
+              results.failed.push({
+                orderId,
+                orderNumber: 'Error de lote',
+                error: 'Error procesando lote completo'
+              });
+            });
+          }
+
+          // Pausa entre lotes
+          if (batchIndex < batches.length - 1) {
+            await new Promise(resolve => setTimeout(resolve, 1000));
+          }
+        }
+
+        return {
+          data: {
+            results,
+            summary: {
+              total: results.total,
+              successful: results.successful.length,
+              failed: results.failed.length,
+              success_rate: Math.round((results.successful.length / results.total) * 100)
+            }
+          }
+        };
+
+      } catch (error) {
+        console.error('❌ API: Error en asignación masiva con progreso:', error);
+        throw error;
+      }
+    },
 
   /**
    * Cancelar asignaciones masivas (si es necesario)
