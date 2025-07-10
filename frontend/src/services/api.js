@@ -1,7 +1,6 @@
 // frontend/src/services/api.js
 import axios from 'axios'
-const baseURL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
-
+ const baseURL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
 // Configuración base de axios
 const api = axios.create({
   baseURL,
@@ -32,7 +31,9 @@ const apiLongTimeout = axios.create({
     (error) => Promise.reject(error)
   );
 
-  instance.interceptors.response.use(
+});
+// Interceptor para manejar respuestas
+api.interceptors.response.use(
   (response) => response,
   (error) => {
     console.error('API Error:', error.response || error)
@@ -47,10 +48,7 @@ const apiLongTimeout = axios.create({
     
     return Promise.reject(error)
   }
-);
-});
-// Interceptor para manejar respuestas
-
+)
 
 
 
