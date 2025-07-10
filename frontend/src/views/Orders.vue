@@ -46,6 +46,16 @@
       </div>
     </div>
 
+    <!-- Sección de acciones masivas -->
+    <div v-if="selectedOrders.length > 0" class="actions-header">
+      <button 
+        @click="generateManifest"
+        :disabled="selectedOrders.length === 0"
+        class="btn-manifest">
+        Generar Manifiesto ({{ selectedOrders.length }})
+      </button>
+    </div>
+
     <!-- Tabla de pedidos -->
     <div class="orders-table-section">
       <div v-if="loadingOrders" class="loading-state">
@@ -63,6 +73,13 @@
         <table class="orders-table">
           <thead>
             <tr>
+              <th class="col-checkbox">
+                <input 
+                  type="checkbox" 
+                  @change="selectAllOrders"
+                  :checked="selectedOrders.length === orders.length && orders.length > 0"
+                />
+              </th>
               <th class="col-order">#Pedido</th>
               <th class="col-customer">Cliente</th>
               <th class="col-address">Dirección</th>
@@ -75,6 +92,15 @@
           </thead>
           <tbody>
             <tr v-for="order in orders" :key="order._id" class="order-row" :class="getRowClass(order)">
+              <!-- Checkbox para seleccionar pedido -->
+              <td class="col-checkbox">
+                <input 
+                  type="checkbox"
+                  :value="order._id"
+                  v-model="selectedOrders"
+                  class="checkbox-input"
+                />
+              </td>
 
               <!-- Número de pedido -->
               <td class="col-order">
@@ -119,39 +145,35 @@
               </td>
 
               <!-- Tracking -->
-  <td class="col-tracking">
-   <div class="tracking-cell">
-    
-    <!-- PRIORIDAD 1: Pedido entregado - SIEMPRE mostrar prueba de entrega -->
-    <div v-if="order.status === 'delivered'" class="proof-delivery">
-      <span class="proof-indicator">📋 Prueba</span>
-      <button @click="showProofOfDelivery(order)" class="proof-btn">
-        📸 Ver Prueba
-      </button>
-    </div>
-    <!-- PRIORIDAD 2: Tracking en vivo (solo para pedidos NO entregados) -->
-    <div v-if="order.status === 'shipped'" class="tracking-live">
-      <span class="live-indicator">🔴 Live</span>
-      <button @click="openLiveTracking(order)" class="track-live-btn">
-        📍 Ver Mapa
-      </button>
-    </div>
-    
-    <!-- PRIORIDAD 3: Tracking general (para pedidos sincronizados pero sin live tracking) -->
-    <div v-else-if="hasTrackingInfo(order)" class="tracking-available">
-      <span class="tracking-indicator">📦 Info</span>
-      <button @click="openTrackingModal(order)" class="tracking-btn">
-        🚚 Seguimiento
-      </button>
-    </div>
-    
-    <!-- PRIORIDAD 4: Sin información de tracking -->
-    <div v-else class="no-tracking">
-      <span class="no-tracking-text">Sin tracking</span>
-    </div>
-
-  </div>
-</td>
+              <td class="col-tracking">
+                <div class="tracking-cell">
+                  <!-- PRIORIDAD 1: Pedido entregado - SIEMPRE mostrar prueba de entrega -->
+                  <div v-if="order.status === 'delivered'" class="proof-delivery">
+                    <span class="proof-indicator">📋 Prueba</span>
+                    <button @click="showProofOfDelivery(order)" class="proof-btn">
+                      📸 Ver Prueba
+                    </button>
+                  </div>
+                  <!-- PRIORIDAD 2: Tracking en vivo (solo para pedidos NO entregados) -->
+                  <div v-else-if="order.status === 'shipped'" class="tracking-live">
+                    <span class="live-indicator">🔴 Live</span>
+                    <button @click="openLiveTracking(order)" class="track-live-btn">
+                      📍 Ver Mapa
+                    </button>
+                  </div>
+                  <!-- PRIORIDAD 3: Tracking general (para pedidos sincronizados pero sin live tracking) -->
+                  <div v-else-if="hasTrackingInfo(order)" class="tracking-available">
+                    <span class="tracking-indicator">📦 Info</span>
+                    <button @click="openTrackingModal(order)" class="tracking-btn">
+                      🚚 Seguimiento
+                    </button>
+                  </div>
+                  <!-- PRIORIDAD 4: Sin información de tracking -->
+                  <div v-else class="no-tracking">
+                    <span class="no-tracking-text">Sin tracking</span>
+                  </div>
+                </div>
+              </td>
 
               <!-- Total -->
               <td class="col-amount">
@@ -226,7 +248,6 @@
     </div>
 
     <!-- Modales -->
-
     <Modal v-model="showOrderDetailsModal" :title="`Pedido #${selectedOrder?.order_number}`" width="800px">
       <OrderDetails v-if="selectedOrder" :order="selectedOrder" />
     </Modal>
@@ -234,11 +255,11 @@
     <Modal v-model="showTrackingModal" :title="`🚚 Tracking - Pedido #${selectedTrackingOrder?.order_number}`"
       width="700px">
       <OrderTracking 
-    v-if="selectedTrackingOrder" 
-    :order-id="selectedTrackingOrder._id" 
-    @support-contact="handleTrackingSupport"
-    @show-proof="handleShowProof"
-  />
+        v-if="selectedTrackingOrder" 
+        :order-id="selectedTrackingOrder._id" 
+        @support-contact="handleTrackingSupport"
+        @show-proof="handleShowProof"
+      />
     </Modal>
 
     <Modal v-model="showProofModal" :title="`📋 Prueba de Entrega - #${selectedProofOrder?.order_number}`"
@@ -276,30 +297,36 @@
 
 <script setup>
 import { ref, onMounted, computed } from 'vue';
+import { useRouter } from 'vue-router'; // ✅ AGREGADO
 import { useAuthStore } from '../store/auth';
 import { apiService } from '../services/api';
 import Modal from '../components/Modal.vue';
 import OrderDetails from '../components/OrderDetails.vue';
 import OrderTracking from '../components/OrderTracking.vue';
-import ProofOfDelivery from '../components/ProofOfDelivery.vue'; // 🆕 NUEVO
+import ProofOfDelivery from '../components/ProofOfDelivery.vue';
 
+const router = useRouter(); // ✅ AGREGADO
 const auth = useAuthStore();
 const user = computed(() => auth.user);
 
 // Estado de la página
 const orders = ref([]);
 const channels = ref([]);
-const pagination = ref({ page: 1, limit: 20, total: 0, totalPages: 1 }); // Más pedidos por página
+const pagination = ref({ page: 1, limit: 20, total: 0, totalPages: 1 });
 const filters = ref({ status: '', channel_id: '', date_from: '', date_to: '', search: '' });
 const loadingOrders = ref(true);
+const loadingOrderDetails = ref(false); // ✅ AGREGADO
+
+// ✅ AGREGADO: Estado para selección de pedidos
+const selectedOrders = ref([]);
 
 // Estados de modales
 const selectedOrder = ref(null);
 const showOrderDetailsModal = ref(false);
 const selectedTrackingOrder = ref(null);
 const showTrackingModal = ref(false);
-const selectedProofOrder = ref(null); // 🆕 NUEVO
-const showProofModal = ref(false); // 🆕 NUEVO
+const selectedProofOrder = ref(null);
+const showProofModal = ref(false);
 const supportOrder = ref(null);
 const showSupportModal = ref(false);
 
@@ -337,13 +364,14 @@ async function fetchChannels() {
     console.error('Error fetching channels:', error);
   }
 }
+
 async function markAsReady(orderToUpdate) {
   try {
     await apiService.orders.markAsReady(orderToUpdate._id);
     
     const index = orders.value.findIndex(o => o._id === orderToUpdate._id);
     if (index !== -1) {
-      orders.value[index].status = 'ready_for_pickup';
+      orders.value[index].status = 'Listo para retiro';
     }
     
     alert(`Pedido #${orderToUpdate.order_number} marcado como listo para retiro.`);
@@ -353,8 +381,29 @@ async function markAsReady(orderToUpdate) {
     alert("No se pudo actualizar el estado del pedido.");
   }
 }
-// 🆕 NUEVAS FUNCIONES PARA TRACKING Y PRUEBAS DE ENTREGA
 
+// ✅ AGREGADO: Función para seleccionar todos los pedidos
+function selectAllOrders(event) {
+  if (event.target.checked) {
+    selectedOrders.value = orders.value.map(order => order._id);
+  } else {
+    selectedOrders.value = [];
+  }
+}
+
+// ✅ AGREGADO: Función para generar manifiesto
+function generateManifest() {
+  if (selectedOrders.value.length === 0) return;
+  
+  // Convertir el array de IDs a un string separado por comas
+  const ids = selectedOrders.value.join(',');
+  
+  // Abrir en una nueva pestaña
+  const routeData = router.resolve({ name: 'PickupManifest', query: { ids } });
+  window.open(routeData.href, '_blank');
+}
+
+// Funciones de tracking y pruebas de entrega
 function hasTrackingInfo(order) {
   // ✅ EXCLUIR EXPLÍCITAMENTE PEDIDOS ENTREGADOS
   if (order.status === 'delivered') {
@@ -366,6 +415,7 @@ function hasTrackingInfo(order) {
          order.shipday_order_id ||
          ['processing', 'shipped'].includes(order.status);
 }
+
 function hasProofOfDelivery(order) {
   // Solo verificar pruebas si el pedido está entregado
   if (order.status !== 'delivered') {
@@ -401,12 +451,15 @@ function showProofOfDelivery(order) {
 async function openOrderDetailsModal(order) {
   selectedOrder.value = null;
   showOrderDetailsModal.value = true;
+  loadingOrderDetails.value = true;
   try {
     const { data } = await apiService.orders.getById(order._id);
     selectedOrder.value = data;
   } catch (error) {
     console.error("Error al obtener detalles del pedido:", error);
     showOrderDetailsModal.value = false;
+  } finally {
+    loadingOrderDetails.value = false;
   }
 }
 
@@ -424,6 +477,15 @@ function handleTrackingSupport(supportData) {
     status: selectedTrackingOrder.value?.status || 'unknown'
   };
   showSupportModal.value = true;
+}
+
+function handleShowProof(proofData) {
+  // Cerrar el modal de tracking
+  showTrackingModal.value = false;
+  
+  // Abrir el modal de prueba de entrega
+  selectedProofOrder.value = proofData.order;
+  showProofModal.value = true;
 }
 
 // Funciones de soporte
@@ -534,18 +596,31 @@ function formatDate(dateStr) {
     day: '2-digit', month: '2-digit', year: '2-digit'
   });
 }
-function handleShowProof(proofData) {
-  // Cerrar el modal de tracking
-  showTrackingModal.value = false;
-  
-  // Abrir el modal de prueba de entrega
-  selectedProofOrder.value = proofData.order;
-  showProofModal.value = true;
-}
 </script>
 
 <style scoped>
-
+.actions-header {
+  margin-bottom: 1rem;
+}
+.btn-manifest {
+  background-color: #3b82f6;
+  color: white;
+  padding: 0.5rem 1rem;
+  border-radius: 0.375rem;
+  border: none;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+.btn-manifest:hover {
+  background-color: #2563eb;
+}
+.btn-manifest:disabled {
+  background-color: #9ca3af;
+  cursor: not-allowed;
+}
+.col-checkbox {
+  width: 3%;
+}
 
 .action-btn.ready {
   background-color: #dcfce7; /* Verde claro */

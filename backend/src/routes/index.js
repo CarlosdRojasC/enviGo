@@ -264,6 +264,32 @@ router.patch('/orders/:id/ready', authenticateToken, validateMongoId('id'), asyn
   }
 });
 
+// --> INICIO DE NUEVA RUTA PARA MANIFIESTO <--
+router.post('/orders/manifest', authenticateToken, async (req, res) => {
+  try {
+    const { orderIds } = req.body;
+    if (!orderIds || !Array.isArray(orderIds) || orderIds.length === 0) {
+      return res.status(400).json({ error: 'Se requiere un array de IDs de pedidos.' });
+    }
+
+    const orders = await Order.find({
+      '_id': { $in: orderIds },
+      'company_id': req.user.company_id // Asegurar que solo obtenga pedidos de su empresa
+    }).select('order_number customer_name shipping_commune load1Packages');
+
+    const company = await Company.findById(req.user.company_id).select('name address');
+
+    res.json({
+      company,
+      orders,
+      generationDate: new Date()
+    });
+
+  } catch (error) {
+    res.status(500).json({ error: 'Error generando el manifiesto', details: error.message });
+  }
+});
+
 // ==================== PEDIDOS - INTEGRACIÓN SHIPDAY ====================
 
 // Crear orden individual en Shipday (sin asignar conductor)

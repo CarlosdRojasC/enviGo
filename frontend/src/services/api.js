@@ -86,6 +86,7 @@ const orders = {
   updateStatus: (id, status) => api.patch(`/orders/${id}/status`, { status }),
   markAsReady: (id) => api.patch(`/orders/${id}/ready`),
   getStats: (params = {}) => api.get('/orders/stats', { params }),
+  getManifestData: (orderIds) => api.post('/orders/manifest', { orderIds }),
   getTrend: (params = {}) => api.get('/orders/trend', { params }),
   debugShipday: (orderId) => api.get(`/orders/${orderId}/debug-shipday`),
   exportForOptiRoute: (params = {}) => api.get('/orders/export', { 

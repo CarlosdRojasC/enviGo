@@ -2,7 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '../store/auth'
 import DashboardLayout from '../layouts/DashboardLayout.vue'
 import Login from '../views/login.vue'
-
+import PickupManifest from '../views/PickupManifest.vue'
 const routes = [
   {
     path: '/login',
@@ -83,6 +83,13 @@ const routes = [
         component: () => import('../views/Orders.vue'),
         meta: { roles: ['company_owner', 'company_employee'], requiresCompany: true }
       },
+      // <-- INICIO DE NUEVA RUTA -->
+  {
+    path: '/manifest',
+    name: 'PickupManifest',
+    component: PickupManifest,
+    meta: { requiresAuth: true, roles: ['company_owner', 'company_employee'] }
+  },
       {
         path: 'channels',
         name: 'Channels',

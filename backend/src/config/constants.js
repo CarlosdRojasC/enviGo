@@ -24,7 +24,7 @@ module.exports = {
     DELIVERED: 'delivered',
     CANCELLED: 'cancelled',
     INVOICED: 'facturado',
-    READY_FOR_PICKUP: 'Listo para Retirp' // Nuevo estado añadido
+    READY_FOR_PICKUP: 'Listo para Retiro' // Nuevo estado añadido
   },
   
   // Estados de facturas
