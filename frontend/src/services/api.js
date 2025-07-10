@@ -1,127 +1,47 @@
 // frontend/src/services/api.js
 import axios from 'axios'
 
-// Configuración de la URL base
-const baseURL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
-console.log('🌐 API Base URL configurada:', baseURL);
-
 // Configuración base de axios
 const api = axios.create({
-  baseURL,
-  timeout: 15000, // 15 segundos para requests normales
+  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:3001/api',
+  timeout: 10000,
   headers: {
-    'Content-Type': 'application/json',
-  },
-});
-
-// Instancia separada para operaciones que toman más tiempo
-const apiLongTimeout = axios.create({
-  baseURL,
-  timeout: 180000, // 3 minutos para operaciones masivas
-  headers: {
-    'Content-Type': 'application/json',
-  },
-});
-
-// Variable para evitar bucles de redirección
-let isRedirecting = false;
-
-// Función para manejar errores de autenticación
-const handleAuthError = () => {
-  if (isRedirecting) {
-    return; // Evitar múltiples redirecciones
+    'Content-Type': 'application/json'
   }
-  
-  isRedirecting = true;
-  
-  // Limpiar datos de autenticación
-  localStorage.removeItem('auth_token');
-  sessionStorage.removeItem('auth_token');
-  
-  // Solo redirigir si no estamos ya en login
-  const currentPath = window.location.pathname;
-  if (!currentPath.includes('/login') && !currentPath.includes('/register')) {
-    console.log('🔒 Sesión expirada, redirigiendo a login...');
+})
+
+// Interceptor para agregar token
+api.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('token')
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`
+    }
+    return config
+  },
+  (error) => {
+    return Promise.reject(error)
+  }
+)
+
+// Interceptor para manejar respuestas
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    console.error('API Error:', error.response || error)
     
-    // Usar setTimeout para evitar problemas de estado
-    setTimeout(() => {
-      window.location.href = '/login';
-    }, 100);
-  } else {
-    // Si ya estamos en login, solo resetear la bandera
-    setTimeout(() => {
-      isRedirecting = false;
-    }, 1000);
+    if (error.response?.status === 401) {
+      // Token expirado o inválido
+      localStorage.removeItem('token')
+      localStorage.removeItem('user')
+      // No redirigir automáticamente para evitar bucles
+      console.warn('Token expirado, el usuario debe hacer login nuevamente')
+    }
+    
+    return Promise.reject(error)
   }
-};
+)
 
-// Función para configurar interceptors
-const setupInterceptors = (instance) => {
-  // Interceptor de request
-  instance.interceptors.request.use(
-    (config) => {
-      const token = localStorage.getItem('auth_token') || sessionStorage.getItem('auth_token');
-      
-      if (token) {
-        config.headers.Authorization = `Bearer ${token}`;
-      }
-      
-      // Log para debugging (solo en desarrollo)
-      if (import.meta.env.DEV) {
-        console.log(`📡 ${config.method?.toUpperCase()} ${config.url}`, {
-          hasToken: !!token,
-          timeout: config.timeout
-        });
-      }
-      
-      return config;
-    },
-    (error) => {
-      console.error('❌ Error en request interceptor:', error);
-      return Promise.reject(error);
-    }
-  );
-
-  // Interceptor de response
-  instance.interceptors.response.use(
-    (response) => {
-      // Resetear bandera de redirección en respuestas exitosas
-      if (isRedirecting) {
-        isRedirecting = false;
-      }
-      
-      return response;
-    },
-    (error) => {
-      console.error('❌ Error en response:', {
-        status: error.response?.status,
-        url: error.config?.url,
-        message: error.message
-      });
-
-      // Manejar diferentes tipos de error
-      if (error.response?.status === 401) {
-        console.warn('🔒 Error 401: Token inválido o expirado');
-        handleAuthError();
-      } else if (error.response?.status === 403) {
-        console.warn('🚫 Error 403: Acceso prohibido');
-        // No redirigir en 403, solo mostrar mensaje
-      } else if (error.response?.status >= 500) {
-        console.error('🔧 Error del servidor:', error.response?.status);
-      } else if (error.code === 'ECONNABORTED') {
-        console.warn('⏱️ Timeout de request');
-      } else if (error.code === 'ERR_NETWORK') {
-        console.error('🌐 Error de red - servidor no disponible');
-      }
-
-      return Promise.reject(error);
-    }
-  );
-};
-
-// Aplicar interceptors a ambas instancias
-setupInterceptors(api);
-setupInterceptors(apiLongTimeout);
 
 
 // Servicios de autenticación
