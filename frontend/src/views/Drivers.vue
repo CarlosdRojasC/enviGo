@@ -1,12 +1,4 @@
-.location-coords {
-  grid-column: 1 / -1; /* Ocupa toda la fila */
-}
-
-.location-coords .stat-value {
-  font-size: 11px;
-  font-family: monospace;
-  color: #059669;
-}<template>
+<template>
   <div class="drivers-management">
     <!-- Header -->
     <div class="page-header">

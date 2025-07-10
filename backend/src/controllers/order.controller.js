@@ -527,13 +527,13 @@ async getOrdersTrend(req, res) {
             orderNumber: order.order_number,
             customerName: order.customer_name,
             customerAddress: order.shipping_address,
-            restaurantName: order.company_id.name,
-            restaurantAddress: order.company_id.address || order.shipping_address,
+            restaurantName: "enviGo",
+            restaurantAddress: "santa hilda 1447, quilicura",
             customerPhoneNumber: order.customer_phone || '',
             deliveryInstruction: order.notes || '',
-            deliveryFee: parseFloat(order.shipping_cost) || 0,
+            deliveryFee: 1800,
             total: parseFloat(order.total_amount) || parseFloat(order.shipping_cost) || 1,
-            paymentMethod: order.payment_method || 'CASH'
+            customerEmail: order.customer_email || '',
         };
         
         const createdShipdayOrder = await ShipdayService.createOrder(orderDataForShipday);

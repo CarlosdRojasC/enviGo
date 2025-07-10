@@ -166,13 +166,17 @@ class ShipDayService {
     try {
       const headers = this.workingFormat || this.getHeaders(1);
       
-      const payload = {
+const payload = {
         orderNumber: orderData.orderNumber,
         customerName: orderData.customerName,
         customerAddress: orderData.customerAddress,
-        restaurantName: orderData.restaurantName,
-        restaurantAddress: orderData.restaurantAddress,
-        ...orderData, // Incluye el resto de los datos opcionales
+        restaurantName: "enviGo", // <-- VALOR FIJO
+        restaurantAddress: "santa hilda 1447, quilicura", // <-- VALOR FIJO
+        // Campos opcionales pero útiles para Shipday
+        customerEmail: orderData.customerEmail,
+        customerPhoneNumber: orderData.customerPhoneNumber,
+        deliveryInstruction: orderData.deliveryInstruction
+        // No se incluyen `deliveryFee`, `total`, ni `paymentMethod`.
       };
 
       console.log('📦 Enviando payload de creación de orden a Shipday:', JSON.stringify(payload, null, 2));
