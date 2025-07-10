@@ -44,12 +44,7 @@ const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutos
   max: 100 // límite de 100 requests por IP
 });
-// NUEVO: Rate limiting para creación de pedidos
-const orderLimiter = rateLimit({
-  windowMs: 5 * 60 * 1000, // 5 minutos
-  max: 20, // Límite de 20 peticiones por IP cada 5 minutos
-  message: 'Demasiadas solicitudes de creación de pedidos. Por favor, intente de nuevo en 5 minutos.'
-});
+
 
 app.use('/api/', limiter);
 
@@ -127,4 +122,3 @@ process.on('SIGINT', () => {
 
 // Iniciar
 startServer();
-module.exports = { app, orderLimiter };

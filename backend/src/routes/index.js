@@ -9,7 +9,7 @@ const {
   isCompanyOwner,
   hasCompanyAccess
 } = require('../middlewares/auth.middleware');
-const { orderLimiter } = require('../app')
+const { orderLimiter } = require('../middlewares/rateLimiter.middleware');
 // Importar validadores
 const { validateMongoId } = require('../middlewares/validators/generic.validator');
 const { validateRegistration } = require('../middlewares/validators/user.validator');
