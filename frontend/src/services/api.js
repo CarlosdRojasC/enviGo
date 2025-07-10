@@ -115,8 +115,7 @@ const orders = {
   getShipdayStatus: (orderId) => api.get(`/orders/${orderId}/shipday-status`),
 
    // --- 👇 AÑADE ESTA LÍNEA 👇 ---
-  getAllCommunes: () => api.get('/orders/all-communes'),
-
+getAvailableCommunes: (params = {}) => api.get('/orders/communes', { params }),
 
   // ==================== NUEVOS MÉTODOS PARA ASIGNACIÓN MASIVA ====================
   
