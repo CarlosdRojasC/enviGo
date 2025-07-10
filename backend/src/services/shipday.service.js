@@ -175,7 +175,8 @@ const payload = {
         // Campos opcionales pero útiles para Shipday
         customerEmail: orderData.customerEmail,
         customerPhoneNumber: orderData.customerPhoneNumber,
-        deliveryInstruction: orderData.deliveryInstruction
+        deliveryInstruction: orderData.deliveryInstruction,
+        deliveryFee: 1800,
         // No se incluyen `deliveryFee`, `total`, ni `paymentMethod`.
       };
 

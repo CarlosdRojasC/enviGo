@@ -641,6 +641,7 @@ router.post('/orders/bulk-create-shipday', authenticateToken, isAdmin, async (re
           customerEmail: order.customer_email || '',
           customerPhoneNumber: order.customer_phone || '',
           deliveryInstruction: order.notes || 'Sin instrucciones especiales',
+          deliveryFee: 1800
         };
 
         const shipdayOrder = await ShipdayService.createOrder(shipdayData);
