@@ -707,7 +707,7 @@ function formatDate(dateStr, withTime = false) {
 function getStatusName(status) { 
   const names = { 
     pending: 'Pendiente', processing: 'Procesando', shipped: 'Enviado', 
-    delivered: 'Entregado', cancelled: 'Cancelado' 
+    delivered: 'Entregado', cancelled: 'Cancelado', ready_for_pickup: 'Listo para recoger',
   }; 
   return names[status] || status; 
 }
