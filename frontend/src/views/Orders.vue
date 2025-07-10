@@ -393,14 +393,43 @@ function selectAllOrders(event) {
 
 // ✅ AGREGADO: Función para generar manifiesto
 function generateManifest() {
-  if (selectedOrders.value.length === 0) return;
+  if (selectedOrders.value.length === 0) {
+    alert('Por favor, selecciona al menos un pedido.');
+    return;
+  }
   
-  // Convertir el array de IDs a un string separado por comas
-  const ids = selectedOrders.value.join(',');
-  
-  // Abrir en una nueva pestaña
-  const routeData = router.resolve({ name: 'PickupManifest', query: { ids } });
-  window.open(routeData.href, '_blank');
+  try {
+    // Convertir el array de IDs a un string separado por comas
+    const ids = selectedOrders.value.join(',');
+    
+    console.log('📋 Generando manifiesto para pedidos:', selectedOrders.value);
+    
+    // Crear la URL de la ruta
+    const routeData = router.resolve({ 
+      name: 'PickupManifest', 
+      query: { ids } 
+    });
+    
+    console.log('🔗 URL del manifiesto:', routeData.href);
+    
+    // Abrir en una nueva pestaña
+    const newWindow = window.open(routeData.href, '_blank');
+    
+    // Verificar si la ventana se abrió correctamente
+    if (!newWindow) {
+      alert('No se pudo abrir el manifiesto. Por favor, permite las ventanas emergentes.');
+      return;
+    }
+    
+    console.log('✅ Manifiesto abierto en nueva pestaña');
+    
+    // Limpiar selección después de generar el manifiesto
+    selectedOrders.value = [];
+    
+  } catch (error) {
+    console.error('❌ Error generando manifiesto:', error);
+    alert('Error al generar el manifiesto. Por favor, inténtalo de nuevo.');
+  }
 }
 
 // Funciones de tracking y pruebas de entrega

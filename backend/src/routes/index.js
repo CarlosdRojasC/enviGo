@@ -256,7 +256,7 @@ router.patch('/orders/:id/ready', authenticateToken, validateMongoId('id'), asyn
       return res.status(400).json({ error: 'Solo los pedidos pendientes pueden marcarse como listos' });
     }
 
-    order.status = 'ready_for_pickup';
+    order.status = 'Listo para Retiro';
     await order.save();
     res.json({ message: 'Pedido marcado como listo para retiro', order });
   } catch (error) {
@@ -265,28 +265,120 @@ router.patch('/orders/:id/ready', authenticateToken, validateMongoId('id'), asyn
 });
 
 // --> INICIO DE NUEVA RUTA PARA MANIFIESTO <--
+/**
+ * Obtener datos para el manifiesto de retiro
+ * POST /api/orders/manifest
+ */
 router.post('/orders/manifest', authenticateToken, async (req, res) => {
   try {
     const { orderIds } = req.body;
+    
+    // Validar que se proporcionen IDs
     if (!orderIds || !Array.isArray(orderIds) || orderIds.length === 0) {
-      return res.status(400).json({ error: 'Se requiere un array de IDs de pedidos.' });
+      return res.status(400).json({ 
+        error: 'Se requiere un array de IDs de pedidos' 
+      });
     }
-
-    const orders = await Order.find({
-      '_id': { $in: orderIds },
-      'company_id': req.user.company_id // Asegurar que solo obtenga pedidos de su empresa
-    }).select('order_number customer_name shipping_commune load1Packages');
-
-    const company = await Company.findById(req.user.company_id).select('name address');
-
-    res.json({
-      company,
-      orders,
-      generationDate: new Date()
+    
+    console.log('📋 Generando manifiesto para pedidos:', orderIds);
+    
+    // Obtener los pedidos con populate de empresa y canal
+    const orders = await Order.find({ 
+      _id: { $in: orderIds } 
+    })
+    .populate('company_id', 'name email phone address')
+    .populate('channel_id', 'channel_name channel_type')
+    .sort({ order_number: 1 });
+    
+    if (orders.length === 0) {
+      return res.status(404).json({ 
+        error: 'No se encontraron pedidos con los IDs proporcionados' 
+      });
+    }
+    
+    // Verificar permisos
+    const userId = req.user.id;
+    const userRole = req.user.role;
+    
+    if (userRole !== 'admin') {
+      // Para usuarios no admin, verificar que tengan acceso a los pedidos
+      const userCompanyId = req.user.company_id || req.user.company?._id;
+      
+      const unauthorizedOrders = orders.filter(order => 
+        order.company_id._id.toString() !== userCompanyId.toString()
+      );
+      
+      if (unauthorizedOrders.length > 0) {
+        return res.status(403).json({ 
+          error: 'No tienes permisos para acceder a algunos de estos pedidos' 
+        });
+      }
+    }
+    
+    // Agrupar por empresa (en caso de que un admin esté viendo pedidos de múltiples empresas)
+    const ordersByCompany = orders.reduce((acc, order) => {
+      const companyId = order.company_id._id.toString();
+      if (!acc[companyId]) {
+        acc[companyId] = {
+          company: order.company_id,
+          orders: []
+        };
+      }
+      acc[companyId].orders.push(order);
+      return acc;
+    }, {});
+    
+    // Si todos los pedidos son de la misma empresa, devolver formato simple
+    const companies = Object.keys(ordersByCompany);
+    if (companies.length === 1) {
+      const companyData = ordersByCompany[companies[0]];
+      
+      console.log('✅ Manifiesto generado:', {
+        company: companyData.company.name,
+        orders: companyData.orders.length,
+        orderNumbers: companyData.orders.map(o => o.order_number)
+      });
+      
+      return res.json({
+        success: true,
+        company: companyData.company,
+        orders: companyData.orders,
+        manifest_id: `MANIFEST_${Date.now()}`,
+        generated_at: new Date().toISOString(),
+        summary: {
+          total_orders: companyData.orders.length,
+          total_value: companyData.orders.reduce((sum, order) => 
+            sum + (order.total_amount || order.shipping_cost || 0), 0
+          ),
+          unique_communes: [...new Set(companyData.orders.map(o => o.shipping_commune))].filter(Boolean),
+          total_packages: companyData.orders.reduce((sum, order) => 
+            sum + (order.package_count || 1), 0
+          )
+        }
+      });
+    }
+    
+    // Si hay múltiples empresas, devolver formato agrupado
+    console.log('✅ Manifiesto multi-empresa generado:', {
+      companies: companies.length,
+      total_orders: orders.length
     });
-
+    
+    return res.json({
+      success: true,
+      multi_company: true,
+      companies: ordersByCompany,
+      total_orders: orders.length,
+      manifest_id: `MANIFEST_MULTI_${Date.now()}`,
+      generated_at: new Date().toISOString()
+    });
+    
   } catch (error) {
-    res.status(500).json({ error: 'Error generando el manifiesto', details: error.message });
+    console.error('❌ Error generando manifiesto:', error);
+    res.status(500).json({ 
+      error: 'Error interno del servidor al generar el manifiesto',
+      details: error.message 
+    });
   }
 });
 

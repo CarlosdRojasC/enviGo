@@ -84,12 +84,15 @@ const routes = [
         meta: { roles: ['company_owner', 'company_employee'], requiresCompany: true }
       },
       // <-- INICIO DE NUEVA RUTA -->
-  {
-    path: '/manifest',
-    name: 'PickupManifest',
-    component: PickupManifest,
-    meta: { requiresAuth: true, roles: ['company_owner', 'company_employee'] }
-  },
+      {
+        path: 'pickup-manifest',
+        name: 'PickupManifest',
+        component: () => import('../views/PickupManifest.vue'),
+        meta: { 
+          roles: ['company_owner', 'company_employee', 'admin'], 
+          requiresCompany: false // Los admins pueden ver manifiestos de cualquier empresa
+        }
+      },
       {
         path: 'channels',
         name: 'Channels',

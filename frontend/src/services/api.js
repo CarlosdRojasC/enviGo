@@ -101,6 +101,35 @@ const orders = {
     downloadImportTemplate: () => api.get('/orders/import-template', {
     responseType: 'blob'
   }),
+  /**
+ * Obtener datos para el manifiesto de retiro
+ * @param {Array} orderIds - Array de IDs de pedidos
+ * @returns {Promise} Datos del manifiesto
+ */
+getManifest: async (orderIds) => {
+  try {
+    console.log('📋 API: Solicitando datos del manifiesto para:', orderIds);
+    
+    const response = await api.post('/orders/manifest', {
+      orderIds
+    });
+    
+    console.log('✅ API: Datos del manifiesto obtenidos:', {
+      orders: response.data.orders?.length || 0,
+      company: response.data.company?.name || 'N/A'
+    });
+    
+    return response;
+    
+  } catch (error) {
+    console.error('❌ API: Error obteniendo manifiesto:', {
+      status: error.response?.status,
+      message: error.response?.data?.error || error.message,
+      orderIds
+    });
+    throw error;
+  }
+},
   
   // ==================== MÉTODOS SHIPDAY EXISTENTES ====================
   
