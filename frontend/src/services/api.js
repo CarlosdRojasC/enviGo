@@ -61,37 +61,6 @@ const communes = {
   getEnvigoCommunes: () => api.get('/communes/envigo') 
 };
 // --- FIN DEL NUEVO OBJETO ---
-
-const driverOrders = {
-  // Obtener pedidos de conductores con filtros
-  getAll: (params = {}) => {
-    return api.get('/driver-orders', { params })
-  },
-  
-  // Obtener solo estadísticas (para auto-refresh rápido)
-  getStats: () => {
-    return api.get('/driver-orders/stats')
-  },
-  
-  // Obtener pedidos de un conductor específico
-  getByDriver: (driverId, params = {}) => {
-    return api.get('/driver-orders', { 
-      params: { ...params, driver_id: driverId } 
-    })
-  },
-  
-  // Obtener pedidos por estado
-  getByStatus: (status, params = {}) => {
-    return api.get('/driver-orders', { 
-      params: { ...params, status } 
-    })
-  },
-  
-  // Obtener resumen de un conductor específico
-  getDriverSummary: (driverId) => {
-    return api.get(`/drivers/${driverId}/summary`)
-  }
-}
 // Servicios de empresas
 const companies = {
   getAll: () => api.get('/companies'),
@@ -499,8 +468,7 @@ export const apiService = {
   drivers,
   billing,
   dashboard,
-  users,
-  driverOrders
+  users
 }
 
 // Exportar instancia de axios para casos especiales
