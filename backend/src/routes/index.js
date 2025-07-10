@@ -479,7 +479,7 @@ router.post('/orders/bulk-assign-driver', authenticateToken, isAdmin, async (req
 
       // Pausa pequeña entre asignaciones para no sobrecargar
       if (i < orderIds.length - 1) {
-        await new Promise(resolve => setTimeout(resolve, 500));
+        await new Promise(resolve => setTimeout(resolve, 1200));
       }
     }
 
