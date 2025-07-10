@@ -124,7 +124,8 @@ class WooCommerceService {
           page,
           per_page: perPage,
           orderby: 'date',
-          order: 'desc'
+          order: 'desc',
+          status: 'completed'
         };
         
         if (dateFrom) params.after = new Date(dateFrom).toISOString();
