@@ -84,6 +84,7 @@ const orders = {
   getById: (id) => api.get(`/orders/${id}`),
   create: (orderData) => api.post('/orders', orderData),
   updateStatus: (id, status) => api.patch(`/orders/${id}/status`, { status }),
+  markAsReady: (id) => api.patch(`/orders/${id}/ready`),
   getStats: (params = {}) => api.get('/orders/stats', { params }),
   getTrend: (params = {}) => api.get('/orders/trend', { params }),
   debugShipday: (orderId) => api.get(`/orders/${orderId}/debug-shipday`),

@@ -125,7 +125,7 @@ class WooCommerceService {
           per_page: perPage,
           orderby: 'date',
           order: 'desc',
-          status: 'completed'
+          status: 'completed, processing'
         };
         
         if (dateFrom) params.after = new Date(dateFrom).toISOString();
@@ -361,9 +361,9 @@ class WooCommerceService {
   static mapOrderStatus(wooOrder) {
     const statusMap = {
       'pending': 'pending', 
-      'processing': 'processing', 
+      'processing': 'pending', 
       'on-hold': 'pending',
-      'completed': 'delivered', 
+      'completed': 'pending', 
       'cancelled': 'cancelled', 
       'refunded': 'cancelled',
       'failed': 'cancelled', 

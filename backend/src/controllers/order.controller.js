@@ -22,6 +22,14 @@ class OrderController {
         if (company_id) {
             filters.company_id = new mongoose.Types.ObjectId(company_id);
         }
+        // --> INICIO DE LA NUEVA LÓGICA <--
+        // Si el admin no está filtrando por un estado específico,
+        // ocultamos los pedidos que están 'pendientes'.
+        if (!status) {
+          filters.status = { $ne: 'pending' }; } 
+          else {
+          filters.status = status;
+        }
       } else {
         if (req.user.company_id) {
           filters.company_id = new mongoose.Types.ObjectId(req.user.company_id);

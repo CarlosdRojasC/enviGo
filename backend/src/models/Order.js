@@ -99,7 +99,7 @@ const orderSchema = new mongoose.Schema({
   // Estados y fechas
   status: { 
     type: String, 
-    enum: ['pending', 'processing', 'shipped', 'delivered', 'cancelled', 'facturado'],
+    enum: ['pending', 'ready_for_pickup', 'processing', 'shipped', 'delivered', 'cancelled', 'facturado'],
     default: 'pending' 
   },
   order_date: { type: Date, required: true },

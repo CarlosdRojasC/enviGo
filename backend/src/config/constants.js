@@ -23,7 +23,8 @@ module.exports = {
     SHIPPED: 'shipped',
     DELIVERED: 'delivered',
     CANCELLED: 'cancelled',
-    INVOICED: 'facturado'
+    INVOICED: 'facturado',
+    READY_FOR_PICKUP: 'Listo para Retirp' // Nuevo estado añadido
   },
   
   // Estados de facturas

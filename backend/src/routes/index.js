@@ -242,6 +242,28 @@ router.post('/orders', authenticateToken, validateOrderCreation, orderController
 router.get('/orders/:id', authenticateToken, validateMongoId('id'), orderController.getById);
 router.patch('/orders/:id/status', authenticateToken, validateMongoId('id'), isAdmin, orderController.updateStatus);
 
+router.patch('/orders/:id/ready', authenticateToken, validateMongoId('id'), async (req, res) => {
+  try {
+    const order = await Order.findById(req.params.id);
+    if (!order) return res.status(404).json({ error: 'Pedido no encontrado' });
+
+    // Solo la empresa dueña puede marcar como listo
+    if (req.user.company_id.toString() !== order.company_id.toString()) {
+      return res.status(403).json({ error: 'No tienes permiso para esta acción' });
+    }
+
+    if (order.status !== 'pending') {
+      return res.status(400).json({ error: 'Solo los pedidos pendientes pueden marcarse como listos' });
+    }
+
+    order.status = 'ready_for_pickup';
+    await order.save();
+    res.json({ message: 'Pedido marcado como listo para retiro', order });
+  } catch (error) {
+    res.status(500).json({ error: 'Error actualizando el pedido' });
+  }
+});
+
 // ==================== PEDIDOS - INTEGRACIÓN SHIPDAY ====================
 
 // Crear orden individual en Shipday (sin asignar conductor)

@@ -173,6 +173,13 @@
               <!-- Acciones -->
               <td class="col-actions">
                 <div class="actions-cell">
+                  <button 
+                    v-if="order.status === 'pending'" 
+                    @click="markAsReady(order)" 
+                    class="action-btn ready" 
+                    title="Marcar como Listo para Retiro">
+                    ✔️
+                  </button>
                   <button @click="openOrderDetailsModal(order)" class="action-btn details" title="Ver detalles">
                     👁️
                   </button>
@@ -330,7 +337,22 @@ async function fetchChannels() {
     console.error('Error fetching channels:', error);
   }
 }
-
+async function markAsReady(orderToUpdate) {
+  try {
+    await apiService.orders.markAsReady(orderToUpdate._id);
+    
+    const index = orders.value.findIndex(o => o._id === orderToUpdate._id);
+    if (index !== -1) {
+      orders.value[index].status = 'ready_for_pickup';
+    }
+    
+    alert(`Pedido #${orderToUpdate.order_number} marcado como listo para retiro.`);
+    
+  } catch (error) {
+    console.error("Error al marcar el pedido:", error);
+    alert("No se pudo actualizar el estado del pedido.");
+  }
+}
 // 🆕 NUEVAS FUNCIONES PARA TRACKING Y PRUEBAS DE ENTREGA
 
 function hasTrackingInfo(order) {
@@ -523,6 +545,16 @@ function handleShowProof(proofData) {
 </script>
 
 <style scoped>
+
+
+.action-btn.ready {
+  background-color: #dcfce7; /* Verde claro */
+  color: #166534; /* Verde oscuro */
+}
+.action-btn.ready:hover {
+  background-color: #bbf7d0;
+}
+
 .orders-page {
   padding: 20px;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
