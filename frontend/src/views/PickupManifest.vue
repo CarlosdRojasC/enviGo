@@ -235,14 +235,401 @@ async function loadManifestData() {
 }
 
 function printManifest() {
-  window.print()
+  // Crear una nueva ventana para imprimir solo la tabla
+  const printWindow = window.open('', '_blank', 'width=800,height=600')
+  
+  if (!printWindow) {
+    alert('No se pudo abrir la ventana de impresión. Por favor, permite las ventanas emergentes.')
+    return
+  }
+  
+  // Obtener solo la tabla
+  const tableContainer = document.querySelector('.table-container')
+  const tableHTML = tableContainer ? tableContainer.outerHTML : '<p>Error: No se encontró la tabla</p>'
+  
+  // Crear el contenido HTML para imprimir
+  const printContent = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>Manifiesto de Retiro - ${companyInfo.value?.name || 'Pedidos'}</title>
+      <style>
+        body {
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+          margin: 20px;
+          padding: 0;
+          font-size: 12px;
+          line-height: 1.4;
+        }
+        
+        .print-header {
+          text-align: center;
+          margin-bottom: 20px;
+          border-bottom: 2px solid #333;
+          padding-bottom: 15px;
+        }
+        
+        .print-header h1 {
+          margin: 0 0 10px 0;
+          font-size: 18px;
+          color: #333;
+        }
+        
+        .print-header .meta {
+          font-size: 11px;
+          color: #666;
+        }
+        
+        .table-container {
+          overflow: visible;
+          border: none;
+          border-radius: 0;
+        }
+        
+        .manifest-table {
+          width: 100%;
+          border-collapse: collapse;
+          font-size: 10px;
+          margin-bottom: 20px;
+        }
+        
+        .manifest-table th {
+          background: #f0f0f0;
+          padding: 8px 6px;
+          text-align: left;
+          font-weight: bold;
+          color: #333;
+          border: 1px solid #333;
+          font-size: 9px;
+        }
+        
+        .manifest-table td {
+          padding: 6px 4px;
+          border: 1px solid #666;
+          vertical-align: top;
+          font-size: 9px;
+        }
+        
+        .manifest-table .order-row:nth-child(even) {
+          background: #f9f9f9;
+        }
+        
+        .manifest-table .row-number {
+          font-weight: bold;
+          text-align: center;
+          width: 30px;
+        }
+        
+        .manifest-table .order-number {
+          font-weight: bold;
+          width: 60px;
+        }
+        
+        .manifest-table .customer-name {
+          width: 80px;
+        }
+        
+        .manifest-table .address {
+          width: 120px;
+          font-size: 8px;
+          line-height: 1.2;
+        }
+        
+        .manifest-table .commune {
+          width: 60px;
+        }
+        
+        .manifest-table .phone {
+          width: 70px;
+        }
+        
+        .manifest-table .value {
+          font-weight: bold;
+          text-align: right;
+          width: 50px;
+        }
+        
+        .manifest-table .notes {
+          width: 80px;
+          font-style: italic;
+          font-size: 8px;
+        }
+        
+        .manifest-table .signature-cell {
+          width: 60px;
+          height: 20px;
+          border: 1px solid #333;
+        }
+        
+        .print-footer {
+          margin-top: 20px;
+          padding-top: 10px;
+          border-top: 1px solid #ccc;
+          font-size: 9px;
+          color: #666;
+          text-align: center;
+        }
+        
+        /* Ajustes específicos para impresión */
+        @media print {
+          body {
+            margin: 0;
+            padding: 10px;
+          }
+          
+          .print-header {
+            margin-bottom: 15px;
+          }
+          
+          .manifest-table th,
+          .manifest-table td {
+            padding: 4px 3px;
+          }
+          
+          .print-footer {
+            position: fixed;
+            bottom: 10px;
+            left: 0;
+            right: 0;
+          }
+        }
+      </style>
+    </head>
+    <body>
+      <div class="print-header">
+        <h1>📋 MANIFIESTO DE RETIRO</h1>
+        <div class="meta">
+          <strong>${companyInfo.value?.name || 'Empresa'}</strong> • 
+          ${formatDate(new Date())} • 
+          ${orders.value.length} pedidos
+        </div>
+      </div>
+      
+      ${tableHTML}
+      
+      <div class="print-footer">
+        Manifiesto generado el ${formatDate(new Date())} • enviGo - Sistema de Gestión Logística
+      </div>
+    </body>
+    </html>
+  `
+  
+  // Escribir el contenido en la nueva ventana
+  printWindow.document.write(printContent)
+  printWindow.document.close()
+  
+  // Esperar a que cargue y luego imprimir
+  printWindow.onload = function() {
+    setTimeout(() => {
+      printWindow.print()
+      // Cerrar la ventana después de imprimir
+      printWindow.onafterprint = function() {
+        printWindow.close()
+      }
+    }, 250)
+  }
+  
+  console.log('🖨️ Abriendo vista de impresión de tabla')
 }
 
 function downloadPDF() {
-  // TODO: Implementar descarga como PDF
-  // Podrías usar una librería como jsPDF o solicitar al backend
-  console.log('📄 Descargando PDF...')
-  alert('Funcionalidad de PDF en desarrollo. Usa Imprimir por ahora.')
+  try {
+    console.log('📄 Generando PDF del manifiesto...')
+    
+    // Crear nuevo documento PDF
+    const doc = new jsPDF('p', 'mm', 'a4')
+    
+    // Configuración de fuentes y colores
+    const primaryColor = [59, 130, 246] // Azul
+    const textColor = [31, 41, 55] // Gris oscuro
+    
+    let yPos = 20
+    
+    // === ENCABEZADO ===
+    doc.setFontSize(20)
+    doc.setTextColor(...primaryColor)
+    doc.text('📋 MANIFIESTO DE RETIRO', 20, yPos)
+    
+    yPos += 10
+    doc.setFontSize(12)
+    doc.setTextColor(...textColor)
+    doc.text(`Fecha: ${formatDate(new Date())}`, 20, yPos)
+    doc.text(`Total pedidos: ${orders.value.length}`, 120, yPos)
+    
+    yPos += 15
+    
+    // === INFORMACIÓN DE LA EMPRESA ===
+    if (companyInfo.value) {
+      doc.setFontSize(14)
+      doc.setTextColor(...primaryColor)
+      doc.text('INFORMACIÓN DE LA EMPRESA', 20, yPos)
+      
+      yPos += 8
+      doc.setFontSize(10)
+      doc.setTextColor(...textColor)
+      doc.text(`Empresa: ${companyInfo.value.name}`, 20, yPos)
+      
+      if (companyInfo.value.email) {
+        yPos += 5
+        doc.text(`Email: ${companyInfo.value.email}`, 20, yPos)
+      }
+      
+      if (companyInfo.value.phone) {
+        yPos += 5
+        doc.text(`Teléfono: ${companyInfo.value.phone}`, 20, yPos)
+      }
+      
+      yPos += 10
+    }
+    
+    // === RESUMEN ===
+    doc.setFontSize(14)
+    doc.setTextColor(...primaryColor)
+    doc.text('RESUMEN', 20, yPos)
+    
+    yPos += 8
+    doc.setFontSize(10)
+    doc.setTextColor(...textColor)
+    
+    const summaryData = [
+      ['Total Pedidos:', orders.value.length.toString()],
+      ['Valor Total:', totalValue.value],
+      ['Comunas:', uniqueCommunes.value.length.toString()],
+      ['Paquetes:', totalPackages.value.toString()]
+    ]
+    
+    summaryData.forEach(([label, value]) => {
+      doc.text(label, 20, yPos)
+      doc.text(value, 80, yPos)
+      yPos += 5
+    })
+    
+    yPos += 10
+    
+    // === TABLA DE PEDIDOS ===
+    doc.setFontSize(14)
+    doc.setTextColor(...primaryColor)
+    doc.text('DETALLE DE PEDIDOS', 20, yPos)
+    
+    yPos += 8
+    
+    // Preparar datos de la tabla
+    const tableHeaders = [
+      '#', 'Pedido', 'Cliente', 'Dirección', 'Comuna', 
+      'Teléfono', 'Valor', 'Observaciones'
+    ]
+    
+    const tableData = orders.value.map((order, index) => [
+      (index + 1).toString(),
+      `#${order.order_number}`,
+      order.customer_name || 'N/A',
+      order.shipping_address || 'N/A',
+      order.shipping_commune || 'N/A',
+      order.customer_phone || 'N/A',
+      `${formatCurrency(order.total_amount || order.shipping_cost)}`,
+      order.delivery_notes || '-'
+    ])
+    
+    // Generar tabla con autoTable
+    doc.autoTable({
+      head: [tableHeaders],
+      body: tableData,
+      startY: yPos,
+      styles: {
+        fontSize: 8,
+        cellPadding: 3,
+        textColor: textColor,
+        lineColor: [200, 200, 200],
+        lineWidth: 0.1
+      },
+      headStyles: {
+        fillColor: primaryColor,
+        textColor: [255, 255, 255],
+        fontStyle: 'bold'
+      },
+      alternateRowStyles: {
+        fillColor: [248, 250, 252]
+      },
+      columnStyles: {
+        0: { cellWidth: 10, halign: 'center' }, // #
+        1: { cellWidth: 20 }, // Pedido
+        2: { cellWidth: 30 }, // Cliente
+        3: { cellWidth: 40 }, // Dirección
+        4: { cellWidth: 20 }, // Comuna
+        5: { cellWidth: 25 }, // Teléfono
+        6: { cellWidth: 20, halign: 'right' }, // Valor
+        7: { cellWidth: 25 } // Observaciones
+      },
+      margin: { left: 20, right: 20 }
+    })
+    
+    // Obtener posición Y después de la tabla
+    yPos = doc.lastAutoTable.finalY + 20
+    
+    // === SECCIÓN DE FIRMAS ===
+    // Verificar si necesitamos una nueva página
+    if (yPos > 220) {
+      doc.addPage()
+      yPos = 20
+    }
+    
+    doc.setFontSize(14)
+    doc.setTextColor(...primaryColor)
+    doc.text('FIRMAS', 20, yPos)
+    
+    yPos += 15
+    
+    // Firmas lado a lado
+    const signatureWidth = 70
+    const signatureHeight = 30
+    
+    // Firma del conductor
+    doc.setFontSize(12)
+    doc.setTextColor(...textColor)
+    doc.text('Firma del Conductor', 20, yPos)
+    doc.rect(20, yPos + 5, signatureWidth, signatureHeight) // Rectángulo para firma
+    
+    doc.setFontSize(10)
+    doc.text('Nombre: _________________________', 20, yPos + signatureHeight + 15)
+    doc.text('RUT: ____________________________', 20, yPos + signatureHeight + 20)
+    doc.text(`Fecha: ${formatDate(new Date())}`, 20, yPos + signatureHeight + 25)
+    
+    // Firma del responsable
+    doc.setFontSize(12)
+    doc.text('Firma del Responsable', 110, yPos)
+    doc.rect(110, yPos + 5, signatureWidth, signatureHeight) // Rectángulo para firma
+    
+    doc.setFontSize(10)
+    doc.text('Nombre: _________________________', 110, yPos + signatureHeight + 15)
+    doc.text('Cargo: ___________________________', 110, yPos + signatureHeight + 20)
+    doc.text(`Fecha: ${formatDate(new Date())}`, 110, yPos + signatureHeight + 25)
+    
+    // === PIE DE PÁGINA ===
+    const pageCount = doc.internal.getNumberOfPages()
+    for (let i = 1; i <= pageCount; i++) {
+      doc.setPage(i)
+      doc.setFontSize(8)
+      doc.setTextColor(100, 100, 100)
+      doc.text(
+        `Manifiesto generado el ${formatDate(new Date())} - Página ${i} de ${pageCount}`,
+        20,
+        285
+      )
+      doc.text('enviGo - Sistema de Gestión Logística', 120, 285)
+    }
+    
+    // Generar nombre del archivo
+    const fileName = `manifiesto_${companyInfo.value?.name || 'pedidos'}_${new Date().toISOString().split('T')[0]}.pdf`
+    
+    // Descargar el PDF
+    doc.save(fileName)
+    
+    console.log('✅ PDF generado y descargado:', fileName)
+    
+  } catch (error) {
+    console.error('❌ Error generando PDF:', error)
+    alert('Error al generar el PDF. Inténtalo de nuevo.')
+  }
 }
 
 function goBack() {
@@ -568,24 +955,12 @@ function formatDate(date) {
   color: #374151;
 }
 
-/* Print Styles */
+/* Print Styles - Simplificados ya que usamos ventana separada */
 @media print {
-  .manifest-header .manifest-actions {
-    display: none;
-  }
-  
+  /* Solo mantener estilos básicos para el PDF */
   .manifest-page {
     max-width: none;
-    padding: 0;
-  }
-  
-  .manifest-table {
-    font-size: 10px;
-  }
-  
-  .manifest-table th,
-  .manifest-table td {
-    padding: 6px 4px;
+    padding: 20px;
   }
 }
 

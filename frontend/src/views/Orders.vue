@@ -54,6 +54,12 @@
         class="btn-manifest">
         Generar Manifiesto ({{ selectedOrders.length }})
       </button>
+      <button 
+        @click="markSelectedAsReady"
+        :disabled="isMarkingReady"
+        class="btn-mark-ready">
+        {{ isMarkingReady ? 'Marcando...' : `✔️ Marcar ${selectedOrders.length} como Listo` }}
+      </button>
     </div>
 
     <!-- Tabla de pedidos -->
@@ -320,6 +326,7 @@ const loadingOrderDetails = ref(false); // ✅ AGREGADO
 // ✅ AGREGADO: Estado para selección de pedidos
 const selectedOrders = ref([]);
 
+const isMarkingReady = ref(false);
 // Estados de modales
 const selectedOrder = ref(null);
 const showOrderDetailsModal = ref(false);
@@ -390,7 +397,48 @@ function selectAllOrders(event) {
     selectedOrders.value = [];
   }
 }
-
+async function markSelectedAsReady() {
+  if (selectedOrders.value.length === 0) {
+    alert('No hay pedidos seleccionados.');
+    return;
+  }
+  
+  const confirmation = confirm(
+    `¿Estás seguro de marcar ${selectedOrders.value.length} pedido(s) como "Listo para Retiro"?`
+  );
+  
+  if (!confirmation) return;
+  
+  isMarkingReady.value = true;
+  
+  try {
+    console.log('🔄 Marcando pedidos como listos:', selectedOrders.value);
+    
+    // Llamar a la API para marcar múltiples pedidos
+    const response = await apiService.orders.markMultipleAsReady(selectedOrders.value);
+    
+    // Actualizar el estado local de los pedidos
+    selectedOrders.value.forEach(orderId => {
+      const orderIndex = orders.value.findIndex(o => o._id === orderId);
+      if (orderIndex !== -1) {
+        orders.value[orderIndex].status = 'processing'; // o el estado que corresponda
+      }
+    });
+    
+    console.log('✅ Pedidos marcados como listos:', response.data);
+    
+    alert(`${selectedOrders.value.length} pedido(s) marcado(s) como "Listo para Retiro" exitosamente.`);
+    
+    // Limpiar selección
+    selectedOrders.value = [];
+    
+  } catch (error) {
+    console.error('❌ Error marcando pedidos como listos:', error);
+    alert('Error al marcar los pedidos como listos. Por favor, inténtalo de nuevo.');
+  } finally {
+    isMarkingReady.value = false;
+  }
+}
 // ✅ AGREGADO: Función para generar manifiesto
 function generateManifest() {
   if (selectedOrders.value.length === 0) {
@@ -631,6 +679,27 @@ function formatDate(dateStr) {
 .actions-header {
   margin-bottom: 1rem;
 }
+
+.btn-mark-ready {
+  background-color: #059669;
+  color: white;
+  padding: 0.5rem 1rem;
+  border-radius: 0.375rem;
+  border: none;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  margin-left: 0.5rem;
+}
+
+.btn-mark-ready:hover {
+  background-color: #047857;
+}
+
+.btn-mark-ready:disabled {
+  background-color: #9ca3af;
+  cursor: not-allowed;
+}
+
 .btn-manifest {
   background-color: #3b82f6;
   color: white;

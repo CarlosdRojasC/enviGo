@@ -130,7 +130,29 @@ getManifest: async (orderIds) => {
     throw error;
   }
 },
-  
+  markMultipleAsReady: async (orderIds) => {
+    try {
+      console.log('📦 API: Marcando pedidos como listos:', orderIds);
+      // Se corrige la ruta a '/orders/bulk-ready'
+      const response = await api.post('/orders/bulk-ready', { orderIds });
+      console.log('✅ API: Respuesta del servidor:', response.data);
+      return response;
+    } catch (error) {
+      console.error('❌ API: Error marcando pedidos como listos:', {
+        status: error.response?.status,
+        message: error.response?.data?.error || error.message,
+        orderIds
+      });
+      throw error;
+    }
+  },
+
+/**
+ * Marcar múltiples pedidos como listos para retiro
+ * @param {Array} orderIds - Array de IDs de pedidos
+ * @returns {Promise} Resultado de la operación
+ */
+
   // ==================== MÉTODOS SHIPDAY EXISTENTES ====================
   
   // Crear orden en Shipday sin asignar conductor
