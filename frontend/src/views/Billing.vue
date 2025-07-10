@@ -449,7 +449,9 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useAuthStore } from '../store/auth'
 import { apiService } from '../services/api'
 import Modal from '../components/Modal.vue'
+import { useToast } from 'vue-toastification';
 
+const toast = useToast();
 const auth = useAuthStore()
 
 // Estado principal
@@ -632,7 +634,7 @@ async function fetchInvoices() {
 
     // AÑADE UN MANEJO DE ERROR REAL:
     invoices.value = []
-    alert('Error al cargar tus facturas desde el servidor.')
+    toast.warning('Error al cargar tus facturas desde el servidor.')
   } finally {
     loading.value = false
   }
@@ -712,12 +714,12 @@ async function submitInvoiceRequest() {
     // En producción sería:
     // await apiService.billing.requestInvoice(requestData)
     
-    alert('Solicitud de factura enviada exitosamente. Recibirás la factura en 1-2 días hábiles.')
+    toast.success('Solicitud de factura enviada exitosamente. Recibirás la factura en 1-2 días hábiles.')
     showRequestModal.value = false
     resetRequestForm()
     
   } catch (error) {
-    alert(`Error al enviar solicitud: ${error.message}`)
+    toast.error(`Error al enviar solicitud: ${error.message}`)
   } finally {
     requesting.value = false
   }
@@ -757,7 +759,7 @@ async function submitPaymentReport() {
     // En producción sería:
     // await apiService.billing.reportPayment(paymentData)
     
-    alert('Reporte de pago enviado exitosamente. Validaremos el pago y actualizaremos el estado de la factura.')
+    toast.success('Reporte de pago enviado exitosamente. Validaremos el pago y actualizaremos el estado de la factura.')
     showPaymentModal.value = false
     
     // Actualizar estado local
@@ -768,7 +770,7 @@ async function submitPaymentReport() {
     }
     
   } catch (error) {
-    alert(`Error al reportar pago: ${error.message}`)
+    toast.error(`Error al reportar pago: ${error.message}`)
   } finally {
     reportingPayment.value = false
   }
@@ -794,7 +796,7 @@ async function exportInvoices() {
     downloadCSV(csv, `facturas_${companyInfo.value.name.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.csv`)
     
   } catch (error) {
-    alert('Error al exportar facturas')
+    toast.error('Error al exportar facturas')
   }
 }
 
@@ -855,7 +857,7 @@ async function downloadInvoice(invoice) {
       errorMessage = 'Error de conexión. Verifica tu internet.'
     }
     
-    alert(`${errorMessage}: ${invoice.invoice_number}`)
+    toast.error(`${errorMessage}: ${invoice.invoice_number}`)
   }
 }
 

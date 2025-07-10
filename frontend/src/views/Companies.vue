@@ -447,7 +447,9 @@
 import { ref, computed, onMounted } from 'vue';
 import { apiService } from '../services/api';
 import Modal from '../components/Modal.vue';
+import { useToast } from 'vue-toastification';
 
+const toast = useToast();
 // --- ESTADO PRINCIPAL ---
 const companies = ref([]);
 const users = ref([]);
@@ -527,7 +529,7 @@ async function fetchCompanies() {
     companies.value = data.map(company => ({ ...company, price_per_order: company.price_per_order || 0, plan_type: company.plan_type || 'basic', orders_this_month: company.orders_this_month || 0 }));
   } catch (error) {
     console.error("Error fetching companies:", error);
-    alert('No se pudieron cargar las empresas.');
+    toast.error('No se pudieron cargar las empresas.');
   } finally {
     loading.value = false;
   }
@@ -542,12 +544,12 @@ async function handleAddNewCompany() {
   isAddingCompany.value = true;
   try {
     await apiService.companies.create(newCompany.value);
-    alert('Empresa y usuario administrador creados exitosamente.');
+    toast.success('Empresa y usuario administrador creados exitosamente.');
     showAddCompanyModal.value = false;
     await fetchCompanies();
   } catch (error) {
     const errorMessage = error.response?.data?.error || 'Ocurrió un error inesperado.';
-    alert(`No se pudo crear la empresa: ${errorMessage}`);
+    toast.error(`No se pudo crear la empresa: ${errorMessage}`);
   } finally {
     isAddingCompany.value = false;
   }
@@ -561,7 +563,7 @@ async function openUsersModal(company) {
         const { data } = await apiService.companies.getUsers(company._id);
         users.value = data;
     } catch (error) {
-        alert('No se pudieron cargar los usuarios de la empresa.');
+        toast.error('No se pudieron cargar los usuarios de la empresa.');
     } finally {
         loadingUsers.value = false;
     }
@@ -577,7 +579,7 @@ async function handleAddNewUser() {
     try {
         const userData = { ...newUser.value, company_id: selectedCompany.value._id };
         await apiService.auth.register(userData);
-        alert('Usuario creado con éxito.');
+        toast.success('Usuario creado con éxito.');
         showAddUserForm.value = false;
         await openUsersModal(selectedCompany.value);
     } catch (error) {
@@ -596,9 +598,9 @@ async function toggleUserStatus(user) {
       // Suponiendo que tienes un endpoint para actualizar usuarios
       // await apiService.users.update(user._id, { is_active: newStatus });
       user.is_active = newStatus;
-      alert('Usuario actualizado con éxito.');
+      toast.success('Usuario actualizado con éxito.');
     } catch (error) {
-      alert(`Error al actualizar usuario: ${error.message}`);
+      toast.error(`Error al actualizar usuario: ${error.message}`);
     }
   }
 }
@@ -635,9 +637,9 @@ async function savePricingConfig() {
       companies.value[companyIndex] = { ...companies.value[companyIndex], price_per_order: pricingForm.value.price_per_order, ...updateData };
     }
     showPricingModal.value = false;
-    alert('Configuración de precios guardada con éxito.');
+    toast.success('Configuración de precios guardada con éxito.');
   } catch (error) {
-    alert(`Error al guardar configuración: ${error.message}`);
+    toast.error(`Error al guardar configuración: ${error.message}`);
   } finally {
     savingPricing.value = false;
   }
@@ -661,7 +663,7 @@ async function exportCompanyOrders(company) {
     window.URL.revokeObjectURL(url);
   } catch (error) {
     console.error('Error exporting company orders:', error);
-    alert('No se encontraron pedidos para exportar para esta empresa.');
+    toast.warning('No se encontraron pedidos para exportar para esta empresa.');
   } finally {
     isExporting.value = false;
   }
@@ -674,9 +676,9 @@ async function toggleCompanyStatus(company) {
     try {
       await apiService.companies.update(company._id, { is_active: newStatus });
       company.is_active = newStatus;
-      alert(`Empresa ${newStatus ? 'activada' : 'desactivada'} con éxito.`);
+      toast.success(`Empresa ${newStatus ? 'activada' : 'desactivada'} con éxito.`);
     } catch (error) {
-      alert(`Error al actualizar empresa: ${error.message}`);
+      toast.error(`Error al actualizar empresa: ${error.message}`);
     }
   }
 }

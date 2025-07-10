@@ -304,7 +304,9 @@ import Modal from '../components/Modal.vue';
 import OrderDetails from '../components/OrderDetails.vue';
 import OrderTracking from '../components/OrderTracking.vue';
 import ProofOfDelivery from '../components/ProofOfDelivery.vue';
+import { useToast } from 'vue-toastification';
 
+const toast = useToast();
 const router = useRouter(); // ✅ AGREGADO
 const auth = useAuthStore();
 const user = computed(() => auth.user);
@@ -375,11 +377,11 @@ async function markAsReady(orderToUpdate) {
       orders.value[index].status = 'Listo para retiro';
     }
     
-    alert(`Pedido #${orderToUpdate.order_number} marcado como listo para retiro.`);
+    toast.success(`Pedido #${orderToUpdate.order_number} marcado como listo para retiro.`);
     
   } catch (error) {
     console.error("Error al marcar el pedido:", error);
-    alert("No se pudo actualizar el estado del pedido.");
+    toast.error("No se pudo actualizar el estado del pedido.");
   }
 }
 
@@ -393,7 +395,7 @@ function selectAllOrders(event) {
 }
 async function generateManifestAndMarkReady() {
   if (selectedOrders.value.length === 0) {
-    alert('Selecciona al menos un pedido.');
+    toast.warning('Selecciona al menos un pedido.');
     return;
   }
 
@@ -420,17 +422,17 @@ async function generateManifestAndMarkReady() {
     const newWindow = window.open(routeData.href, '_blank');
 
     if (!newWindow) {
-      alert('No se pudo abrir el manifiesto. Habilita las ventanas emergentes.');
+      toast.error('No se pudo abrir el manifiesto. Habilita las ventanas emergentes.');
       return;
     }
 
     // 4. Limpiar selección
     selectedOrders.value = [];
 
-    alert('✅ Pedidos marcados como listos y manifiesto generado exitosamente.');
+    toast.success('✅ Pedidos marcados como listos y manifiesto generado exitosamente.');
   } catch (error) {
     console.error('❌ Error al generar manifiesto y marcar pedidos:', error);
-    alert('Ocurrió un error. Por favor, inténtalo nuevamente.');
+    toast.error('Ocurrió un error. Por favor, inténtalo nuevamente.');
   } finally {
     isMarkingReady.value = false;
   }

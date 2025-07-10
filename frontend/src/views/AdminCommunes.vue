@@ -75,7 +75,9 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue';
 import { apiService } from '../services/api';
+import { useToast } from 'vue-toastification';
 
+const toast = useToast();
 // --- ESTADO ---
 const companies = ref([]);
 const channels = ref([]);
@@ -109,7 +111,7 @@ async function fetchInitialData() {
 
   } catch (error) {
     console.error('Error cargando datos iniciales:', error);
-    alert('No se pudieron cargar los datos necesarios.');
+    toast.warning('No se pudieron cargar los datos necesarios.');
   } finally {
     loading.value.companies = false;
     loading.value.communes = false;
@@ -170,7 +172,7 @@ const getSelectedInZone = (zoneCommunes) => {
 
 async function saveConfiguration() {
   if (!selectedChannelId.value) {
-    alert('Por favor, selecciona un canal antes de guardar.');
+    toast.warning('Por favor, selecciona un canal antes de guardar.');
     return;
   }
   saving.value = true;
@@ -179,10 +181,10 @@ async function saveConfiguration() {
       accepted_communes: selectedCommunes.value
     };
     await apiService.channels.update(selectedChannelId.value, payload);
-    alert('✅ Configuración de comunas guardada exitosamente.');
+    toast.success('✅ Configuración de comunas guardada exitosamente.');
   } catch (error) {
     console.error('Error guardando configuración:', error);
-    alert('❌ Hubo un error al guardar la configuración.');
+    toast.error('❌ Hubo un error al guardar la configuración.');
   } finally {
     saving.value = false;
   }

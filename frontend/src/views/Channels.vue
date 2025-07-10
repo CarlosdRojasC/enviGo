@@ -142,7 +142,9 @@ import { useAuthStore } from '../store/auth';
 import { apiService } from '../services/api';
 import Modal from '../components/Modal.vue';
 import { useRoute } from 'vue-router';
+import { useToast } from 'vue-toastification';
 
+const toast = useToast();
 const auth = useAuthStore();
 const route = useRoute();
 const user = computed(() => auth.user);
@@ -217,7 +219,7 @@ async function fetchChannels() {
 
 function openAddChannelModal() {
   if (!canAddChannel.value) {
-    alert("Por favor, seleccione una empresa primero.");
+    toast.error("Por favor, seleccione una empresa primero.");
     return;
   }
   
@@ -249,18 +251,18 @@ async function addChannel() {
     const { data } = await apiService.channels.create(companyId, payload);
     
     showAddChannelModal.value = false;
-    alert('Canal agregado. Probando conexión...');
+    toast.success('Canal agregado. Probando conexión...');
 
     const testResult = await apiService.channels.testConnection(data.channel._id);
     if (testResult.data.success) {
-      alert(`¡Conexión exitosa! ${testResult.data.message}`);
+      toast.success(`¡Conexión exitosa! ${testResult.data.message}`);
     } else {
-      alert(`Canal creado, pero la prueba de conexión falló: ${testResult.data.message}`);
+      toast.warning(`Canal creado, pero la prueba de conexión falló: ${testResult.data.message}`);
     }
     await fetchChannels();
 
   } catch (error) {
-    alert(`Error al agregar el canal: ${error.message || 'Verifique los datos.'}`);
+    toast.error(`Error al agregar el canal: ${error.message || 'Verifique los datos.'}`);
   } finally {
     addingChannel.value = false;
   }
@@ -301,11 +303,11 @@ async function updateChannel() {
     }
 
     await apiService.channels.update(editingChannelId.value, updateData);
-    alert('Canal actualizado con éxito.');
+    toast.success('Canal actualizado con éxito.');
     showEditChannelModal.value = false;
     await fetchChannels();
   } catch (error) {
-    alert(`Error al actualizar el canal: ${error.message}`);
+    toast.error(`Error al actualizar el canal: ${error.message}`);
   } finally {
     isUpdatingChannel.value = false;
   }
@@ -317,10 +319,10 @@ async function deleteChannel(channel) {
 
   try {
     await apiService.channels.delete(channel._id);
-    alert('Canal eliminado con éxito.');
+    toast.success('Canal eliminado con éxito.');
     await fetchChannels();
   } catch (error) {
-    alert(`Error al eliminar el canal: ${error.message}`);
+    toast.error(`Error al eliminar el canal: ${error.message}`);
   }
 }
 
@@ -332,17 +334,17 @@ async function syncChannel(channelId) {
     date_from: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
     date_to: new Date().toISOString()
 });
-        alert('Sincronización iniciada. Los pedidos aparecerán en la sección "Mis Pedidos" en unos momentos.');
+        toast.success('Sincronización iniciada. Los pedidos aparecerán en la sección "Mis Pedidos" en unos momentos.');
         await fetchChannels();
     } catch (error) {
-        alert(`Error en la sincronización: ${error.message}`);
+        toast.error(`Error en la sincronización: ${error.message}`);
     } finally {
         syncingChannels.value = syncingChannels.value.filter(id => id !== channelId);
     }
 }
 
 function showChannelDetails(channel) {
-  alert(`Detalles del canal ${channel.channel_name}. Funcionalidad pendiente.`);
+  toast.warning(`Detalles del canal ${channel.channel_name}. Funcionalidad pendiente.`);
 }
 
 function getChannelTypeName(type) {

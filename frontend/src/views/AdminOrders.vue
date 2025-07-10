@@ -143,12 +143,6 @@
                     title="Asignar a un conductor en Shipday">
                     Asignar
                   </button>
-                  <button 
-                    @click="debugOrder(order)" 
-                    class="btn-table-action debug" 
-                    title="Debug datos para Shipday">
-                    🔍 Debug
-                  </button>
                 </div>
               </td>
             </tr>
@@ -255,11 +249,6 @@
       <div v-if="selectedOrder">
         <p>Asignando pedido <strong>#{{ selectedOrder.order_number }}</strong> a un conductor de Shipday.</p>
         
-        <div class="debug-section">
-          <button @click="debugDrivers" class="btn-debug" type="button">
-            🔍 Debug Conductores
-          </button>
-        </div>
         
         <div v-if="loadingDrivers" class="loading-state">Cargando conductores...</div>
         
@@ -536,7 +525,7 @@ async function exportOrders() {
     link.remove(); 
     window.URL.revokeObjectURL(url); 
   } catch (error) { 
-    alert('No se encontraron pedidos para exportar.'); 
+    toast.warning('No se encontraron pedidos para exportar.'); 
   } finally { 
     isExporting.value = false; 
   } 
@@ -553,9 +542,9 @@ async function handleStatusUpdate({ orderId, newStatus }) {
       orders.value[index].status = newStatus; 
     } 
     showUpdateStatusModal.value = false; 
-    alert('Estado actualizado con éxito.'); 
+    toast.success('Estado actualizado con éxito.'); 
   } catch (error) { 
-    alert(`Error al actualizar estado: ${error.message}`); 
+    toast.warning(`Error al actualizar estado: ${error.message}`); 
   } 
 }
 
@@ -629,12 +618,12 @@ async function handleCreateOrder() {
     console.log('📦 Datos del pedido a crear:', orderData);
     
     await apiService.orders.create(orderData); 
-    alert('Pedido manual creado con éxito.'); 
+    toast.success('Pedido manual creado con éxito.'); 
     showCreateOrderModal.value = false; 
     await fetchOrders(); 
   } catch (error) { 
     console.error('Error creando pedido:', error);
-    alert(`No se pudo crear el pedido: ${error.response?.data?.errors?.[0]?.msg || error.response?.data?.error || error.message}`); 
+    toast.error(`No se pudo crear el pedido: ${error.response?.data?.errors?.[0]?.msg || error.response?.data?.error || error.message}`); 
   } finally { 
     isCreatingOrder.value = false; 
   } 
@@ -656,15 +645,15 @@ function handleFileSelect(event) {
 async function handleBulkUpload() {
 
    if (!bulkUploadCompanyId.value) { // <--- Añade esta validación
-    alert('Por favor, selecciona una empresa para la subida masiva.');
+    toast.warning('Por favor, selecciona una empresa para la subida masiva.');
     return;
   }
   if (!selectedFile.value) {
-    alert('Por favor, selecciona un archivo.');
+    toast.warning('Por favor, selecciona un archivo.');
     return;
   }
   if (!selectedFile.value) {
-    alert('Por favor, selecciona un archivo.');
+    toast.warning('Por favor, selecciona un archivo.');
     return;
   }
   isUploading.value = true;
@@ -772,93 +761,6 @@ async function confirmAssignment() {
     isAssigning.value = false;
   }
 }
-
-async function debugOrder(order) {
-  try {
-    console.log('🔍 Iniciando debug para orden:', order._id);
-    
-    const response = await apiService.orders.debugShipday(order._id);
-    
-    console.log('✅ Debug Info completa:', response.data);
-    
-    const debugInfo = response.data.debug_info;
-    const validations = debugInfo.validations;
-    const companyData = debugInfo.company_data;
-    const orderData = debugInfo.order_basics;
-    
-    alert(`
-🔍 DEBUG ORDEN: ${orderData.order_number}
-
-📊 DATOS BÁSICOS:
-• Cliente: ${orderData.customer_name || 'NO DEFINIDO'}
-• Dirección: ${orderData.shipping_address || 'NO DEFINIDA'}
-• Total: ${orderData.total_amount || orderData.shipping_cost || 0}
-
-🏢 DATOS EMPRESA:
-• ID: ${companyData.company_id || 'NO DEFINIDO'}
-• Nombre: ${companyData.company_name || 'NO DEFINIDO'}
-• Teléfono: ${companyData.company_phone || 'NO DEFINIDO'}
-
-✅ VALIDACIONES:
-• Tiene empresa: ${validations.has_company ? '✅' : '❌'}
-• Nombre empresa: ${validations.has_company_name ? '✅' : '❌'}
-• Nombre no vacío: ${validations.company_name_not_empty ? '✅' : '❌'}
-• Todo OK: ${validations.all_required_fields_ok ? '✅' : '❌'}
-
-🚀 NOMBRE RESTAURANTE FINAL: 
-"${validations.restaurant_name_final}"
-
-Ver consola para detalles completos.
-    `);
-    
-  } catch (error) {
-    console.error('❌ Error en debug:', error);
-    alert(`Error: ${error.response?.data?.error || error.message}`);
-  }
-}
-
-async function debugDrivers() {
-  try {
-    console.log('🔍 Iniciando debug de conductores...');
-    
-    const response = await shipdayService.getDrivers();
-    console.log('📋 Respuesta completa de getDrivers:', response);
-    
-    const drivers = response.data?.data || response.data || [];
-    console.log('👥 Conductores procesados:', drivers);
-    
-    drivers.forEach((driver, index) => {
-      console.log(`👨‍💼 Conductor ${index + 1}:`, {
-        id: driver.id,
-        carrierId: driver.carrierId,
-        name: driver.name,
-        email: driver.email,
-        isActive: driver.isActive,
-        isOnShift: driver.isOnShift,
-        status: driver.status
-      });
-    });
-    
-    const filtered = drivers.filter(driver => driver.isActive && !driver.isOnShift);
-    console.log('🎯 Conductores filtrados (disponibles):', filtered);
-    
-    alert(`
-🔍 DEBUG CONDUCTORES
-
-📊 Total conductores: ${drivers.length}
-✅ Activos: ${drivers.filter(d => d.isActive).length}
-🚚 En turno: ${drivers.filter(d => d.isOnShift).length}
-⭐ Disponibles: ${filtered.length}
-
-Ver consola para detalles completos.
-    `);
-    
-  } catch (error) {
-    console.error('❌ Error en debug de conductores:', error);
-    alert('Error obteniendo conductores: ' + error.message);
-  }
-}
-
 async function fetchAvailableDrivers() {
   loadingDrivers.value = true;
   try {
@@ -873,7 +775,7 @@ async function fetchAvailableDrivers() {
     console.log('⭐ Conductores mostrados en select:', availableDrivers.value);
     
   } catch (error) {
-    alert("Error al cargar los conductores desde Shipday.");
+    toast.error("Error al cargar los conductores desde Shipday.");
     console.error(error);
   } finally {
     loadingDrivers.value = false;
@@ -910,7 +812,7 @@ function getOrderById(orderId) {
 // NUEVO: Funciones para asignación masiva
 async function openBulkAssignModal() {
   if (selectedOrders.value.length === 0) {
-    alert('Por favor, selecciona al menos un pedido.');
+    toast.warning('Por favor, selecciona al menos un pedido.');
     return;
   }
   
@@ -940,17 +842,17 @@ async function downloadTemplate() {
     link.remove();
   } catch (error) {
     console.error("Error al descargar la plantilla:", error);
-    alert('No se pudo descargar la plantilla. Inténtelo de nuevo.');
+    toast.error('No se pudo descargar la plantilla. Inténtelo de nuevo.');
   }
 }
 async function confirmBulkAssignment() {
   if (!bulkSelectedDriverId.value) {
-    alert('Por favor, selecciona un conductor.');
+    toast.error('Por favor, selecciona un conductor.');
     return;
   }
   
   if (selectedOrders.value.length === 0) {
-    alert('No hay pedidos seleccionados.');
+    toast.error('No hay pedidos seleccionados.');
     return;
   }
   
@@ -1064,7 +966,7 @@ async function confirmBulkAssignment() {
   const successful = bulkAssignmentResults.value.filter(r => r.success).length;
   const failed = bulkAssignmentResults.value.filter(r => !r.success).length;
   
-  alert(`
+  toast.success(`
 🏁 Asignación masiva completada:
 
 ✅ Exitosos: ${successful}

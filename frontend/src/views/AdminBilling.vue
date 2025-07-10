@@ -522,7 +522,9 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useAuthStore } from '../store/auth'
 import { apiService } from '../services/api'
 import Modal from '../components/Modal.vue'
+import { useToast } from 'vue-toastification';
 
+const toast = useToast();
 const auth = useAuthStore()
 
 // Estado principal
@@ -634,7 +636,7 @@ onMounted(async () => {
   // Verificar que el usuario sea admin
   if (!auth.isAdmin) {
     console.error('❌ Usuario no es administrador')
-    alert('No tienes permisos de administrador para acceder a esta sección.')
+    toast.error('No tienes permisos de administrador para acceder a esta sección.')
     return
   }
   
@@ -644,7 +646,7 @@ onMounted(async () => {
     const connectionTest = await checkConnection()
     if (!connectionTest.success) {
       console.error('🔴 No hay conexión con el backend:', connectionTest.error)
-      alert('No se puede conectar con el servidor. Verifica que el backend esté ejecutándose.')
+      toast.error('No se puede conectar con el servidor. Verifica que el backend esté ejecutándose.')
       return
     }
     console.log('🟢 Conexión con backend verificada')
@@ -866,14 +868,14 @@ async function confirmGenerateInvoice() {
     
     const { data } = await apiService.billing.generateInvoice(invoiceData)
     
-    alert(`Factura ${data.invoice.invoice_number} generada exitosamente para ${selectedOrders.value.length} pedidos`)
+    toast.success(`Factura ${data.invoice.invoice_number} generada exitosamente para ${selectedOrders.value.length} pedidos`)
     showGenerateModal.value = false
     resetGenerateForm()
     await fetchInvoices()
     
   } catch (error) {
     console.error('Error generando factura:', error)
-    alert(`Error al generar factura: ${error.response?.data?.error || error.message}`)
+    toast.warning(`Error al generar factura: ${error.response?.data?.error || error.message}`)
   } finally {
     generating.value = false
   }
@@ -893,7 +895,7 @@ async function previewBulkGeneration() {
       
   } catch (error) {
     console.error('Error previewing bulk generation:', error)
-    alert(`Error en vista previa: ${error.response?.data?.error || error.message}`)
+    toast.error(`Error en vista previa: ${error.response?.data?.error || error.message}`)
   }
 }
 
@@ -902,14 +904,14 @@ async function confirmBulkGeneration() {
   try {
     const { data } = await apiService.billing.generateBulkInvoices(bulkGenerateForm.value)
     
-    alert(`${data.generated_invoices.length} facturas generadas exitosamente`)
+    toast.success(`${data.generated_invoices.length} facturas generadas exitosamente`)
     showBulkGenerateModal.value = false
     bulkPreview.value = []
     await fetchInvoices()
     
   } catch (error) {
     console.error('Error generando facturas masivas:', error)
-    alert(`Error al generar facturas: ${error.response?.data?.error || error.message}`)
+    toast.error(`Error al generar facturas: ${error.response?.data?.error || error.message}`)
   } finally {
     generating.value = false
   }
@@ -934,11 +936,11 @@ async function bulkSendInvoices() {
   
   try {
     // await apiService.billing.bulkSendInvoices(selectedInvoices.value)
-    alert('Facturas enviadas exitosamente')
+    toast.success('Facturas enviadas exitosamente')
     selectedInvoices.value = []
     selectAll.value = false
   } catch (error) {
-    alert(`Error al enviar facturas: ${error.message}`)
+    toast.error(`Error al enviar facturas: ${error.message}`)
   }
 }
 
@@ -948,21 +950,21 @@ async function bulkMarkAsPaid() {
   
   try {
     // await apiService.billing.bulkMarkAsPaid(selectedInvoices.value)
-    alert('Facturas marcadas como pagadas')
+    toast.success('Facturas marcadas como pagadas')
     selectedInvoices.value = []
     selectAll.value = false
     await fetchInvoices()
   } catch (error) {
-    alert(`Error al marcar facturas: ${error.message}`)
+    toast.error(`Error al marcar facturas: ${error.message}`)
   }
 }
 
 async function bulkDownload() {
   try {
     // await apiService.billing.bulkDownload(selectedInvoices.value)
-    alert('Descargando ZIP con facturas seleccionadas...')
+    toast.warning('Descargando ZIP con facturas seleccionadas...')
   } catch (error) {
-    alert(`Error al descargar facturas: ${error.message}`)
+    toast.error(`Error al descargar facturas: ${error.message}`)
   }
 }
 
@@ -1150,7 +1152,7 @@ async function downloadInvoice(invoice) {
       errorMessage = 'Error de conexión. Verifica tu internet.'
     }
     
-    alert(`${errorMessage}: ${invoice.invoice_number}`)
+    toast.error(`${errorMessage}: ${invoice.invoice_number}`)
   }
 }
 
@@ -1160,9 +1162,9 @@ async function sendInvoice(invoice) {
   
   try {
     invoice.status = 'sent'
-    alert('Factura enviada por email exitosamente')
+    toast.success('Factura enviada por email exitosamente')
   } catch (error) {
-    alert(`Error al enviar factura: ${error.message}`)
+    toast.error(`Error al enviar factura: ${error.message}`)
   }
 }
 
@@ -1173,10 +1175,10 @@ async function markAsPaid(invoice) {
   try {
     await apiService.billing.markAsPaid(invoice._id)
     invoice.status = 'paid'
-    alert('Factura marcada como pagada')
+    toast.success('Factura marcada como pagada')
     await fetchInvoices()
   } catch (error) {
-    alert(`Error al marcar factura como pagada: ${error.response?.data?.error || error.message}`)
+    toast.error(`Error al marcar factura como pagada: ${error.response?.data?.error || error.message}`)
   }
 }
 
@@ -1200,7 +1202,7 @@ async function deleteInvoice(invoice) {
     // Actualizar resumen financiero
     await fetchFinancialSummary()
     
-    alert(`Factura ${invoice.invoice_number} borrada exitosamente`)
+    toast.success(`Factura ${invoice.invoice_number} borrada exitosamente`)
     
   } catch (error) {
     console.error('Error borrando factura:', error)
@@ -1210,7 +1212,7 @@ async function deleteInvoice(invoice) {
       errorMessage = error.response.data.error || 'No se puede borrar esta factura'
     }
     
-    alert(`${errorMessage}: ${invoice.invoice_number}`)
+    toast.error(`${errorMessage}: ${invoice.invoice_number}`)
   }
 }
 
@@ -1239,7 +1241,7 @@ async function bulkDeleteInvoices() {
     // Actualizar resumen financiero
     await fetchFinancialSummary()
     
-    alert(`${data.deleted_count} facturas borradas exitosamente`)
+    toast.success(`${data.deleted_count} facturas borradas exitosamente`)
     
   } catch (error) {
     console.error('Error borrando facturas en lote:', error)
@@ -1254,7 +1256,7 @@ async function bulkDeleteInvoices() {
 }
 
 async function editInvoice(invoice) {
-  alert(`Editando factura ${invoice.invoice_number}`)
+  toast.warning(`Editando factura ${invoice.invoice_number}`)
 }
 
 function openGenerateModal() {

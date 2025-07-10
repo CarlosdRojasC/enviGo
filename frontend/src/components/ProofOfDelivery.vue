@@ -144,9 +144,6 @@
     </div>
 
     <div class="actions-section">
-      <button @click="downloadProof" class="action-btn download">
-        📥 Descargar Comprobante
-      </button>
       <button @click="shareProof" class="action-btn share">
         📤 Compartir
       </button>
@@ -183,7 +180,9 @@
 
 <script setup>
 import { ref, computed } from 'vue';
+import { useToast } from 'vue-toastification';
 
+const toast = useToast();
 const props = defineProps({
   order: { type: Object, required: true }
 });
@@ -313,12 +312,6 @@ function openLocationInMaps() {
   }
 }
 
-function downloadProof() {
-  // Implementar descarga de comprobante
-  console.log('Descargando comprobante de entrega para pedido:', props.order.order_number);
-  alert('Función de descarga en desarrollo');
-}
-
 function shareProof() {
   if (navigator.share) {
     navigator.share({
@@ -330,7 +323,7 @@ function shareProof() {
     // Fallback para navegadores que no soportan Web Share API
     const text = `Mi pedido #${props.order.order_number} fue entregado exitosamente el ${formatDate(props.order.delivery_date)}`;
     navigator.clipboard.writeText(text);
-    alert('Información copiada al portapapeles');
+    toast.success('Información copiada al portapapeles');
   }
 }
 
