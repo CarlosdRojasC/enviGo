@@ -13,6 +13,55 @@ class ShipDayService {
       console.log('✅ ShipDay API Key configurada:', `${API_KEY.substring(0, 10)}...`);
     }
     this.workingFormat = null; // Para almacenar el formato de auth que funciona
+    
+    // ========== NUEVO: RATE LIMITING ==========
+    this.lastRequestTime = 0;
+    this.minRequestInterval = 250; // 250ms entre requests (4 requests/segundo máximo)
+    this.requestQueue = [];
+    this.isProcessingQueue = false;
+    
+    // ========== RETRY CONFIGURATION ==========
+    this.maxRetries = 3;
+    this.baseDelay = 1000; // 1 segundo
+  }
+
+  // ========== NUEVO: RATE LIMITING ==========
+  async waitForRateLimit() {
+    const now = Date.now();
+    const timeSinceLastRequest = now - this.lastRequestTime;
+    
+    if (timeSinceLastRequest < this.minRequestInterval) {
+      const waitTime = this.minRequestInterval - timeSinceLastRequest;
+      console.log(`⏱️ Rate limiting: esperando ${waitTime}ms...`);
+      await new Promise(resolve => setTimeout(resolve, waitTime));
+    }
+    
+    this.lastRequestTime = Date.now();
+  }
+
+  // ========== NUEVO: RETRY CON BACKOFF EXPONENCIAL ==========
+  async retryWithBackoff(fn, context = 'operación', attempt = 1) {
+    try {
+      await this.waitForRateLimit();
+      return await fn();
+    } catch (error) {
+      const isRateLimitError = 
+        error.response?.status === 429 || 
+        error.message?.toLowerCase().includes('rate limit') ||
+        error.message?.toLowerCase().includes('límite') ||
+        error.response?.data?.errorMessage?.toLowerCase().includes('rate limit') ||
+        error.response?.data?.errorMessage?.toLowerCase().includes('limit exceeded');
+
+      if (isRateLimitError && attempt <= this.maxRetries) {
+        const delay = this.baseDelay * Math.pow(2, attempt - 1) + Math.random() * 1000; // Backoff exponencial + jitter
+        console.log(`🔄 Rate limit detectado en ${context}. Reintento ${attempt}/${this.maxRetries} en ${Math.round(delay)}ms...`);
+        
+        await new Promise(resolve => setTimeout(resolve, delay));
+        return this.retryWithBackoff(fn, context, attempt + 1);
+      }
+      
+      throw error;
+    }
   }
 
   // Método para probar diferentes formatos de autenticación
@@ -39,57 +88,63 @@ class ShipDayService {
   // ==================== DRIVERS ====================
 
   async createDriver(driverData) {
-    const payload = {
-      name: driverData.name,
-      email: driverData.email,
-      phoneNumber: driverData.phone,
-      vehicleType: driverData.vehicle_type || 'car'
-    };
+    return this.retryWithBackoff(async () => {
+      const payload = {
+        name: driverData.name,
+        email: driverData.email,
+        phoneNumber: driverData.phone,
+        vehicleType: driverData.vehicle_type || 'car'
+      };
 
-    console.log('🚚 Enviando payload a ShipDay:', payload);
+      console.log('🚚 Enviando payload a ShipDay con rate limiting:', payload);
 
-    // Probar diferentes formatos de autenticación
-    const authFormats = [
-      { name: 'Basic + API_KEY', headers: this.getHeaders(1) },
-      { name: 'Solo API_KEY', headers: this.getHeaders(2) },
-      { name: 'Bearer + API_KEY', headers: this.getHeaders(3) },
-      { name: 'X-API-Key header', headers: this.getHeaders(4) }
-    ];
+      // Probar diferentes formatos de autenticación
+      const authFormats = [
+        { name: 'Basic + API_KEY', headers: this.getHeaders(1) },
+        { name: 'Solo API_KEY', headers: this.getHeaders(2) },
+        { name: 'Bearer + API_KEY', headers: this.getHeaders(3) },
+        { name: 'X-API-Key header', headers: this.getHeaders(4) }
+      ];
 
-    let lastError;
-    
-    for (const format of authFormats) {
-      try {
-        console.log(`🔍 Probando formato: ${format.name}`);
-        
-        const res = await axios.post(`${BASE_URL}/carriers`, payload, { headers: format.headers });
-        console.log(`✅ ¡ÉXITO con formato ${format.name}!`, res.data);
-        
-        // Si funciona, actualizar el método getHeaders por defecto
-        this.workingFormat = format.headers;
-        return res.data;
-        
-      } catch (error) {
-        console.log(`❌ Formato ${format.name} falló:`, error.response?.status, error.response?.data?.errorMessage);
-        lastError = error;
-        continue;
+      let lastError;
+      
+      for (const format of authFormats) {
+        try {
+          console.log(`🔍 Probando formato: ${format.name}`);
+          
+          const res = await axios.post(`${BASE_URL}/carriers`, payload, { headers: format.headers });
+          console.log(`✅ ¡ÉXITO con formato ${format.name}!`, res.data);
+          
+          // Si funciona, actualizar el método getHeaders por defecto
+          this.workingFormat = format.headers;
+          return res.data;
+          
+        } catch (error) {
+          console.log(`❌ Formato ${format.name} falló:`, error.response?.status, error.response?.data?.errorMessage);
+          lastError = error;
+          continue;
+        }
       }
-    }
 
-    // Si ningún formato funcionó, lanzar el último error
-    console.error('❌ Todos los formatos de autenticación fallaron');
-    throw this.handleError(lastError);
+      // Si ningún formato funcionó, lanzar el último error
+      console.error('❌ Todos los formatos de autenticación fallaron');
+      throw this.handleError(lastError);
+    }, 'crear conductor');
   }
 
   async getDrivers() {
-    try {
+    return this.retryWithBackoff(async () => {
       const headers = this.workingFormat || this.getHeaders(1);
+      console.log('🚗 Obteniendo conductores con rate limiting...');
+      
       const res = await axios.get(`${BASE_URL}/carriers`, { headers });
       const driversData = Array.isArray(res.data) ? res.data : res.data.data || res.data.carriers || [];
+      
       if (!Array.isArray(driversData)) {
         console.error('❌ Los datos de conductores de Shipday no son un array.');
         return [];
       }
+      
       return driversData.map(driver => ({
         ...driver,
         id: driver.id,
@@ -98,10 +153,7 @@ class ShipDayService {
         isOnShift: Boolean(driver.isOnShift),
         status: this.calculateDriverStatus(driver)
       }));
-    } catch (error) {
-      console.error('❌ Error obteniendo conductores:', error.response?.data);
-      throw this.handleError(error);
-    }
+    }, 'obtener conductores');
   }
 
   calculateDriverStatus(driver) {
@@ -111,167 +163,157 @@ class ShipDayService {
   }
 
   async getDriver(email) {
-    try {
+    return this.retryWithBackoff(async () => {
       const headers = this.workingFormat || this.getHeaders(1);
       const res = await axios.get(`${BASE_URL}/carriers/${email}`, { headers });
       return res.data;
-    } catch (error) {
-      console.error('❌ Error obteniendo conductor:', error.response?.data);
-      throw this.handleError(error);
-    }
+    }, `obtener conductor ${email}`);
   }
 
   async updateDriver(email, updateData) {
-    try {
+    return this.retryWithBackoff(async () => {
       const payload = {
         name: updateData.name,
         email,
         phoneNumber: updateData.phone || updateData.phoneNumber,
-        // ShipDay maneja isActive para habilitar/deshabilitar
         isActive: updateData.isActive,
-        // Otros campos si están disponibles
         codeName: updateData.codeName || '',
         areaId: updateData.areaId || null
       };
 
-      console.log('🔄 Actualizando conductor en ShipDay:', payload);
+      console.log('🔄 Actualizando conductor en ShipDay con rate limiting:', payload);
 
       const headers = this.workingFormat || this.getHeaders(1);
       const res = await axios.put(`${BASE_URL}/carriers/${email}`, payload, { headers });
       
       console.log('✅ Conductor actualizado:', res.data);
       return res.data;
-    } catch (error) {
-      console.error('❌ Error actualizando conductor:', error.response?.data);
-      throw this.handleError(error);
-    }
+    }, `actualizar conductor ${email}`);
   }
 
   async deleteDriver(email) {
-    try {
+    return this.retryWithBackoff(async () => {
       const headers = this.workingFormat || this.getHeaders(1);
       const res = await axios.delete(`${BASE_URL}/carriers/${email}`, { headers });
       return res.data;
-    } catch (error) {
-      console.error('❌ Error eliminando conductor:', error.response?.data);
-      throw this.handleError(error);
-    }
+    }, `eliminar conductor ${email}`);
   }
 
   // ==================== ORDERS ====================
-/**
-   * ✅ CORREGIDO: Crea una orden en Shipday asegurando que los campos obligatorios estén presentes.
+
+  /**
+   * ✅ CORREGIDO: Crea una orden en Shipday con rate limiting
    */
   async createOrder(orderData) {
-    try {
+    return this.retryWithBackoff(async () => {
       const headers = this.workingFormat || this.getHeaders(1);
       
-const payload = {
+      const payload = {
         orderNumber: orderData.orderNumber,
         customerName: orderData.customerName,
         customerAddress: orderData.customerAddress,
         restaurantName: "enviGo", // <-- VALOR FIJO
         restaurantAddress: "santa hilda 1447, quilicura", // <-- VALOR FIJO
-        // Campos opcionales pero útiles para Shipday
         customerEmail: orderData.customerEmail,
         customerPhoneNumber: orderData.customerPhoneNumber,
         deliveryInstruction: orderData.deliveryInstruction,
         deliveryFee: 1800,
-        // No se incluyen `deliveryFee`, `total`, ni `paymentMethod`.
       };
 
-      console.log('📦 Enviando payload de creación de orden a Shipday:', JSON.stringify(payload, null, 2));
+      console.log('📦 Enviando payload de creación de orden a Shipday con rate limiting:', JSON.stringify(payload, null, 2));
       const res = await axios.post(`${BASE_URL}/orders`, payload, { headers });
       
       return res.data;
-    } catch (error) {
-      console.error('❌ Error creando la orden en Shipday:', error.response?.data);
-      throw this.handleError(error);
-    }
+    }, `crear orden ${orderData.orderNumber}`);
   }
 
-    async assignOrderNewUrl(orderId, carrierId) {
+  async assignOrderNewUrl(orderId, carrierId) {
     if (!orderId || !carrierId) {
       throw new Error('El orderId y el carrierId son requeridos para el nuevo método.');
     }
 
-    try {
-      // Usa los headers que ya sabes que funcionan o el default
+    return this.retryWithBackoff(async () => {
       const headers = this.workingFormat || this.getHeaders(1);
-      
-      // Construye la URL exacta que sugeriste
       const url = `${BASE_URL}/orders/assign/${orderId}/${carrierId}`;
       
       console.log(`🚀 Probando NUEVO método de asignación con la URL sugerida...`);
       console.log(`🌐 URL: PUT ${url}`);
       
-      // La petición PUT se envía SIN cuerpo (payload), por eso pasamos un objeto vacío {}.
-      // Toda la información necesaria ya está en la URL.
       const response = await axios.put(url, {}, { headers });
       
       console.log('✅ ¡ÉXITO con el nuevo método de asignación!:', response.data);
       return response.data;
-
-    } catch (error) {
-      console.error('❌ Error fatal con el nuevo método de asignación:', {
-        status: error.response?.status,
-        statusText: error.response?.statusText,
-        data: error.response?.data,
-        url: error.config?.url
-      });
-      // Reutiliza tu manejador de errores
-      throw this.handleError(error);
-    }
+    }, `asignación nueva URL (orden ${orderId})`);
   }
 
   /**
-   * ✅ CORREGIDO: Asigna una orden ya creada a un conductor.
-   * Sigue la documentación oficial: POST /orders/assign/{orderId}
+   * ✅ ASIGNACIÓN MEJORADA CON RATE LIMITING Y MÚLTIPLES MÉTODOS
    */
-
   async assignOrder(orderId, driverId) {
+    console.log(`🎯 Iniciando asignación con rate limiting: orden ${orderId} → conductor ${driverId}`);
+    
+    // Método 1: Endpoint oficial (recomendado por documentación)
     try {
-      const headers = this.workingFormat || this.getHeaders(1);
+      return await this.retryWithBackoff(async () => {
+        const headers = this.workingFormat || this.getHeaders(1);
+        
+        const payload = {
+          carrierId: parseInt(driverId)
+        };
+        
+        console.log(`🔵 Método 1: PUT /orders/${orderId}/assign`);
+        const response = await axios.put(`${BASE_URL}/orders/${orderId}/assign`, payload, { headers });
+        
+        console.log('✅ Método 1 exitoso:', response.data);
+        return response.data;
+        
+      }, `asignación método 1 (orden ${orderId})`);
       
-      console.log(`🔗 Asignando orden ${orderId} al conductor ${driverId} (según docs oficiales)...`);
+    } catch (error1) {
+      console.log('❌ Método 1 falló:', error1.message);
       
-      // Según la documentación, el payload debe ser:
-      const payload = {
-        carrierId: parseInt(driverId) // Asegurar que sea número entero
-      };
-      
-      console.log(`📋 Payload oficial:`, payload);
-      console.log(`🌐 URL: PUT ${BASE_URL}/orders/${orderId}/assign`);
-      
-      const response = await axios.put(`${BASE_URL}/orders/${orderId}/assign`, payload, { headers });
-      
-      console.log('✅ Asignación exitosa según docs oficiales:', response.data);
-      
-      return response.data;
-      
-    } catch (error) {
-      console.error('❌ Error con método oficial:', {
-        status: error.response?.status,
-        statusText: error.response?.statusText,
-        data: error.response?.data,
-        url: error.config?.url
-      });
-      
-      // Si el método oficial falla, intentar variaciones del payload
-      if (error.response?.status === 400 || error.response?.status === 422) {
-        console.log('🔄 Intentando variaciones del payload...');
-        return await this.assignOrderWithVariations(orderId, driverId);
+      // Método 2: Endpoint alternativo
+      try {
+        return await this.retryWithBackoff(async () => {
+          const headers = this.workingFormat || this.getHeaders(1);
+          
+          console.log(`🔵 Método 2: PUT /orders/assign/${orderId}/${driverId}`);
+          const response = await axios.put(`${BASE_URL}/orders/assign/${orderId}/${driverId}`, {}, { headers });
+          
+          console.log('✅ Método 2 exitoso:', response.data);
+          return response.data;
+          
+        }, `asignación método 2 (orden ${orderId})`);
+        
+      } catch (error2) {
+        console.log('❌ Método 2 falló:', error2.message);
+        
+        // Método 3: Variaciones del payload
+        try {
+          return await this.assignOrderWithVariations(orderId, driverId);
+          
+        } catch (error3) {
+          console.error('❌ Todos los métodos de asignación fallaron');
+          
+          // Si es error de rate limit, lanzar mensaje específico
+          if (error1.message?.toLowerCase().includes('límite') || 
+              error1.message?.toLowerCase().includes('rate limit') ||
+              error1.response?.status === 429) {
+            throw new Error('Límite de requests excedido. Intenta más tarde');
+          }
+          
+          // Lanzar el primer error que es el más relevante
+          throw this.handleError(error1);
+        }
       }
-      
-      throw this.handleError(error);
     }
   }
 
   /**
-   * ✅ VARIACIONES: Intentar diferentes formatos de payload si el oficial falla
+   * ✅ VARIACIONES: Intentar diferentes formatos de payload con rate limiting
    */
   async assignOrderWithVariations(orderId, driverId) {
-    try {
+    return this.retryWithBackoff(async () => {
       const headers = this.workingFormat || this.getHeaders(1);
       
       console.log('🔄 Probando variaciones del payload para asignación...');
@@ -303,6 +345,9 @@ const payload = {
         try {
           console.log(`🔍 Variación ${i + 1}:`, payload);
           
+          // Aplicar rate limiting entre variaciones
+          await this.waitForRateLimit();
+          
           const response = await axios.put(`${BASE_URL}/orders/${orderId}/assign`, payload, { headers });
           
           console.log(`✅ Éxito con variación ${i + 1}:`, response.data);
@@ -321,17 +366,14 @@ const payload = {
       console.error('❌ Todas las variaciones fallaron');
       throw this.handleError(lastError);
       
-    } catch (error) {
-      console.error('❌ Error en variaciones:', error);
-      throw this.handleError(error);
-    }
+    }, `variaciones asignación orden ${orderId}`);
   }
 
   /**
-   * ✅ MÉTODO MEJORADO: Obtener conductor con validación
+   * ✅ MÉTODO MEJORADO: Obtener conductor con validación y rate limiting
    */
   async getValidatedDriver(driverId) {
-    try {
+    return this.retryWithBackoff(async () => {
       console.log(`🔍 Validando conductor ${driverId}...`);
       
       const drivers = await this.getDrivers();
@@ -368,14 +410,11 @@ const payload = {
       
       return driver;
       
-    } catch (error) {
-      console.error('❌ Error validando conductor:', error);
-      throw error;
-    }
+    }, `validar conductor ${driverId}`);
   }
 
   /**
-   * ✅ MÉTODO COMPLETO: Asignar con validación completa
+   * ✅ MÉTODO COMPLETO: Asignar con validación completa y rate limiting
    */
   async assignOrderWithValidation(orderId, driverId) {
     try {
@@ -401,7 +440,7 @@ const payload = {
       console.log(`🎯 Asignando conductor usando ID: ${driver.id || driver.carrierId}`);
       const result = await this.assignOrder(orderId, driver.id || driver.carrierId);
       
-      // Paso 4: Verificar que la asignación fue exitosa
+      // Paso 4: Verificar que la asignación fue exitosa (con delay para rate limiting)
       console.log('🔍 Verificando asignación...');
       setTimeout(async () => {
         try {
@@ -410,7 +449,7 @@ const payload = {
         } catch (verifyError) {
           console.error('❌ Error en verificación:', verifyError);
         }
-      }, 2000);
+      }, 3000); // Aumentado a 3 segundos para rate limiting
       
       return {
         success: true,
@@ -429,21 +468,20 @@ const payload = {
   }
   
   async getOrders() {
-    try {
+    return this.retryWithBackoff(async () => {
       const headers = this.workingFormat || this.getHeaders(1);
+      console.log('📦 Obteniendo órdenes con rate limiting...');
+      
       const res = await axios.get(`${BASE_URL}/orders`, { headers });
       return res.data;
-    } catch (error) {
-      console.error('❌ Error obteniendo órdenes:', error.response?.data);
-      throw this.handleError(error);
-    }
+    }, 'obtener órdenes');
   }
 
- async getOrder(orderId) {
-    try {
+  async getOrder(orderId) {
+    return this.retryWithBackoff(async () => {
       const headers = this.workingFormat || this.getHeaders(1);
       
-      console.log(`🔍 Obteniendo orden ${orderId} de Shipday...`);
+      console.log(`🔍 Obteniendo orden ${orderId} de Shipday con rate limiting...`);
       
       const response = await axios.get(`${BASE_URL}/orders/${orderId}`, { headers });
       
@@ -494,18 +532,46 @@ const payload = {
       
       return standardizedOrder;
       
-    } catch (error) {
-      console.error('❌ Error obteniendo orden:', {
-        orderId,
-        status: error.response?.status,
-        statusText: error.response?.statusText,
-        data: error.response?.data,
-        url: error.config?.url
-      });
-      throw this.handleError(error);
-    }
+    }, `obtener orden ${orderId}`);
   }
 
+  /**
+   * ✅ NUEVO: Verificar asignación de orden con rate limiting
+   */
+  async verifyOrderAssignment(orderId) {
+    return this.retryWithBackoff(async () => {
+      const orderInfo = await this.getOrder(orderId);
+      
+      return {
+        orderId: orderInfo.orderId,
+        hasDriverAssigned: !!(orderInfo.carrierId || orderInfo.carrierEmail),
+        assignedDriverId: orderInfo.carrierId,
+        assignedDriverEmail: orderInfo.carrierEmail,
+        assignedDriverName: orderInfo.carrierName,
+        orderStatus: orderInfo.orderStatus
+      };
+    }, `verificar asignación orden ${orderId}`);
+  }
+
+  /**
+   * ✅ NUEVO: Debug de orden con rate limiting
+   */
+  async debugOrder(orderId) {
+    return this.retryWithBackoff(async () => {
+      const orderInfo = await this.getOrder(orderId);
+      
+      return {
+        ...orderInfo,
+        debug_info: {
+          has_carrier_id: !!orderInfo.carrierId,
+          has_carrier_email: !!orderInfo.carrierEmail,
+          has_carrier_name: !!orderInfo.carrierName,
+          raw_carrier_id: orderInfo.carrierId,
+          raw_carrier_email: orderInfo.carrierEmail
+        }
+      };
+    }, `debug orden ${orderId}`);
+  }
 
   // ==================== UTILITIES ====================
 
