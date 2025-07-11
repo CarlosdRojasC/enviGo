@@ -945,7 +945,7 @@ async function confirmBulkAssignment() {
       
       // Pausa entre asignaciones individuales
       if (i < selectedOrders.value.length - 1) {
-        await new Promise(resolve => setTimeout(resolve, 300));
+        await new Promise(resolve => setTimeout(resolve, 1500));
       }
     }
   }
@@ -1142,7 +1142,7 @@ function closeBulkAssignModal() {
 .status-badge.processing { background: #dbeafe; color: #1e40af; }
 .status-badge.shipped { background: #e9d5ff; color: #6b21a8; }
 .status-badge.delivered { background: #d1fae5; color: #065f46; }
-.status-badge.ready_for_pickup { background: #163d79; color: #eeeeee; }
+.status-badge.ready_for_pickup { background: #163d79; color: #4c8502; }
 .pagination { display: flex; justify-content: space-between; align-items: center; padding: 16px; border-top: 1px solid #e5e7eb; }
 .page-btn { background: #3b82f6; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; }
 .page-btn:disabled { background: #d1d5db; cursor: not-allowed; }
