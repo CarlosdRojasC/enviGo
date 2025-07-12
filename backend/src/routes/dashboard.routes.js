@@ -12,7 +12,7 @@ const User = require('../models/User');
 // ==================== RUTAS DE DASHBOARD Y ESTADÍSTICAS ====================
 
 // Estadísticas generales del dashboard
-router.get('/stats/dashboard', authenticateToken, async (req, res) => {
+router.get('/dashboard', authenticateToken, async (req, res) => {
   try {
     let stats = {};
 
@@ -111,7 +111,7 @@ router.get('/stats/dashboard', authenticateToken, async (req, res) => {
 });
 
 // Tendencia de órdenes en el tiempo
-router.get('/stats/orders-trend', authenticateToken, async (req, res) => {
+router.get('/orders-trend', authenticateToken, async (req, res) => {
   try {
     const { period = '7d', company_id } = req.query;
     
@@ -194,7 +194,7 @@ router.get('/stats/orders-trend', authenticateToken, async (req, res) => {
 });
 
 // Estadísticas de ingresos por empresa (solo admin)
-router.get('/stats/revenue-by-company', authenticateToken, isAdmin, async (req, res) => {
+router.get('/revenue-by-company', authenticateToken, isAdmin, async (req, res) => {
   try {
     const { period = '30d' } = req.query;
     

@@ -1,1002 +1,543 @@
+
 <template>
   <div class="page-container">
-    <div class="page-header">
-      <h1 class="page-title">Pedidos Globales</h1>
-      <div class="header-actions">
-        <button @click="openCreateOrderModal" class="btn-action btn-secondary">
-          + Crear Pedido Manual
-        </button>
-        <button @click="openBulkUploadModal" class="btn-action btn-secondary">
-          ⬆️ Subida Masiva
-        </button>
-        <button @click="exportOrders" class="btn-action btn-primary" :disabled="isExporting">
-          {{ isExporting ? 'Exportando...' : 'Exportar para OptiRoute' }}
-        </button>
+    <!-- Header con estadísticas y acciones -->
+    <AdminOrdersHeader 
+      :is-exporting="isExporting"
+      :stats="orderStats"
+      :additional-stats="additionalStats"
+      @export="exportOrders"
+      @create-order="openCreateOrderModal"
+      @bulk-upload="openBulkUploadModal"
+      @quick-action="handleQuickAction"
+    />
+
+    <!-- Filtros avanzados -->
+    <AdminOrdersFilters
+      v-model:filters="filters"
+      :companies="companies"
+      :available-communes="availableCommunes"
+      :loading="loadingOrders"
+      @filter-changed="handleFilterChange"
+      @reset-filters="resetFilters"
+    />
+
+    <!-- Acciones masivas -->
+    <AdminOrdersBulkActions
+      v-if="selectedOrders.length > 0"
+      :selected-count="selectedOrders.length"
+      :selected-orders="selectedOrderObjects"
+      :selection-summary="selectionSummary"
+      :companies="companies"
+      @bulk-assign="handleOpenBulkAssignModal"
+      @bulk-status-change="handleBulkStatusChange"
+      @bulk-export="handleBulkExport"
+      @bulk-print="handleBulkPrint"
+      @clear-selection="clearSelection"
+    />
+
+    <!-- Tabla principal -->
+    <AdminOrdersTable
+      :orders="orders"
+      :companies="companies"
+      :loading="loadingOrders"
+      :pagination="pagination"
+      :selected-orders="selectedOrders"
+      :select-all-checked="selectAllChecked"
+      :select-all-indeterminate="selectAllIndeterminate"
+      @select-order="toggleOrderSelection"
+      @select-all="toggleSelectAll"
+      @view-details="openOrderDetailsModal"
+      @update-status="openUpdateStatusModal"
+      @assign-driver="handleOpenAssignModal"
+      @page-change="goToPage"
+      @page-size-change="changePageSize"
+    />
+
+    <!-- Modales -->
+    <AdminOrdersModals
+      :show-details="showOrderDetailsModal"
+      :show-update-status="showUpdateStatusModal"
+      :show-create="showCreateOrderModal"
+      :show-bulk-upload="showBulkUploadModal"
+      :show-assign="showAssignModal"
+      :show-bulk-assign="showBulkAssignModal"
+      :selected-order="selectedOrder"
+      :companies="companies"
+      :new-order="newOrder"
+      :is-creating="isCreatingOrder"
+      v-model:bulkUploadCompanyId="bulkUploadCompanyId"
+      :selected-file="selectedFile"
+      :upload-feedback="uploadFeedback"
+      :upload-status="uploadStatus"
+      :is-uploading="isUploading"
+      :available-drivers="availableDrivers"
+      :loading-drivers="loadingDrivers"
+      v-model:selectedDriverId="selectedDriverId"
+      :is-assigning="isAssigning"
+      :selected-orders="selectedOrderObjects"
+      v-model:bulkSelectedDriverId="bulkSelectedDriverId"
+      :is-bulk-assigning="isBulkAssigning"
+      :bulk-assignment-completed="bulkAssignmentCompleted"
+      :bulk-assignment-results="bulkAssignmentResults"
+      :bulk-assignment-finished="bulkAssignmentFinished"
+      :bulk-progress-percentage="bulkProgressPercentage"
+      @close-details="showOrderDetailsModal = false"
+      @close-update-status="showUpdateStatusModal = false"
+      @status-updated="handleStatusUpdate"
+      @close-create="showCreateOrderModal = false"
+      @create-order="handleCreateOrder"
+      @close-bulk-upload="showBulkUploadModal = false"
+      @file-selected="handleFileSelect"
+      @bulk-upload="handleBulkUpload"
+      @download-template="downloadTemplate"
+      @close-assign="showAssignModal = false"
+      @confirm-assignment="confirmAssignment(selectedOrder._id)"
+      @close-bulk-assign="closeBulkAssignModal"
+      @confirm-bulk-assignment="confirmBulkAssignment"
+    />
+
+    <!-- Notificaciones Toast (si no están globales) -->
+    <Teleport to="body">
+      <div v-if="showNotification" class="notification-overlay">
+        <!-- Notificaciones personalizadas si es necesario -->
       </div>
-    </div>
-    
-    <div class="filters-section">
-      <div class="filters">
-        <select v-model="filters.company_id" @change="fetchOrders">
-          <option value="">Todas las Empresas</option>
-          <option v-for="company in companies" :key="company._id" :value="company._id">
-            {{ company.name }}
-          </option>
-        </select>
-        <select v-model="filters.status" @change="fetchOrders">
-          <option value="">Todos los estados</option>
-          <option value="pending">Pendientes</option>
-          <option value="ready_for_pickup">Listos para Retiro</option>
-          <option value="processing">Procesando</option>
-          <option value="shipped">Enviados</option>
-          <option value="delivered">Entregados</option>
-          <option value="cancelled">Cancelados</option>
-        </select>
-        <!-- Filtro por comuna -->
-   <select v-model="filters.shipping_commune" @change="fetchOrders" class="filter-select">
-      <option value="">Todas las Comunas</option>
-      <option v-for="commune in availableCommunes" :key="commune" :value="commune">
-        {{ commune }}
-      </option>
-    </select>
-        <input type="date" v-model="filters.date_from" @change="fetchOrders" />
-        <input type="date" v-model="filters.date_to" @change="fetchOrders" />
-                  <input 
-          type="text" 
-          v-model="filters.search" 
-          @input="debounceSearch"
-          placeholder="Buscar por pedido, cliente, dirección o comuna..."
-          class="search-input"
-        />
-      </div>
-    </div>
-
-    <!-- NUEVO: Sección de acciones masivas -->
-    <div v-if="selectedOrders.length > 0" class="bulk-actions-section">
-      <div class="bulk-actions-header">
-        <span class="selection-count">{{ selectedOrders.length }} pedido(s) seleccionado(s)</span>
-        <div class="bulk-actions">
-          <button @click="openBulkAssignModal" class="btn-bulk-assign">
-            🚚 Asignar {{ selectedOrders.length }} pedido(s) a conductor
-          </button>
-          <button @click="clearSelection" class="btn-clear-selection">
-            ✕ Limpiar selección
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <div class="content-section">
-      <div class="table-wrapper">
-        <table class="data-table">
-          <thead>
-            <tr>
-              <!-- NUEVO: Checkbox para seleccionar todos -->
-              <th class="checkbox-column">
-                <input 
-                  type="checkbox" 
-                  @change="toggleSelectAll"
-                  :checked="selectAllChecked"
-                  :indeterminate="selectAllIndeterminate"
-                  class="checkbox-input"
-                />
-              </th>
-              <th>Pedido</th>
-              <th>Empresa</th>
-              <th>Cliente</th>
-              <th>Comuna</th>
-              <th>Fechas (Creación / Entrega)</th>
-              <th>Estado</th>
-              <th>Costo de Envío</th>
-              <th>Acciones</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-if="loadingOrders">
-              <td colspan="9" class="loading-row">Cargando pedidos...</td>
-            </tr>
-            <tr v-else-if="orders.length === 0">
-              <td colspan="9" class="empty-row">No se encontraron pedidos.</td>
-            </tr>
-            <tr v-else v-for="order in orders" :key="order._id" :class="{ 'selected-row': selectedOrders.includes(order._id) }">
-              <!-- NUEVO: Checkbox individual -->
-              <td class="checkbox-column">
-                <input 
-                  type="checkbox"
-                  :value="order._id"
-                  v-model="selectedOrders"
-                  :disabled="order.shipday_order_id"
-                  class="checkbox-input"
-                />
-              </td>
-              <td class="order-number">{{ order.order_number }}</td>
-              <td>{{ order.company_id.name }}</td>
-              <td>{{ order.customer_name }}</td>
-              <!-- Columna de comuna -->
-              <td class="commune-cell">
-                <span class="commune-badge" :class="getCommuneClass(order.shipping_commune)">
-                  {{ order.shipping_commune || 'Sin comuna' }}
-                </span>
-              </td>
-              <td class="date-cell">
-                <div class="date-creation">
-                  <span class="date-label">Creado:</span> {{ formatDate(order.order_date, true) }}
-                </div>
-                <div v-if="order.delivery_date" class="date-delivery">
-                  <span class="date-label">Entregado:</span> {{ formatDate(order.delivery_date, true) }}
-                </div>
-              </td>
-              <td>
-                <span class="status-badge" :class="order.status">
-                  {{ getStatusName(order.status) }}
-                </span>
-              </td>
-              <td>${{ formatCurrency(order.shipping_cost) }}</td>
-              <td>
-                <div class="action-buttons">
-                  <button @click="openOrderDetailsModal(order)" class="btn-table-action view">Ver</button>
-                  <button @click="openUpdateStatusModal(order)" class="btn-table-action edit">Estado</button>
-                  <button 
-                    @click="openAssignModal(order)" 
-                    class="btn-table-action assign" 
-                    :disabled="order.shipday_order_id"
-                    title="Asignar a un conductor en Shipday">
-                    Asignar
-                  </button>
-                </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-      
-      <div v-if="pagination.totalPages > 1" class="pagination">
-        <button @click="goToPage(pagination.page - 1)" :disabled="pagination.page <= 1" class="page-btn">Anterior</button>
-        <span>Página {{ pagination.page }} de {{ pagination.totalPages }}</span>
-        <button @click="goToPage(pagination.page + 1)" :disabled="pagination.page >= pagination.totalPages" class="page-btn">Siguiente</button>
-      </div>
-    </div>
-
-    <!-- Modales existentes -->
-    <Modal v-model="showUpdateStatusModal" title="Actualizar Estado del Pedido" width="500px">
-      <UpdateOrderStatus v-if="selectedOrder" :order="selectedOrder" @close="showUpdateStatusModal = false" @status-updated="handleStatusUpdate" />
-    </Modal>
-    
-    <Modal v-model="showOrderDetailsModal" :title="`Detalles del Pedido #${selectedOrder?.order_number}`" width="800px">
-      <OrderDetails v-if="selectedOrder" :order="selectedOrder" />
-    </Modal>
-    
-    <Modal v-model="showCreateOrderModal" title="Crear Nuevo Pedido Manual" width="800px">
-      <form @submit.prevent="handleCreateOrder" class="order-form">
-        <div class="form-grid">
-          <div class="form-group full-width section-header"><h4>Información Principal</h4></div>
-          <div class="form-group full-width">
-            <label>Asignar a Empresa *</label>
-            <select v-model="newOrder.company_id" required>
-              <option disabled value="">Seleccione una empresa...</option>
-              <option v-for="company in companies" :key="company._id" :value="company._id">{{ company.name }}</option>
-            </select>
-          </div>
-          <div class="form-group"><label>Nombre del Cliente *</label><input v-model="newOrder.customer_name" type="text" required /></div>
-          <div class="form-group"><label>Email del Cliente</label><input v-model="newOrder.customer_email" type="email" /></div>
-          <div class="form-group full-width"><label>Dirección de Envío *</label><input v-model="newOrder.shipping_address" type="text" required /></div>
-          <div class="form-group"><label>Comuna *</label><input v-model="newOrder.shipping_commune" type="text" placeholder="ej: Las Condes, Providencia, Santiago" required /></div>
-          <div class="form-group"><label>Región</label><input v-model="newOrder.shipping_state" type="text" placeholder="Región Metropolitana" /></div>
-          
-          <div class="form-group full-width section-header"><h4>Información Financiera</h4></div>
-          <div class="form-group"><label>Monto Total *</label><input v-model.number="newOrder.total_amount" type="number" step="0.01" min="0" required placeholder="0.00" /></div>
-          <div class="form-group"><label>Costo de Envío</label><input v-model.number="newOrder.shipping_cost" type="number" step="0.01" min="0" placeholder="0.00" /></div>
-          
-          <div class="form-group full-width section-header"><h4>Datos para Logística (OptiRoute)</h4></div>
-          <div class="form-group"><label>Prioridad</label><select v-model="newOrder.priority"><option>Normal</option><option>Alta</option><option>Baja</option></select></div>
-          <div class="form-group"><label>Tiempo de Servicio (minutos)</label><input v-model.number="newOrder.serviceTime" type="number" /></div>
-          <div class="form-group"><label>Ventana Horaria (Inicio)</label><input v-model="newOrder.timeWindowStart" type="time" /></div>
-          <div class="form-group"><label>Ventana Horaria (Fin)</label><input v-model="newOrder.timeWindowEnd" type="time" /></div>
-          <div class="form-group"><label>N° de Paquetes</label><input v-model.number="newOrder.load1Packages" type="number" /></div>
-          <div class="form-group"><label>Peso Total (Kg)</label><input v-model.number="newOrder.load2WeightKg" type="number" step="0.1" /></div>
-        </div>
-        <div class="modal-actions">
-          <button type="button" @click="showCreateOrderModal = false" class="btn-cancel">Cancelar</button>
-          <button type="submit" :disabled="isCreatingOrder" class="btn-save">{{ isCreatingOrder ? 'Creando...' : 'Guardar Pedido' }}</button>
-        </div>
-      </form>
-    </Modal>
-<Modal v-model="showBulkUploadModal" title="Subida Masiva de Pedidos" width="600px">
-  <div class="bulk-upload-content">
-     <div class="form-group">
-        <label for="bulk-company-select">Asignar pedidos a la empresa:</label>
-        <select id="bulk-company-select" v-model="bulkUploadCompanyId" required>
-            <option disabled value="">-- Seleccione una empresa --</option>
-            <option v-for="company in companies" :key="company._id" :value="company._id">
-                {{ company.name }}
-            </option>
-        </select>
-    </div>
-    <p>Sube un archivo Excel para crear múltiples pedidos a la vez. Asegúrate de que el archivo siga la plantilla requerida.</p>
-    <div class="template-download-section">
-        <a href="#" @click.prevent="downloadTemplate" class="download-template-link">
-            ⬇️ Descargar Plantilla de Ejemplo
-        </a>
-    </div>
-    
-    <div class="form-group">
-      <label for="file-upload" class="file-upload-label">Seleccionar archivo Excel</label>
-      <input id="file-upload" type="file" @change="handleFileSelect" accept=".xlsx, .xls" />
-    </div>
-    
-    <div v-if="selectedFile" class="file-name">
-      Archivo seleccionado: {{ selectedFile.name }}
-    </div>
-    
-    <div v-if="uploadFeedback" class="upload-feedback" :class="uploadStatus">
-      {{ uploadFeedback }}
-    </div>
-
-    <div class="modal-actions">
-      <button @click="showBulkUploadModal = false" class="btn-cancel">Cerrar</button>
-      
-      <button @click="handleBulkUpload" 
-              :disabled="!selectedFile || isUploading" 
-              class="btn-save">
-        {{ isUploading ? 'Subiendo...' : 'Iniciar Subida' }}
-      </button>
-    </div>
-    </div>
-</Modal>
-
-    <!-- Modal de asignación individual (existente) -->
-    <Modal v-model="showAssignModal" title="Asignar Conductor" width="500px">
-      <div v-if="selectedOrder">
-        <p>Asignando pedido <strong>#{{ selectedOrder.order_number }}</strong> a un conductor de Shipday.</p>
-        
-        
-        <div v-if="loadingDrivers" class="loading-state">Cargando conductores...</div>
-        
-        <div v-else class="form-group">
-          <label>Conductor Disponible</label>
-          <select v-model="selectedDriverId">
-            <option disabled value="">-- Selecciona un conductor --</option>
-            <option v-for="driver in availableDrivers" :key="driver.id" :value="driver.id">
-              {{ driver.name }} ({{ driver.email }}) - {{ driver.isActive ? 'Activo' : 'Inactivo' }}
-            </option>
-          </select>
-          
-          <div v-if="selectedDriverId" class="driver-info">
-            <p><strong>Conductor seleccionado:</strong></p>
-            <pre>{{ JSON.stringify(availableDrivers.find(d => d.id === selectedDriverId), null, 2) }}</pre>
-          </div>
-        </div>
-
-        <div class="modal-actions">
-          <button @click="showAssignModal = false" class="btn-cancel">Cancelar</button>
-          <button @click="confirmAssignment" :disabled="!selectedDriverId || isAssigning" class="btn-save">
-            {{ isAssigning ? 'Asignando...' : 'Confirmar Asignación' }}
-          </button>
-        </div>
-      </div>
-    </Modal>
-
-    <!-- NUEVO: Modal de asignación masiva -->
-    <Modal v-model="showBulkAssignModal" title="Asignación Masiva de Conductor" width="600px">
-      <div class="bulk-assign-content">
-        <div class="selection-summary">
-          <h4>📋 Pedidos seleccionados ({{ selectedOrders.length }})</h4>
-          <div class="selected-orders-list">
-            <div v-for="orderId in selectedOrders" :key="orderId" class="selected-order-item">
-              {{ getOrderById(orderId)?.order_number }} - {{ getOrderById(orderId)?.customer_name }}
-            </div>
-          </div>
-        </div>
-
-        <div class="driver-selection">
-          <div v-if="loadingDrivers" class="loading-state">Cargando conductores...</div>
-          
-          <div v-else class="form-group">
-            <label>Conductor para asignar a todos los pedidos</label>
-            <select v-model="bulkSelectedDriverId">
-              <option disabled value="">-- Selecciona un conductor --</option>
-              <option v-for="driver in availableDrivers" :key="driver.id" :value="driver.id">
-                {{ driver.name }} ({{ driver.email }}) - {{ driver.isActive ? 'Activo' : 'Inactivo' }}
-              </option>
-            </select>
-          </div>
-
-          <div v-if="bulkSelectedDriverId" class="bulk-driver-info">
-            <p><strong>Se asignará:</strong> {{ availableDrivers.find(d => d.id === bulkSelectedDriverId)?.name }}</p>
-          </div>
-        </div>
-
-        <!-- Progreso de asignación masiva -->
-        <div v-if="isBulkAssigning" class="bulk-progress">
-          <h4>Progreso de asignación:</h4>
-          <div class="progress-bar">
-            <div class="progress-fill" :style="{ width: bulkProgressPercentage + '%' }"></div>
-          </div>
-          <p>{{ bulkAssignmentCompleted }} / {{ selectedOrders.length }} pedidos procesados</p>
-          
-          <div v-if="bulkAssignmentResults.length > 0" class="results-preview">
-            <div v-for="result in bulkAssignmentResults.slice(-3)" :key="result.orderId" class="result-item">
-              <span :class="result.success ? 'success-icon' : 'error-icon'">
-                {{ result.success ? '✅' : '❌' }}
-              </span>
-              {{ result.orderNumber }}: {{ result.message }}
-            </div>
-          </div>
-        </div>
-
-        <!-- Resultados finales -->
-        <div v-if="bulkAssignmentFinished" class="bulk-results">
-          <h4>📊 Resultados de la asignación masiva:</h4>
-          <div class="results-summary">
-            <div class="result-stat success">
-              <span class="stat-number">{{ bulkAssignmentResults.filter(r => r.success).length }}</span>
-              <span class="stat-label">Exitosos</span>
-            </div>
-            <div class="result-stat error">
-              <span class="stat-number">{{ bulkAssignmentResults.filter(r => !r.success).length }}</span>
-              <span class="stat-label">Fallidos</span>
-            </div>
-          </div>
-
-          <div v-if="bulkAssignmentResults.filter(r => !r.success).length > 0" class="error-details">
-            <h5>❌ Pedidos que fallaron:</h5>
-            <div v-for="result in bulkAssignmentResults.filter(r => !r.success)" :key="result.orderId" class="error-item">
-              <strong>{{ result.orderNumber }}:</strong> {{ result.message }}
-            </div>
-          </div>
-        </div>
-
-        <div class="modal-actions">
-          <button @click="closeBulkAssignModal" class="btn-cancel">
-            {{ isBulkAssigning ? 'Cerrar después de completar' : 'Cerrar' }}
-          </button>
-          <button 
-            v-if="!isBulkAssigning && !bulkAssignmentFinished"
-            @click="confirmBulkAssignment" 
-            :disabled="!bulkSelectedDriverId" 
-            class="btn-save">
-            🚚 Asignar {{ selectedOrders.length }} pedidos
-          </button>
-        </div>
-      </div>
-    </Modal>
+    </Teleport>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue';
-import { apiService } from '../services/api';
-import { shipdayService } from '../services/shipday';
-import Modal from '../components/Modal.vue';
-import UpdateOrderStatus from '../components/UpdateOrderStatus.vue';
-import OrderDetails from '../components/OrderDetails.vue';
-import { useRoute } from 'vue-router';
-import { useToast } from 'vue-toastification';
+import { ref, computed, onMounted, watch, nextTick, onBeforeUnmount } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { useToast } from 'vue-toastification'
 
-const toast = useToast();
-const route = useRoute();
-const orders = ref([]);
-const companies = ref([]);
-const pagination = ref({ page: 1, limit: 15, total: 0, totalPages: 1 });
-const filters = ref({ company_id: '', status: '', shipping_commune: '', date_from: '', date_to: '', search: '' });
-const loadingOrders = ref(true);
-const isExporting = ref(false);
-const selectedOrder = ref(null);
-const showUpdateStatusModal = ref(false);
-const showOrderDetailsModal = ref(false);
-const showCreateOrderModal = ref(false);
-const isCreatingOrder = ref(false);
-const newOrder = ref({});
-const bulkUploadCompanyId = ref('');
-const showBulkUploadModal = ref(false);
-const selectedFile = ref(null);
-const isUploading = ref(false);
-const uploadFeedback = ref('');
-const uploadStatus = ref('');
+// Composables
+import { useOrdersData } from '../composables/useOrdersData'
+import { useOrdersFilters } from '../composables/useOrdersFilters'
+import { useOrdersSelection } from '../composables/useOrdersSelection'
+import { useOrdersModals } from '../composables/useOrdersModals'
+import { useDriverAssignment } from '../composables/useDriverAssignment'
+import { useBulkUpload } from '../composables/useBulkUpload'
+import { useOrdersActions } from '../composables/useOrdersActions'
 
-// Estados para asignación individual (existente)
-const showAssignModal = ref(false);
-const availableDrivers = ref([]);
-const loadingDrivers = ref(false);
-const selectedDriverId = ref('');
-const isAssigning = ref(false);
+// Componentes
+import AdminOrdersHeader from '../components/AdminOrders/AdminOrdersHeader.vue'
+import AdminOrdersFilters from '../components/AdminOrders/AdminOrdersFilters.vue'
+import AdminOrdersBulkActions from '../components/AdminOrders/AdminOrdersBulkActions.vue'
+import AdminOrdersTable from '../components/AdminOrders/AdminOrdersTable.vue'
+import AdminOrdersModals from '../components/AdminOrders/AdminOrdersModals.vue'
 
-// NUEVO: Estados para selección masiva y asignación masiva
-const selectedOrders = ref([]);
-const showBulkAssignModal = ref(false);
-const bulkSelectedDriverId = ref('');
-const isBulkAssigning = ref(false);
-const bulkAssignmentCompleted = ref(0);
-const bulkAssignmentResults = ref([]);
-const bulkAssignmentFinished = ref(false);
+// ==================== SETUP ====================
+const route = useRoute()
+const router = useRouter()
+const toast = useToast()
 
-// NUEVO: Estados para filtros y comunas
-const availableCommunes = computed(() => {
-  if (!orders.value || orders.value.length === 0) {
-    return [];
+// ==================== COMPOSABLES ====================
+
+// Datos principales
+const {
+  orders,
+  companies,
+  pagination,
+  loadingOrders,
+  fetchOrders,
+  fetchCompanies,
+  goToPage,
+  changePageSize,
+  getOrdersStats,
+  refreshOrders,
+  updateOrderLocally,
+  getCompanyName
+} = useOrdersData()
+
+// Filtros
+const {
+  filters,
+  availableCommunes,
+  handleFilterChange,
+  resetFilters,
+  setFilter,
+  exportFilters,
+  hasActiveFilters
+} = useOrdersFilters(orders, fetchOrders)
+
+// Selección múltiple
+const {
+  selectedOrders,
+  selectedOrderObjects,
+  selectAllChecked,
+  selectAllIndeterminate,
+  selectedCount,
+  selectionStats,
+  toggleOrderSelection,
+  toggleSelectAll,
+  clearSelection,
+  selectOrdersByCriteria,
+  validateSelection,
+  cleanupSelection
+} = useOrdersSelection(orders)
+
+// Modales
+const {
+  showOrderDetailsModal,
+  showUpdateStatusModal,
+  showCreateOrderModal,
+  showBulkUploadModal,
+  showAssignModal,
+  showBulkAssignModal,
+  selectedOrder,
+  newOrder,
+  isCreatingOrder,
+  openOrderDetailsModal,
+  openUpdateStatusModal,
+  openCreateOrderModal,
+  openBulkUploadModal,
+  openAssignModal,
+  closeAllModals,
+  validateNewOrder,
+  openBulkAssignModal,
+  resetNewOrderForm
+} = useOrdersModals()
+
+// Asignación de conductores
+const {
+  availableDrivers,
+  loadingDrivers,
+  selectedDriverId,
+  isAssigning,
+  bulkSelectedDriverId,
+  isBulkAssigning,
+  bulkAssignmentCompleted,
+  bulkAssignmentResults,
+  bulkAssignmentFinished,
+  bulkProgressPercentage,
+  assignmentSummary,
+  confirmAssignment,
+  confirmBulkAssignment,
+  closeBulkAssignModal,
+  fetchAvailableDrivers
+} = useDriverAssignment(selectedOrders, fetchOrders)
+
+// Upload masivo
+const {
+  bulkUploadCompanyId,
+  selectedFile,
+  uploadFeedback,
+  uploadStatus,
+  isUploading,
+  handleFileSelect,
+  handleBulkUpload,
+  downloadTemplate,
+  resetUploadState
+} = useBulkUpload(fetchOrders)
+
+// Acciones generales
+const {
+  isExporting,
+  exportOrders,
+  handleCreateOrder,
+  handleStatusUpdate,
+  deleteOrder,
+  duplicateOrder,
+  formatCurrency,
+  formatDate,
+  getStatusName,
+  getCommuneClass,
+  debugOrder
+} = useOrdersActions(newOrder, isCreatingOrder, fetchOrders)
+
+// ==================== LOCAL STATE ====================
+const showNotification = ref(false)
+const isInitialLoad = ref(true)
+
+// ==================== COMPUTED ====================
+
+/**
+ * Estadísticas de pedidos para el header
+ */
+const orderStats = computed(() => {
+  return getOrdersStats()
+})
+
+/**
+ * Estadísticas adicionales para el header
+ */
+const additionalStats = computed(() => {
+  const stats = orderStats.value
+  const totalValue = orders.value.reduce((sum, order) => sum + (order.total_amount || 0), 0)
+  const averageValue = stats.total > 0 ? totalValue / stats.total : 0
+  const deliveryRate = stats.total > 0 ? Math.round((stats.delivered / stats.total) * 100) : 0
+  const shipdayOrders = orders.value.filter(order => order.shipday_order_id).length
+
+  return {
+    totalValue,
+    averageValue,
+    deliveryRate,
+    shipdayOrders
   }
-  // Usamos Set para obtener valores únicos automáticamente
-  const communes = new Set(
-    orders.value
-      .map(order => order.shipping_commune)
-      .filter(commune => !!commune) // Filtramos valores nulos o vacíos
-  );
-  return Array.from(communes).sort(); // Convertimos a array y ordenamos alfabéticamente
-});
+})
 
+/**
+ * Resumen de la selección para acciones masivas
+ */
+const selectionSummary = computed(() => {
+  if (selectedOrderObjects.value.length === 0) return null
 
-// NUEVO: Computed properties para selección masiva
-const selectAllChecked = computed(() => {
-  const selectableOrders = orders.value.filter(order => !order.shipday_order_id);
-  return selectableOrders.length > 0 && selectableOrders.every(order => selectedOrders.value.includes(order._id));
-});
+  const totalValue = selectedOrderObjects.value.reduce((sum, order) => sum + (order.total_amount || 0), 0)
+  const companies = new Set(selectedOrderObjects.value.map(order => 
+    typeof order.company_id === 'object' ? order.company_id._id : order.company_id
+  )).size
+  const communes = new Set(selectedOrderObjects.value.map(order => order.shipping_commune)).size
 
-const selectAllIndeterminate = computed(() => {
-  const selectableOrders = orders.value.filter(order => !order.shipday_order_id);
-  const selectedCount = selectableOrders.filter(order => selectedOrders.value.includes(order._id)).length;
-  return selectedCount > 0 && selectedCount < selectableOrders.length;
-});
+  return {
+    totalValue,
+    companies,
+    communes
+  }
+})
 
-const bulkProgressPercentage = computed(() => {
-  if (selectedOrders.value.length === 0) return 0;
-  return (bulkAssignmentCompleted.value / selectedOrders.value.length) * 100;
-});
+// ==================== WATCHERS ====================
 
-onMounted(() => {
-  fetchCompanies();
-  fetchOrders();
-  fetchAvailableCommunes();
-});
+/**
+ * Watch route query parameters for initial filters
+ */
+watch(() => route.query, (newQuery) => {
+  if (isInitialLoad.value && newQuery.company_id) {
+    setFilter('company_id', newQuery.company_id)
+  }
+}, { immediate: true })
 
-// Funciones existentes (sin cambios)
-async function fetchCompanies() { 
-  try { 
-    const { data } = await apiService.companies.getAll(); 
-    companies.value = data; 
-  } catch (error) { 
-    console.error("Error fetching companies:", error); 
-  } 
-}
-
-async function fetchOrders() { 
-  loadingOrders.value = true; 
-  try { 
-    const params = { page: pagination.value.page, limit: pagination.value.limit, ...filters.value }; 
-    const { data } = await apiService.orders.getAll(params); 
-    orders.value = data.orders; 
-    pagination.value = data.pagination;
-    // Limpiar selección si cambiamos de página o filtros
-    selectedOrders.value = [];
-  } catch (error) { 
-    console.error('Error fetching orders:', error); 
-  } finally { 
-    loadingOrders.value = false; 
-  } 
-}
-
-// Función mejorada para obtener comunas disponibles
-async function fetchAvailableCommunes() {
-  try {
-    console.log('🏘️ Obteniendo comunas disponibles...');
-    
-    const params = {};
-    
-    // Si hay filtro de empresa, aplicarlo también para las comunas
-    if (filters.value.company_id) {
-      params.company_id = filters.value.company_id;
+/**
+ * Watch for URL changes and update filters accordingly
+ */
+watch(filters, (newFilters) => {
+  // Update URL query params without navigation
+  const query = { ...route.query }
+  
+  Object.keys(newFilters).forEach(key => {
+    if (newFilters[key]) {
+      query[key] = newFilters[key]
+    } else {
+      delete query[key]
     }
-    
-    const { data } = await apiService.orders.getAvailableCommunes(params);
-    availableCommunes.value = data.communes || [];
-    
-    console.log('✅ Comunas cargadas:', availableCommunes.value.length);
-    
-  } catch (error) {
-    console.error('❌ Error fetching communes:', error);
-    // Fallback: extraer comunas de las órdenes actuales
-    if (orders.value.length > 0) {
-      updateAvailableCommunes(orders.value);
-    }
-  }
-}
-
-// Función para actualizar la lista de comunas (fallback)
-function updateAvailableCommunes(orders) {
-  const communes = new Set();
-  orders.forEach(order => {
-    if (order.shipping_commune && order.shipping_commune.trim()) {
-      communes.add(order.shipping_commune.trim());
-    }
-  });
-  availableCommunes.value = [...communes].sort();
-  console.log('📍 Comunas actualizadas desde órdenes locales:', availableCommunes.value.length);
-}
-
-async function exportOrders() { 
-  isExporting.value = true; 
-  try { 
-    const response = await apiService.orders.exportForOptiRoute(filters.value); 
-    const url = window.URL.createObjectURL(new Blob([response.data])); 
-    const link = document.createElement('a'); 
-    link.href = url; 
-    link.setAttribute('download', `pedidos_optiroute_${Date.now()}.xlsx`); 
-    document.body.appendChild(link); 
-    link.click(); 
-    link.remove(); 
-    window.URL.revokeObjectURL(url); 
-  } catch (error) { 
-    toast.warning('No se encontraron pedidos para exportar.'); 
-  } finally { 
-    isExporting.value = false; 
-  } 
-}
-
-function openUpdateStatusModal(order) { selectedOrder.value = order; showUpdateStatusModal.value = true; }
-function openOrderDetailsModal(order) { selectedOrder.value = order; showOrderDetailsModal.value = true; }
-
-async function handleStatusUpdate({ orderId, newStatus }) { 
-  try { 
-    await apiService.orders.updateStatus(orderId, newStatus); 
-    const index = orders.value.findIndex(o => o._id === orderId); 
-    if (index !== -1) { 
-      orders.value[index].status = newStatus; 
-    } 
-    showUpdateStatusModal.value = false; 
-    toast.success('Estado actualizado con éxito.'); 
-  } catch (error) { 
-    toast.warning(`Error al actualizar estado: ${error.message}`); 
-  } 
-}
-
-let searchTimeout;
-function debounceSearch() { 
-  clearTimeout(searchTimeout); 
-  searchTimeout = setTimeout(() => { 
-    pagination.value.page = 1; 
-    fetchOrders(); 
-  }, 500); 
-}
-
-function goToPage(page) { 
-  if (page >= 1 && page <= pagination.value.totalPages) { 
-    pagination.value.page = page; 
-    fetchOrders(); 
-  } 
-}
-
-function openCreateOrderModal() { 
-  newOrder.value = { 
-    company_id: '', customer_name: '', customer_email: '', shipping_address: '',
-    shipping_commune: '', shipping_state: 'Región Metropolitana', total_amount: 0, shipping_cost: 0, 
-    priority: 'Normal', serviceTime: 5, timeWindowStart: '09:00', timeWindowEnd: '18:00', 
-    load1Packages: 1, load2WeightKg: 1 
-  }; 
-  showCreateOrderModal.value = true; 
-}
-
-async function handleCreateOrder() { 
-  if (!newOrder.value.company_id) { 
-    toast.warning("Por favor, seleccione una empresa."); 
-    return; 
-  }
+  })
   
-  if (!newOrder.value.customer_name) {
-    toast.warning("Por favor, ingrese el nombre del cliente.");
-    return;
-  }
-  
-  if (!newOrder.value.shipping_address) {
-    toast.warning("Por favor, ingrese la dirección de envío.");
-    return;
-  }
-  
-  if (!newOrder.value.total_amount || newOrder.value.total_amount <= 0) {
-    toast.warning("Por favor, ingrese un monto total válido.");
-    return;
-  }
-  
-  const channelsResponse = await apiService.channels.getByCompany(newOrder.value.company_id); 
-  if (!channelsResponse.data || channelsResponse.data.length === 0) { 
-    toast.warning("La empresa seleccionada no tiene canales. Configure uno primero."); 
-    return; 
-  } 
-  isCreatingOrder.value = true; 
-  try { 
-    const orderData = { 
-      ...newOrder.value, 
-      channel_id: channelsResponse.data[0]._id, 
-      order_number: `MANUAL-${Date.now()}`, 
-      external_order_id: `manual-admin-${Date.now()}`,
-      // Asegurar que los valores numéricos sean números
-      total_amount: parseFloat(newOrder.value.total_amount) || 0,
-      shipping_cost: parseFloat(newOrder.value.shipping_cost) || 0,
-      serviceTime: parseInt(newOrder.value.serviceTime) || 5,
-      load1Packages: parseInt(newOrder.value.load1Packages) || 1,
-      load2WeightKg: parseFloat(newOrder.value.load2WeightKg) || 1
-    }; 
-    
-    console.log('📦 Datos del pedido a crear:', orderData);
-    
-    await apiService.orders.create(orderData); 
-    toast.success('Pedido manual creado con éxito.'); 
-    showCreateOrderModal.value = false; 
-    await fetchOrders(); 
-  } catch (error) { 
-    console.error('Error creando pedido:', error);
-    toast.error(`No se pudo crear el pedido: ${error.response?.data?.errors?.[0]?.msg || error.response?.data?.error || error.message}`); 
-  } finally { 
-    isCreatingOrder.value = false; 
-  } 
-}
+  router.replace({ query })
+}, { deep: true })
 
-function openBulkUploadModal() { 
-  selectedFile.value = null; 
-  uploadFeedback.value = ''; 
-  uploadStatus.value = ''; 
-  showBulkUploadModal.value = true; 
-}
+/**
+ * Cleanup selection when orders change
+ */
+watch(orders, () => {
+  cleanupSelection()
+})
 
-function handleFileSelect(event) { 
-  selectedFile.value = event.target.files[0]; 
-  uploadFeedback.value = ''; 
-  uploadStatus.value = ''; 
-}
+// ==================== METHODS ====================
 
-async function handleBulkUpload() {
-
-   if (!bulkUploadCompanyId.value) { // <--- Añade esta validación
-    toast.warning('Por favor, selecciona una empresa para la subida masiva.');
-    return;
-  }
-  if (!selectedFile.value) {
-    toast.warning('Por favor, selecciona un archivo.');
-    return;
-  }
-  if (!selectedFile.value) {
-    toast.warning('Por favor, selecciona un archivo.');
-    return;
-  }
-  isUploading.value = true;
-  uploadFeedback.value = 'Procesando archivo...';
-  uploadStatus.value = 'processing';
-
-  const formData = new FormData();
-  formData.append('file', selectedFile.value);
-  formData.append('company_id', bulkUploadCompanyId.value); // <--- Envía el ID de la empresa
-
-  try {
-    // Esta llamada a la API necesita ser creada
-    const { data } = await apiService.orders.bulkUpload(formData);
-    uploadFeedback.value = `Proceso completado: ${data.success} pedidos creados, ${data.failed} fallaron.`;
-    uploadStatus.value = data.failed > 0 ? 'error' : 'success';
-    if (data.success > 0) await fetchOrders(); // Recargar la tabla si hubo éxito
-  } catch (error) {
-    uploadFeedback.value = `Error: ${error.message}`;
-    uploadStatus.value = 'error';
-  } finally {
-    isUploading.value = false;
-  }
-}
-
-function formatCurrency(amount) { 
-  if (amount === undefined || amount === null) return '0'; 
-  return new Intl.NumberFormat('es-CL').format(amount); 
-}
-
-function formatDate(dateStr, withTime = false) { 
-  if (!dateStr) return 'N/A'; 
-  const options = { day: '2-digit', month: '2-digit', year: 'numeric' }; 
-  if (withTime) { 
-    options.hour = '2-digit'; 
-    options.minute = '2-digit'; 
-  } 
-  return new Date(dateStr).toLocaleString('es-CL', options); 
-}
-
-function getStatusName(status) { 
-  const names = { 
-    pending: 'Pendiente', processing: 'Procesando', shipped: 'Enviado', 
-    delivered: 'Entregado', cancelled: 'Cancelado', ready_for_pickup: 'Listo para recoger',
-  }; 
-  return names[status] || status; 
-}
-
-// Función para obtener clase CSS de comuna
-function getCommuneClass(commune) {
-  if (!commune || commune === 'Sin comuna') return 'commune-empty';
-  // Comunas importantes de Santiago y otras regiones
-  const importantCommunes = [
-   'Macul',
-      'San Miguel', 
-      'Santiago Centro',
-      'La Florida',
-      'Peñalolén',
-      'Las Condes',
-      'Vitacura',
-      'Quinta Normal',
-      'Independencia',
-      'Recoleta',
-      'Huechuraba',
-      'Quilicura',
-      'Estación Central',
-      'Ñuñoa',
-      'La Reina',
-      'San Joaquín',
-      'Pedro Aguirre Cerda',
-      'Cerrillos',
-      'Renca',
-      'La Granja',
-      'La Cisterna',
-      'San Ramón',
-      'Cerro Navia'
-  ];
-  if (importantCommunes.some(important => commune.toLowerCase().includes(important.toLowerCase()))) {
-    return 'commune-important';
-  }
-  return 'commune-filled';
-}
-
-// Funciones de asignación individual (existentes)
-async function openAssignModal(order) {
-  selectedOrder.value = order;
-  selectedDriverId.value = '';
-  showAssignModal.value = true;
-  await fetchAvailableDrivers();
-}
-
-async function confirmAssignment() {
-  if (!selectedDriverId.value) {
-    toast.warning("Por favor, selecciona un conductor.");
-    return;
-  }
-  isAssigning.value = true;
-  try {
-    await apiService.orders.assignDriver(selectedOrder.value._id, selectedDriverId.value);
-    toast.success('Pedido asignado exitosamente en Shipday.');
-    showAssignModal.value = false;
-    fetchOrders();
-  } catch (error) {
-    toast.error(`Error al asignar: ${error.response?.data?.error || error.message}`);
-  } finally {
-    isAssigning.value = false;
-  }
-}
-async function fetchAvailableDrivers() {
-  loadingDrivers.value = true;
-  try {
-    const response = await shipdayService.getDrivers();
-    console.log('📋 Respuesta de conductores:', response);
-    
-    const allDrivers = response.data?.data || response.data || [];
-    console.log('👥 Todos los conductores:', allDrivers);
-    
-    availableDrivers.value = allDrivers.filter(driver => driver.isActive);
-    
-    console.log('⭐ Conductores mostrados en select:', availableDrivers.value);
-    
-  } catch (error) {
-    toast.error("Error al cargar los conductores desde Shipday.");
-    console.error(error);
-  } finally {
-    loadingDrivers.value = false;
-  }
-}
-
-// NUEVO: Funciones para selección masiva
-function toggleSelectAll() {
-  const selectableOrders = orders.value.filter(order => !order.shipday_order_id);
-  
-  if (selectAllChecked.value) {
-    // Deseleccionar todos
-    selectedOrders.value = selectedOrders.value.filter(id => 
-      !selectableOrders.some(order => order._id === id)
-    );
-  } else {
-    // Seleccionar todos los seleccionables de la página actual
-    selectableOrders.forEach(order => {
-      if (!selectedOrders.value.includes(order._id)) {
-        selectedOrders.value.push(order._id);
+/**
+ * Handle quick actions from header
+ */
+function handleQuickAction(action) {
+  switch (action) {
+    case 'refresh':
+      refreshOrders()
+      toast.info('Datos actualizados')
+      break
+      
+    case 'pending-today':
+      const today = new Date().toISOString().split('T')[0]
+      setFilter('date_from', today)
+      setFilter('date_to', today)
+      setFilter('status', 'pending')
+      break
+      
+    case 'ready-pickup':
+      resetFilters()
+      setFilter('status', 'ready_for_pickup')
+      break
+      
+    case 'unassigned':
+      resetFilters()
+      // This would need custom filtering logic
+      break
+      
+    case 'bulk-status':
+      if (selectedOrders.value.length === 0) {
+        toast.warning('Selecciona pedidos primero')
+        return
       }
-    });
+      // Open bulk status change modal/dropdown
+      break
+      
+    case 'reports':
+      // Navigate to reports page or open reports modal
+      router.push('/admin/reports')
+      break
+      
+    default:
+      console.log('Acción rápida no implementada:', action)
   }
 }
 
-function clearSelection() {
-  selectedOrders.value = [];
+/**
+ * Handle bulk status change
+ */
+async function handleBulkStatusChange(newStatus) {
+  const validation = validateSelection()
+  if (!validation.valid) {
+    toast.error(validation.message)
+    return
+  }
+
+  const confirmed = confirm(
+    `¿Cambiar estado de ${selectedOrders.value.length} pedidos a "${getStatusName(newStatus)}"?`
+  )
+  
+  if (!confirmed) return
+
+  try {
+    // Implementation would depend on your API
+    // This is a placeholder for bulk status update
+    const promises = selectedOrderObjects.value.map(order => 
+      handleStatusUpdate({ orderId: order._id, newStatus })
+    )
+    
+    await Promise.all(promises)
+    toast.success(`Estado actualizado para ${selectedOrders.value.length} pedidos`)
+    clearSelection()
+    
+  } catch (error) {
+    console.error('Error in bulk status change:', error)
+    toast.error('Error al cambiar estado masivo')
+  }
 }
 
-function getOrderById(orderId) {
-  return orders.value.find(order => order._id === orderId);
-}
-
-// NUEVO: Funciones para asignación masiva
-async function openBulkAssignModal() {
+/**
+ * Handle bulk export
+ */
+function handleBulkExport() {
   if (selectedOrders.value.length === 0) {
-    toast.warning('Por favor, selecciona al menos un pedido.');
-    return;
+    toast.warning('Selecciona pedidos para exportar')
+    return
   }
-  
-  showBulkAssignModal.value = true;
-  bulkSelectedDriverId.value = '';
-  bulkAssignmentCompleted.value = 0;
-  bulkAssignmentResults.value = [];
-  bulkAssignmentFinished.value = false;
-  isBulkAssigning.value = false;
-  
-  // Cargar conductores si no están cargados
-  if (availableDrivers.value.length === 0) {
-    await fetchAvailableDrivers();
-  }
+
+  const orderIds = selectedOrders.value
+  exportOrders({ order_ids: orderIds })
 }
-async function downloadTemplate() {
-  try {
-    // Suponiendo que tienes un método en apiService para esto
-    // que solicita el archivo como un 'blob'
-    const response = await apiService.orders.downloadImportTemplate();
-    const url = window.URL.createObjectURL(new Blob([response.data]));
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', 'plantilla_importacion_pedidos.xlsx');
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-  } catch (error) {
-    console.error("Error al descargar la plantilla:", error);
-    toast.error('No se pudo descargar la plantilla. Inténtelo de nuevo.');
-  }
-}
-async function confirmBulkAssignment() {
-  if (!bulkSelectedDriverId.value) {
-    toast.error('Por favor, selecciona un conductor.');
-    return;
-  }
-  
+
+/**
+ * Handle bulk print
+ */
+function handleBulkPrint() {
   if (selectedOrders.value.length === 0) {
-    toast.error('No hay pedidos seleccionados.');
-    return;
+    toast.warning('Selecciona pedidos para imprimir')
+    return
+  }
+
+  // Implementation for printing labels
+  toast.info('Función de impresión en desarrollo')
+}
+
+/**
+ * Handle errors globally
+ */
+function handleError(error, context = 'Operación') {
+  console.error(`Error en ${context}:`, error)
+  
+  let message = `Error en ${context.toLowerCase()}`
+  
+  if (error.response?.data?.message) {
+    message = error.response.data.message
+  } else if (error.message) {
+    message = error.message
   }
   
-  const confirmation = confirm(
-    `¿Estás seguro de asignar ${selectedOrders.value.length} pedidos al conductor ${
-      availableDrivers.value.find(d => d.id === bulkSelectedDriverId.value)?.name
-    }?`
-  );
-  
-  if (!confirmation) return;
-  
-  isBulkAssigning.value = true;
-  bulkAssignmentCompleted.value = 0;
-  bulkAssignmentResults.value = [];
-  
-  console.log('🚀 Iniciando asignación masiva:', {
-    ordersCount: selectedOrders.value.length,
-    driverId: bulkSelectedDriverId.value,
-    driverName: availableDrivers.value.find(d => d.id === bulkSelectedDriverId.value)?.name
-  });
-  
-  try {
-    // OPCIÓN 1: Usar el nuevo endpoint de asignación masiva (más eficiente)
-    const response = await apiService.orders.bulkAssignDriver(
-      selectedOrders.value, 
-      bulkSelectedDriverId.value
-    );
-    
-    // Simular progreso para mostrar feedback visual
-    const totalOrders = selectedOrders.value.length;
-    const results = response.data.results;
-    
-    // Actualizar progreso gradualmente para UX
-    for (let i = 0; i <= totalOrders; i++) {
-      bulkAssignmentCompleted.value = i;
-      
-      if (i < results.successful.length + results.failed.length) {
-        const allResults = [...results.successful, ...results.failed];
-        const currentResult = allResults[i];
-        if (currentResult) {
-          bulkAssignmentResults.value.push({
-            orderId: currentResult.orderId,
-            orderNumber: currentResult.orderNumber,
-            success: results.successful.includes(currentResult),
-            message: currentResult.message || currentResult.error || 'Procesado'
-          });
-        }
-      }
-      
-      // Pausa para efecto visual
-      await new Promise(resolve => setTimeout(resolve, 100));
+  toast.error(message)
+}
+
+/**
+ * Refresh data periodically (optional)
+ */
+function startPeriodicRefresh() {
+  // Refresh every 5 minutes
+  setInterval(() => {
+    if (!document.hidden) {
+      refreshOrders()
     }
+  }, 5 * 60 * 1000)
+}
+
+/**
+ * Handle keyboard shortcuts
+ */
+function handleKeyboardShortcuts(event) {
+  // Ctrl/Cmd + R: Refresh
+  if ((event.ctrlKey || event.metaKey) && event.key === 'r') {
+    event.preventDefault()
+    refreshOrders()
+    return
+  }
+  
+  // Escape: Clear selection or close modals
+  if (event.key === 'Escape') {
+    if (showOrderDetailsModal.value || showCreateOrderModal.value || 
+        showBulkUploadModal.value || showAssignModal.value || 
+        showBulkAssignModal.value || showUpdateStatusModal.value) {
+      closeAllModals()
+    } else if (selectedOrders.value.length > 0) {
+      clearSelection()
+    }
+  }
+  
+  // Ctrl/Cmd + A: Select all
+  if ((event.ctrlKey || event.metaKey) && event.key === 'a') {
+    event.preventDefault()
+    toggleSelectAll()
+  }
+}
+/**
+ * handleOpenBulkAssignModal
+ */
+function handleOpenBulkAssignModal() {
+  console.log('Solicitando apertura de modal masivo...');
+  fetchAvailableDrivers(); // Carga los conductores
+  openBulkAssignModal();   // Abre el modal
+}
+/**
+ * Orquesta la apertura del modal de asignación individual
+ */
+function handleOpenAssignModal(order) {
+  console.log('Solicitando apertura de modal individual...');
+  fetchAvailableDrivers(); // Carga los conductores
+  openAssignModal(order);  // Abre el modal con el pedido correcto
+}
+// ==================== LIFECYCLE ====================
+
+onMounted(async () => {
+  try {
+    // Load initial data
+    await Promise.all([
+      fetchCompanies(),
+      fetchOrders()
+    ])
     
-    console.log('✅ Asignación masiva completada via endpoint:', response.data);
+    // Setup additional features
+    startPeriodicRefresh()
+    
+    // Add keyboard shortcuts
+    document.addEventListener('keydown', handleKeyboardShortcuts)
+    
+    isInitialLoad.value = false
     
   } catch (error) {
-    console.error('❌ Error en asignación masiva via endpoint, fallback a método individual:', error);
-    
-    // OPCIÓN 2: Fallback al método individual si falla el endpoint masivo
-    for (let i = 0; i < selectedOrders.value.length; i++) {
-      const orderId = selectedOrders.value[i];
-      const order = getOrderById(orderId);
-      
-      console.log(`📦 Procesando pedido ${i + 1}/${selectedOrders.value.length}: ${order?.order_number}`);
-      
-      try {
-        await apiService.orders.assignDriver(orderId, bulkSelectedDriverId.value);
-        
-        bulkAssignmentResults.value.push({
-          orderId: orderId,
-          orderNumber: order?.order_number || 'Sin número',
-          success: true,
-          message: 'Asignado exitosamente'
-        });
-        
-        console.log(`✅ Pedido ${order?.order_number} asignado exitosamente`);
-        
-      } catch (error) {
-        console.error(`❌ Error asignando pedido ${order?.order_number}:`, error);
-        
-        bulkAssignmentResults.value.push({
-          orderId: orderId,
-          orderNumber: order?.order_number || 'Sin número',
-          success: false,
-          message: error.response?.data?.error || error.message || 'Error desconocido'
-        });
-      }
-      
-      bulkAssignmentCompleted.value = i + 1;
-      
-      // Pausa entre asignaciones individuales
-      if (i < selectedOrders.value.length - 1) {
-        await new Promise(resolve => setTimeout(resolve, 300));
-      }
-    }
+    handleError(error, 'Carga inicial')
   }
-  
-  isBulkAssigning.value = false;
-  bulkAssignmentFinished.value = true;
-  
-  console.log('🏁 Asignación masiva completada:', {
-    total: selectedOrders.value.length,
-    successful: bulkAssignmentResults.value.filter(r => r.success).length,
-    failed: bulkAssignmentResults.value.filter(r => !r.success).length
-  });
-  
-  // Recargar pedidos para mostrar cambios
-  await fetchOrders();
-  
-  // Mostrar resumen final
-  const successful = bulkAssignmentResults.value.filter(r => r.success).length;
-  const failed = bulkAssignmentResults.value.filter(r => !r.success).length;
-  
-  toast.success(`
-🏁 Asignación masiva completada:
+})
 
-✅ Exitosos: ${successful}
-❌ Fallidos: ${failed}
-
-${failed > 0 ? 'Revisa los detalles en el modal para ver qué pedidos fallaron.' : '¡Todos los pedidos fueron asignados exitosamente!'}
-  `);
-}
-
-function closeBulkAssignModal() {
-  showBulkAssignModal.value = false;
-  
-  // Limpiar selección si la asignación fue exitosa
-  if (bulkAssignmentFinished.value) {
-    const successfulOrderIds = bulkAssignmentResults.value
-      .filter(r => r.success)
-      .map(r => r.orderId);
-    
-    selectedOrders.value = selectedOrders.value.filter(id => 
-      !successfulOrderIds.includes(id)
-    );
-  }
-  
-  // Reset estados
-  bulkSelectedDriverId.value = '';
-  bulkAssignmentCompleted.value = 0;
-  bulkAssignmentResults.value = [];
-  bulkAssignmentFinished.value = false;
-  isBulkAssigning.value = false;
-}
+// Cleanup
+onBeforeUnmount(() => {
+  document.removeEventListener('keydown', handleKeyboardShortcuts)
+})
 </script>
 
 <style scoped>

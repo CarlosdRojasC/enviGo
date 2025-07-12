@@ -96,7 +96,8 @@ const orders = {
   bulkUpload: (formData) => api.post('/orders/bulk-upload', formData, {
     headers: {
       'Content-Type': 'multipart/form-data'
-    }
+    },
+    timeout: 60000 // Aumentar timeout para cargas grandes
   }),
     downloadImportTemplate: () => api.get('/orders/import-template', {
     responseType: 'blob'
@@ -492,7 +493,7 @@ const billing = {
 
 // Servicios de dashboard
 const dashboard = {
-  getStats: () => api.get('/stats/dashboard')
+  getStats: () => api.get('/dashboard')
 }
 
 // Servicios de conductores

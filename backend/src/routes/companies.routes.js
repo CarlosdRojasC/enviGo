@@ -1,28 +1,35 @@
 const express = require('express');
 const router = express.Router();
 const companyController = require('../controllers/company.controller');
+const channelController = require('../controllers/channel.controller');
 const { authenticateToken, isAdmin } = require('../middlewares/auth.middleware');
 const { validateMongoId } = require('../middlewares/validators/generic.validator');
-const channelController = require('../controllers/channel.controller');
 
+// ==================== RUTAS DE EMPRESAS ====================
 
+// Listar todas las empresas (solo admin)
+router.get('/', authenticateToken, isAdmin, companyController.getAll);
 
-// ==================== EMPRESAS ====================
+// Crear nueva empresa (solo admin)
+router.post('/', authenticateToken, isAdmin, companyController.create);
 
-router.get('/companies', authenticateToken, isAdmin, companyController.getAll);
-router.post('/companies', authenticateToken, isAdmin, companyController.create);
-router.patch('/companies/:id/price', authenticateToken, isAdmin, companyController.updatePrice);
+// Actualizar precio de empresa (solo admin)
+router.patch('/:id/price', authenticateToken, isAdmin, validateMongoId('id'), companyController.updatePrice);
 
-router.get('/companies/:id', authenticateToken, validateMongoId('id'), companyController.getById);
-router.put('/companies/:id', authenticateToken, validateMongoId('id'), companyController.update);
-router.get('/companies/:id/users', authenticateToken, validateMongoId('id'), companyController.getUsers);
-router.get('/companies/:id/stats', authenticateToken, validateMongoId('id'), companyController.getStats);
+// Obtener empresa específica
+router.get('/:id', authenticateToken, validateMongoId('id'), companyController.getById);
 
-// ==================== CANALES DE VENTA (RUTAS BÁSICAS) ====================
-// Las rutas avanzadas de comunas están en channels.routes.js
+// Actualizar empresa
+router.put('/:id', authenticateToken, validateMongoId('id'), companyController.update);
 
-router.get('/companies/:companyId/channels', authenticateToken, validateMongoId('companyId'), channelController.getByCompany);
-router.post('/companies/:companyId/channels', authenticateToken, validateMongoId('companyId'), channelController.create);
+// Obtener usuarios de una empresa
+router.get('/:id/users', authenticateToken, validateMongoId('id'), companyController.getUsers);
 
+// Obtener estadísticas de una empresa
+router.get('/:id/stats', authenticateToken, validateMongoId('id'), companyController.getStats);
+
+// ==================== CANALES DE VENTA ANIDADOS ====================
+router.get('/:companyId/channels', authenticateToken, validateMongoId('companyId'), channelController.getByCompany);
+router.post('/:companyId/channels', authenticateToken, validateMongoId('companyId'), channelController.create);
 
 module.exports = router;

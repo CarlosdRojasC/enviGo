@@ -5,13 +5,11 @@ const { authenticateToken } = require('../middlewares/auth.middleware');
 const { validateRegistration } = require('../middlewares/validators/user.validator');
 
 // ==================== RUTAS PÚBLICAS ====================
+router.post('/login', authController.login);
+router.post('/register', validateRegistration, authController.register);
 
-router.post('/auth/login', authController.login);
-router.post('/auth/register', validateRegistration, authController.register);
-
-// ==================== RUTAS AUTENTICADAS ====================
-
-router.get('/auth/profile', authenticateToken, authController.getProfile);
-router.post('/auth/change-password', authenticateToken, authController.changePassword);
+// ==================== RUTAS PROTEGIDAS ====================
+router.get('/profile', authenticateToken, authController.getProfile);
+router.post('/change-password', authenticateToken, authController.changePassword);
 
 module.exports = router;

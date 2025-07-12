@@ -565,7 +565,7 @@ async getOrdersTrend(req, res) {
       try {
         // ========== 👇 ESTE ES EL CAMBIO PRINCIPAL 👇 ==========
         // Llamamos al nuevo método assignOrderNewUrl que usa la URL /orders/assign/{orderId}/{carrierId}
-        const assignmentResult = await ShipdayService.assignOrderNewUrl(shipdayOrderId, driverId);
+        const assignmentResult = await ShipdayService.assignOrder(shipdayOrderId, driverId);
         
         console.log('✅ Asignación con nuevo método exitosa:', assignmentResult);
         
@@ -716,7 +716,7 @@ async bulkUpload(req, res) {
             if (shipdayResult && shipdayResult.orderId) {
               // Actualizar el pedido local con el ID de Shipday
               createdOrder.shipday_order_id = shipdayResult.orderId;
-              createdOrder.status = 'processing';
+              createdOrder.status = 'pending';
               await createdOrder.save();
               
               results.shipday_created++;
