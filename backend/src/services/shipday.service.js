@@ -181,7 +181,7 @@ class ShipDayService {
       deliveryInstruction: orderData.deliveryInstruction || '',
       deliveryFee: parseFloat(orderData.deliveryFee) || 1800,
       total: parseFloat(orderData.total) || 1,
-      paymentMethod: "cash" // Campo requerido por Shipday
+      paymentMethod: "credit_card" // Campo requerido por Shipday
     };
 
     console.log('🚢 Creando orden en Shipday con payload:', JSON.stringify(payload, null, 2));
