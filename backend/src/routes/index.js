@@ -244,7 +244,9 @@ router.patch('/orders/:id/status', authenticateToken, validateMongoId('id'), isA
 
 router.patch('/orders/:id/ready', authenticateToken, validateMongoId('id'), async (req, res) => {
   try {
-    const order = await Order.findById(req.params.id);
+    const { autoCreateShipday = true } = req.body; // Por defecto, auto-crear
+    
+    const order = await Order.findById(req.params.id).populate('company_id');
     if (!order) return res.status(404).json({ error: 'Pedido no encontrado' });
 
     // Solo la empresa dueña puede marcar como listo
@@ -256,10 +258,74 @@ router.patch('/orders/:id/ready', authenticateToken, validateMongoId('id'), asyn
       return res.status(400).json({ error: 'Solo los pedidos pendientes pueden marcarse como listos' });
     }
 
+    // 🆕 PASO 1: Marcar como listo
     order.status = 'ready_for_pickup';
     await order.save();
-    res.json({ message: 'Pedido marcado como listo para retiro', order });
+
+    console.log(`✅ Pedido #${order.order_number} marcado como listo para retiro`);
+
+    let shipdayResult = null;
+
+    // 🆕 PASO 2: Auto-crear en Shipday si está habilitado
+    if (autoCreateShipday && !order.shipday_order_id) {
+      try {
+        console.log(`📦 Auto-creando pedido #${order.order_number} en Shipday...`);
+        
+        const shipdayData = {
+          orderNumber: order.order_number,
+          customerName: order.customer_name,
+          customerAddress: order.shipping_address,
+          restaurantName: "enviGo",
+          restaurantAddress: "santa hilda 1447, quilicura",
+          customerEmail: order.customer_email || '',
+          customerPhoneNumber: order.customer_phone || '',
+          deliveryInstruction: order.notes || 'Sin instrucciones especiales',
+          deliveryFee: 1800
+        };
+
+        const ShipdayService = require('../services/shipday.service');
+        const createdOrder = await ShipdayService.createOrder(shipdayData);
+
+        if (createdOrder && createdOrder.orderId) {
+          // Actualizar el pedido con el ID de Shipday
+          order.shipday_order_id = createdOrder.orderId;
+          order.status = 'processing'; // Cambiar a processing ya que está en Shipday
+          await order.save();
+
+          shipdayResult = {
+            success: true,
+            shipday_order_id: createdOrder.orderId,
+            message: 'Pedido creado exitosamente en Shipday'
+          };
+
+          console.log(`✅ Pedido #${order.order_number} creado en Shipday con ID: ${createdOrder.orderId}`);
+        }
+
+      } catch (shipdayError) {
+        console.error(`❌ Error creando en Shipday para pedido #${order.order_number}:`, shipdayError);
+        
+        // No falla la operación principal, solo logea el error
+        shipdayResult = {
+          success: false,
+          error: shipdayError.message,
+          message: 'Pedido marcado como listo pero falló la creación en Shipday'
+        };
+      }
+    }
+
+    res.json({ 
+      message: 'Pedido marcado como listo para retiro exitosamente',
+      order: {
+        _id: order._id,
+        order_number: order.order_number,
+        status: order.status,
+        shipday_order_id: order.shipday_order_id
+      },
+      shipday_auto_creation: shipdayResult
+    });
+
   } catch (error) {
+    console.error('❌ Error al marcar pedido como listo:', error);
     res.status(500).json({ error: 'Error actualizando el pedido' });
   }
 });

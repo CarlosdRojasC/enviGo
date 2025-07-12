@@ -232,6 +232,7 @@ if (order.shipday_order_id) {
       });
 
       await order.save();
+       await this._autoCreateInShipday(order);
 
       res.status(201).json({ message: 'Pedido creado exitosamente', order });
     } catch (error) {
@@ -285,7 +286,40 @@ if (order.shipday_order_id) {
       res.status(500).json({ error: error.message || 'Error interno del servidor' });
     }
   }
+ async _autoCreateInShipday(order) {
+    if (process.env.AUTO_CREATE_SHIPDAY_ORDERS !== 'true') {
+      return; // No hacer nada si la variable de entorno no está activada
+    }
 
+    try {
+      console.log(`🚀 Auto-creando orden #${order.order_number} en Shipday...`);
+
+      const shipdayData = {
+        orderNumber: order.order_number,
+        customerName: order.customer_name,
+        customerAddress: order.shipping_address,
+        customerEmail: order.customer_email || '',
+        customerPhoneNumber: order.customer_phone || '',
+        deliveryInstruction: order.notes || 'Sin instrucciones especiales',
+      };
+
+      const shipdayOrder = await ShipdayService.createOrder(shipdayData);
+
+      if (shipdayOrder && shipdayOrder.orderId) {
+        order.shipday_order_id = shipdayOrder.orderId;
+        order.status = 'processing'; // Cambia el estado a "procesando"
+        await order.save();
+        console.log(`✅ Orden #${order.order_number} creada en Shipday con ID: ${shipdayOrder.orderId}`);
+      } else {
+         console.warn(`⚠️ La creación en Shipday para la orden #${order.order_number} no devolvió un ID.`);
+      }
+
+    } catch (shipdayError) {
+      // Es importante no detener el flujo principal si Shipday falla.
+      // Solo registramos el error para futura depuración.
+      console.error(`❌ Error auto-creando la orden #${order.order_number} en Shipday:`, shipdayError.message);
+    }
+  }
   async exportForOptiRoute(req, res) {
     try {
       const { date_from, date_to, company_id, status } = req.query;
@@ -669,8 +703,13 @@ async getOrdersTrend(req, res) {
             throw new Error('Faltan campos obligatorios (Pedido, Cliente o Dirección)');
           }
 
-          await Order.create(orderData);
+          // **CAMBIO IMPORTANTE AQUÍ**
+          const newOrder = await Order.create(orderData); // Guardamos la instancia del pedido creado
           results.success++;
+
+          // **Llamamos a la función de auto-creación en Shipday**
+          await this._autoCreateInShipday(newOrder);
+
 
         } catch (rowError) {
           results.failed++;
