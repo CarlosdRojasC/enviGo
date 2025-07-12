@@ -615,79 +615,189 @@ async getOrdersTrend(req, res) {
       res.status(500).json({ error: 'Error generando la plantilla de importación' });
     }
   }
-  async bulkUpload(req, res) {
-    // 1. Verificar que el archivo fue subido
-    if (!req.file) {
-      return res.status(400).json({ error: 'No se ha subido ningún archivo.' });
-    }
-
-    // 2. Obtener el ID de la empresa desde el cuerpo de la petición
-    const { company_id } = req.body;
-    if (!company_id) {
-        return res.status(400).json({ error: 'No se especificó la empresa para la subida masiva.' });
-    }
-
-    try {
-      // 3. Leer el archivo Excel desde el buffer de memoria
-      const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
-      const sheetName = workbook.SheetNames[0];
-      const worksheet = workbook.Sheets[sheetName];
-      const data = XLSX.utils.sheet_to_json(worksheet);
-
-      const results = { success: 0, failed: 0, errors: [] };
-
-      // 4. Buscar el canal de venta de la empresa seleccionada
-      // Asumimos que cada empresa tiene al menos un canal para asociar los pedidos
-      const channel = await Channel.findOne({ company_id: company_id });
-      if (!channel) {
-        return res.status(400).json({ error: 'La empresa seleccionada no tiene un canal de venta configurado.' });
-      }
-
-      // 5. Recorrer cada fila del Excel y crear los pedidos
-      for (const row of data) {
-        try {
-          const orderData = {
-            company_id: company_id, // Usar el ID real
-            channel_id: channel._id, // Usar el ID del canal encontrado
-            external_order_id: String(row['ID Externo*'] || `MANUAL-${Date.now()}`),
-            order_number: String(row['Número de Pedido*']),
-            customer_name: String(row['Nombre Cliente*']),
-            customer_email: String(row['Email Cliente'] || ''),
-            customer_phone: String(row['Teléfono Cliente'] || ''),
-            shipping_address: String(row['Dirección*']),
-            shipping_commune: String(row['Ciudad*']), // El campo en Excel es "Ciudad"
-            shipping_state: String(row['Estado/Región'] || 'RM'),
-            total_amount: parseFloat(row['Monto Total*'] || 0),
-            shipping_cost: parseFloat(row['Costo de Envío'] || 0),
-            order_date: new Date(),
-            status: 'pending',
-            notes: String(row['Notas'] || '')
-          };
-
-          // Validación simple de campos obligatorios
-          if (!orderData.order_number || !orderData.customer_name || !orderData.shipping_address) {
-            throw new Error('Faltan campos obligatorios (Pedido, Cliente o Dirección)');
-          }
-
-          await Order.create(orderData);
-          results.success++;
-
-        } catch (rowError) {
-          results.failed++;
-          results.errors.push({ 
-            order: row['Número de Pedido*'] || 'Fila sin número', 
-            reason: rowError.message 
-          });
-        }
-      }
-
-      return res.status(200).json(results);
-
-    } catch (error) {
-      console.error('Error procesando archivo de subida masiva:', error);
-      return res.status(500).json({ error: 'Error al leer el archivo Excel.' });
-    }
+async bulkUpload(req, res) {
+  // 1. Verificar que el archivo fue subido
+  if (!req.file) {
+    return res.status(400).json({ error: 'No se ha subido ningún archivo.' });
   }
+
+  // 2. Obtener parámetros del cuerpo de la petición
+  const { company_id, create_in_shipday = 'true' } = req.body; // create_in_shipday viene como string del FormData
+  
+  if (!company_id) {
+    return res.status(400).json({ error: 'No se especificó la empresa para la subida masiva.' });
+  }
+
+  // Convertir string a boolean
+  const shouldCreateInShipday = create_in_shipday === 'true' || create_in_shipday === true;
+
+  try {
+    // 3. Leer el archivo Excel desde el buffer de memoria
+    const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
+    const sheetName = workbook.SheetNames[0];
+    const worksheet = workbook.Sheets[sheetName];
+    const data = XLSX.utils.sheet_to_json(worksheet);
+
+    console.log(`📋 Procesando ${data.length} pedidos para subida masiva...`);
+    console.log(`🚢 Crear en Shipday: ${shouldCreateInShipday ? 'SÍ' : 'NO'}`);
+
+    const results = { 
+      success: 0, 
+      failed: 0, 
+      errors: [],
+      shipday_created: 0,
+      shipday_failed: 0,
+      shipday_errors: []
+    };
+
+    // 4. Buscar el canal de venta de la empresa seleccionada
+    const channel = await Channel.findOne({ company_id: company_id });
+    if (!channel) {
+      return res.status(400).json({ error: 'La empresa seleccionada no tiene un canal de venta configurado.' });
+    }
+
+    // 5. Recorrer cada fila del Excel y crear los pedidos
+    for (let i = 0; i < data.length; i++) {
+      const row = data[i];
+      
+      try {
+        console.log(`\n📦 Procesando pedido ${i + 1}/${data.length}: ${row['Número de Pedido*']}`);
+        
+        const orderData = {
+          company_id: company_id,
+          channel_id: channel._id,
+          external_order_id: String(row['ID Externo*'] || `MANUAL-${Date.now()}-${i}`),
+          order_number: String(row['Número de Pedido*']),
+          customer_name: String(row['Nombre Cliente*']),
+          customer_email: String(row['Email Cliente'] || ''),
+          customer_phone: String(row['Teléfono Cliente'] || ''),
+          shipping_address: String(row['Dirección*']),
+          shipping_commune: String(row['Ciudad*']),
+          shipping_state: String(row['Estado/Región'] || 'RM'),
+          total_amount: parseFloat(row['Monto Total*'] || 0),
+          shipping_cost: parseFloat(row['Costo de Envío'] || 0),
+          order_date: new Date(),
+          status: 'pending',
+          notes: String(row['Notas'] || '')
+        };
+
+        // Validación de campos obligatorios
+        if (!orderData.order_number || !orderData.customer_name || !orderData.shipping_address) {
+          throw new Error('Faltan campos obligatorios (Pedido, Cliente o Dirección)');
+        }
+
+        // Crear el pedido en la base de datos local
+        const createdOrder = await Order.create(orderData);
+        results.success++;
+        console.log(`✅ Pedido ${orderData.order_number} creado en base de datos local`);
+
+        // 🔥 CREAR AUTOMÁTICAMENTE EN SHIPDAY SI ESTÁ HABILITADO
+        if (shouldCreateInShipday) {
+          try {
+            console.log(`🚢 Creando pedido ${orderData.order_number} en Shipday...`);
+            
+            // Preparar datos para Shipday
+            const shipdayOrderData = {
+              orderNumber: orderData.order_number,
+              customerName: orderData.customer_name,
+              customerAddress: orderData.shipping_address,
+              restaurantName: "enviGo",
+              restaurantAddress: "santa hilda 1447, quilicura",
+              customerPhoneNumber: orderData.customer_phone || '',
+              deliveryInstruction: orderData.notes || '',
+              deliveryFee: orderData.shipping_cost || 1800,
+              total: orderData.total_amount || 1,
+              customerEmail: orderData.customer_email || '',
+            };
+
+            // Crear en Shipday usando el servicio con rate limiting
+            const shipdayResult = await ShipdayService.createOrder(shipdayOrderData);
+            
+            if (shipdayResult && shipdayResult.orderId) {
+              // Actualizar el pedido local con el ID de Shipday
+              createdOrder.shipday_order_id = shipdayResult.orderId;
+              createdOrder.status = 'processing';
+              await createdOrder.save();
+              
+              results.shipday_created++;
+              console.log(`✅ Pedido ${orderData.order_number} creado en Shipday con ID: ${shipdayResult.orderId}`);
+            } else {
+              throw new Error('Shipday no devolvió un orderId válido');
+            }
+
+            // 🔥 DELAY CRUCIAL PARA EVITAR 429 (3 segundos entre creaciones)
+            if (i < data.length - 1) { // No hacer delay en el último pedido
+              console.log('⏱️ Aplicando delay de 3 segundos para evitar rate limiting...');
+              await new Promise(resolve => setTimeout(resolve, 3000));
+            }
+
+          } catch (shipdayError) {
+            console.error(`❌ Error creando en Shipday:`, shipdayError.message);
+            results.shipday_failed++;
+            results.shipday_errors.push({
+              order: orderData.order_number,
+              error: shipdayError.message
+            });
+            
+            // Aunque falle Shipday, el pedido ya se creó localmente
+            // Solo marcamos como pendiente
+            createdOrder.status = 'pending';
+            await createdOrder.save();
+            
+            // Delay de recuperación tras error de Shipday
+            if (i < data.length - 1) {
+              console.log('⏱️ Delay de recuperación tras error: 2 segundos...');
+              await new Promise(resolve => setTimeout(resolve, 2000));
+            }
+          }
+        }
+
+      } catch (rowError) {
+        console.error(`❌ Error procesando fila ${i + 1}:`, rowError.message);
+        results.failed++;
+        results.errors.push({ 
+          order: row['Número de Pedido*'] || `Fila ${i + 1}`, 
+          reason: rowError.message 
+        });
+      }
+    }
+
+    // Preparar respuesta con estadísticas completas
+    const response = {
+      message: 'Subida masiva completada',
+      database: {
+        success: results.success,
+        failed: results.failed,
+        errors: results.errors
+      }
+    };
+
+    if (shouldCreateInShipday) {
+      response.shipday = {
+        created: results.shipday_created,
+        failed: results.shipday_failed,
+        errors: results.shipday_errors
+      };
+      response.message += ` (${results.shipday_created} creados en Shipday de ${results.success} pedidos locales)`;
+    }
+
+    console.log('\n📊 RESUMEN FINAL DE SUBIDA MASIVA:');
+    console.log(`✅ Base de datos: ${results.success} exitosos, ${results.failed} fallidos`);
+    if (shouldCreateInShipday) {
+      console.log(`🚢 Shipday: ${results.shipday_created} creados, ${results.shipday_failed} fallidos`);
+    }
+
+    return res.status(200).json(response);
+
+  } catch (error) {
+    console.error('❌ Error procesando archivo de subida masiva:', error);
+    return res.status(500).json({ 
+      error: 'Error al procesar el archivo Excel.',
+      details: error.message 
+    });
+  }
+}
+
   async getAllCommunes(req, res) {
     try {
       // Combina todas las comunas de todas las zonas en una sola lista

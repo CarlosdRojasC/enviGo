@@ -163,32 +163,58 @@ class ShipDayService {
    * ✅ CORREGIDO: Crea una orden en Shipday asegurando que los campos obligatorios estén presentes.
    */
   async createOrder(orderData) {
-    try {
-      const headers = this.workingFormat || this.getHeaders(1);
-      
-const payload = {
-        orderNumber: orderData.orderNumber,
-        customerName: orderData.customerName,
-        customerAddress: orderData.customerAddress,
-        restaurantName: "enviGo", // <-- VALOR FIJO
-        restaurantAddress: "santa hilda 1447, quilicura", // <-- VALOR FIJO
-        // Campos opcionales pero útiles para Shipday
-        customerEmail: orderData.customerEmail,
-        customerPhoneNumber: orderData.customerPhoneNumber,
-        deliveryInstruction: orderData.deliveryInstruction,
-        deliveryFee: 1800,
-        // No se incluyen `deliveryFee`, `total`, ni `paymentMethod`.
-      };
+  try {
+    // Aplicar rate limiting automáticamente
+    await this.enforceRateLimit();
+    
+    const headers = this.getHeaders();
+    
+    // Preparar payload con todos los campos requeridos
+    const payload = {
+      orderNumber: orderData.orderNumber,
+      customerName: orderData.customerName,
+      customerAddress: orderData.customerAddress,
+      restaurantName: orderData.restaurantName || "enviGo",
+      restaurantAddress: orderData.restaurantAddress || "santa hilda 1447, quilicura",
+      customerEmail: orderData.customerEmail || '',
+      customerPhoneNumber: orderData.customerPhoneNumber || '',
+      deliveryInstruction: orderData.deliveryInstruction || '',
+      deliveryFee: parseFloat(orderData.deliveryFee) || 1800,
+      total: parseFloat(orderData.total) || 1,
+      paymentMethod: "cash" // Campo requerido por Shipday
+    };
 
-      console.log('📦 Enviando payload de creación de orden a Shipday:', JSON.stringify(payload, null, 2));
-      const res = await axios.post(`${BASE_URL}/orders`, payload, { headers });
-      
-      return res.data;
-    } catch (error) {
-      console.error('❌ Error creando la orden en Shipday:', error.response?.data);
-      throw this.handleError(error);
+    console.log('🚢 Creando orden en Shipday con payload:', JSON.stringify(payload, null, 2));
+    
+    const response = await axios.post(`${BASE_URL}/orders`, payload, { headers });
+    
+    console.log('✅ Orden creada exitosamente en Shipday:', {
+      orderId: response.data.orderId,
+      orderNumber: payload.orderNumber,
+      status: response.data.orderStatus || 'created'
+    });
+    
+    return response.data;
+    
+  } catch (error) {
+    console.error('❌ Error creando orden en Shipday:', {
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      data: error.response?.data,
+      url: error.config?.url,
+      payload: error.config?.data
+    });
+    
+    // Si es error 429, aplicar delay extra
+    if (error.response?.status === 429) {
+      console.log('🚫 Rate limit detectado, aplicando delay extra de 5 segundos...');
+      await new Promise(resolve => setTimeout(resolve, 5000));
+      this.lastRequestTime = Date.now();
     }
+    
+    throw this.handleError(error);
   }
+}
 
     async assignOrderNewUrl(orderId, carrierId) {
     if (!orderId || !carrierId) {
