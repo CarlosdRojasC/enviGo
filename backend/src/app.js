@@ -18,7 +18,6 @@ app.use(helmet());
 app.use(compression());
 
 const allowedOrigins = [
-  'https://envi-go.vercel.app',
   'http://localhost:5173' // si usas desarrollo también
 ];
 
