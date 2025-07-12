@@ -111,7 +111,6 @@ class ChannelController {
         api_secret,
         store_url,
         webhook_secret,
-        accepted_communes: accepted_communes || []
       });
 
       await channel.save();
