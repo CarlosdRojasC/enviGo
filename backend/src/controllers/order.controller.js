@@ -542,6 +542,7 @@ async getOrdersTrend(req, res) {
             deliveryFee: 1800,
             total: parseFloat(order.total_amount) || parseFloat(order.shipping_cost) || 1,
             customerEmail: order.customer_email || '',
+            payment_method: '',
         };
         
         const createdShipdayOrder = await ShipdayService.createOrder(orderDataForShipday);
@@ -569,11 +570,37 @@ async getOrdersTrend(req, res) {
         
         console.log('✅ Asignación con nuevo método exitosa:', assignmentResult);
         
-        // Actualizar orden local con conductor asignado
-        order.shipday_driver_id = driverId;
-        order.status = 'shipped';
-        await order.save();
+// Actualizar orden local con conductor asignado
+order.shipday_driver_id = driverId;
+order.status = 'shipped';
+await order.save();
 
+console.log(`💾 Orden ${order.order_number} actualizada en BD local con conductor ${driverId}`);
+console.log('🔍 Intentando obtener info del conductor para driverId:', driverId);
+// Obtener y guardar nombre del conductor desde Shipday
+try {
+  const driversResponse = await ShipdayService.getDrivers();
+  console.log('📋 Respuesta de getDrivers:', driversResponse);
+  const drivers = driversResponse.data || [];
+  console.log('👥 Drivers encontrados:', drivers.length);
+  console.log('🔎 Buscando driver con ID:', driverId, 'tipo:', typeof driverId);
+  const driver = drivers.find(d => {
+        console.log('🔍 Comparando:', d.id, 'con', driverId, 'match:', d.id == driverId);
+        return d.id == driverId;});
+  if (driver) {
+    console.log('✅ Conductor encontrado:', driver);
+    order.driver_info = {
+      name: driver.name,
+      phone: driver.phone || '',
+      email: driver.email || '',
+      status: driver.isOnShift ? 'ONLINE' : 'OFFLINE'
+    };
+    await order.save();
+    console.log(`👤 Info del conductor ${driver.name} guardada para orden ${order.order_number}`);
+  }
+} catch (driverError) {
+  console.warn('⚠️ No se pudo obtener info del conductor:', driverError.message);
+}
         res.status(200).json({ 
           message: 'Pedido y conductor asignado exitosamente usando el nuevo endpoint.',
           shipday_order_id: shipdayOrderId,

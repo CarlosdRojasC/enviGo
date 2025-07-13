@@ -105,7 +105,7 @@
       </div>
       <div v-if="order.shipday_driver_id" class="detail-item">
         <span class="label">Conductor Asignado:</span>
-        <span class="value driver-assigned">ID: {{ order.shipday_driver_id }}</span>
+        <span class="value driver-assigned">Nombre:🚚 {{ order.driver_info?.name || 'Conductor asignado' }}</span>
       </div>
 
       <div class="detail-item full-width">

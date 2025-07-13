@@ -96,54 +96,47 @@ export function useBulkUpload(fetchOrders) {
       console.log('✅ Bulk upload response:', data)
       
       // Process response
-      const successful = data.success || data.created || 0
-      const failed = data.failed || data.errors?.length || 0
-      const total = successful + failed
+      const results = parseUploadResults(data)
       
       // Update UI
-      uploadFeedback.value = `Proceso completado: ${successful} pedidos creados`
-      if (failed > 0) {
-        uploadFeedback.value += `, ${failed} fallaron`
-      }
+      uploadFeedback.value = `Proceso completado: ${results.successful} pedidos creados`
+        if (results.failed > 0) {
+          uploadFeedback.value += `, ${results.failed} fallaron`
+        }
       
-      uploadStatus.value = failed > 0 ? 'error' : 'success'
+    uploadStatus.value = results.failed > 0 ? 'error' : 'success'
       
       // Show detailed feedback
-      if (data.errors && data.errors.length > 0) {
-        console.warn('⚠️ Upload errors:', data.errors)
+      if (results.errors && results.errors.length > 0) {
+        console.warn('⚠️ Upload errors:', results.errors)
         
         // Show first few errors
-        const errorSummary = data.errors.slice(0, 3).map(error => 
+        const errorSummary = results.errors.slice(0, 3).map(error => 
           `Fila ${error.row}: ${error.message}`
         ).join('\n')
         
-        if (data.errors.length > 3) {
-          uploadFeedback.value += `\n\nPrimeros errores:\n${errorSummary}\n... y ${data.errors.length - 3} más`
+        if (results.errors.length > 3) {
+          uploadFeedback.value += `\n\nPrimeros errores:\n${errorSummary}\n... y ${results.errors.length - 3} más`
         } else {
           uploadFeedback.value += `\n\nErrores:\n${errorSummary}`
         }
       }
       
       // Show success message
-      if (successful > 0) {
-        toast.success(`✅ ${successful} pedidos creados exitosamente`)
+      if (results.successful > 0) {
+        toast.success(`✅ ${results.successful} pedidos creados exitosamente`)
         
         // Refresh orders list
         await fetchOrders()
       }
       
-      if (failed > 0) {
-        toast.warning(`⚠️ ${failed} pedidos fallaron. Revisa los detalles.`)
+      if (results.failed > 0) {
+        toast.warning(`⚠️ ${results.failed} pedidos fallaron. Revisa los detalles.`)
       }
       
-      console.log('📊 Bulk upload summary:', {
-        total,
-        successful,
-        failed,
-        successRate: total > 0 ? Math.round((successful / total) * 100) : 0
-      })
+      console.log('📊 Bulk upload summary:', results)
       
-      return successful > 0
+      return results.successful > 0
       
     } catch (error) {
       console.error('❌ Error in bulk upload:', error)
@@ -340,41 +333,81 @@ export function useBulkUpload(fetchOrders) {
    * Parse upload results for display
    */
   function parseUploadResults(data) {
-    const results = {
-      total: 0,
-      successful: 0,
-      failed: 0,
-      errors: [],
-      successRate: 0
-    }
-    
-    // Handle different response formats
-    if (data.success !== undefined && data.failed !== undefined) {
-      results.successful = data.success
-      results.failed = data.failed
-      results.total = results.successful + results.failed
-    } else if (data.created !== undefined) {
-      results.successful = data.created
-      results.failed = data.errors?.length || 0
-      results.total = results.successful + results.failed
-    }
-    
-    // Parse errors
-    if (data.errors && Array.isArray(data.errors)) {
-      results.errors = data.errors.map(error => ({
-        row: error.row || error.line || 'N/A',
-        message: error.message || error.error || 'Error desconocido',
-        field: error.field || null
-      }))
-    }
-    
-    // Calculate success rate
-    if (results.total > 0) {
-      results.successRate = Math.round((results.successful / results.total) * 100)
-    }
-    
-    return results
-  }
+ const results = {
+   total: 0,
+   successful: 0,
+   failed: 0,
+   errors: [],
+   successRate: 0,
+   shipdayCreated: 0,
+   shipdayFailed: 0,
+   shipdayErrors: []
+ }
+ 
+ console.log('🔍 Parsing upload results:', data)
+ 
+ // Handle enviGo backend format first
+ if (data.database) {
+   results.successful = data.database.success || 0
+   results.failed = data.database.failed || 0
+   results.total = results.successful + results.failed
+   
+   if (data.database.errors && Array.isArray(data.database.errors)) {
+     results.errors = data.database.errors.map(error => ({
+       row: error.order || 'N/A',
+       message: error.reason || error.message || 'Error desconocido',
+       field: null
+     }))
+   }
+   
+   // Handle Shipday info if present
+   if (data.shipday) {
+     results.shipdayCreated = data.shipday.created || 0
+     results.shipdayFailed = data.shipday.failed || 0
+     
+     if (data.shipday.errors && Array.isArray(data.shipday.errors)) {
+       results.shipdayErrors = data.shipday.errors.map(error => ({
+         order: error.order || 'N/A',
+         message: error.reason || error.message || 'Error en Shipday'
+       }))
+     }
+   }
+ } 
+ // Handle other response formats
+ else if (data.success !== undefined && data.failed !== undefined) {
+   results.successful = data.success
+   results.failed = data.failed
+   results.total = results.successful + results.failed
+   
+   if (data.errors && Array.isArray(data.errors)) {
+     results.errors = data.errors.map(error => ({
+       row: error.row || error.line || 'N/A',
+       message: error.message || error.error || 'Error desconocido',
+       field: error.field || null
+     }))
+   }
+ } else if (data.created !== undefined) {
+   results.successful = data.created
+   results.failed = data.errors?.length || 0
+   results.total = results.successful + results.failed
+   
+   if (data.errors && Array.isArray(data.errors)) {
+     results.errors = data.errors.map(error => ({
+       row: error.row || error.line || 'N/A',
+       message: error.message || error.error || 'Error desconocido',
+       field: error.field || null
+     }))
+   }
+ }
+ 
+ // Calculate success rate
+ if (results.total > 0) {
+   results.successRate = Math.round((results.successful / results.total) * 100)
+ }
+ 
+ console.log('📊 Parsed results:', results)
+ return results
+}
 
   // ==================== RETURN ====================
   return {

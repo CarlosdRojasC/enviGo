@@ -216,7 +216,7 @@ const {
   confirmBulkAssignment,
   closeBulkAssignModal,
   fetchAvailableDrivers
-} = useDriverAssignment(selectedOrders, fetchOrders)
+} = useDriverAssignment(selectedOrderObjects, fetchOrders) 
 
 // Upload masivo
 const {
