@@ -62,26 +62,80 @@ class OrderController {
 
       console.log('Filtros finales aplicados:', JSON.stringify(filters, null, 2));
 
-      const [orders, totalCount] = await Promise.all([
-        Order.find(filters)
-          .populate('company_id', 'name price_per_order')
-          .populate('channel_id', 'channel_type channel_name')
-          .sort({ order_date: -1 })
-          .skip(skip)
-          .limit(parseInt(limit))
-          .lean(),
-        Order.countDocuments(filters)
-      ]);
+const [orders, totalCount] = await Promise.all([
+  Order.find(filters)
+    .populate('company_id', 'name price_per_order')
+    .populate('channel_id', 'channel_type channel_name')
+    .sort({ order_date: -1 })
+    .skip(skip)
+    .limit(parseInt(limit))
+    .lean(),
+  Order.countDocuments(filters)
+]);
 
-      res.json({
-        orders,
-        pagination: {
-          page: parseInt(page),
-          limit: parseInt(limit),
-          total: totalCount,
-          totalPages: Math.ceil(totalCount / limit)
-        }
-      });
+// ==================== ENRIQUECER CON DATOS DE SHIPDAY ====================
+console.log(`🚚 Enriqueciendo ${orders.length} pedidos con datos de Shipday...`);
+
+const enrichedOrders = await Promise.all(
+  orders.map(async (order) => {
+    // Solo procesar pedidos que tienen shipday_order_id
+    if (!order.shipday_order_id) {
+      return order;
+    }
+
+    try {
+      console.log(`📦 Obteniendo datos de Shipday para pedido #${order.order_number}`);
+      
+      const shipdayOrderDetails = await ShipdayService.getOrder(order.shipday_order_id);
+      
+      // Agregar la misma información que en getById
+      const enrichedOrder = {
+        ...order,
+        shipday_details: shipdayOrderDetails._raw,
+        delivery_note: shipdayOrderDetails._raw?.deliveryNote,
+        podUrls: shipdayOrderDetails._raw?.podUrls || [],
+        signatureUrl: shipdayOrderDetails._raw?.signatures?.[0]?.url,
+        driver_info: shipdayOrderDetails._raw?.assignedCarrier,
+        shipday_times: shipdayOrderDetails._raw?.activityLog,
+        // Agregar URL de tracking en vivo
+        shipday_tracking_url: shipdayOrderDetails._raw?.trackingUrl || shipdayOrderDetails.trackingUrl
+      };
+
+      // Agregar ubicación de entrega si existe
+      if (shipdayOrderDetails._raw?.proofOfDelivery?.location) {
+        enrichedOrder.delivery_location = {
+          lat: shipdayOrderDetails._raw.proofOfDelivery.location.latitude,
+          lng: shipdayOrderDetails._raw.proofOfDelivery.location.longitude,
+          formatted_address: shipdayOrderDetails._raw.proofOfDelivery.location.address
+        };
+      }
+
+      console.log(`✅ Pedido #${order.order_number} enriquecido con datos de Shipday`);
+      return enrichedOrder;
+      
+    } catch (shipdayError) {
+      console.warn(`⚠️ No se pudo obtener datos de Shipday para pedido #${order.order_number}:`, shipdayError.message);
+      
+      // Retornar pedido original con indicador de error
+      return {
+        ...order,
+        shipday_error: "No se pudieron obtener los detalles de Shipday."
+      };
+    }
+  })
+);
+
+console.log(`🎉 Proceso de enriquecimiento completado. ${enrichedOrders.length} pedidos procesados.`);
+
+res.json({
+  orders: enrichedOrders, // ← Usar los pedidos enriquecidos
+  pagination: {
+    page: parseInt(page),
+    limit: parseInt(limit),
+    total: totalCount,
+    totalPages: Math.ceil(totalCount / limit)
+  }
+});
     } catch (error) {
       console.error('Error obteniendo pedidos:', error);
       res.status(500).json({ error: ERRORS.SERVER_ERROR });
