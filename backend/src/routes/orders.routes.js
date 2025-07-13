@@ -267,7 +267,6 @@ router.post('/bulk-assign-driver', authenticateToken, isAdmin, async (req, res) 
     if (!driver) {
       return res.status(404).json({ error: `Conductor con ID ${driverId} no encontrado en Shipday.` });
     }
-    const driverEmail = driver.email;
 
     // Bucle para asignar cada orden individualmente
     for (const order of ordersInShipday) {
@@ -278,7 +277,14 @@ router.post('/bulk-assign-driver', authenticateToken, isAdmin, async (req, res) 
         // Actualizamos el estado local
         order.shipday_driver_id = driverId;
         order.status = 'shipped'; // O el estado que corresponda
+        order.driver_info = {
+          name: driver.name,
+          phone: driver.phone || '',
+          email: driver.email || '',
+          status: driver.isOnShift ? 'ONLINE' : 'OFFLINE'
+        };
         await order.save();
+        console.log(`👤 Info del conductor ${driver.name} guardada para orden ${order.order_number}`);
 
         results.successful.push({ orderId: order._id, orderNumber: order.order_number });
 

@@ -182,7 +182,7 @@
                   </div>
 <div v-if="order.shipday_driver_id" class="driver-assigned">
   <span class="driver-badge">
-    🚚 {{ order.shipday_driver_name || 'Conductor asignado' }}
+    🚚 {{ order.driver_info?.name || 'Conductor asignado' }}
   </span>
 </div>
                   <div v-else class="driver-pending">
