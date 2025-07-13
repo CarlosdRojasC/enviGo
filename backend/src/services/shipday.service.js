@@ -191,18 +191,20 @@ class ShipDayService {
     }
   }
 
-  async assignOrder(orderId, driverEmail) {
-    try {
-      console.log('🔗 Asignando orden:', orderId, 'a conductor:', driverEmail);
-
-      const payload = {
-        carrierEmail: driverEmail
-      };
+  async assignOrder(orderId, driverId) {
+     try {
+      console.log(`🔗 Asignando orden: ${orderId} al conductor ID: ${driverId}`);
 
       const headers = this.getHeaders();
-      const response = await axios.put(`${BASE_URL}/orders/${orderId}/assign`, payload, { headers });
       
-      console.log('✅ Orden asignada exitosamente');
+      // --- CAMBIO CLAVE: Usar la nueva URL correcta sin cuerpo (payload) ---
+      const response = await axios.put(
+        `${BASE_URL}/orders/assign/${orderId}/${driverId}`,
+        null, // No se envía cuerpo en la petición con este endpoint
+        { headers }
+      );
+      
+      console.log('✅ Orden asignada exitosamente con el nuevo endpoint.');
       return response.data;
 
     } catch (error) {

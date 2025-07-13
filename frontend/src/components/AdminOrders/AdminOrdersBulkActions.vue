@@ -241,7 +241,9 @@ const showBreakdown = ref(false)
  * Count of orders that can be assigned to drivers
  */
 const assignableCount = computed(() => {
-  return props.selectedOrders.filter(order => !order.shipday_order_id).length
+   return props.selectedOrders.filter(order => 
+    ['pending', 'ready_for_pickup'].includes(order.status)
+  ).length
 })
 
 /**

@@ -92,7 +92,7 @@
       @bulk-upload="handleBulkUpload"
       @download-template="downloadTemplate"
       @close-assign="showAssignModal = false"
-      @confirm-assignment="confirmAssignment(selectedOrder._id)"
+      @confirm-assignment="confirmAssignment"
       @close-bulk-assign="closeBulkAssignModal"
       @confirm-bulk-assignment="confirmBulkAssignment"
     />

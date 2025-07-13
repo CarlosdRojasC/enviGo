@@ -62,7 +62,7 @@
                 type="checkbox" 
                 :checked="isOrderSelected(order)"
                 @change="$emit('select-order', order)"
-                :disabled="!!order.shipday_order_id"
+                :disabled="order.status !== 'pending' && order.status !== 'ready_for_pickup'"
                 class="order-checkbox"
               />
             </td>
@@ -223,8 +223,8 @@
                 <button 
                   @click="$emit('assign-driver', order)" 
                   class="btn-action assign"
-                  :disabled="!!order.shipday_order_id"
-                  :title="order.shipday_order_id ? 'Ya asignado en Shipday' : 'Asignar conductor'"
+                 :disabled="order.status !== 'pending' && order.status !== 'ready_for_pickup'"
+                 :title="['pending', 'ready_for_pickup'].includes(order.status) ? 'Asignar conductor' : 'No se puede asignar en este estado'"
                 >
                   <span class="action-icon">🚚</span>
                   <span class="action-text">Asignar</span>

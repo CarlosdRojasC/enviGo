@@ -875,7 +875,7 @@ function getSelectedDriver() {
  * Get bulk selected driver info
  */
 function getBulkSelectedDriver() {
-  return props.availableDrivers.find(driver => driver.id === props.bulkSelectedDriverId)
+  return props.availableDrivers.find(driver => driver.id == props.bulkSelectedDriverId)
 }
 
 /**

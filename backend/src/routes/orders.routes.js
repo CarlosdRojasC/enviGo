@@ -273,7 +273,7 @@ router.post('/bulk-assign-driver', authenticateToken, isAdmin, async (req, res) 
     for (const order of ordersInShipday) {
       try {
         // Se llama a la función individual y correcta: assignOrder
-        await ShipdayService.assignOrder(order.shipday_order_id, driverEmail);
+        await ShipdayService.assignOrder(order.shipday_order_id, driverId);
         
         // Actualizamos el estado local
         order.shipday_driver_id = driverId;
