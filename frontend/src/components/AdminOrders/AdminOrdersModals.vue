@@ -932,10 +932,6 @@ function getFailedResults() {
 </script>
 
 <style scoped>
-/* ==================== MODAL CONTAINER ==================== */
-.modals-container {
-  /* This container doesn't need styles since each Modal has its own */
-}
 
 /* ==================== FORM STYLES ==================== */
 .create-order-content,

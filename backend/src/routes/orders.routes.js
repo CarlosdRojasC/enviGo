@@ -584,6 +584,55 @@ router.get('/:orderId/shipday-status', authenticateToken, async (req, res) => {
 });
 
 // ==================== TRACKING DE PEDIDOS ====================
+/**
+ * Generar timeline de eventos del pedido
+ */
+function generateTimeline(order) {
+  const timeline = []
+  
+  // Evento de creación
+  timeline.push({
+    status: 'created',
+    timestamp: order.order_date,
+    title: 'Pedido Creado',
+    description: `Pedido #${order.order_number} creado`,
+    icon: '📝'
+  })
+  
+  // Eventos basados en el estado
+  if (order.status === 'processing' || order.status === 'shipped' || order.status === 'delivered') {
+    timeline.push({
+      status: 'processing',
+      timestamp: order.updated_at || order.order_date,
+      title: 'En Procesamiento',
+      description: 'Pedido confirmado y en preparación',
+      icon: '⚙️'
+    })
+  }
+  
+  if (order.status === 'shipped' || order.status === 'delivered') {
+    timeline.push({
+      status: 'shipped',
+      timestamp: order.shipped_date || order.updated_at,
+      title: 'Enviado',
+      description: 'Pedido en camino al destino',
+      icon: '🚚'
+    })
+  }
+  
+  if (order.status === 'delivered') {
+    timeline.push({
+      status: 'delivered',
+      timestamp: order.delivery_date,
+      title: 'Entregado',
+      description: 'Pedido entregado exitosamente',
+      icon: '✅'
+    })
+  }
+  
+  // Ordenar por timestamp
+  return timeline.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
+}
 
 router.get('/:orderId/tracking', authenticateToken, async (req, res) => {
   try {

@@ -25,9 +25,7 @@ class OrderController {
         // --> INICIO DE LA NUEVA LÓGICA <--
         // Si el admin no está filtrando por un estado específico,
         // ocultamos los pedidos que están 'pendientes'.
-        if (!status) {
-          filters.status = { $ne: 'pending' }; } 
-          else {
+        if (status) {
           filters.status = status;
         }
       } else {

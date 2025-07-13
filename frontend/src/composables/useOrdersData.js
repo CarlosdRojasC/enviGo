@@ -1,13 +1,15 @@
 // composables/useOrdersData.js
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { useToast } from 'vue-toastification'
 import { apiService } from '../services/api'
+import { useAuthStore } from '../store/auth'
 
 export function useOrdersData() {
   const toast = useToast()
-  
+  const auth = useAuthStore() // ← AGREGAR ESTO
   // ==================== STATE ====================
   const orders = ref([])
+  const channels = ref([])
   const companies = ref([])
   const loadingOrders = ref(true)
   const pagination = ref({ 
@@ -16,6 +18,41 @@ export function useOrdersData() {
     total: 0, 
     totalPages: 1 
   })
+  const loadingStates = ref({
+  fetching: false,
+  refreshing: false,
+  updating: false,
+  exporting: false
+})
+
+// Cache y auto-refresh
+const dataCache = ref({
+  lastFetch: null,
+  lastFilters: null,
+  autoRefreshInterval: null
+})
+
+// Estadísticas adicionales
+const additionalStats = ref({
+  totalRevenue: 0,
+  averageOrderValue: 0,
+  deliveryRate: 0,
+  pendingRate: 0
+})
+
+// ==================== COMPUTED ====================
+
+/**
+ * Usuario actual para permisos
+ */
+const user = computed(() => auth.user)
+
+/**
+ * ID de empresa del usuario
+ */
+const companyId = computed(() => {
+  return user.value?.company_id || user.value?.company?._id
+})
 
   // ==================== METHODS ====================
   
@@ -47,10 +84,18 @@ export function useOrdersData() {
         ...filters
       }
       
+      
       console.log('📊 Fetching orders with params:', params)
       
       const { data } = await apiService.orders.getAll(params)
-      
+
+        dataCache.value.lastFetch = Date.now()
+        dataCache.value.lastFilters = { ...params }
+        
+        // Calcular stats
+        calculateAdditionalStats()
+        
+        console.log(`✅ Loaded ${orders.value.length} orders`)
       // Handle different API response formats
       if (data.orders) {
         // Format: { orders: [...], pagination: {...} }
@@ -89,9 +134,29 @@ export function useOrdersData() {
       pagination.value.totalPages = 1
     } finally {
       loadingOrders.value = false
+      loadingStates.value.fetching = false
     }
   }
+async function fetchChannels() {
+  try {
+    if (!companyId.value) {
+      console.warn('⚠️ No company ID available for fetching channels')
+      return
+    }
 
+    console.log('🏪 Fetching channels for company:', companyId.value)
+    
+    const { data } = await apiService.channels.getByCompany(companyId.value)
+    channels.value = data || []
+    
+    console.log(`✅ Loaded ${channels.value.length} channels`)
+    
+  } catch (err) {
+    console.error('❌ Error fetching channels:', err)
+    // No mostramos toast aquí porque es información secundaria
+    channels.value = []
+  }
+}
   /**
    * Change page
    */
@@ -199,6 +264,71 @@ export function useOrdersData() {
     }
   }
 
+  function startAutoRefresh(intervalMinutes = 5) {
+  stopAutoRefresh()
+  dataCache.value.autoRefreshInterval = setInterval(() => {
+    if (!loadingStates.value.fetching) {
+      refreshOrders()
+    }
+  }, intervalMinutes * 60 * 1000)
+}
+
+function stopAutoRefresh() {
+  if (dataCache.value.autoRefreshInterval) {
+    clearInterval(dataCache.value.autoRefreshInterval)
+    dataCache.value.autoRefreshInterval = null
+  }
+}
+
+// Calcular estadísticas adicionales
+function calculateAdditionalStats() {
+  const total = orders.value.length
+  if (total === 0) return
+  
+  const totalRevenue = orders.value.reduce((sum, order) => sum + (order.total_amount || 0), 0)
+  const delivered = orders.value.filter(o => o.status === 'delivered').length
+  const pending = orders.value.filter(o => o.status === 'pending').length
+  
+  additionalStats.value = {
+    totalRevenue,
+    averageOrderValue: totalRevenue / total,
+    deliveryRate: (delivered / total) * 100,
+    pendingRate: (pending / total) * 100
+  }
+}
+
+// Exportar datos
+async function exportOrders(format = 'excel', filters = {}) {
+  loadingStates.value.exporting = true
+  try {
+    const response = await apiService.orders.export({ format, ...filters })
+    // Manejar descarga
+    const blob = new Blob([response.data])
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `orders_${new Date().toISOString().split('T')[0]}.${format}`
+    link.click()
+    window.URL.revokeObjectURL(url)
+  } catch (error) {
+    console.error('Error exporting:', error)
+    throw error
+  } finally {
+    loadingStates.value.exporting = false
+  }
+}
+
+// Obtener tendencias
+async function getOrdersTrend(period = '30d') {
+  try {
+    const { data } = await apiService.orders.getTrend({ period })
+    return data
+  } catch (error) {
+    console.error('Error fetching trend:', error)
+    return []
+  }
+}
+
   // ==================== RETURN ====================
   return {
     // State
@@ -206,9 +336,17 @@ export function useOrdersData() {
     companies,
     loadingOrders,
     pagination,
-    
+    loadingStates,
+    additionalStats,
+    channels,
+  
+     // Computed
+        user,           
+        companyId, 
+
     // Methods
     fetchOrders,
+    fetchChannels,
     fetchCompanies,
     goToPage,
     changePageSize,
@@ -218,6 +356,11 @@ export function useOrdersData() {
     updateOrderLocally,
     removeOrderLocally,
     addOrderLocally,
-    getOrdersStats
+    getOrdersStats,
+    startAutoRefresh,
+    stopAutoRefresh,
+    exportOrders,
+    getOrdersTrend,
+    calculateAdditionalStats
   }
 }

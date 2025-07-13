@@ -272,7 +272,40 @@ export function useOrdersSelection(orders) {
     
     return removedCount
   }
+// Seleccionar por filtros
+function selectByFilters(filterCriteria) {
+  const matching = selectableOrders.value.filter(order => {
+    if (filterCriteria.status && order.status !== filterCriteria.status) return false
+    if (filterCriteria.commune && order.shipping_commune !== filterCriteria.commune) return false
+    if (filterCriteria.dateFrom && new Date(order.order_date) < new Date(filterCriteria.dateFrom)) return false
+    return true
+  })
+  
+  const newIds = matching.map(o => o._id)
+  selectOrders(newIds)
+  return matching.length
+}
 
+// Guardar/cargar selección
+function saveSelection(name) {
+  const selection = {
+    name,
+    ids: [...selectedOrders.value],
+    timestamp: Date.now()
+  }
+  localStorage.setItem(`selection_${name}`, JSON.stringify(selection))
+  return selection
+}
+
+function loadSelection(name) {
+  const saved = localStorage.getItem(`selection_${name}`)
+  if (saved) {
+    const selection = JSON.parse(saved)
+    selectedOrders.value = selection.ids
+    return selection
+  }
+  return null
+}
   // ==================== RETURN ====================
   return {
     // State
@@ -297,6 +330,9 @@ export function useOrdersSelection(orders) {
     selectOrdersByCriteria,
     getSelectionSummary,
     validateSelection,
-    cleanupSelection
+    cleanupSelection,
+    selectByFilters,
+    saveSelection,
+    loadSelection
   }
 }

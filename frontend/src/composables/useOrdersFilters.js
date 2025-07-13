@@ -13,6 +13,24 @@ export function useOrdersFilters(orders, fetchOrders) {
     search: ''
   })
 
+  // Filtros avanzados
+const advancedFilters = ref({
+  amount_min: '',
+  amount_max: '',
+  customer_email: '',
+  order_number: '',
+  external_order_id: '',
+  has_tracking: '',
+  has_proof: '',
+  priority: ''
+})
+
+// Estado de UI
+const filtersUI = ref({
+  showAdvanced: false,
+  savedPresets: []
+})
+
   // Search debounce
   let searchTimeout
 
@@ -48,6 +66,50 @@ export function useOrdersFilters(orders, fetchOrders) {
   const hasActiveFilters = computed(() => {
     return activeFiltersCount.value > 0
   })
+  // Todos los filtros combinados
+const allFilters = computed(() => {
+  const basic = Object.fromEntries(
+    Object.entries(filters.value).filter(([_, value]) => value !== '')
+  )
+  const advanced = Object.fromEntries(
+    Object.entries(advancedFilters.value).filter(([_, value]) => value !== '')
+  )
+  return { ...basic, ...advanced }
+})
+
+// Presets predefinidos
+const filterPresets = computed(() => [
+  {
+    id: 'today',
+    name: 'Hoy',
+    icon: '📅',
+    filters: {
+      date_from: new Date().toISOString().split('T')[0],
+      date_to: new Date().toISOString().split('T')[0]
+    }
+  },
+  {
+    id: 'pending',
+    name: 'Pendientes',
+    icon: '⏳',
+    filters: { status: 'pending' }
+  },
+  {
+    id: 'week',
+    name: 'Esta Semana',
+    icon: '📊',
+    filters: {
+      date_from: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+      date_to: new Date().toISOString().split('T')[0]
+    }
+  },
+  {
+    id: 'ready',
+    name: 'Listos',
+    icon: '📦',
+    filters: { status: 'ready_for_pickup' }
+  }
+])
 
   // ==================== METHODS ====================
 
@@ -233,11 +295,53 @@ export function useOrdersFilters(orders, fetchOrders) {
       }
     }
   )
+// Aplicar preset
+function applyPreset(presetId) {
+  const preset = filterPresets.value.find(p => p.id === presetId)
+  if (!preset) return
+  
+  // Resetear filtros
+  Object.keys(filters.value).forEach(key => filters.value[key] = '')
+  Object.keys(advancedFilters.value).forEach(key => advancedFilters.value[key] = '')
+  
+  // Aplicar preset
+  Object.entries(preset.filters).forEach(([key, value]) => {
+    if (key in filters.value) filters.value[key] = value
+    if (key in advancedFilters.value) advancedFilters.value[key] = value
+  })
+  
+  applyFilters()
+}
 
+// Toggle filtros avanzados
+function toggleAdvancedFilters() {
+  filtersUI.value.showAdvanced = !filtersUI.value.showAdvanced
+}
+
+// Actualizar filtro avanzado
+function updateAdvancedFilter(key, value) {
+  if (key in advancedFilters.value) {
+    advancedFilters.value[key] = value
+    applyFilters()
+  }
+}
+
+// Búsqueda con mejor debounce
+function debouncedSearch(searchTerm, delay = 300) {
+  clearTimeout(searchTimeout)
+  searchTimeout = setTimeout(() => {
+    handleFilterChange('search', searchTerm)
+  }, delay)
+}
   // ==================== RETURN ====================
   return {
     // State
     filters,
+    advancedFilters,
+    filtersUI,
+    allFilters,
+    filterPresets,
+  
     
     // Computed
     availableCommunes,
@@ -254,6 +358,10 @@ export function useOrdersFilters(orders, fetchOrders) {
     validateDateRange,
     getFilterSummary,
     exportFilters,
-    importFilters
+    importFilters,
+    applyPreset,
+    toggleAdvancedFilters,
+    updateAdvancedFilter,
+    debouncedSearch
   }
 }
