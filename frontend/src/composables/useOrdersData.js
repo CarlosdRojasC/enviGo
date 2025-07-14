@@ -210,13 +210,13 @@ async function fetchChannels() {
   /**
    * Update order in local state (optimistic update)
    */
-  function updateOrderLocally(orderId, updates) {
-    const index = orders.value.findIndex(order => order._id === orderId)
-    if (index !== -1) {
-      orders.value[index] = { ...orders.value[index], ...updates }
-      console.log('🔄 Order updated locally:', orderId, updates)
-    }
+function updateOrderLocally(updatedOrder) {
+  const index = orders.value.findIndex(o => o._id === updatedOrder._id)
+  if (index !== -1) {
+    orders.value[index] = { ...orders.value[index], ...updatedOrder }
+    console.log('✅ Orden actualizada localmente:', updatedOrder.order_number)
   }
+}
 
   /**
    * Remove order from local state

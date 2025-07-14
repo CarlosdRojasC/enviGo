@@ -20,9 +20,9 @@ router.get('/trend', authenticateToken, orderController.getOrdersTrend);
 router.get('/export', authenticateToken, isAdmin, orderController.exportForOptiRoute);
 router.get('/import-template', authenticateToken, isAdmin, orderController.downloadImportTemplate);
 router.post(
-  '/bulk-upload', 
-  authenticateToken, 
-  isAdmin, 
+  '/bulk-upload',
+  authenticateToken,
+  isAdmin,
   upload.single('file'),
   orderController.bulkUpload
 );
@@ -199,7 +199,7 @@ router.post('/:orderId/create-shipday', authenticateToken, isAdmin, async (req, 
     order.status = 'processing';
     await order.save();
 
-    res.status(200).json({ 
+    res.status(200).json({
       message: 'Pedido creado en Shipday exitosamente.',
       shipday_order_id: shipdayOrder.orderId
     });
@@ -339,7 +339,7 @@ router.post('/bulk-assignment-preview', authenticateToken, isAdmin, async (req, 
 
     console.log(`🔍 Generando preview para ${orderIds.length} pedidos`);
 
-    const orders = await Order.find({ 
+    const orders = await Order.find({
       _id: { $in: orderIds }
     }).populate('company_id').lean();
 
@@ -387,7 +387,7 @@ router.post('/bulk-assignment-preview', authenticateToken, isAdmin, async (req, 
 
     res.json({
       preview: analysis,
-      recommendations: analysis.assignable.length > 0 ? 
+      recommendations: analysis.assignable.length > 0 ?
         [`Se pueden asignar ${analysis.assignable.length} de ${analysis.total} pedidos`] :
         ['No hay pedidos disponibles para asignación'],
       ready_for_assignment: analysis.assignable.length > 0
@@ -408,7 +408,7 @@ router.post('/bulk-assignment-status', authenticateToken, isAdmin, async (req, r
       return res.status(400).json({ error: 'Se requiere un array de IDs de órdenes.' });
     }
 
-    const orders = await Order.find({ 
+    const orders = await Order.find({
       _id: { $in: orderIds }
     }).lean();
 
@@ -458,7 +458,7 @@ router.post('/bulk-unassign-driver', authenticateToken, isAdmin, async (req, res
       total: orderIds.length
     };
 
-    const orders = await Order.find({ 
+    const orders = await Order.find({
       _id: { $in: orderIds },
       shipday_driver_id: { $exists: true }
     });
@@ -510,7 +510,7 @@ router.post('/bulk-create-shipday', authenticateToken, isAdmin, async (req, res)
       return res.status(400).json({ error: 'Se requiere un array de IDs de órdenes.' });
     }
 
-    const orders = await Order.find({ 
+    const orders = await Order.find({
       _id: { $in: orderIds },
       shipday_order_id: { $exists: false }
     }).populate('company_id');
@@ -671,7 +671,7 @@ router.get('/:orderId/tracking', authenticateToken, async (req, res) => {
     }
 
     // Verificar permisos (admin o dueño del pedido)
-    if (req.user.role !== 'admin' && req.user.company_id.toString() !== order.company_id._id.toString()) {
+    if (req.user.role !== 'admin' && req.user.company_id._id.toString() !== req.user.company_id.toString()) {
       console.log(`🚫 Sin permisos para ver orden: ${orderId}`);
       return res.status(403).json({ error: 'Sin permisos para ver este pedido' });
     }
@@ -740,7 +740,7 @@ router.get('/:orderId/tracking', authenticateToken, async (req, res) => {
       debug_info: {
         has_shipday_order: !!order.shipday_order_id,
         fresh_data_available: !!freshShipdayData,
-        tracking_url_source: order.shipday_tracking_url ? 'database' : 
+        tracking_url_source: order.shipday_tracking_url ? 'database' :
                              freshShipdayData?.trackingUrl ? 'shipday_api' : 'none'
       }
     };

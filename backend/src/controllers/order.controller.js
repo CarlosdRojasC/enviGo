@@ -90,26 +90,64 @@ res.json({
     }
   }
 
-  async getById(req, res) {
-    try {
-      const { id } = req.params;
+async getById(req, res) {
+  try {
+    const { id } = req.params;
 
-      const order = await Order.findById(id)
-        .populate('company_id', 'name price_per_order')
-        .populate('channel_id', 'channel_type channel_name store_url')
-        .lean();
+    const order = await Order.findById(id)
+      .populate('company_id', 'name price_per_order')
+      .populate('channel_id', 'channel_type channel_name store_url')
+      .lean();
 
-      if (!order) return res.status(404).json({ error: 'Pedido no encontrado' });
+    if (!order) return res.status(404).json({ error: 'Pedido no encontrado' });
 
-if (order.shipday_order_id) {
-        try {
-          const shipdayOrderDetails = await ShipdayService.getOrder(order.shipday_order_id);
-          order.shipday_details = shipdayOrderDetails._raw;
-          order.delivery_note = shipdayOrderDetails._raw?.deliveryNote;
-          order.podUrls = shipdayOrderDetails._raw?.podUrls || [];
-          order.signatureUrl = shipdayOrderDetails._raw?.signatures?.[0]?.url;
-          order.driver_info = shipdayOrderDetails._raw?.assignedCarrier;
-          order.shipday_times = shipdayOrderDetails._raw?.activityLog;
+    // 🔧 CORRECCIÓN: Obtener datos actualizados de Shipday si existe la orden
+    if (order.shipday_order_id) {
+      try {
+        console.log(`📍 Obteniendo datos actualizados de Shipday para orden: ${order.shipday_order_id}`);
+        
+        const shipdayOrderDetails = await ShipdayService.getOrder(order.shipday_order_id);
+        
+        // 🆕 MAPEAR CORRECTAMENTE LOS DATOS DE SHIPDAY
+        if (shipdayOrderDetails) {
+          // Actualizar URL de tracking
+          if (shipdayOrderDetails.trackingUrl && shipdayOrderDetails.trackingUrl !== order.shipday_tracking_url) {
+            console.log('🔄 Actualizando tracking URL desde Shipday:', shipdayOrderDetails.trackingUrl);
+            
+            // Actualizar en la base de datos para futuras consultas
+            await Order.findByIdAndUpdate(id, {
+              shipday_tracking_url: shipdayOrderDetails.trackingUrl,
+              updated_at: new Date()
+            });
+            
+            // Actualizar en el objeto de respuesta
+            order.shipday_tracking_url = shipdayOrderDetails.trackingUrl;
+          }
+
+          // Agregar datos completos de Shipday para debugging
+          order.shipday_details = shipdayOrderDetails._raw || shipdayOrderDetails;
+          
+          // Extraer datos específicos
+          order.delivery_note = shipdayOrderDetails.deliveryNote || shipdayOrderDetails._raw?.deliveryNote;
+          order.podUrls = shipdayOrderDetails.podUrls || shipdayOrderDetails._raw?.podUrls || [];
+          order.signatureUrl = shipdayOrderDetails.signatureUrl || shipdayOrderDetails._raw?.signatures?.[0]?.url;
+          
+          // Información del conductor
+          if (shipdayOrderDetails.carrierName || shipdayOrderDetails._raw?.assignedCarrier) {
+            order.driver_info = {
+              name: shipdayOrderDetails.carrierName || shipdayOrderDetails._raw?.assignedCarrier?.name,
+              phone: shipdayOrderDetails.carrierPhone || shipdayOrderDetails._raw?.assignedCarrier?.phone,
+              email: shipdayOrderDetails.carrierEmail || shipdayOrderDetails._raw?.assignedCarrier?.email,
+              status: shipdayOrderDetails.carrierStatus || shipdayOrderDetails._raw?.assignedCarrier?.status
+            };
+          }
+          
+          // Tiempos de Shipday
+          if (shipdayOrderDetails._raw?.activityLog) {
+            order.shipday_times = shipdayOrderDetails._raw.activityLog;
+          }
+          
+          // Ubicación de entrega
           if (shipdayOrderDetails._raw?.proofOfDelivery?.location) {
             order.delivery_location = {
               lat: shipdayOrderDetails._raw.proofOfDelivery.location.latitude,
@@ -117,22 +155,40 @@ if (order.shipday_order_id) {
               formatted_address: shipdayOrderDetails._raw.proofOfDelivery.location.address
             };
           }
-        } catch (shipdayError) {
-          order.shipday_error = "No se pudieron obtener los detalles de Shipday.";
+
+          console.log('✅ Datos de Shipday actualizados correctamente:', {
+            has_tracking_url: !!order.shipday_tracking_url,
+            tracking_url: order.shipday_tracking_url,
+            has_driver: !!order.driver_info?.name,
+            has_pods: !!(order.podUrls?.length || order.signatureUrl)
+          });
         }
+        
+      } catch (shipdayError) {
+        console.error('❌ Error obteniendo datos de Shipday:', shipdayError);
+        order.shipday_error = "No se pudieron obtener los detalles de Shipday.";
       }
-      // --- FIN DE LA LÓGICA AÑADIDA ---
-
-      if (req.user.role !== 'admin' && req.user.company_id.toString() !== order.company_id._id.toString()) {
-        return res.status(403).json({ error: ERRORS.FORBIDDEN });
-      }
-
-      res.json(order);
-    } catch (error) {
-      console.error('Error obteniendo pedido:', error);
-      res.status(500).json({ error: ERRORS.SERVER_ERROR });
     }
+
+    // Verificar permisos
+    if (req.user.role !== 'admin' && req.user.company_id.toString() !== order.company_id._id.toString()) {
+      return res.status(403).json({ error: ERRORS.FORBIDDEN });
+    }
+
+    console.log(`📋 Orden enviada al frontend:`, {
+      order_id: order._id,
+      order_number: order.order_number,
+      status: order.status,
+      shipday_tracking_url: order.shipday_tracking_url,
+      has_shipday_order: !!order.shipday_order_id
+    });
+
+    res.json(order);
+  } catch (error) {
+    console.error('Error obteniendo pedido:', error);
+    res.status(500).json({ error: ERRORS.SERVER_ERROR });
   }
+}
 
   async updateStatus(req, res) {
     try {

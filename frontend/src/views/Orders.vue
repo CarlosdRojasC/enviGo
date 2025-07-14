@@ -34,28 +34,32 @@
 
     <!-- Tabla moderna -->
     <OrdersTable
-      :orders="orders"
-      :selected-orders="selectedOrders"
-      :select-all-checked="selectAllChecked"
-      :select-all-indeterminate="selectAllIndeterminate"
-      :loading="loadingOrders"
-      :pagination="pagination"
-      @toggle-selection="toggleOrderSelection"
-      @toggle-select-all="toggleSelectAll"
-      @clear-selection="clearSelection"
-      @view-details="openOrderDetailsModal"
-      @mark-ready="markAsReady"
-      @track-live="openLiveTracking"
-      @view-tracking="openTrackingModal"
-      @view-proof="showProofOfDelivery"
-      @contact-support="contactSupport"
-      @bulk-mark-ready="handleBulkMarkReady"
-      @generate-manifest="generateManifestAndMarkReady"
-      @bulk-export="handleBulkExport"
-      @create-order="handleCreateOrder"
-      @go-to-page="goToPage"
-      @change-page-size="changePageSize"
-      @sort="handleSort"
+       :orders="orders"
+  :selected-orders="selectedOrders"
+  :select-all-checked="selectAllChecked"
+  :select-all-indeterminate="selectAllIndeterminate"
+  :loading="loadingOrders"
+  :pagination="pagination"
+  @toggle-selection="toggleOrderSelection"
+  @toggle-select-all="toggleSelectAll"
+  @clear-selection="clearSelection"
+  @view-details="openOrderDetailsModal"
+  @mark-ready="markAsReady"
+  @track-live="openLiveTracking"
+  @view-tracking="openTrackingModal"
+  @view-proof="showProofOfDelivery"
+  @handle-action="handleActionButton"
+  @contact-support="contactSupport"
+  @bulk-mark-ready="handleBulkMarkReady"
+  @generate-manifest="generateManifestAndMarkReady"
+  @bulk-export="handleBulkExport"
+  @create-order="handleCreateOrder"
+  @go-to-page="goToPage"
+  @change-page-size="changePageSize"
+  @sort="handleSort"
+  :has-tracking-info="hasTrackingInfo"
+  :has-proof-of-delivery="hasProofOfDelivery"
+  :get-action-button="getActionButton"
     />
 
     <!-- Modales existentes (mantener tal como están) -->
@@ -63,15 +67,18 @@
       <OrderDetails v-if="selectedOrder" :order="selectedOrder" />
     </Modal>
 
-    <Modal v-model="showTrackingModal" :title="`🚚 Tracking - Pedido #${selectedTrackingOrder?.order_number}`"
-      width="700px">
-      <OrderTracking 
-        v-if="selectedTrackingOrder" 
-        :order-id="selectedTrackingOrder._id" 
-        @support-contact="handleTrackingSupport"
-        @show-proof="handleShowProof"
-      />
-    </Modal>
+<Modal v-model="showTrackingModal" :title="`🚚 Tracking - Pedido #${selectedTrackingOrder?.order_number}`"
+  width="700px">
+  <OrderTracking 
+    ref="orderTrackingRef"
+    v-if="selectedTrackingOrder" 
+    :order-id="selectedTrackingOrder._id" 
+    :order-number="selectedTrackingOrder.order_number"
+    @support-contact="handleTrackingSupport"
+    @show-proof="handleShowProof"
+    @close="showTrackingModal = false"
+  />
+</Modal>
 
     <Modal v-model="showProofModal" :title="`📋 Prueba de Entrega - #${selectedProofOrder?.order_number}`"
       width="700px">
@@ -192,6 +199,7 @@ const user = computed(() => auth.user)
 const lastUpdate = ref(Date.now())
 const autoRefreshEnabled = ref(false)
 const loadingOrderDetails = ref(false)
+const orderTrackingRef = ref(null)
 
 // Estados de modales (mantener los existentes)
 const selectedOrder = ref(null)
@@ -336,16 +344,109 @@ async function markAsReady(order) {
 }
 
 // ==================== MÉTODOS DE TRACKING Y MODALES ====================
-
-function openLiveTracking(order) {
-  if (order.shipday_tracking_url) {
-    window.open(order.shipday_tracking_url, '_blank')
-    console.log('📍 Abriendo tracking en vivo:', order.order_number)
-  } else {
-    toast.warning('No hay URL de tracking disponible')
+/**
+ * Verificar si una orden tiene tracking disponible
+ */
+function hasTrackingInfo(order) {
+  // Usar la función del componente OrderTracking si está disponible
+  if (orderTrackingRef.value?.hasTrackingInfo) {
+    return orderTrackingRef.value.hasTrackingInfo(order)
   }
+  
+  // Fallback: lógica básica
+  if (order.status === 'delivered') return false
+  return !!(
+    order.shipday_tracking_url ||
+    order.shipday_driver_id || 
+    order.shipday_order_id ||
+    ['processing', 'shipped'].includes(order.status)
+  )
 }
 
+/**
+ * Verificar si una orden tiene prueba de entrega
+ */
+function hasProofOfDelivery(order) {
+  if (orderTrackingRef.value?.orderHasProofOfDelivery) {
+    return orderTrackingRef.value.orderHasProofOfDelivery(order)
+  }
+  
+  // Fallback: lógica básica
+  if (order.status !== 'delivered') return false
+  return !!(
+    order.proof_of_delivery?.photo_url || 
+    order.proof_of_delivery?.signature_url ||
+    order.podUrls?.length > 0 ||
+    order.signatureUrl
+  )
+}
+
+/**
+ * Obtener configuración del botón de acción
+ */
+function getActionButton(order) {
+  if (orderTrackingRef.value?.getActionButton) {
+    return orderTrackingRef.value.getActionButton(order)
+  }
+  
+  // Fallback: lógica básica
+  if (order.status === 'delivered') {
+    return {
+      type: 'proof',
+      label: 'Ver Prueba de Entrega',
+      icon: '📸',
+      class: 'btn-success',
+      available: hasProofOfDelivery(order)
+    }
+  }
+  
+  if (['processing', 'shipped'].includes(order.status)) {
+    return {
+      type: 'tracking',
+      label: 'Tracking en Vivo',
+      icon: '📍',
+      class: 'btn-primary',
+      available: hasTrackingInfo(order)
+    }
+  }
+  
+  return { type: 'none', available: false }
+}
+
+async function openLiveTracking(order) {
+  console.log('📍 Intentando abrir tracking para orden:', order.order_number)
+  
+  // Usar la función del componente si está disponible
+  if (orderTrackingRef.value?.openLiveTrackingFromExternal) {
+    await orderTrackingRef.value.openLiveTrackingFromExternal(order, updateOrderLocally)
+    return
+  }
+  
+  // Fallback: lógica básica
+  if (order.shipday_tracking_url) {
+    console.log('✅ Abriendo tracking URL directa:', order.shipday_tracking_url)
+    window.open(order.shipday_tracking_url, '_blank')
+  } else if (order.shipday_order_id) {
+    console.log('⚠️ No hay tracking URL, intentando refrescar datos...')
+    try {
+      const { data } = await apiService.orders.getById(order._id)
+      
+      if (data.shipday_tracking_url) {
+        console.log('✅ URL obtenida después de refresh:', data.shipday_tracking_url)
+        // Actualizar orden localmente
+        updateOrderLocally(data)
+        window.open(data.shipday_tracking_url, '_blank')
+      } else {
+        toast.warning('No se encontró URL de tracking. El pedido puede no estar asignado a un conductor aún.')
+      }
+    } catch (error) {
+      console.error('❌ Error refrescando orden:', error)
+      toast.error('Error obteniendo información de tracking')
+    }
+  } else {
+    toast.warning('No hay información de tracking disponible')
+  }
+}
 function openTrackingModal(order) {
   selectedTrackingOrder.value = order
   showTrackingModal.value = true
@@ -431,6 +532,25 @@ function getStatusName(status) {
     cancelled: 'Cancelado'
   }
   return names[status] || status
+}
+async function handleActionButton(order) {
+  const action = getActionButton(order)
+  
+  if (!action.available) {
+    console.log('❌ Acción no disponible para orden:', order.order_number)
+    return
+  }
+
+  switch (action.type) {
+    case 'proof':
+      showProofOfDelivery(order)
+      break
+    case 'tracking':
+      await openLiveTracking(order)
+      break
+    default:
+      console.log('❌ Tipo de acción desconocido:', action.type)
+  }
 }
 
 // ==================== LIFECYCLE ====================

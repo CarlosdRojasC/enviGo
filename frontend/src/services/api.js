@@ -266,30 +266,60 @@ getAvailableCommunes: (params = {}) => api.get('/orders/communes', { params }),
     }
   },
    // 🆕 NUEVO: Método para tracking
-  getTracking: async (orderId) => {
-    try {
-      console.log('📍 API: Obteniendo tracking para orden:', orderId);
-      
-      const response = await api.get(`/orders/${orderId}/tracking`);
-      
-      console.log('✅ API: Tracking obtenido:', {
-        order_number: response.data.tracking?.order_number,
-        has_tracking_url: !!response.data.tracking?.tracking_url,
-        current_status: response.data.tracking?.current_status,
-        timeline_events: response.data.tracking?.timeline?.length || 0
-      });
-      
-      return response;
-      
-    } catch (error) {
-      console.error('❌ API: Error obteniendo tracking:', {
-        orderId,
-        status: error.response?.status,
-        message: error.response?.data?.error || error.message
-      });
-      throw error;
-    }
+getTracking: async (orderId) => {
+  try {
+    console.log('📍 API: Obteniendo tracking para orden:', orderId);
+    
+    const response = await api.get(`/orders/${orderId}/tracking`);
+    
+    console.log('✅ API: Tracking obtenido:', {
+      order_number: response.data.tracking?.order_number,
+      has_tracking_url: !!response.data.tracking?.tracking_url,
+      tracking_url: response.data.tracking?.tracking_url,
+      current_status: response.data.tracking?.current_status,
+      timeline_events: response.data.tracking?.timeline?.length || 0,
+      debug_info: response.data.tracking?.debug_info
+    });
+    
+    return response;
+    
+  } catch (error) {
+    console.error('❌ API: Error obteniendo tracking:', {
+      orderId,
+      status: error.response?.status,
+      message: error.response?.data?.error || error.message
+    });
+    throw error;
   }
+},
+
+// 🆕 NUEVO: Método para refrescar datos de una orden específica
+refreshOrderData: async (orderId) => {
+  try {
+    console.log('🔄 API: Refrescando datos de orden:', orderId);
+    
+    const response = await api.get(`/orders/${orderId}`);
+    
+    console.log('✅ API: Datos de orden refrescados:', {
+      order_id: response.data._id,
+      order_number: response.data.order_number,
+      status: response.data.status,
+      has_tracking_url: !!response.data.shipday_tracking_url,
+      tracking_url: response.data.shipday_tracking_url,
+      last_updated: response.data.updated_at
+    });
+    
+    return response;
+    
+  } catch (error) {
+    console.error('❌ API: Error refrescando datos de orden:', {
+      orderId,
+      status: error.response?.status,
+      message: error.response?.data?.error || error.message
+    });
+    throw error;
+  }
+}
 }
 
 // Servicios de canales
