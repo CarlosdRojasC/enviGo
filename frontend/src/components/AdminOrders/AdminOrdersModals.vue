@@ -566,7 +566,7 @@
           </button>
           
           <button 
-            @click="$emit('confirm-assignment')" 
+            @click="$emit('confirm-assignment', selectedOrder._id)"
             :disabled="!selectedDriverId || isAssigning" 
             class="btn-modal save"
           >
