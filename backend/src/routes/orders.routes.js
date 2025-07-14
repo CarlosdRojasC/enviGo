@@ -220,7 +220,7 @@ router.post('/bulk-assign-driver', authenticateToken, isAdmin, async (req, res) 
   try {
     const { orderIds, driverId } = req.body;
 
-    // --- Validaciones (esto ya lo tenías bien) ---
+    // --- Validaciones ---
     if (!Array.isArray(orderIds) || orderIds.length === 0) {
       return res.status(400).json({ error: 'Se requiere un array de IDs de órdenes.' });
     }
@@ -232,7 +232,7 @@ router.post('/bulk-assign-driver', authenticateToken, isAdmin, async (req, res) 
     
     const results = { successful: [], failed: [] };
 
-    // --- Lógica de creación de órdenes (esto ya lo tenías bien) ---
+    // --- Lógica de creación de órdenes ---
     const orders = await Order.find({ _id: { $in: orderIds } }).populate('company_id');
     const ordersInShipday = [];
     const ordersNeedingCreation = [];
@@ -248,7 +248,19 @@ router.post('/bulk-assign-driver', authenticateToken, isAdmin, async (req, res) 
     console.log(`🏗️ Creando ${ordersNeedingCreation.length} órdenes nuevas en Shipday...`);
     for (const order of ordersNeedingCreation) {
       try {
-        const orderDataForShipday = { /* ... tus datos de orden ... */ };
+        const orderDataForShipday = {
+            orderNumber: order.order_number,
+            customerName: order.customer_name,
+            customerAddress: order.shipping_address,
+            restaurantName: "enviGo",
+            restaurantAddress: "santa hilda 1447, quilicura",
+            customerPhoneNumber: order.customer_phone || '',
+            deliveryInstruction: order.notes || '',
+            deliveryFee: 1800,
+            total: parseFloat(order.total_amount) || parseFloat(order.shipping_cost) || 1,
+            customerEmail: order.customer_email || '',
+            payment_method: '',
+        };
         const createdShipdayOrder = await ShipdayService.createOrder(orderDataForShipday);
         order.shipday_order_id = createdShipdayOrder.orderId;
         await order.save();
@@ -261,7 +273,6 @@ router.post('/bulk-assign-driver', authenticateToken, isAdmin, async (req, res) 
     // --- LÓGICA DE ASIGNACIÓN CORREGIDA ---
     console.log(`🎯 Asignando conductor a ${ordersInShipday.length} órdenes...`);
     
-    // Obtenemos el email del conductor, que es lo que necesita la función assignOrder
     const drivers = await ShipdayService.getDrivers();
     const driver = drivers.find(d => d.id == driverId);
     if (!driver) {
@@ -271,20 +282,31 @@ router.post('/bulk-assign-driver', authenticateToken, isAdmin, async (req, res) 
     // Bucle para asignar cada orden individualmente
     for (const order of ordersInShipday) {
       try {
-        // Se llama a la función individual y correcta: assignOrder
-        await ShipdayService.assignOrder(order.shipday_order_id, driverId);
+        // ----- INICIO DE LA CORRECCIÓN -----
         
-        // Actualizamos el estado local
+        // 1. Se llama a la función assignOrder y se captura el resultado
+        const assignmentResult = await ShipdayService.assignOrder(order.shipday_order_id, driverId);
+        
+        // 2. Se extrae la URL de seguimiento del resultado
+        const trackingUrl = assignmentResult?.trackingUrl || null;
+        
+        // 3. Se actualiza el estado local, incluyendo la nueva URL de seguimiento
         order.shipday_driver_id = driverId;
         order.status = 'shipped'; // O el estado que corresponda
+        order.shipday_tracking_url = trackingUrl; // <-- ¡AQUÍ ESTÁ EL CAMBIO!
+
         order.driver_info = {
           name: driver.name,
           phone: driver.phone || '',
           email: driver.email || '',
           status: driver.isOnShift ? 'ONLINE' : 'OFFLINE'
         };
+        
+        // 4. Se guardan todos los cambios en la base de datos
         await order.save();
-        console.log(`👤 Info del conductor ${driver.name} guardada para orden ${order.order_number}`);
+        console.log(`👤 Info del conductor ${driver.name} y tracking URL guardada para orden ${order.order_number}`);
+
+        // ----- FIN DE LA CORRECCIÓN -----
 
         results.successful.push({ orderId: order._id, orderNumber: order.order_number });
 
@@ -293,7 +315,7 @@ router.post('/bulk-assign-driver', authenticateToken, isAdmin, async (req, res) 
       }
     }
 
-    // --- Respuesta final (esto ya lo tenías bien) ---
+    // --- Respuesta final ---
     res.status(200).json({
       message: `Asignación masiva completada: ${results.successful.length} exitosas, ${results.failed.length} fallidas.`,
       summary: { total: orderIds.length, successful: results.successful.length, failed: results.failed.length },

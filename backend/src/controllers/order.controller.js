@@ -73,62 +73,10 @@ const [orders, totalCount] = await Promise.all([
   Order.countDocuments(filters)
 ]);
 
-// ==================== ENRIQUECER CON DATOS DE SHIPDAY ====================
-console.log(`🚚 Enriqueciendo ${orders.length} pedidos con datos de Shipday...`);
 
-const enrichedOrders = await Promise.all(
-  orders.map(async (order) => {
-    // Solo procesar pedidos que tienen shipday_order_id
-    if (!order.shipday_order_id) {
-      return order;
-    }
-
-    try {
-      console.log(`📦 Obteniendo datos de Shipday para pedido #${order.order_number}`);
-      
-      const shipdayOrderDetails = await ShipdayService.getOrder(order.shipday_order_id);
-      
-      // Agregar la misma información que en getById
-      const enrichedOrder = {
-        ...order,
-        shipday_details: shipdayOrderDetails._raw,
-        delivery_note: shipdayOrderDetails._raw?.deliveryNote,
-        podUrls: shipdayOrderDetails._raw?.podUrls || [],
-        signatureUrl: shipdayOrderDetails._raw?.signatures?.[0]?.url,
-        driver_info: shipdayOrderDetails._raw?.assignedCarrier,
-        shipday_times: shipdayOrderDetails._raw?.activityLog,
-        // Agregar URL de tracking en vivo
-        shipday_tracking_url: shipdayOrderDetails._raw?.trackingUrl || shipdayOrderDetails.trackingUrl
-      };
-
-      // Agregar ubicación de entrega si existe
-      if (shipdayOrderDetails._raw?.proofOfDelivery?.location) {
-        enrichedOrder.delivery_location = {
-          lat: shipdayOrderDetails._raw.proofOfDelivery.location.latitude,
-          lng: shipdayOrderDetails._raw.proofOfDelivery.location.longitude,
-          formatted_address: shipdayOrderDetails._raw.proofOfDelivery.location.address
-        };
-      }
-
-      console.log(`✅ Pedido #${order.order_number} enriquecido con datos de Shipday`);
-      return enrichedOrder;
-      
-    } catch (shipdayError) {
-      console.warn(`⚠️ No se pudo obtener datos de Shipday para pedido #${order.order_number}:`, shipdayError.message);
-      
-      // Retornar pedido original con indicador de error
-      return {
-        ...order,
-        shipday_error: "No se pudieron obtener los detalles de Shipday."
-      };
-    }
-  })
-);
-
-console.log(`🎉 Proceso de enriquecimiento completado. ${enrichedOrders.length} pedidos procesados.`);
 
 res.json({
-  orders: enrichedOrders, // ← Usar los pedidos enriquecidos
+  orders, // ← Usar los pedidos enriquecidos
   pagination: {
     page: parseInt(page),
     limit: parseInt(limit),
@@ -556,133 +504,129 @@ async getOrdersTrend(req, res) {
   }
 }
 
-  async assignToDriver(req, res) {
+async assignToDriver(req, res) {
+  try {
+    const { orderId } = req.params;
+    const { driverId } = req.body;
+
+    if (!driverId) {
+      return res.status(400).json({ error: 'Se requiere el ID del conductor de Shipday.' });
+    }
+
+    console.log('🚀 assignToDriver iniciado con NUEVO MÉTODO:', { orderId, driverId });
+    
+    const order = await Order.findById(orderId).populate('company_id');
+
+    if (!order) {
+      return res.status(404).json({ error: 'Pedido no encontrado.' });
+    }
+    
+    if (!order.company_id) {
+      return res.status(400).json({ error: 'El pedido no está asociado a ninguna empresa.' });
+    }
+
+    let shipdayOrderId = order.shipday_order_id;
+
+    // CASO 1: La orden NO está en Shipday → Crear primero
+    if (!shipdayOrderId) {
+      console.log('📦 Paso 1: Creando orden en Shipday...');
+      
+      const orderDataForShipday = {
+          orderNumber: order.order_number,
+          customerName: order.customer_name,
+          customerAddress: order.shipping_address,
+          restaurantName: "enviGo",
+          restaurantAddress: "santa hilda 1447, quilicura",
+          customerPhoneNumber: order.customer_phone || '',
+          deliveryInstruction: order.notes || '',
+          deliveryFee: 1800,
+          total: parseFloat(order.total_amount) || parseFloat(order.shipping_cost) || 1,
+          customerEmail: order.customer_email || '',
+          payment_method: '',
+      };
+      
+      const createdShipdayOrder = await ShipdayService.createOrder(orderDataForShipday);
+      
+      if (!createdShipdayOrder || !createdShipdayOrder.orderId) {
+        throw new Error('No se pudo crear la orden en Shipday o la respuesta no incluyó un orderId.');
+      }
+      
+      shipdayOrderId = createdShipdayOrder.orderId;
+      console.log(`✅ Orden creada en Shipday con ID: ${shipdayOrderId}`);
+
+      // Actualizar la orden local con el ID de Shipday
+      order.shipday_order_id = shipdayOrderId;
+      order.status = 'processing';
+      await order.save();
+    }
+
+    // CASO 2: La orden YA está en Shipday (o se acaba de crear) → Asignar
+    console.log(`👨‍💼 Paso 2: Asignando conductor con el nuevo método URL...`);
+    
     try {
-      const { orderId } = req.params;
-      const { driverId } = req.body;
-
-      if (!driverId) {
-        return res.status(400).json({ error: 'Se requiere el ID del conductor de Shipday.' });
-      }
-
-      console.log('🚀 assignToDriver iniciado con NUEVO MÉTODO:', { orderId, driverId });
+      const assignmentResult = await ShipdayService.assignOrder(shipdayOrderId, driverId);
       
-      const order = await Order.findById(orderId).populate('company_id');
-
-      if (!order) {
-        return res.status(404).json({ error: 'Pedido no encontrado.' });
-      }
+      console.log('✅ Asignación con nuevo método exitosa:', assignmentResult);
       
-      if (!order.company_id) {
-        return res.status(400).json({ error: 'El pedido no está asociado a ninguna empresa.' });
-      }
+      // ----- INICIO DE LA CORRECCIÓN -----
+      const trackingUrl = assignmentResult?.trackingUrl || null; // Extraer la URL de seguimiento
 
-      let shipdayOrderId = order.shipday_order_id;
+      order.shipday_driver_id = driverId;
+      order.status = 'shipped';
+      order.shipday_tracking_url = trackingUrl; // Guardar la URL en el campo correcto del modelo
 
-      // CASO 1: La orden NO está en Shipday → Crear primero
-      if (!shipdayOrderId) {
-        console.log('📦 Paso 1: Creando orden en Shipday...');
-        
-        const orderDataForShipday = {
-            orderNumber: order.order_number,
-            customerName: order.customer_name,
-            customerAddress: order.shipping_address,
-            restaurantName: "enviGo",
-            restaurantAddress: "santa hilda 1447, quilicura",
-            customerPhoneNumber: order.customer_phone || '',
-            deliveryInstruction: order.notes || '',
-            deliveryFee: 1800,
-            total: parseFloat(order.total_amount) || parseFloat(order.shipping_cost) || 1,
-            customerEmail: order.customer_email || '',
-            payment_method: '',
-        };
-        
-        const createdShipdayOrder = await ShipdayService.createOrder(orderDataForShipday);
-        
-        if (!createdShipdayOrder || !createdShipdayOrder.orderId) {
-          throw new Error('No se pudo crear la orden en Shipday o la respuesta no incluyó un orderId.');
-        }
-        
-        shipdayOrderId = createdShipdayOrder.orderId;
-        console.log(`✅ Orden creada en Shipday con ID: ${shipdayOrderId}`);
-
-        // Actualizar la orden local con el ID de Shipday
-        order.shipday_order_id = shipdayOrderId;
-        order.status = 'processing';
-        await order.save();
-      }
-
-      // CASO 2: La orden YA está en Shipday (o se acaba de crear) → Asignar
-      console.log(`👨‍💼 Paso 2: Asignando conductor con el nuevo método URL...`);
-      
+      // Obtener y guardar información del conductor
       try {
-        // ========== 👇 ESTE ES EL CAMBIO PRINCIPAL 👇 ==========
-        // Llamamos al nuevo método assignOrderNewUrl que usa la URL /orders/assign/{orderId}/{carrierId}
-        const assignmentResult = await ShipdayService.assignOrder(shipdayOrderId, driverId);
-        
-        console.log('✅ Asignación con nuevo método exitosa:', assignmentResult);
-        
-// Actualizar orden local con conductor asignado
-order.shipday_driver_id = driverId;
-order.status = 'shipped';
-await order.save();
-
-console.log(`💾 Orden ${order.order_number} actualizada en BD local con conductor ${driverId}`);
-console.log('🔍 Intentando obtener info del conductor para driverId:', driverId);
-// Obtener y guardar nombre del conductor desde Shipday
-try {
-  const driversResponse = await ShipdayService.getDrivers();
-  console.log('📋 Respuesta de getDrivers:', driversResponse);
-  const drivers = driversResponse.data || [];
-  console.log('👥 Drivers encontrados:', drivers.length);
-  console.log('🔎 Buscando driver con ID:', driverId, 'tipo:', typeof driverId);
-  const driver = drivers.find(d => {
-        console.log('🔍 Comparando:', d.id, 'con', driverId, 'match:', d.id == driverId);
-        return d.id == driverId;});
-  if (driver) {
-    console.log('✅ Conductor encontrado:', driver);
-    order.driver_info = {
-      name: driver.name,
-      phone: driver.phone || '',
-      email: driver.email || '',
-      status: driver.isOnShift ? 'ONLINE' : 'OFFLINE'
-    };
-    await order.save();
-    console.log(`👤 Info del conductor ${driver.name} guardada para orden ${order.order_number}`);
-  }
-} catch (driverError) {
-  console.warn('⚠️ No se pudo obtener info del conductor:', driverError.message);
-}
-        res.status(200).json({ 
-          message: 'Pedido y conductor asignado exitosamente usando el nuevo endpoint.',
-          shipday_order_id: shipdayOrderId,
-          driverId: driverId,
-          assignmentResult: assignmentResult,
-          success: true
-        });
-
-      } catch (assignError) {
-        console.error('❌ Error asignando con el nuevo método:', assignError);
-        
-        res.status(400).json({ 
-          error: `Error asignando conductor: ${assignError.message}`,
-          details: 'El endpoint sugerido (PUT /orders/assign/{orderId}/{carrierId}) falló.',
-          shipday_order_id: shipdayOrderId,
-          suggestions: [
-             '1. Verifica que la API Key tenga permisos.',
-             '2. Confirma que los IDs de la orden y el conductor sean correctos.',
-             '3. Contacta a soporte de Shipday con este error.'
-          ]
-        });
+        const drivers = await ShipdayService.getDrivers();
+        const driver = drivers.find(d => d.id == driverId);
+        if (driver) {
+          console.log('✅ Conductor encontrado:', driver);
+          order.driver_info = {
+            name: driver.name,
+            phone: driver.phone || '',
+            email: driver.email || '',
+            status: driver.isOnShift ? 'ONLINE' : 'OFFLINE'
+          };
+        }
+      } catch (driverError) {
+        console.warn('⚠️ No se pudo obtener info del conductor:', driverError.message);
       }
+      
+      await order.save(); // Guardar todos los cambios en la base de datos
+      console.log(`💾 Orden ${order.order_number} actualizada en BD local con conductor ${driverId} y tracking URL.`);
+      // ----- FIN DE LA CORRECCIÓN -----
+      
+      res.status(200).json({ 
+        message: 'Pedido y conductor asignado exitosamente usando el nuevo endpoint.',
+        shipday_order_id: shipdayOrderId,
+        driverId: driverId,
+        assignmentResult: assignmentResult,
+        trackingUrl: trackingUrl, // Devolver la URL en la respuesta
+        success: true
+      });
 
-    } catch (error) {
-      console.error('❌ Error completo en assignToDriver:', error);
-      res.status(500).json({ 
-        error: error.message || 'Error interno del servidor en el proceso de asignación.',
+    } catch (assignError) {
+      console.error('❌ Error asignando con el nuevo método:', assignError);
+      
+      res.status(400).json({ 
+        error: `Error asignando conductor: ${assignError.message}`,
+        details: 'El endpoint sugerido (PUT /orders/assign/{orderId}/{carrierId}) falló.',
+        shipday_order_id: shipdayOrderId,
+        suggestions: [
+           '1. Verifica que la API Key tenga permisos.',
+           '2. Confirma que los IDs de la orden y el conductor sean correctos.',
+           '3. Contacta a soporte de Shipday con este error.'
+        ]
       });
     }
+
+  } catch (error) {
+    console.error('❌ Error completo en assignToDriver:', error);
+    res.status(500).json({ 
+      error: error.message || 'Error interno del servidor en el proceso de asignación.',
+    });
   }
+}
   async downloadImportTemplate(req, res) {
     try {
       const excelBuffer = await ExcelService.generateImportTemplate();

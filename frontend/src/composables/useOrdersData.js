@@ -329,6 +329,53 @@ async function getOrdersTrend(period = '30d') {
   }
 }
 
+
+/**
+ * Marcar múltiples pedidos como listos para retiro
+ */
+async function markMultipleAsReady(orderIds) {
+  try {
+    console.log('📦 Marcando múltiples pedidos como listos:', orderIds);
+    
+    const response = await apiService.orders.markMultipleAsReady(orderIds);
+    
+    // Actualizar estado local de cada pedido
+    orderIds.forEach(orderId => {
+      updateOrderLocally(orderId, { status: 'ready_for_pickup' });
+    });
+    
+    console.log(`✅ ${orderIds.length} pedidos marcados como listos`);
+    toast.success(`${orderIds.length} pedidos marcados como listos para retiro`);
+    
+    return response;
+    
+  } catch (error) {
+    console.error('❌ Error marcando múltiples pedidos como listos:', error);
+    toast.error('Error al marcar pedidos como listos');
+    throw error;
+  }
+}
+
+/**
+ * Marcar un pedido individual como listo
+ */
+async function markOrderAsReady(order) {
+  try {
+    console.log('📦 Marcando pedido como listo:', order.order_number);
+    
+    await apiService.orders.markAsReady(order._id);
+    
+    // Actualizar estado local
+    updateOrderLocally(order._id, { status: 'ready_for_pickup' });
+    
+    toast.success(`Pedido #${order.order_number} marcado como listo para retiro`);
+    
+  } catch (error) {
+    console.error('❌ Error marcando pedido como listo:', error);
+    toast.error('No se pudo actualizar el estado del pedido');
+    throw error;
+  }
+}
   // ==================== RETURN ====================
   return {
     // State
@@ -361,6 +408,8 @@ async function getOrdersTrend(period = '30d') {
     stopAutoRefresh,
     exportOrders,
     getOrdersTrend,
-    calculateAdditionalStats
+    calculateAdditionalStats,
+    markMultipleAsReady,
+    markOrderAsReady
   }
 }
