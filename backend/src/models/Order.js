@@ -62,7 +62,7 @@ const orderSchema = new mongoose.Schema({
   // Campos para Shipday
   shipday_order_id: { type: String }, // ID de la orden en Shipday
   shipday_driver_id: { type: String }, // ID del conductor asignado en Shipday
-  shipday_tracking_url: { type: String }, // 🆕 URL de tracking de Shipday
+  shipday_tracking_url: { type: String, default: '' }, 
   shipday_status: { type: String }, // Estado en Shipday
   proof_of_delivery: { type: evidenceSchema, default: null },
   
