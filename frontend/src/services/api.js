@@ -319,7 +319,31 @@ refreshOrderData: async (orderId) => {
     });
     throw error;
   }
-}
+},
+
+markAsDelivered: async (orderId, proofData = {}) => {
+    try {
+      console.log('📦 API: Marcando pedido como entregado:', orderId, proofData);
+      
+      const response = await api.patch(`/orders/${orderId}/deliver`, proofData);
+      
+      console.log('✅ API: Pedido marcado como entregado:', {
+        order_id: response.data.order._id,
+        order_number: response.data.order.order_number,
+        has_proof: !!response.data.proof_of_delivery
+      });
+      
+      return response;
+      
+    } catch (error) {
+      console.error('❌ API: Error marcando como entregado:', {
+        orderId,
+        status: error.response?.status,
+        message: error.response?.data?.error || error.message
+      });
+      throw error;
+    }
+  }
 }
 
 // Servicios de canales

@@ -190,38 +190,107 @@ async getById(req, res) {
   }
 }
 
-  async updateStatus(req, res) {
-    try {
-      const { id } = req.params;
-      const { status } = req.body;
+ async updateStatus(req, res) {
+  try {
+    const { id } = req.params;
+    const { status, proof_of_delivery } = req.body; // 🆕 Aceptar prueba de entrega
 
-      if (!Object.values(ORDER_STATUS).includes(status)) {
-        return res.status(400).json({ error: 'Estado no válido' });
-      }
-
-      const order = await Order.findById(id);
-      if (!order) return res.status(404).json({ error: 'Pedido no encontrado' });
-
-      if (req.user.role !== 'admin' && req.user.company_id.toString() !== order.company_id.toString()) {
-        return res.status(403).json({ error: ERRORS.FORBIDDEN });
-      }
-
-      if ((order.status === 'delivered' || order.status === 'cancelled') && status !== order.status) {
-        return res.status(400).json({ error: 'No se puede cambiar el estado de un pedido entregado o cancelado' });
-      }
-
-      order.status = status;
-      if (status === 'delivered') order.delivery_date = new Date();
-      order.updated_at = new Date();
-
-      await order.save();
-
-      res.json({ message: 'Estado actualizado exitosamente', order });
-    } catch (error) {
-      console.error('Error actualizando estado:', error);
-      res.status(500).json({ error: ERRORS.SERVER_ERROR });
+    if (!Object.values(ORDER_STATUS).includes(status)) {
+      return res.status(400).json({ error: 'Estado no válido' });
     }
+
+    const order = await Order.findById(id);
+    if (!order) return res.status(404).json({ error: 'Pedido no encontrado' });
+
+    if (req.user.role !== 'admin' && req.user.company_id.toString() !== order.company_id.toString()) {
+      return res.status(403).json({ error: ERRORS.FORBIDDEN });
+    }
+
+    if ((order.status === 'delivered' || order.status === 'cancelled') && status !== order.status) {
+      return res.status(400).json({ error: 'No se puede cambiar el estado de un pedido entregado o cancelado' });
+    }
+
+    // 🆕 LÓGICA MEJORADA PARA ESTADO "DELIVERED"
+    order.status = status;
+    order.updated_at = new Date();
+
+    if (status === 'delivered') {
+      // Establecer fecha de entrega
+      if (!order.delivery_date) {
+        order.delivery_date = new Date();
+      }
+
+      // 🆕 Manejar prueba de entrega
+      if (proof_of_delivery) {
+        order.proof_of_delivery = {
+          photo_url: proof_of_delivery.photo_url || order.proof_of_delivery?.photo_url || null,
+          signature_url: proof_of_delivery.signature_url || order.proof_of_delivery?.signature_url || null,
+          notes: proof_of_delivery.notes || order.proof_of_delivery?.notes || '',
+          delivery_location: proof_of_delivery.delivery_location || order.proof_of_delivery?.delivery_location || null,
+          delivered_by: req.user.name || req.user.email || 'Sistema',
+          delivery_timestamp: new Date()
+        };
+
+        // 🆕 Compatibilidad con campos adicionales
+        if (proof_of_delivery.photo_url) {
+          order.podUrls = [proof_of_delivery.photo_url];
+        }
+        if (proof_of_delivery.signature_url) {
+          order.signatureUrl = proof_of_delivery.signature_url;
+        }
+
+        console.log('📸 Prueba de entrega agregada manualmente:', {
+          order_number: order.order_number,
+          has_photo: !!order.proof_of_delivery.photo_url,
+          has_signature: !!order.proof_of_delivery.signature_url,
+          delivered_by: order.proof_of_delivery.delivered_by
+        });
+      } else {
+        // 🆕 Si no se proporciona POD, crear una básica
+        order.proof_of_delivery = {
+          photo_url: null,
+          signature_url: null,
+          notes: 'Entrega confirmada manualmente desde el sistema',
+          delivery_location: null,
+          delivered_by: req.user.name || req.user.email || 'Sistema',
+          delivery_timestamp: new Date()
+        };
+        console.log('📋 Prueba de entrega básica creada para:', order.order_number);
+      }
+
+      // 🆕 Intentar actualizar en Shipday si está integrado
+      if (order.shipday_order_id) {
+        try {
+          console.log('🔄 Intentando marcar como entregado en Shipday:', order.shipday_order_id);
+          
+          // Aquí puedes llamar a tu servicio de Shipday para marcar como entregado
+          // await ShipdayService.markAsDelivered(order.shipday_order_id, proof_of_delivery);
+          
+        } catch (shipdayError) {
+          console.warn('⚠️ No se pudo actualizar en Shipday:', shipdayError.message);
+          // No fallar por esto, solo registrar
+        }
+      }
+    }
+
+    await order.save();
+
+    console.log(`✅ Estado actualizado: ${order.order_number} -> ${status}`, {
+      delivery_date: order.delivery_date,
+      has_proof_of_delivery: !!order.proof_of_delivery,
+      proof_created_by: order.proof_of_delivery?.delivered_by
+    });
+
+    res.json({ 
+      message: 'Estado actualizado exitosamente', 
+      order,
+      proof_of_delivery_created: status === 'delivered' && !!order.proof_of_delivery
+    });
+  } catch (error) {
+    console.error('Error actualizando estado:', error);
+    res.status(500).json({ error: ERRORS.SERVER_ERROR });
   }
+}
 
   async create(req, res) {
     try {

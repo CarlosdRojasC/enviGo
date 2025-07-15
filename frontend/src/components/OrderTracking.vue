@@ -70,19 +70,19 @@
         </div>
       </div>
 
-      <!-- Información del conductor -->
-      <div v-if="tracking.driver && (tracking.driver.name || tracking.driver.id)" class="driver-section">
+      <!-- 🔧 CORREGIDO: Información del conductor con mejor detección -->
+      <div v-if="hasDriverInfo" class="driver-section">
         <div class="section-header">
           <h3>👨‍💼 Tu Conductor</h3>
         </div>
         <div class="driver-card">
           <div class="driver-avatar">
-            {{ getDriverInitials(tracking.driver.name) }}
+            {{ getDriverInitials(getDriverName) }}
           </div>
           <div class="driver-info">
-            <div class="driver-name">{{ tracking.driver.name || 'Conductor Asignado' }}</div>
-            <div class="driver-phone" v-if="driverStatus.phone">
-              📞 {{ driverStatus.phone }}
+            <div class="driver-name">{{ getDriverName }}</div>
+            <div class="driver-phone" v-if="getDriverPhone">
+              📞 {{ getDriverPhone }}
             </div>
             <div class="driver-status" :class="getDriverStatusClass(driverStatus.status)">
               <div class="status-indicator" :class="{ 'online': driverStatus.isConnected }"></div>
@@ -96,7 +96,7 @@
             </div>
             <div class="driver-actions">
               <button 
-                v-if="driverStatus.phone" 
+                v-if="getDriverPhone" 
                 @click="callDriver" 
                 class="action-btn call-btn"
                 title="Llamar al conductor"
@@ -113,6 +113,23 @@
               </button>
             </div>
           </div>
+        </div>
+      </div>
+
+      <!-- 🔍 DEBUG INFO (temporal - remover en producción) -->
+      <div v-if="showDebugInfo" class="debug-section">
+        <div class="section-header">
+          <h3>🔍 Debug Info</h3>
+        </div>
+        <div class="debug-content">
+          <pre>{{ JSON.stringify({
+            tracking_driver: tracking.driver,
+            tracking_driver_info: tracking.driver_info,
+            tracking_carrierId: tracking.carrierId,
+            tracking_carrierName: tracking.carrierName,
+            tracking_shipday_driver_id: tracking.shipday_driver_id,
+            driverStatus: driverStatus
+          }, null, 2) }}</pre>
         </div>
       </div>
 
@@ -275,7 +292,7 @@ const tracking = ref(null);
 const loadingTracking = ref(true);
 const refreshing = ref(false);
 const lastUpdated = ref(new Date());
-const showDebugInfo = ref(false); // 🔧 Cambiar a true para debug
+const showDebugInfo = ref(true); // 🔧 Cambiar a false después de probar
 const driverStatus = ref({
   name: '',
   phone: '',
@@ -303,6 +320,36 @@ const hasProofOfDelivery = computed(() => {
     tracking.value.proof_of_delivery?.signature_url ||
     tracking.value.podUrls?.length > 0 ||
     tracking.value.signatureUrl
+  );
+});
+
+// 🆕 COMPUTED PROPERTIES PARA EL CONDUCTOR
+const hasDriverInfo = computed(() => {
+  return !!(
+    tracking.value?.driver?.name || 
+    tracking.value?.driver_info?.name ||
+    tracking.value?.carrierName ||
+    driverStatus.value?.name !== ''
+  );
+});
+
+const getDriverName = computed(() => {
+  return (
+    driverStatus.value?.name ||
+    tracking.value?.driver?.name || 
+    tracking.value?.driver_info?.name ||
+    tracking.value?.carrierName ||
+    'Conductor Asignado'
+  );
+});
+
+const getDriverPhone = computed(() => {
+  return (
+    driverStatus.value?.phone ||
+    tracking.value?.driver?.phone || 
+    tracking.value?.driver_info?.phone ||
+    tracking.value?.carrierPhone ||
+    ''
   );
 });
 
@@ -345,6 +392,16 @@ async function fetchTracking() {
       tracking_url_used: getTrackingUrl.value,
       current_status: tracking.value?.current_status,
       timeline_events: tracking.value?.timeline?.length || 0
+    });
+    
+    // 🔍 DEBUG TEMPORAL: Mostrar estructura de datos del conductor
+    console.log('🔍 DEBUG - Estructura completa del tracking para conductor:', {
+      'tracking.driver': tracking.value?.driver,
+      'tracking.driver_info': tracking.value?.driver_info,
+      'tracking.carrierId': tracking.value?.carrierId,
+      'tracking.carrierName': tracking.value?.carrierName,
+      'tracking.carrierPhone': tracking.value?.carrierPhone,
+      'tracking.shipday_driver_id': tracking.value?.shipday_driver_id
     });
     
     // 🔧 IMPORTANTE: Cargar estado del conductor después de cargar tracking
@@ -490,54 +547,92 @@ function reportIssue() {
 // ==================== MÉTODOS PARA ESTADO DEL CONDUCTOR ====================
 
 /**
- * 🔧 CORREGIDO: Obtener estado actual del conductor desde Shipday
- * Ahora usa tracking.value en lugar de order.value
+ * 🔧 COMPLETAMENTE CORREGIDO: Obtener estado actual del conductor
+ * Busca el driver ID en todas las ubicaciones posibles y maneja fallbacks
  */
 async function fetchDriverStatus() {
-  // 🔧 CORREGIDO: Usar tracking.value en lugar de order.value
-  if (!tracking.value?.driver_info?.shipday_driver_id && !tracking.value?.shipday_driver_id) {
-    console.log('📍 No hay ID de conductor para obtener estado');
+  // 🔧 BUSCAR DRIVER ID EN TODAS LAS UBICACIONES POSIBLES
+  const possibleDriverIds = [
+    tracking.value?.driver_info?.shipday_driver_id,
+    tracking.value?.shipday_driver_id,
+    tracking.value?.driver?.id,
+    tracking.value?.driver_info?.id,
+    tracking.value?.driver_info?.driver_id,
+    tracking.value?.carrierId,
+    tracking.value?.driver_info?.carrierId,
+    tracking.value?.driver?.carrierId
+  ];
+
+  const driverId = possibleDriverIds.find(id => id && id !== null && id !== undefined && id !== '');
+
+  // 🔧 TAMBIÉN VERIFICAR SI HAY INFORMACIÓN BÁSICA DEL CONDUCTOR
+  const hasDriverInfo = !!(
+    tracking.value?.driver?.name || 
+    tracking.value?.driver_info?.name ||
+    tracking.value?.carrierName
+  );
+
+  console.log('🔍 DEBUG fetchDriverStatus:', {
+    possibleDriverIds,
+    foundDriverId: driverId,
+    hasDriverInfo,
+    trackingDriverInfo: tracking.value?.driver_info,
+    trackingDriver: tracking.value?.driver
+  });
+
+  if (!driverId && !hasDriverInfo) {
+    console.log('📍 No hay ID de conductor ni información del conductor disponible');
     return;
   }
-  
-  // 🔧 CORREGIDO: Obtener driver ID desde tracking.value
-  const driverId = tracking.value?.driver_info?.shipday_driver_id || 
-                   tracking.value?.shipday_driver_id ||
-                   tracking.value?.driver?.id;
 
+  // 🔧 SI NO HAY ID PERO SÍ HAY INFO, USAR LOS DATOS EXISTENTES
   if (!driverId) {
-    console.log('📍 No se encontró driver ID en el tracking');
+    console.log('📍 No hay driver ID, pero usando información existente del conductor');
+    driverStatus.value = {
+      name: tracking.value?.driver?.name || tracking.value?.driver_info?.name || tracking.value?.carrierName || 'Conductor',
+      phone: tracking.value?.driver?.phone || tracking.value?.driver_info?.phone || tracking.value?.carrierPhone || '',
+      status: tracking.value?.driver?.status || tracking.value?.driver_info?.status || 'unknown',
+      lastSeen: null,
+      isConnected: false
+    };
     return;
   }
 
   try {
     loadingDriverStatus.value = true;
-    console.log('👨‍💼 Obteniendo estado del conductor:', driverId);
+    console.log('👨‍💼 Obteniendo estado del conductor con ID:', driverId);
     
-    // 🔧 CORREGIDO: Usar apiService en lugar de fetch directo
+    // 🔧 VERIFICAR SI EL ENDPOINT EXISTE EN apiService
+    if (!apiService.drivers || typeof apiService.drivers.getStatus !== 'function') {
+      console.warn('⚠️ apiService.drivers.getStatus no está disponible, usando datos existentes');
+      throw new Error('Endpoint no disponible');
+    }
+    
+    // 🔧 CORREGIDO: Usar apiService con manejo de errores mejorado
     const { data: driverData } = await apiService.drivers.getStatus(driverId);
     
     driverStatus.value = {
-      name: driverData.name || tracking.value?.driver_info?.name || tracking.value?.driver?.name || 'Conductor',
-      phone: driverData.phone || tracking.value?.driver_info?.phone || tracking.value?.driver?.phone || '',
+      name: driverData.name || tracking.value?.driver_info?.name || tracking.value?.driver?.name || tracking.value?.carrierName || 'Conductor',
+      phone: driverData.phone || tracking.value?.driver_info?.phone || tracking.value?.driver?.phone || tracking.value?.carrierPhone || '',
       status: driverData.status || 'unknown', // online, offline, busy
       lastSeen: driverData.lastSeen ? new Date(driverData.lastSeen) : null,
       isConnected: driverData.status === 'online',
       location: driverData.location || null
     };
     
-    console.log('✅ Estado del conductor actualizado:', driverStatus.value);
+    console.log('✅ Estado del conductor actualizado desde API:', driverStatus.value);
     
   } catch (error) {
     console.error('❌ Error obteniendo estado del conductor:', error);
-    // Fallback a datos de la orden
+    // Fallback a datos del tracking
     driverStatus.value = {
-      name: tracking.value?.driver_info?.name || tracking.value?.driver?.name || 'Conductor',
-      phone: tracking.value?.driver_info?.phone || tracking.value?.driver?.phone || '',
+      name: tracking.value?.driver_info?.name || tracking.value?.driver?.name || tracking.value?.carrierName || 'Conductor',
+      phone: tracking.value?.driver_info?.phone || tracking.value?.driver?.phone || tracking.value?.carrierPhone || '',
       status: 'offline',
       lastSeen: null,
       isConnected: false
     };
+    console.log('📋 Usando datos fallback del conductor:', driverStatus.value);
   } finally {
     loadingDriverStatus.value = false;
   }
@@ -583,8 +678,9 @@ function formatLastSeen(lastSeen) {
 }
 
 function callDriver() {
-  if (driverStatus.value.phone) {
-    window.location.href = `tel:${driverStatus.value.phone}`;
+  const phone = getDriverPhone.value;
+  if (phone) {
+    window.location.href = `tel:${phone}`;
   }
 }
 

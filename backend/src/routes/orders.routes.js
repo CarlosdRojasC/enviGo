@@ -756,4 +756,73 @@ router.get('/:orderId/tracking', authenticateToken, async (req, res) => {
   }
 });
 
+router.patch('/:id/deliver', authenticateToken, validateMongoId('id'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { 
+      notes, 
+      photo_url, 
+      signature_url, 
+      delivery_location 
+    } = req.body;
+
+    const order = await Order.findById(id);
+    if (!order) return res.status(404).json({ error: 'Pedido no encontrado' });
+
+    // Verificar permisos
+    if (req.user.role !== 'admin' && req.user.company_id.toString() !== order.company_id.toString()) {
+      return res.status(403).json({ error: 'No tienes permiso para esta acción' });
+    }
+
+    // Verificar que el pedido se puede marcar como entregado
+    if (!['processing', 'shipped', 'ready_for_pickup'].includes(order.status)) {
+      return res.status(400).json({ 
+        error: `No se puede marcar como entregado un pedido con estado "${order.status}"` 
+      });
+    }
+
+    // Actualizar estado y agregar prueba de entrega
+    order.status = 'delivered';
+    order.delivery_date = new Date();
+    order.updated_at = new Date();
+
+    // Crear prueba de entrega
+    order.proof_of_delivery = {
+      photo_url: photo_url || null,
+      signature_url: signature_url || null,
+      notes: notes || 'Entrega confirmada manualmente',
+      delivery_location: delivery_location || null,
+      delivered_by: req.user.name || req.user.email || 'Sistema',
+      delivery_timestamp: new Date()
+    };
+
+    // Campos de compatibilidad
+    if (photo_url) {
+      order.podUrls = [photo_url];
+    }
+    if (signature_url) {
+      order.signatureUrl = signature_url;
+    }
+
+    await order.save();
+
+    console.log(`✅ Pedido marcado como entregado manualmente:`, {
+      order_number: order.order_number,
+      delivered_by: order.proof_of_delivery.delivered_by,
+      has_photo: !!photo_url,
+      has_signature: !!signature_url
+    });
+
+    res.json({
+      message: 'Pedido marcado como entregado exitosamente',
+      order,
+      proof_of_delivery: order.proof_of_delivery
+    });
+
+  } catch (error) {
+    console.error('Error marcando pedido como entregado:', error);
+    res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
 module.exports = router;
