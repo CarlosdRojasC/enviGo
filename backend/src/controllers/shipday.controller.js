@@ -349,15 +349,16 @@ async handleWebhook(req, res) {
       return res.status(400).json({ success: false, error: 'Payload inválido.' });
     }
 
-    // 2. Buscar la orden en tu base de datos
-    const order = await Order.findOne({ shipday_order_id: shipdayOrderId.toString() });
+    // 2. Buscar la orden en tu base de datos (con empresa poblada)
+    const order = await Order.findOne({ shipday_order_id: shipdayOrderId.toString() })
+      .populate('company_id', 'name email');
 
     if (!order) {
       console.warn(`⚠️ No se encontró una orden local para Shipday ID: ${shipdayOrderId}`);
       return res.status(200).json({ success: true, message: 'Orden no encontrada, pero webhook procesado.' });
     }
 
-    console.log(`🔄 Procesando evento "${eventType}" para la orden #${order.order_number}`);
+    console.log(`🔄 Procesando evento "${eventType}" para la orden #${order.order_number} de ${order.company_id?.name}`);
     let orderUpdated = false;
 
     // 🆕 ACTUALIZAR TRACKING URL CON PRIORIDAD ALTA
@@ -427,7 +428,9 @@ async handleWebhook(req, res) {
       orderUpdated = true;
     }
 
-    // 3. Procesar eventos específicos
+    // 3. Procesar eventos específicos y mapear a eventos de notificación
+    let notificationEventType = null;
+
     switch (eventType) {
       
       // Caso: Se asigna un conductor
@@ -437,6 +440,7 @@ async handleWebhook(req, res) {
         if (order.status === 'pending') {
           order.status = 'processing';
           orderUpdated = true;
+          notificationEventType = 'driver_assigned';
           console.log(`⚙️ Orden #${order.order_number} marcada como "procesando".`);
         }
         break;
@@ -448,6 +452,7 @@ async handleWebhook(req, res) {
         if (order.status !== 'shipped') {
           order.status = 'shipped';
           orderUpdated = true;
+          notificationEventType = 'picked_up';
           console.log(`🚚 Orden #${order.order_number} marcada como "enviado".`);
         }
         break;
@@ -482,6 +487,7 @@ async handleWebhook(req, res) {
           }
           
           orderUpdated = true;
+          notificationEventType = 'proof_uploaded';
           console.log('📝 Prueba de entrega guardada.');
         }
         break;
@@ -496,12 +502,16 @@ async handleWebhook(req, res) {
           order.status = 'delivered';
           order.delivery_date = webhookData.order?.delivery_time ? new Date(webhookData.order.delivery_time) : new Date();
           orderUpdated = true;
+          notificationEventType = 'delivered';
           console.log(`📦 Orden #${order.order_number} marcada como "entregado".`);
         }
         break;
           
       default:
         console.log(`ℹ️  Evento "${eventType}" recibido, datos generales actualizados.`);
+        if (orderUpdated) {
+          notificationEventType = 'status_updated';
+        }
         break;
     }
 
@@ -515,12 +525,33 @@ async handleWebhook(req, res) {
       console.log('🔍 Datos actualizados en la orden:', {
         order_number: order.order_number,
         status: order.status,
+        company: order.company_id?.name,
         shipday_tracking_url: order.shipday_tracking_url,
         has_driver_info: !!order.driver_info?.name,
         has_delivery_location: !!order.delivery_location,
         has_proof_of_delivery: !!order.proof_of_delivery,
         shipday_times_count: Object.keys(order.shipday_times || {}).length
       });
+
+      // ⚡ ENVIAR NOTIFICACIONES DIRIGIDAS EN TIEMPO REAL
+      if (global.wsService && notificationEventType) {
+        console.log(`📡 Enviando notificaciones dirigidas para evento: ${notificationEventType}`);
+        
+        try {
+          const notificationStats = global.wsService.notifyOrderUpdate(order, notificationEventType);
+          console.log(`📊 Notificaciones enviadas:`, {
+            company_users: notificationStats.company_notifications,
+            admin_users: notificationStats.admin_notifications,
+            company_name: order.company_id?.name,
+            order_number: order.order_number,
+            event_type: notificationEventType
+          });
+        } catch (notificationError) {
+          console.error('❌ Error enviando notificaciones WebSocket:', notificationError);
+        }
+      } else if (!global.wsService) {
+        console.warn('⚠️ WebSocket no disponible para notificaciones');
+      }
     }
 
     // 5. Responder a Shipday para confirmar la recepción
@@ -528,7 +559,10 @@ async handleWebhook(req, res) {
       success: true, 
       message: 'Webhook procesado exitosamente.',
       order_updated: orderUpdated,
-      order_number: order.order_number
+      order_number: order.order_number,
+      company_name: order.company_id?.name,
+      notification_sent: orderUpdated && !!global.wsService && !!notificationEventType,
+      notification_type: notificationEventType
     });
 
   } catch (error) {

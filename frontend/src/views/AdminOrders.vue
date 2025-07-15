@@ -107,7 +107,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch, nextTick, onBeforeUnmount } from 'vue'
+import { ref, computed, onMounted, watch, nextTick, onBeforeUnmount,onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useToast } from 'vue-toastification'
 
@@ -249,6 +249,11 @@ const {
 // ==================== LOCAL STATE ====================
 const showNotification = ref(false)
 const isInitialLoad = ref(true)
+
+// ⚡ TIEMPO REAL: Estado para actualización automática
+const lastUpdateTime = ref(new Date())
+const autoRefreshEnabled = ref(true)
+const pendingUpdates = ref(new Set()) // IDs de órdenes con actualizaciones pendientes
 
 // ==================== COMPUTED ====================
 
@@ -496,6 +501,148 @@ function handleKeyboardShortcuts(event) {
   }
 }
 /**
+ * ⚡ ACTUALIZACIÓN AUTOMÁTICA EN TIEMPO REAL
+ * Maneja las actualizaciones de órdenes via WebSocket
+ */
+function handleOrderUpdate(event) {
+  const { orderId, orderNumber, newStatus, eventType, companyId } = event.detail
+  
+  console.log('🔄 [AdminOrders] Actualizando orden en tiempo real:', {
+    orderNumber,
+    newStatus,
+    eventType,
+    orderId
+  })
+  
+  // Buscar la orden en la lista actual
+  const orderIndex = orders.value.findIndex(order => 
+    order._id === orderId || order.order_number === orderNumber
+  )
+  
+  if (orderIndex !== -1) {
+    // ✅ Orden encontrada - actualizar localmente
+    const existingOrder = orders.value[orderIndex]
+    
+    // Actualizar campos básicos
+    existingOrder.status = newStatus
+    existingOrder.updated_at = new Date().toISOString()
+    
+    // Actualizar campos específicos según el evento
+    switch (eventType) {
+      case 'driver_assigned':
+        // La información del conductor se actualizará en la próxima carga
+        pendingUpdates.value.add(orderId)
+        break
+        
+      case 'picked_up':
+        existingOrder.pickup_time = new Date().toISOString()
+        break
+        
+      case 'delivered':
+        existingOrder.delivery_date = new Date().toISOString()
+        existingOrder.status = 'delivered'
+        break
+        
+      case 'proof_uploaded':
+        // Marcar que tiene prueba de entrega
+        existingOrder.has_proof_of_delivery = true
+        break
+    }
+    
+    // Actualizar tiempo de última actualización
+    lastUpdateTime.value = new Date()
+    
+    // Log para debugging
+    console.log(`✅ [AdminOrders] Orden ${orderNumber} actualizada localmente:`, {
+      newStatus: existingOrder.status,
+      eventType,
+      timestamp: existingOrder.updated_at
+    })
+    
+    // Mostrar indicador visual temporal (opcional)
+    showOrderUpdateIndicator(orderId)
+    
+  } else {
+    // ❓ Orden no encontrada en la lista actual
+    console.log(`🔄 [AdminOrders] Orden ${orderNumber} no encontrada en lista actual`)
+    
+    // Verificar si la orden debería estar en la lista actual según filtros
+    if (shouldOrderBeInCurrentView(companyId, newStatus)) {
+      console.log('📥 [AdminOrders] Orden debería estar en vista actual, recargando...')
+      refreshOrders()
+    }
+  }
+}
+
+/**
+ * Determinar si una orden debería estar en la vista actual según filtros
+ */
+function shouldOrderBeInCurrentView(companyId, status) {
+  // Si hay filtro de empresa y no coincide, no debería estar
+  if (filters.value.company_id && filters.value.company_id !== companyId) {
+    return false
+  }
+  
+  // Si hay filtro de estado y no coincide, no debería estar
+  if (filters.value.status && filters.value.status !== status) {
+    return false
+  }
+  
+  // Por defecto, asumir que sí debería estar
+  return true
+}
+
+/**
+ * Mostrar indicador visual de actualización (opcional)
+ */
+function showOrderUpdateIndicator(orderId) {
+  // Agregar clase CSS temporal para highlight
+  const orderElement = document.querySelector(`[data-order-id="${orderId}"]`)
+  if (orderElement) {
+    orderElement.classList.add('order-updated')
+    setTimeout(() => {
+      orderElement.classList.remove('order-updated')
+    }, 3000)
+  }
+}
+
+/**
+ * Refrescar órdenes que tienen actualizaciones pendientes
+ */
+async function refreshPendingUpdates() {
+  if (pendingUpdates.value.size === 0) return
+  
+  console.log(`🔄 [AdminOrders] Refrescando ${pendingUpdates.value.size} órdenes con actualizaciones pendientes`)
+  
+  try {
+    // Obtener detalles actualizados de las órdenes pendientes
+    const orderIds = Array.from(pendingUpdates.value)
+    
+    // Aquí deberías hacer una llamada a tu API para obtener detalles específicos
+    // Por ahora, hacemos un refresh completo más inteligente
+    await refreshOrders()
+    
+    // Limpiar actualizaciones pendientes
+    pendingUpdates.value.clear()
+    
+  } catch (error) {
+    console.error('❌ [AdminOrders] Error refrescando actualizaciones pendientes:', error)
+  }
+}
+
+/**
+ * Toggle para habilitar/deshabilitar auto-refresh
+ */
+function toggleAutoRefresh() {
+  autoRefreshEnabled.value = !autoRefreshEnabled.value
+  
+  if (autoRefreshEnabled.value) {
+    toast.success('🔄 Actualización automática activada')
+  } else {
+    toast.info('⏸️ Actualización automática pausada')
+  }
+}
+/**
  * handleOpenBulkAssignModal
  */
 function handleOpenBulkAssignModal() {
@@ -526,6 +673,19 @@ onMounted(async () => {
     
     // Add keyboard shortcuts
     document.addEventListener('keydown', handleKeyboardShortcuts)
+
+     // ⚡ NUEVO: Setup real-time updates
+    console.log('🔗 [AdminOrders] Configurando actualizaciones en tiempo real')
+    
+    // Escuchar actualizaciones de órdenes via WebSocket
+    window.addEventListener('orderUpdated', handleOrderUpdate)
+    
+    // Refrescar actualizaciones pendientes cada 30 segundos
+    setInterval(() => {
+      if (autoRefreshEnabled.value) {
+        refreshPendingUpdates()
+      }
+    }, 30000)
     
     isInitialLoad.value = false
     
@@ -537,6 +697,10 @@ onMounted(async () => {
 // Cleanup
 onBeforeUnmount(() => {
   document.removeEventListener('keydown', handleKeyboardShortcuts)
+
+  // ⚡ NUEVO: Cleanup real-time listeners
+  console.log('🧹 [AdminOrders] Limpiando listeners de tiempo real')
+  window.removeEventListener('orderUpdated', handleOrderUpdate)
 })
 </script>
 
@@ -908,5 +1072,60 @@ onBeforeUnmount(() => {
 
 .error-item:last-child {
   margin-bottom: 0;
+}
+/* ⚡ NUEVOS ESTILOS para indicadores de actualización en tiempo real */
+.order-updated {
+  background-color: #fef3c7 !important;
+  border-left: 4px solid #f59e0b !important;
+  animation: updateGlow 3s ease-out;
+}
+
+@keyframes updateGlow {
+  0% {
+    background-color: #fef3c7;
+    transform: scale(1.02);
+  }
+  50% {
+    background-color: #fde68a;
+  }
+  100% {
+    background-color: transparent;
+    transform: scale(1);
+  }
+}
+
+.real-time-indicator {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  background: #10b981;
+  color: white;
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 500;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+}
+
+.real-time-indicator.disabled {
+  background: #6b7280;
+  box-shadow: 0 4px 12px rgba(107, 114, 128, 0.3);
+}
+
+.pulse-dot {
+  width: 8px;
+  height: 8px;
+  background: white;
+  border-radius: 50%;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
 }
 </style>

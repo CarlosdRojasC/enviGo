@@ -1,14 +1,21 @@
 require('dotenv').config();
 const express = require('express');
+const http = require('http'); // ← AGREGAR ESTA LÍNEA
 const cors = require('cors');
 const helmet = require('helmet');
 const compression = require('compression');
 const rateLimit = require('express-rate-limit');
 const routes = require('./routes');
-const connectDB = require('./config/database');  // <-- Importa conexión MongoDB
+const connectDB = require('./config/database');
+const WebSocketService = require('./services/websocket.service'); // ← AGREGAR ESTA LÍNEA
 
 const app = express();
+const server = http.createServer(app); // ← AGREGAR ESTA LÍNEA
 const PORT = process.env.PORT || 3001;
+
+// --- INICIALIZAR WEBSOCKET ---
+const wsService = new WebSocketService(server); // ← AGREGAR
+global.wsService = wsService; // ← AGREGAR
 
 // --- AÑADE ESTA LÍNEA AQUÍ ---
 app.set('trust proxy', 1); // Confía en el primer proxy (el de Render)
@@ -18,15 +25,22 @@ app.use(helmet());
 app.use(compression());
 
 const allowedOrigins = [
-  'http://localhost:5173' // si usas desarrollo también
+  'http://localhost:5173', // tu frontend de desarrollo
+  'http://localhost:3000', // otro puerto común
+  'http://127.0.0.1:5173',
+  'http://127.0.0.1:3000',
+  null // ← IMPORTANTE: esto permite archivos HTML locales (file://)
 ];
+
 
 const corsOptions = {
   origin: function (origin, callback) {
-    // Permite peticiones sin 'origin' (como apps móviles o Postman) y las de la lista
+    // Permite peticiones sin 'origin' (como apps móviles, Postman, o archivos HTML locales)
+    // y las de la lista de orígenes permitidos
     if (!origin || allowedOrigins.indexOf(origin) !== -1) {
       callback(null, true);
     } else {
+      console.log('❌ CORS bloqueado para origen:', origin);
       callback(new Error('No permitido por CORS'));
     }
   },
@@ -70,6 +84,222 @@ app.get('/health', (req, res) => {
   });
 });
 
+// ← AGREGAR ESTAS RUTAS WEBSOCKET
+app.get('/api/ws-stats', (req, res) => {
+  if (global.wsService) {
+    res.json(global.wsService.getStats());
+  } else {
+    res.status(500).json({ error: 'WebSocket no disponible' });
+  }
+});
+
+app.post('/api/ws-test', (req, res) => {
+  if (global.wsService) {
+    const sentCount = global.wsService.sendTestNotification();
+    res.json({ 
+      success: true, 
+      message: `Notificación de prueba enviada a ${sentCount} clientes`,
+      timestamp: new Date().toISOString()
+    });
+  } else {
+    res.status(500).json({ error: 'WebSocket no disponible' });
+  }
+});
+
+
+// Simular cambio de estado de pedido individual
+app.post('/api/test-order-notification', (req, res) => {
+  if (global.wsService) {
+    const { orderNumber = 'TEST-123', eventType = 'delivered', customerName = 'Cliente de Prueba' } = req.body;
+    
+    const testOrderData = {
+      order_id: 'test-id-' + Date.now(),
+      order_number: orderNumber,
+      status: eventType === 'driver_assigned' ? 'processing' : 
+              eventType === 'picked_up' ? 'shipped' : 
+              eventType === 'delivered' ? 'delivered' : 'pending',
+      customer_name: customerName,
+      shipping_commune: 'Santiago',
+      company_name: 'Empresa Test',
+      updated_at: new Date(),
+      eventType: eventType,
+      tracking_url: `https://tracking.shipday.com/test-${orderNumber}`,
+      driver_name: eventType === 'driver_assigned' ? 'Juan Pérez' : null
+    };
+
+    // Mensajes específicos por tipo de evento
+    const notifications = {
+      'driver_assigned': {
+        message: `👨‍💼 Conductor Juan Pérez asignado a pedido #${orderNumber}`,
+        icon: '👨‍💼',
+        type: 'driver_assigned',
+        priority: 'medium'
+      },
+      'picked_up': {
+        message: `🚚 Pedido #${orderNumber} recogido y en camino`,
+        icon: '🚚', 
+        type: 'picked_up',
+        priority: 'medium'
+      },
+      'delivered': {
+        message: `✅ Pedido #${orderNumber} entregado exitosamente`,
+        icon: '✅',
+        type: 'delivered',
+        priority: 'high'
+      },
+      'proof_uploaded': {
+        message: `📸 Prueba de entrega disponible para pedido #${orderNumber}`,
+        icon: '📸',
+        type: 'proof_uploaded',
+        priority: 'medium'
+      }
+    };
+
+    const notificationData = notifications[eventType] || {
+      message: `📦 Pedido #${orderNumber} actualizado`,
+      icon: '📦',
+      type: 'status_updated',
+      priority: 'low'
+    };
+
+    const sentCount = global.wsService.broadcast('order_status_changed', {
+      ...testOrderData,
+      ...notificationData
+    });
+
+    res.json({ 
+      success: true, 
+      message: `Notificación "${eventType}" enviada a ${sentCount} clientes conectados`,
+      data: { ...testOrderData, ...notificationData },
+      timestamp: new Date().toISOString()
+    });
+  } else {
+    res.status(500).json({ error: 'WebSocket no disponible' });
+  }
+});
+
+// Simular flujo completo de un pedido
+app.post('/api/test-order-flow', (req, res) => {
+  if (global.wsService) {
+    const { orderNumber = `FLOW-${Date.now()}`, customerName = 'Cliente Demo' } = req.body;
+    const events = [
+      { type: 'driver_assigned', delay: 0 },
+      { type: 'picked_up', delay: 3000 },
+      { type: 'delivered', delay: 6000 },
+      { type: 'proof_uploaded', delay: 9000 }
+    ];
+    
+    let totalSent = 0;
+    
+    events.forEach((event, index) => {
+      setTimeout(() => {
+        const testData = {
+          order_id: `flow-${orderNumber}`,
+          order_number: orderNumber,
+          status: event.type === 'driver_assigned' ? 'processing' : 
+                  event.type === 'picked_up' ? 'shipped' : 
+                  event.type === 'delivered' ? 'delivered' : 'delivered',
+          customer_name: customerName,
+          shipping_commune: 'Las Condes',
+          company_name: 'Demo Company',
+          updated_at: new Date(),
+          eventType: event.type,
+          tracking_url: `https://tracking.shipday.com/${orderNumber}`,
+          driver_name: 'Carlos Rodriguez'
+        };
+
+        const messages = {
+          'driver_assigned': `👨‍💼 Conductor Carlos asignado a pedido #${orderNumber}`,
+          'picked_up': `🚚 Pedido #${orderNumber} recogido desde Las Condes`,
+          'delivered': `✅ Pedido #${orderNumber} entregado a ${customerName}`,
+          'proof_uploaded': `📸 Foto y firma confirmadas para #${orderNumber}`
+        };
+        
+        const sent = global.wsService.broadcast('order_status_changed', {
+          ...testData,
+          message: messages[event.type],
+          icon: event.type === 'driver_assigned' ? '👨‍💼' : 
+                event.type === 'picked_up' ? '🚚' : 
+                event.type === 'delivered' ? '✅' : '📸',
+          type: event.type,
+          priority: event.type === 'delivered' ? 'high' : 'medium'
+        });
+        
+        totalSent += sent;
+        console.log(`📤 Flujo ${index + 1}/4: ${event.type} para #${orderNumber}`);
+      }, event.delay);
+    });
+
+    res.json({ 
+      success: true, 
+      message: `Simulando flujo completo para pedido #${orderNumber} (4 eventos en 9 segundos)`,
+      events: events.map(e => e.type),
+      order_number: orderNumber,
+      timestamp: new Date().toISOString()
+    });
+  } else {
+    res.status(500).json({ error: 'WebSocket no disponible' });
+  }
+});
+
+// Simular múltiples pedidos simultáneos
+app.post('/api/test-multiple-orders', (req, res) => {
+  if (global.wsService) {
+    const { count = 5 } = req.body;
+    const companies = ['TiendaOnline', 'EcommerceChile', 'VentasRápidas', 'MegaStore', 'SuperVentas'];
+    const communes = ['Santiago', 'Las Condes', 'Providencia', 'Ñuñoa', 'San Miguel'];
+    const events = ['driver_assigned', 'picked_up', 'delivered'];
+    
+    let sentCount = 0;
+    
+    for (let i = 0; i < count; i++) {
+      setTimeout(() => {
+        const orderNumber = `MULTI-${Date.now()}-${i}`;
+        const eventType = events[Math.floor(Math.random() * events.length)];
+        const company = companies[Math.floor(Math.random() * companies.length)];
+        const commune = communes[Math.floor(Math.random() * communes.length)];
+        
+        const testData = {
+          order_id: `multi-${i}`,
+          order_number: orderNumber,
+          status: eventType,
+          customer_name: `Cliente ${i + 1}`,
+          shipping_commune: commune,
+          company_name: company,
+          updated_at: new Date(),
+          eventType: eventType
+        };
+        
+        const messages = {
+          'driver_assigned': `👨‍💼 Conductor asignado a #${orderNumber} (${company})`,
+          'picked_up': `🚚 Pedido #${orderNumber} en camino a ${commune}`,
+          'delivered': `✅ Entrega exitosa #${orderNumber} en ${commune}`
+        };
+        
+        const sent = global.wsService.broadcast('order_status_changed', {
+          ...testData,
+          message: messages[eventType],
+          icon: eventType === 'driver_assigned' ? '👨‍💼' : 
+                eventType === 'picked_up' ? '🚚' : '✅',
+          type: eventType,
+          priority: 'medium'
+        });
+        
+        sentCount += sent;
+      }, i * 1000); // Una cada segundo
+    }
+
+    res.json({ 
+      success: true, 
+      message: `Enviando ${count} notificaciones de prueba (una por segundo)`,
+      count: count,
+      timestamp: new Date().toISOString()
+    });
+  } else {
+    res.status(500).json({ error: 'WebSocket no disponible' });
+  }
+});
+
 // Rutas API
 app.use('/api', routes);
 
@@ -96,10 +326,14 @@ app.use((err, req, res, next) => {
 const startServer = async () => {
   try {
     await connectDB();  // <-- conecta a MongoDB
-    app.listen(PORT, () => {
+    
+    // ← CAMBIAR app.listen por server.listen
+    server.listen(PORT, () => {
       console.log(`🚀 Servidor corriendo en http://localhost:${PORT}`);
+      console.log(`🔗 WebSocket disponible en ws://localhost:${PORT}/ws`); // ← AGREGAR
       console.log(`📊 Ambiente: ${process.env.NODE_ENV}`);
       console.log(`🔐 JWT configurado: ${process.env.JWT_SECRET ? 'Sí' : 'No'}`);
+      console.log(`📊 WebSocket Stats: http://localhost:${PORT}/api/ws-stats`); // ← AGREGAR
     });
   } catch (error) {
     console.error('❌ Error al iniciar:', error);

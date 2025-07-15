@@ -45,3 +45,5 @@ coverage/
 backend/backend.zip
 .gitignore
 frontend/frontend.zip
+envigo-test-notifications.html
+websocket-test.html

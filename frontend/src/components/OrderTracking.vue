@@ -81,12 +81,35 @@
           </div>
           <div class="driver-info">
             <div class="driver-name">{{ tracking.driver.name || 'Conductor Asignado' }}</div>
-            <div class="driver-status" :class="getDriverStatusClass(tracking.driver.status)">
-              {{ getDriverStatus(tracking.driver.status) }}
+            <div class="driver-phone" v-if="driverStatus.phone">
+              📞 {{ driverStatus.phone }}
             </div>
-            <div v-if="tracking.driver.phone" class="driver-contact">
-              <button @click="callDriver(tracking.driver.phone)" class="contact-btn">
-                📞 {{ tracking.driver.phone }}
+            <div class="driver-status" :class="getDriverStatusClass(driverStatus.status)">
+              <div class="status-indicator" :class="{ 'online': driverStatus.isConnected }"></div>
+              <span class="status-text">{{ getDriverStatusText(driverStatus.status) }}</span>
+              <div v-if="loadingDriverStatus" class="status-loading">
+                <div class="mini-spinner"></div>
+              </div>
+            </div>
+            <div v-if="!driverStatus.isConnected && driverStatus.lastSeen" class="last-seen">
+              Visto por última vez: {{ formatLastSeen(driverStatus.lastSeen) }}
+            </div>
+            <div class="driver-actions">
+              <button 
+                v-if="driverStatus.phone" 
+                @click="callDriver" 
+                class="action-btn call-btn"
+                title="Llamar al conductor"
+              >
+                📞
+              </button>
+              <button 
+                @click="fetchDriverStatus" 
+                class="action-btn refresh-btn"
+                :disabled="loadingDriverStatus"
+                title="Actualizar estado"
+              >
+                🔄
               </button>
             </div>
           </div>
@@ -147,7 +170,7 @@
             </div>
             <div class="card-content">
               <div class="address">{{ tracking.pickup_address }}</div>
-              <div v-if="tracking.company.name" class="company-name">
+              <div v-if="tracking.company && tracking.company.name" class="company-name">
                 {{ tracking.company.name }}
               </div>
             </div>
@@ -213,7 +236,7 @@
             📧 Contactar Soporte
           </button>
           
-          <button v-if="tracking.company.phone" @click="callCompany" class="support-btn">
+          <button v-if="tracking.company && tracking.company.phone" @click="callCompany" class="support-btn">
             📞 Llamar a {{ tracking.company.name }}
           </button>
           
@@ -252,7 +275,15 @@ const tracking = ref(null);
 const loadingTracking = ref(true);
 const refreshing = ref(false);
 const lastUpdated = ref(new Date());
-const showDebugInfo = ref(true); // 🔍 Cambiar a false después de probar
+const showDebugInfo = ref(false); // 🔧 Cambiar a true para debug
+const driverStatus = ref({
+  name: '',
+  phone: '',
+  status: 'unknown', // online, offline, busy, unknown
+  lastSeen: null,
+  isConnected: false
+});
+const loadingDriverStatus = ref(false);
 
 let refreshInterval = null;
 
@@ -316,6 +347,10 @@ async function fetchTracking() {
       timeline_events: tracking.value?.timeline?.length || 0
     });
     
+    // 🔧 IMPORTANTE: Cargar estado del conductor después de cargar tracking
+    if (tracking.value) {
+      await fetchDriverStatus();
+    }
   } catch (error) {
     console.error('❌ Error cargando tracking:', error);
     tracking.value = null;
@@ -385,10 +420,6 @@ function getDriverStatus(status) {
   return statuses[status] || '📍 En servicio';
 }
 
-function getDriverStatusClass(status) {
-  return status ? status.toLowerCase() : 'unknown';
-}
-
 function formatEventTime(timestamp) {
   if (!timestamp) return '';
   
@@ -435,10 +466,6 @@ function trackLiveClick() {
   console.log('📍 Usuario abriendo tracking en vivo:', getTrackingUrl.value);
 }
 
-function callDriver(phone) {
-  window.location.href = `tel:${phone}`;
-}
-
 function callCompany() {
   if (tracking.value?.company?.phone) {
     window.location.href = `tel:${tracking.value.company.phone}`;
@@ -459,6 +486,204 @@ function reportIssue() {
   
   window.location.href = `mailto:soporte@tuempresa.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 }
+
+// ==================== MÉTODOS PARA ESTADO DEL CONDUCTOR ====================
+
+/**
+ * 🔧 CORREGIDO: Obtener estado actual del conductor desde Shipday
+ * Ahora usa tracking.value en lugar de order.value
+ */
+async function fetchDriverStatus() {
+  // 🔧 CORREGIDO: Usar tracking.value en lugar de order.value
+  if (!tracking.value?.driver_info?.shipday_driver_id && !tracking.value?.shipday_driver_id) {
+    console.log('📍 No hay ID de conductor para obtener estado');
+    return;
+  }
+  
+  // 🔧 CORREGIDO: Obtener driver ID desde tracking.value
+  const driverId = tracking.value?.driver_info?.shipday_driver_id || 
+                   tracking.value?.shipday_driver_id ||
+                   tracking.value?.driver?.id;
+
+  if (!driverId) {
+    console.log('📍 No se encontró driver ID en el tracking');
+    return;
+  }
+
+  try {
+    loadingDriverStatus.value = true;
+    console.log('👨‍💼 Obteniendo estado del conductor:', driverId);
+    
+    // 🔧 CORREGIDO: Usar apiService en lugar de fetch directo
+    const { data: driverData } = await apiService.drivers.getStatus(driverId);
+    
+    driverStatus.value = {
+      name: driverData.name || tracking.value?.driver_info?.name || tracking.value?.driver?.name || 'Conductor',
+      phone: driverData.phone || tracking.value?.driver_info?.phone || tracking.value?.driver?.phone || '',
+      status: driverData.status || 'unknown', // online, offline, busy
+      lastSeen: driverData.lastSeen ? new Date(driverData.lastSeen) : null,
+      isConnected: driverData.status === 'online',
+      location: driverData.location || null
+    };
+    
+    console.log('✅ Estado del conductor actualizado:', driverStatus.value);
+    
+  } catch (error) {
+    console.error('❌ Error obteniendo estado del conductor:', error);
+    // Fallback a datos de la orden
+    driverStatus.value = {
+      name: tracking.value?.driver_info?.name || tracking.value?.driver?.name || 'Conductor',
+      phone: tracking.value?.driver_info?.phone || tracking.value?.driver?.phone || '',
+      status: 'offline',
+      lastSeen: null,
+      isConnected: false
+    };
+  } finally {
+    loadingDriverStatus.value = false;
+  }
+}
+
+/**
+ * Formatear el texto del estado del conductor
+ */
+function getDriverStatusText(status) {
+  const statusTexts = {
+    'online': 'En Línea',
+    'offline': 'Desconectado', 
+    'busy': 'Ocupado',
+    'driving': 'Conduciendo',
+    'unknown': 'Estado Desconocido'
+  };
+  return statusTexts[status] || 'Desconocido';
+}
+
+/**
+ * Obtener clase CSS para el estado
+ */
+function getDriverStatusClass(status) {
+  const statusClasses = {
+    'online': 'status-online',
+    'offline': 'status-offline',
+    'busy': 'status-busy', 
+    'driving': 'status-driving',
+    'unknown': 'status-unknown'
+  };
+  return statusClasses[status] || 'status-unknown';
+}
+
+function formatLastSeen(lastSeen) {
+  const now = new Date();
+  const diff = now - lastSeen;
+  const minutes = Math.floor(diff / 60000);
+  
+  if (minutes < 1) return 'hace un momento';
+  if (minutes < 60) return `hace ${minutes} minutos`;
+  if (minutes < 1440) return `hace ${Math.floor(minutes / 60)} horas`;
+  return lastSeen.toLocaleDateString();
+}
+
+function callDriver() {
+  if (driverStatus.value.phone) {
+    window.location.href = `tel:${driverStatus.value.phone}`;
+  }
+}
+
+// ==================== EXPOSE FUNCTIONS PARA USO EXTERNO ====================
+
+/**
+ * Verificar si una orden tiene información de tracking
+ */
+function hasTrackingInfo(order) {
+  if (order.status === 'delivered') return false;
+  return !!(
+    order.shipday_tracking_url ||
+    order.shipday_driver_id || 
+    order.shipday_order_id ||
+    ['processing', 'shipped'].includes(order.status)
+  );
+}
+
+/**
+ * Verificar si una orden tiene prueba de entrega
+ */
+function orderHasProofOfDelivery(order) {
+  if (order.status !== 'delivered') return false;
+  return !!(
+    order.proof_of_delivery?.photo_url || 
+    order.proof_of_delivery?.signature_url ||
+    order.podUrls?.length > 0 ||
+    order.signatureUrl
+  );
+}
+
+/**
+ * Abrir tracking en vivo desde componente externo
+ */
+async function openLiveTrackingFromExternal(order, updateCallback) {
+  console.log('📍 Abriendo tracking externo para orden:', order.order_number);
+  
+  if (order.shipday_tracking_url) {
+    console.log('✅ Abriendo tracking URL directa:', order.shipday_tracking_url);
+    window.open(order.shipday_tracking_url, '_blank');
+  } else if (order.shipday_order_id) {
+    console.log('⚠️ No hay tracking URL, intentando refrescar datos...');
+    try {
+      const { data } = await apiService.orders.getById(order._id);
+      
+      if (data.shipday_tracking_url) {
+        console.log('✅ URL obtenida después de refresh:', data.shipday_tracking_url);
+        // Actualizar orden localmente si hay callback
+        if (updateCallback) {
+          updateCallback(data);
+        }
+        window.open(data.shipday_tracking_url, '_blank');
+      } else {
+        console.log('⚠️ No se encontró URL de tracking después del refresh');
+      }
+    } catch (error) {
+      console.error('❌ Error al refrescar datos de la orden:', error);
+    }
+  } else {
+    console.log('⚠️ No hay información de Shipday para esta orden');
+  }
+}
+
+/**
+ * Obtener configuración del botón de acción
+ */
+function getActionButton(order) {
+  if (order.status === 'delivered') {
+    return {
+      type: 'proof',
+      label: 'Ver Prueba de Entrega',
+      icon: '📸',
+      class: 'btn-success',
+      available: orderHasProofOfDelivery(order)
+    };
+  }
+  
+  if (['processing', 'shipped'].includes(order.status)) {
+    return {
+      type: 'tracking',
+      label: 'Tracking en Vivo',
+      icon: '📍',
+      class: 'btn-primary',
+      available: hasTrackingInfo(order)
+    };
+  }
+  
+  return { type: 'none', available: false };
+}
+
+// Exponer funciones al template parent
+defineExpose({
+  hasTrackingInfo,
+  orderHasProofOfDelivery,
+  openLiveTrackingFromExternal,
+  getActionButton,
+  fetchDriverStatus,
+  refreshTracking
+});
 </script>
 
 <style scoped>

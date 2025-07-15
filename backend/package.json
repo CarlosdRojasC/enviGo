@@ -5,7 +5,7 @@
   "scripts": {
     "start": "node src/app.js",
     "dev": "nodemon src/app.js",
-    "db:seed": "node src/seed.js" 
+    "db:seed": "node src/seed.js"
   },
   "keywords": [
     "ultima-milla",
@@ -33,6 +33,7 @@
     "multer": "^2.0.1",
     "node-cron": "^4.1.1",
     "pdfkit": "^0.17.1",
+    "ws": "^8.18.3",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {

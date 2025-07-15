@@ -211,6 +211,12 @@ const showProofModal = ref(false)
 const supportOrder = ref(null)
 const showSupportModal = ref(false)
 
+// ⚡ TIEMPO REAL: Estado para actualización automática
+const realTimeEnabled = ref(true)
+const lastOrderUpdate = ref(null)
+const pendingOrderUpdates = ref(new Map()) // orderId -> updateData
+const orderUpdateQueue = ref([]) // Cola de notificaciones para mostrar
+
 // ==================== COMPUTED ====================
 
 /**
@@ -232,6 +238,11 @@ async function handleRefresh() {
   try {
     await refreshOrders(allFilters.value)
     lastUpdate.value = Date.now()
+    
+    // Limpiar actualizaciones pendientes después del refresh
+    pendingOrderUpdates.value.clear()
+    orderUpdateQueue.value = []
+    
     toast.success('Pedidos actualizados')
   } catch (error) {
     toast.error('Error al actualizar pedidos')
@@ -553,25 +564,308 @@ async function handleActionButton(order) {
   }
 }
 
+
+/**
+ * ⚡ ACTUALIZACIÓN AUTOMÁTICA EN TIEMPO REAL
+ * Maneja las actualizaciones de órdenes via WebSocket para empresas
+ */
+function handleOrderUpdate(event) {
+  const { orderId, orderNumber, newStatus, eventType, companyId } = event.detail
+  
+  // Verificar que la orden pertenece a esta empresa
+  if (companyId && auth.user?.company_id && companyId !== auth.user.company_id) {
+    console.log('🔒 [Orders] Orden de otra empresa, ignorando:', orderNumber)
+    return
+  }
+  
+  console.log('🔄 [Orders] Actualizando orden en tiempo real:', {
+    orderNumber,
+    newStatus,
+    eventType,
+    orderId,
+    companyMatches: !companyId || companyId === auth.user?.company_id
+  })
+  
+  // Buscar la orden en la lista actual
+  const orderIndex = orders.value.findIndex(order => 
+    order._id === orderId || order.order_number === orderNumber
+  )
+  
+  if (orderIndex !== -1) {
+    // ✅ Orden encontrada - actualizar localmente
+    const existingOrder = orders.value[orderIndex]
+    const previousStatus = existingOrder.status
+    
+    // Actualizar campos básicos
+    existingOrder.status = newStatus
+    existingOrder.updated_at = new Date().toISOString()
+    
+    // Actualizar campos específicos según el evento
+    switch (eventType) {
+      case 'driver_assigned':
+        console.log('👨‍💼 [Orders] Conductor asignado:', orderNumber)
+        // Marcar para actualizar datos completos más tarde
+        pendingOrderUpdates.value.set(orderId, { 
+          type: 'driver_assigned', 
+          timestamp: Date.now() 
+        })
+        break
+        
+      case 'picked_up':
+        console.log('🚚 [Orders] Pedido recogido:', orderNumber)
+        existingOrder.pickup_time = new Date().toISOString()
+        
+        // Si hay modal de tracking abierto para esta orden, actualizarlo
+        if (selectedTrackingOrder.value?._id === orderId) {
+          refreshTrackingModal()
+        }
+        break
+        
+      case 'delivered':
+        console.log('✅ [Orders] Pedido entregado:', orderNumber)
+        existingOrder.delivery_date = new Date().toISOString()
+        existingOrder.status = 'delivered'
+        
+        // Marcar para obtener prueba de entrega
+        pendingOrderUpdates.value.set(orderId, { 
+          type: 'delivered', 
+          timestamp: Date.now() 
+        })
+        break
+        
+      case 'proof_uploaded':
+        console.log('📸 [Orders] Prueba de entrega subida:', orderNumber)
+        existingOrder.has_proof_of_delivery = true
+        
+        // Si hay modal de prueba abierto para esta orden, actualizarlo
+        if (selectedProofOrder.value?._id === orderId) {
+          refreshProofModal()
+        }
+        break
+    }
+    
+    // Registrar la actualización
+    lastOrderUpdate.value = {
+      orderId,
+      orderNumber,
+      previousStatus,
+      newStatus,
+      eventType,
+      timestamp: new Date()
+    }
+    
+    // Agregar a cola de notificaciones si cambió el estado
+    if (previousStatus !== newStatus) {
+      orderUpdateQueue.value.push({
+        id: Date.now(),
+        orderId,
+        orderNumber,
+        previousStatus,
+        newStatus,
+        eventType,
+        timestamp: new Date()
+      })
+      
+      // Mostrar notificación visual temporal
+      showOrderUpdateIndicator(orderId, eventType)
+    }
+    
+    console.log(`✅ [Orders] Orden ${orderNumber} actualizada localmente:`, {
+      from: previousStatus,
+      to: newStatus,
+      eventType
+    })
+    
+  } else {
+    // ❓ Orden no encontrada en la lista actual
+    console.log(`🔄 [Orders] Orden ${orderNumber} no encontrada en lista actual`)
+    
+    // Si es una nueva orden o debería estar en la vista, recargar
+    if (shouldOrderBeInCurrentView(newStatus)) {
+      console.log('📥 [Orders] Recargando lista para incluir orden actualizada...')
+      handleRefresh()
+    }
+  }
+}
+
+/**
+ * Determinar si una orden debería estar en la vista actual
+ */
+function shouldOrderBeInCurrentView(status) {
+  // Si hay filtro de estado y no coincide, no debería estar
+  if (filters.value.status && filters.value.status !== status) {
+    return false
+  }
+  
+  // Por defecto, las órdenes de esta empresa deberían estar
+  return true
+}
+
+/**
+ * Mostrar indicador visual de actualización
+ */
+function showOrderUpdateIndicator(orderId, eventType) {
+  // Buscar el elemento en la tabla
+  const orderRow = document.querySelector(`[data-order-id="${orderId}"]`)
+  if (orderRow) {
+    // Agregar clase de actualización
+    orderRow.classList.add('order-updated', `update-${eventType}`)
+    
+    // Remover después de 4 segundos
+    setTimeout(() => {
+      orderRow.classList.remove('order-updated', `update-${eventType}`)
+    }, 4000)
+  }
+}
+
+/**
+ * Refrescar modal de tracking si está abierto
+ */
+async function refreshTrackingModal() {
+  if (!selectedTrackingOrder.value || !showTrackingModal.value) return
+  
+  try {
+    console.log('🔄 [Orders] Refrescando modal de tracking...')
+    const { data } = await apiService.orders.getById(selectedTrackingOrder.value._id)
+    selectedTrackingOrder.value = data
+    
+    // Si el componente de tracking tiene método de refresh, llamarlo
+    if (orderTrackingRef.value?.refreshTracking) {
+      orderTrackingRef.value.refreshTracking()
+    }
+  } catch (error) {
+    console.error('❌ [Orders] Error refrescando tracking modal:', error)
+  }
+}
+
+/**
+ * Refrescar modal de prueba de entrega si está abierto
+ */
+async function refreshProofModal() {
+  if (!selectedProofOrder.value || !showProofModal.value) return
+  
+  try {
+    console.log('🔄 [Orders] Refrescando modal de prueba de entrega...')
+    const { data } = await apiService.orders.getById(selectedProofOrder.value._id)
+    selectedProofOrder.value = data
+  } catch (error) {
+    console.error('❌ [Orders] Error refrescando proof modal:', error)
+  }
+}
+
+/**
+ * Procesar actualizaciones pendientes
+ */
+async function processPendingUpdates() {
+  if (pendingOrderUpdates.value.size === 0) return
+  
+  console.log(`🔄 [Orders] Procesando ${pendingOrderUpdates.value.size} actualizaciones pendientes...`)
+  
+  const updates = Array.from(pendingOrderUpdates.value.entries())
+  pendingOrderUpdates.value.clear()
+  
+  for (const [orderId, updateData] of updates) {
+    try {
+      console.log(`📡 [Orders] Obteniendo datos actualizados para orden ${orderId}...`)
+      const { data: updatedOrder } = await apiService.orders.getById(orderId)
+      
+      // Actualizar la orden en la lista local
+      updateOrderLocally(updatedOrder)
+      
+      console.log(`✅ [Orders] Orden ${updatedOrder.order_number} actualizada con datos completos`)
+      
+    } catch (error) {
+      console.error(`❌ [Orders] Error actualizando orden ${orderId}:`, error)
+    }
+  }
+}
+
+/**
+ * Limpiar cola de notificaciones antiguas
+ */
+function cleanupNotificationQueue() {
+  const now = Date.now()
+  const QUEUE_CLEANUP_TIME = 30000 // 30 segundos
+  
+  orderUpdateQueue.value = orderUpdateQueue.value.filter(notification => 
+    now - notification.timestamp.getTime() < QUEUE_CLEANUP_TIME
+  )
+}
+
+/**
+ * Toggle para habilitar/deshabilitar tiempo real
+ */
+function toggleRealTime() {
+  realTimeEnabled.value = !realTimeEnabled.value
+  
+  if (realTimeEnabled.value) {
+    toast.success('⚡ Actualizaciones en tiempo real activadas')
+  } else {
+    toast.info('⏸️ Actualizaciones en tiempo real pausadas')
+    pendingOrderUpdates.value.clear()
+    orderUpdateQueue.value = []
+  }
+}
+
+/**
+ * Obtener estadísticas de tiempo real
+ */
+const realTimeStats = computed(() => ({
+  enabled: realTimeEnabled.value,
+  lastUpdate: lastOrderUpdate.value,
+  pendingUpdates: pendingOrderUpdates.value.size,
+  recentNotifications: orderUpdateQueue.value.length,
+  connectionTime: lastUpdate.value
+}))
 // ==================== LIFECYCLE ====================
 
 onMounted(async () => {
   try {
+    // Carga inicial existente
     await Promise.all([
       fetchOrders(),
       fetchChannels()
     ])
     lastUpdate.value = Date.now()
+    
+    // ⚡ NUEVO: Setup real-time updates
+    console.log('🔗 [Orders] Configurando actualizaciones en tiempo real para empresa:', auth.user?.company_id)
+    
+    // Escuchar actualizaciones de órdenes via WebSocket
+    window.addEventListener('orderUpdated', handleOrderUpdate)
+    
+    // Procesar actualizaciones pendientes cada 20 segundos
+    setInterval(() => {
+      if (realTimeEnabled.value) {
+        processPendingUpdates()
+      }
+    }, 20000)
+    
+    // Limpiar cola de notificaciones cada minuto
+    setInterval(() => {
+      cleanupNotificationQueue()
+    }, 60000)
+    
+    console.log('✅ [Orders] Sistema de tiempo real configurado')
+    
   } catch (error) {
     console.error('Error al inicializar Orders:', error)
     toast.error('Error al cargar la página')
   }
 })
-
 onBeforeUnmount(() => {
+  // Cleanup existente
   if (autoRefreshEnabled.value) {
     stopAutoRefresh()
   }
+  
+  // ⚡ NUEVO: Cleanup real-time listeners
+  console.log('🧹 [Orders] Limpiando listeners de tiempo real')
+  window.removeEventListener('orderUpdated', handleOrderUpdate)
+  
+  // Limpiar estado
+  pendingOrderUpdates.value.clear()
+  orderUpdateQueue.value = []
 })
 </script>
 
@@ -703,6 +997,307 @@ onBeforeUnmount(() => {
   .orders-page {
     background: white;
     padding: 0;
+  }
+}
+/* ⚡ TIEMPO REAL: Indicadores visuales de actualización */
+.order-updated {
+  animation: orderUpdateGlow 4s ease-out;
+  position: relative;
+  z-index: 1;
+}
+
+.order-updated.update-driver_assigned {
+  border-left: 4px solid #3b82f6 !important;
+  background: linear-gradient(90deg, #dbeafe, transparent) !important;
+}
+
+.order-updated.update-picked_up {
+  border-left: 4px solid #8b5cf6 !important;
+  background: linear-gradient(90deg, #e9d5ff, transparent) !important;
+}
+
+.order-updated.update-delivered {
+  border-left: 4px solid #10b981 !important;
+  background: linear-gradient(90deg, #d1fae5, transparent) !important;
+}
+
+.order-updated.update-proof_uploaded {
+  border-left: 4px solid #f59e0b !important;
+  background: linear-gradient(90deg, #fef3c7, transparent) !important;
+}
+
+@keyframes orderUpdateGlow {
+  0% {
+    transform: scale(1.02);
+    box-shadow: 0 4px 20px rgba(59, 130, 246, 0.3);
+  }
+  25% {
+    background-opacity: 0.8;
+  }
+  50% {
+    transform: scale(1.01);
+  }
+  75% {
+    background-opacity: 0.4;
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: none;
+    background-opacity: 0;
+  }
+}
+
+/* Indicador de tiempo real en el header */
+.real-time-status {
+  position: fixed;
+  top: 80px;
+  right: 20px;
+  background: linear-gradient(135deg, #10b981, #059669);
+  color: white;
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+  cursor: pointer;
+  transition: all 0.3s ease;
+  user-select: none;
+}
+
+.real-time-status:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(16, 185, 129, 0.5);
+}
+
+.real-time-status.disabled {
+  background: linear-gradient(135deg, #6b7280, #4b5563);
+  box-shadow: 0 4px 12px rgba(107, 114, 128, 0.4);
+}
+
+.real-time-status.disabled:hover {
+  box-shadow: 0 6px 16px rgba(107, 114, 128, 0.5);
+}
+
+.pulse-indicator {
+  width: 8px;
+  height: 8px;
+  background: white;
+  border-radius: 50%;
+  animation: realtimePulse 2s infinite;
+}
+
+.real-time-status.disabled .pulse-indicator {
+  animation: none;
+  opacity: 0.6;
+}
+
+@keyframes realtimePulse {
+  0%, 100% { 
+    opacity: 1; 
+    transform: scale(1); 
+  }
+  50% { 
+    opacity: 0.4; 
+    transform: scale(1.2); 
+  }
+}
+
+.real-time-stats {
+  font-size: 10px;
+  opacity: 0.9;
+  margin-left: 4px;
+}
+
+/* Notificaciones flotantes de actualización */
+.order-notification {
+  position: fixed;
+  top: 120px;
+  right: 20px;
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 12px 16px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  z-index: 1001;
+  max-width: 300px;
+  animation: slideInFromRight 0.4s ease-out;
+}
+
+.order-notification.driver-assigned {
+  border-left: 4px solid #3b82f6;
+}
+
+.order-notification.picked-up {
+  border-left: 4px solid #8b5cf6;
+}
+
+.order-notification.delivered {
+  border-left: 4px solid #10b981;
+}
+
+.order-notification.proof-uploaded {
+  border-left: 4px solid #f59e0b;
+}
+
+@keyframes slideInFromRight {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.notification-content {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.notification-icon {
+  font-size: 20px;
+  flex-shrink: 0;
+}
+
+.notification-text {
+  flex: 1;
+}
+
+.notification-title {
+  font-weight: 600;
+  color: #1f2937;
+  font-size: 14px;
+  margin-bottom: 2px;
+}
+
+.notification-message {
+  color: #6b7280;
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+.notification-time {
+  color: #9ca3af;
+  font-size: 10px;
+  margin-top: 4px;
+}
+
+/* Mejoras para modales cuando se actualizan */
+.modal-updating {
+  position: relative;
+}
+
+.modal-updating::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, #3b82f6, #8b5cf6, #10b981);
+  background-size: 200% 100%;
+  animation: modalUpdateProgress 2s ease-in-out;
+  z-index: 1;
+}
+
+@keyframes modalUpdateProgress {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* Estados de carga mejorados */
+.updating-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px;
+  background: #f3f4f6;
+  border-radius: 16px;
+  font-size: 12px;
+  color: #6b7280;
+  font-weight: 500;
+}
+
+.updating-spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid #e5e7eb;
+  border-top: 2px solid #3b82f6;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+/* Responsive design para indicadores */
+@media (max-width: 768px) {
+  .real-time-status {
+    top: 60px;
+    right: 12px;
+    padding: 6px 12px;
+    font-size: 11px;
+  }
+  
+  .order-notification {
+    top: 100px;
+    right: 12px;
+    max-width: 280px;
+    padding: 10px 12px;
+  }
+  
+  .notification-title {
+    font-size: 13px;
+  }
+  
+  .notification-message {
+    font-size: 11px;
+  }
+}
+
+@media (max-width: 480px) {
+  .real-time-status {
+    position: relative;
+    top: auto;
+    right: auto;
+    margin: 8px 0;
+    align-self: flex-start;
+  }
+  
+  .order-notification {
+    top: 80px;
+    right: 8px;
+    left: 8px;
+    max-width: none;
+  }
+}
+
+/* Accesibilidad */
+.real-time-status:focus-visible {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+}
+
+.order-updated:focus-within {
+  outline: 2px solid #3b82f6;
+  outline-offset: -2px;
+}
+
+/* Modo de contraste alto */
+@media (prefers-contrast: high) {
+  .order-updated {
+    border-width: 3px !important;
+  }
+  
+  .real-time-status {
+    border: 2px solid white;
   }
 }
 </style>
