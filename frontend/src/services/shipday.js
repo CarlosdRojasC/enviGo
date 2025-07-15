@@ -77,8 +77,31 @@ export const shipdayService = {
   /**
    * Asignar orden a conductor
    */
-  assignOrder: (orderId, driverId) => {
-    return api.put(`/shipday/orders/${orderId}/assign`, { driver_id: driverId })
+  async assignOrder(orderId, driverId) {
+    try {
+      console.log(`🔗 Asignando orden: ${orderId} al conductor ID: ${driverId} usando el método recomendado...`);
+
+      const headers = this.getHeaders();
+      
+      // Preparamos el payload con el ID del conductor
+      const payload = {
+        carrierId: parseInt(driverId, 10) // Shipday espera que el carrierId sea un número
+      };
+
+      // --- CAMBIO CLAVE: Usamos el endpoint recomendado por tu log de investigación ---
+      const response = await axios.put(
+        `${BASE_URL}/orders/${orderId}/assign`,
+        payload, // Se envía el payload con el carrierId
+        { headers }
+      );
+      
+      console.log('✅ Orden asignada exitosamente con el método recomendado.');
+      return response.data; // Esta respuesta debería contener el trackingLink
+
+    } catch (error) {
+      console.error('❌ Error asignando orden con el método recomendado:', error.message);
+      throw this.handleError(error);
+    }
   },
 
   /**

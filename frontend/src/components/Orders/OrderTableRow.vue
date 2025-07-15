@@ -123,21 +123,6 @@
           </div>
         </div>
         
-        <!-- Priority 2: Live Tracking (shipped status) -->
-        <div v-else-if="order.status === 'shipped' && hasLiveTracking" class="tracking-action live">
-          <button 
-            @click.stop="$emit('track-live')" 
-            class="tracking-btn live-btn"
-            title="Seguimiento en vivo"
-          >
-            <span class="btn-icon live-pulse">📍</span>
-            <span class="btn-text">En Vivo</span>
-          </button>
-          <div class="live-indicator">
-            <span class="live-dot"></span>
-            <span class="live-text">Rastreando</span>
-          </div>
-        </div>
         
         <!-- Priority 3: General Tracking -->
         <div v-else-if="hasGeneralTracking" class="tracking-action general">

@@ -228,27 +228,19 @@ router.post('/bulk-assign-driver', authenticateToken, isAdmin, async (req, res) 
       return res.status(400).json({ error: 'Se requiere el ID del conductor.' });
     }
 
-    console.log(`🚀 Iniciando asignación masiva: ${orderIds.length} pedidos al conductor ${driverId}`);
+    console.log(`🚀 INICIO: Asignación masiva de ${orderIds.length} pedidos al conductor ${driverId}`);
     
     const results = { successful: [], failed: [] };
+    const ordersToProcess = await Order.find({ _id: { $in: orderIds } });
+    const ordersThatFailedCreation = new Set();
 
-    // --- Lógica de creación de órdenes ---
-    const orders = await Order.find({ _id: { $in: orderIds } }).populate('company_id');
-    const ordersInShipday = [];
-    const ordersNeedingCreation = [];
-
-    for (const order of orders) {
-      if (order.shipday_order_id) {
-        ordersInShipday.push(order);
-      } else {
-        ordersNeedingCreation.push(order);
-      }
-    }
-
-    console.log(`🏗️ Creando ${ordersNeedingCreation.length} órdenes nuevas en Shipday...`);
-    for (const order of ordersNeedingCreation) {
-      try {
-        const orderDataForShipday = {
+    // --- FASE 1: Crear en Shipday todas las órdenes que no existan ---
+    console.log('--- FASE 1: Creando órdenes en Shipday ---');
+    for (const order of ordersToProcess) {
+      if (!order.shipday_order_id) {
+        try {
+          console.log(`📦 Creando orden #${order.order_number} en Shipday...`);
+          const orderDataForShipday = {
             orderNumber: order.order_number,
             customerName: order.customer_name,
             customerAddress: order.shipping_address,
@@ -260,62 +252,61 @@ router.post('/bulk-assign-driver', authenticateToken, isAdmin, async (req, res) 
             total: parseFloat(order.total_amount) || parseFloat(order.shipping_cost) || 1,
             customerEmail: order.customer_email || '',
             payment_method: '',
-        };
-        const createdShipdayOrder = await ShipdayService.createOrder(orderDataForShipday);
-        order.shipday_order_id = createdShipdayOrder.orderId;
-        await order.save();
-        ordersInShipday.push(order); // Añadir a la lista para ser asignada
-      } catch (creationError) {
-        results.failed.push({ orderId: order._id, orderNumber: order.order_number, error: `Error creando en Shipday: ${creationError.message}` });
+          };
+          const createdShipdayOrder = await ShipdayService.createOrder(orderDataForShipday);
+          order.shipday_order_id = createdShipdayOrder.orderId;
+          await order.save();
+        } catch (creationError) {
+          console.error(`❌ Error creando #${order.order_number} en Shipday:`, creationError.message);
+          results.failed.push({ orderId: order._id, orderNumber: order.order_number, error: `Error al crear en Shipday: ${creationError.message}` });
+          ordersThatFailedCreation.add(order._id.toString());
+        }
       }
     }
 
-    // --- LÓGICA DE ASIGNACIÓN CORREGIDA ---
-    console.log(`🎯 Asignando conductor a ${ordersInShipday.length} órdenes...`);
-    
-    const drivers = await ShipdayService.getDrivers();
-    const driver = drivers.find(d => d.id == driverId);
-    if (!driver) {
-      return res.status(404).json({ error: `Conductor con ID ${driverId} no encontrado en Shipday.` });
-    }
+    const validOrdersForAssignment = ordersToProcess.filter(
+      order => !ordersThatFailedCreation.has(order._id.toString())
+    );
 
-    // Bucle para asignar cada orden individualmente
-    for (const order of ordersInShipday) {
+    // --- FASE 2: Asignar el conductor a todas las órdenes válidas ---
+    console.log(`--- FASE 2: Asignando conductor a ${validOrdersForAssignment.length} órdenes ---`);
+    for (const order of validOrdersForAssignment) {
       try {
-        // ----- INICIO DE LA CORRECCIÓN -----
-        
-        // 1. Se llama a la función assignOrder y se captura el resultado
-        const assignmentResult = await ShipdayService.assignOrder(order.shipday_order_id, driverId);
-        
-        // 2. Se extrae la URL de seguimiento del resultado
-        const trackingUrl = assignmentResult?.trackingUrl || null;
-        
-        // 3. Se actualiza el estado local, incluyendo la nueva URL de seguimiento
-        order.shipday_driver_id = driverId;
-        order.status = 'shipped'; // O el estado que corresponda
-        order.shipday_tracking_url = trackingUrl; // <-- ¡AQUÍ ESTÁ EL CAMBIO!
-
-        order.driver_info = {
-          name: driver.name,
-          phone: driver.phone || '',
-          email: driver.email || '',
-          status: driver.isOnShift ? 'ONLINE' : 'OFFLINE'
-        };
-        
-        // 4. Se guardan todos los cambios en la base de datos
-        await order.save();
-        console.log(`👤 Info del conductor ${driver.name} y tracking URL guardada para orden ${order.order_number}`);
-
-        // ----- FIN DE LA CORRECCIÓN -----
-
-        results.successful.push({ orderId: order._id, orderNumber: order.order_number });
-
+        await ShipdayService.assignOrder(order.shipday_order_id, driverId);
       } catch (assignError) {
-        results.failed.push({ orderId: order._id, orderNumber: order.order_number, error: `Error asignando: ${assignError.message}` });
+        console.error(`❌ Error asignando #${order.order_number}:`, assignError.message);
+        results.failed.push({ orderId: order._id, orderNumber: order.order_number, error: `Error en la asignación: ${assignError.message}` });
       }
     }
+    
+    // --- FASE 3: Consultar TODAS las órdenes de Shipday para obtener los datos actualizados ---
+    console.log('--- FASE 3: Obteniendo datos actualizados de Shipday ---');
+    await new Promise(resolve => setTimeout(resolve, 2000)); // Delay para dar tiempo a la API
+    const allShipdayOrders = await ShipdayService.getOrders();
+    const shipdayOrdersMap = new Map(allShipdayOrders.map(o => [o.orderId.toString(), o]));
+    const driverInfo = (await ShipdayService.getDrivers()).find(d => d.id == driverId);
 
-    // --- Respuesta final ---
+    // --- FASE 4: Actualizar la base de datos local con la información correcta ---
+    console.log('--- FASE 4: Actualizando base de datos local ---');
+    for (const order of validOrdersForAssignment) {
+      if (results.failed.some(f => f.orderId.equals(order._id))) continue;
+
+      const updatedShipdayOrder = shipdayOrdersMap.get(order.shipday_order_id);
+      const trackingUrl = updatedShipdayOrder?.trackingLink || '';
+
+      order.shipday_driver_id = driverId;
+      order.status = 'shipped';
+      order.shipday_tracking_url = trackingUrl;
+      if (driverInfo) {
+        order.driver_info = { name: driverInfo.name, phone: driverInfo.phone, email: driverInfo.email, status: driverInfo.isOnShift ? 'ONLINE' : 'OFFLINE' };
+      }
+      await order.save();
+      
+      results.successful.push({ orderId: order._id, orderNumber: order.order_number });
+      console.log(`✅ Orden #${order.order_number} actualizada con Tracking URL: "${trackingUrl}"`);
+    }
+
+    console.log(`🏁 FIN: Proceso completado.`);
     res.status(200).json({
       message: `Asignación masiva completada: ${results.successful.length} exitosas, ${results.failed.length} fallidas.`,
       summary: { total: orderIds.length, successful: results.successful.length, failed: results.failed.length },
@@ -671,9 +662,10 @@ router.get('/:orderId/tracking', authenticateToken, async (req, res) => {
     }
 
     // Verificar permisos (admin o dueño del pedido)
-    if (req.user.role !== 'admin' && req.user.company_id._id.toString() !== req.user.company_id.toString()) {
-      console.log(`🚫 Sin permisos para ver orden: ${orderId}`);
-      return res.status(403).json({ error: 'Sin permisos para ver este pedido' });
+        // Verificar permisos (admin o dueño del pedido)
+    if (req.user.role !== 'admin' && (!req.user.company_id || req.user.company_id.toString() !== order.company_id._id.toString())) {
+      console.log(`🚫 Permiso denegado para ver la orden: ${orderId}`);
+      return res.status(403).json({ error: 'No tienes permisos para ver este pedido' });
     }
 
     console.log(`✅ Generando tracking info para orden: #${order.order_number}`);

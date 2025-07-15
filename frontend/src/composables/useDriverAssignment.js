@@ -285,43 +285,50 @@ async function processBulkResults(apiResponse, orderObjects) {
   /**
    * Perform individual assignments as fallback
    */
-  async function performIndividualAssignments() {
-    for (let i = 0; i < selectedOrders.value.length; i++) {
-      const orderId = selectedOrders.value[i]
+async function performIndividualAssignments() {
+  for (let i = 0; i < selectedOrders.value.length; i++) {
+    // Extraemos el objeto de la orden de la lista de selección
+    const orderObject = selectedOrders.value[i]; 
+    
+    // --- INICIO DE LA CORRECCIÓN ---
+    // Nos aseguramos de usar solo el ID para la llamada a la API y la lógica
+    const orderId = orderObject._id; 
+    const orderNumber = orderObject.order_number || `Order-${orderId.slice(-6)}`;
+    // --- FIN DE LA CORRECCIÓN ---
+
+    console.log(`📦 Procesando orden ${i + 1}/${selectedOrders.value.length}: ${orderNumber} (ID: ${orderId})`);
+    
+    try {
+      // Ahora pasamos el ID correcto (string) a la API
+      await apiService.orders.assignDriver(orderId, bulkSelectedDriverId.value);
       
-      console.log(`📦 Processing order ${i + 1}/${selectedOrders.value.length}: ${orderId}`)
+      bulkAssignmentResults.value.push({
+        orderId: orderId,
+        orderNumber: orderNumber,
+        success: true,
+        message: 'Asignado exitosamente'
+      });
       
-      try {
-        await apiService.orders.assignDriver(orderId, bulkSelectedDriverId.value)
-        
-        bulkAssignmentResults.value.push({
-          orderId,
-          orderNumber: `Order-${orderId.slice(-6)}`,
-          success: true,
-          message: 'Asignado exitosamente'
-        })
-        
-        console.log(`✅ Order ${orderId} assigned successfully`)
-        
-      } catch (error) {
-        console.error(`❌ Error assigning order ${orderId}:`, error)
-        
-        bulkAssignmentResults.value.push({
-          orderId,
-          orderNumber: `Order-${orderId.slice(-6)}`,
-          success: false,
-          message: error.response?.data?.error || error.message || 'Error desconocido'
-        })
-      }
+      console.log(`✅ Orden ${orderNumber} asignada exitosamente`);
       
-      bulkAssignmentCompleted.value = i + 1
+    } catch (error) {
+      console.error(`❌ Error asignando orden ${orderNumber}:`, error);
       
-      // Small delay between requests
-      if (i < selectedOrders.value.length - 1) {
-        await new Promise(resolve => setTimeout(resolve, 300))
-      }
+      bulkAssignmentResults.value.push({
+        orderId: orderId,
+        orderNumber: orderNumber,
+        success: false,
+        message: error.response?.data?.error || error.message || 'Error desconocido'
+      });
+    }
+    
+    bulkAssignmentCompleted.value = i + 1;
+    
+    if (i < selectedOrders.value.length - 1) {
+      await new Promise(resolve => setTimeout(resolve, 300));
     }
   }
+}
 
   /**
    * Close bulk assignment modal

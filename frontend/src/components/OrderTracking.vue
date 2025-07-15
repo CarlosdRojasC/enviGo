@@ -38,14 +38,6 @@
           </div>
           <p>Rastrea tu pedido en tiempo real con nuestra tecnología GPS</p>
           
-          <!-- 🔍 DEBUG INFO (quitar después de probar) -->
-          <div v-if="showDebugInfo" class="debug-info">
-            <strong>Debug URLs:</strong><br>
-            tracking_url: {{ tracking.tracking_url }}<br>
-            shipday_tracking_url: {{ tracking.shipday_tracking_url }}<br>
-            URL utilizada: {{ getTrackingUrl }}
-          </div>
-          
           <a 
             :href="getTrackingUrl" 
             target="_blank" 
