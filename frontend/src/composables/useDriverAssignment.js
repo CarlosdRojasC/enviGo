@@ -1,8 +1,8 @@
-// frontend/src/composables/useDriverAssignment.js - Con Rate Limiting Mejorado
+// frontend/src/composables/useDriverAssignment.js - CORRECCIÓN COMPLETA
 
 import { ref, computed, watch } from 'vue'
 import { useToast } from 'vue-toastification'
-import { apiService } from '../services/api'
+import { apiService } from '../services/api'  // SOLO ESTA IMPORTACIÓN
 
 const toast = useToast()
 
@@ -61,42 +61,87 @@ export function useDriverAssignment(selectedOrders, fetchOrders) {
     return Math.round((now - bulkAssignmentStartTime.value) / 1000)
   })
 
-  // ==================== WATCHERS ====================
-  
-  // Calcular tiempo estimado restante
-  watch([bulkAssignmentCompleted, isBulkAssigning], ([completed, isAssigning]) => {
-    if (!isAssigning || completed === 0) {
-      estimatedTimeRemaining.value = 0
-      return
-    }
-    
-    const elapsed = Date.now() - bulkAssignmentStartTime.value
-    const avgTimePerOrder = elapsed / completed
-    const remaining = selectedOrders.value.length - completed
-    estimatedTimeRemaining.value = Math.round((avgTimePerOrder * remaining) / 1000)
-  })
-
   // ==================== MÉTODOS DE CONDUCTORES ====================
   
   /**
-   * Obtener lista de conductores disponibles
+   * Obtener lista de conductores disponibles - CORREGIDO
    */
   async function fetchDrivers() {
     if (loadingDrivers.value) return
     
     loadingDrivers.value = true
     try {
-      console.log('👥 Obteniendo lista de conductores...')
-      const { data } = await apiService.shipday.getDrivers()
+      console.log('👥 Obteniendo lista de conductores desde Shipday...')
+      
+      // USAR apiService.shipday en lugar de shipdayService
+      const response = await apiService.shipday.getDrivers()
+      
+      console.log('📋 Respuesta completa de API:', response)
+      
+      // MANEJO MEJORADO DE DIFERENTES FORMATOS DE RESPUESTA
+      let driversData = []
+      
+      if (response.data) {
+        if (response.data.data && Array.isArray(response.data.data)) {
+          // Formato: { data: { data: [...] } }
+          driversData = response.data.data
+        } else if (Array.isArray(response.data)) {
+          // Formato: { data: [...] }
+          driversData = response.data
+        } else if (response.data.success && Array.isArray(response.data.data)) {
+          // Formato: { success: true, data: [...] }
+          driversData = response.data.data
+        } else {
+          console.warn('⚠️ Formato de respuesta inesperado:', response.data)
+          driversData = []
+        }
+      } else {
+        console.warn('⚠️ No se encontró data en la respuesta:', response)
+        driversData = []
+      }
+      
+      console.log('📊 Datos de conductores extraídos:', {
+        type: typeof driversData,
+        isArray: Array.isArray(driversData),
+        length: driversData?.length || 0,
+        firstItem: driversData?.[0] || null
+      })
+      
+      // VALIDAR QUE SEA UN ARRAY ANTES DE FILTRAR
+      if (!Array.isArray(driversData)) {
+        console.error('❌ Los datos de conductores no son un array:', driversData)
+        throw new Error('Formato de datos de conductores inválido')
+      }
       
       // Filtrar solo conductores activos
-      drivers.value = data.filter(driver => driver.isActive)
+      const activeDrivers = driversData.filter(driver => {
+        return driver && typeof driver === 'object' && driver.isActive === true
+      })
       
-      console.log(`✅ ${drivers.value.length} conductores activos encontrados`)
+      drivers.value = activeDrivers
+      
+      console.log(`✅ ${activeDrivers.length} conductores activos de ${driversData.length} total`)
+      console.log('🚚 Conductores disponibles:', activeDrivers.map(d => ({
+        id: d.id,
+        name: d.name,
+        email: d.email,
+        isActive: d.isActive
+      })))
       
     } catch (error) {
       console.error('❌ Error obteniendo conductores:', error)
-      toast.error('Error al cargar conductores')
+      
+      // Mensaje específico según el tipo de error
+      let errorMessage = 'Error al cargar conductores'
+      if (error.response?.status === 404) {
+        errorMessage = 'Servicio de conductores no encontrado'
+      } else if (error.response?.status === 401) {
+        errorMessage = 'No autorizado para obtener conductores'
+      } else if (error.message?.includes('Cannot read properties')) {
+        errorMessage = 'Error de formato en los datos de conductores'
+      }
+      
+      toast.error(errorMessage)
       drivers.value = []
     } finally {
       loadingDrivers.value = false
