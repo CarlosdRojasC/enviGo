@@ -1,139 +1,128 @@
-// composables/useDriverAssignment.js
-import { ref, computed } from 'vue'
+// frontend/src/composables/useDriverAssignment.js - Con Rate Limiting Mejorado
+
+import { ref, computed, watch } from 'vue'
 import { useToast } from 'vue-toastification'
 import { apiService } from '../services/api'
-import { shipdayService } from '../services/shipday'
+
+const toast = useToast()
 
 export function useDriverAssignment(selectedOrders, fetchOrders) {
-  const toast = useToast()
-
-  // ==================== STATE ====================
+  // ==================== ESTADO REACTIVO ====================
   
-  // Driver data
-  const availableDrivers = ref([])
-  const loadingDrivers = ref(false)
-  
-  // Individual assignment
+  // Estados de asignación individual
   const selectedDriverId = ref('')
   const isAssigning = ref(false)
   
-  // Bulk assignment
+  // Estados de asignación masiva
+  const showBulkAssignModal = ref(false)
   const bulkSelectedDriverId = ref('')
   const isBulkAssigning = ref(false)
   const bulkAssignmentCompleted = ref(0)
   const bulkAssignmentResults = ref([])
   const bulkAssignmentFinished = ref(false)
-
-  // ==================== COMPUTED ====================
+  const bulkAssignmentStartTime = ref(null)
   
-  /**
-   * Progress percentage for bulk assignment
-   */
-  const bulkProgressPercentage = computed(() => {
+  // Datos de conductores
+  const drivers = ref([])
+  const loadingDrivers = ref(false)
+  
+  // Rate limiting y progreso
+  const rateLimitInfo = ref({})
+  const currentBatch = ref(0)
+  const totalBatches = ref(0)
+  const estimatedTimeRemaining = ref(0)
+
+  // ==================== COMPUTED PROPERTIES ====================
+  
+  const selectedDriver = computed(() => 
+    drivers.value.find(d => d.id == selectedDriverId.value)
+  )
+  
+  const bulkSelectedDriver = computed(() => 
+    drivers.value.find(d => d.id == bulkSelectedDriverId.value)
+  )
+  
+  const bulkAssignmentProgress = computed(() => {
     if (selectedOrders.value.length === 0) return 0
-    return (bulkAssignmentCompleted.value / selectedOrders.value.length) * 100
+    return Math.round((bulkAssignmentCompleted.value / selectedOrders.value.length) * 100)
   })
-
-  /**
-   * Selected driver object for individual assignment
-   */
-  const selectedDriver = computed(() => {
-    if (!selectedDriverId.value) return null
-    return availableDrivers.value.find(driver => driver.id == selectedDriverId.value)
-  })
-
-  /**
-   * Selected driver object for bulk assignment
-   */
-  const bulkSelectedDriver = computed(() => {
-    if (!bulkSelectedDriverId.value) return null
-    return availableDrivers.value.find(driver => driver.id == bulkSelectedDriverId.value)
-  })
-
-  /**
-   * Assignment results summary
-   */
-  const assignmentSummary = computed(() => {
+  
+  const bulkAssignmentSuccessRate = computed(() => {
+    if (bulkAssignmentResults.value.length === 0) return 0
     const successful = bulkAssignmentResults.value.filter(r => r.success).length
-    const failed = bulkAssignmentResults.value.filter(r => !r.success).length
-    
-    return {
-      total: bulkAssignmentResults.value.length,
-      successful,
-      failed,
-      successRate: bulkAssignmentResults.value.length > 0 
-        ? Math.round((successful / bulkAssignmentResults.value.length) * 100) 
-        : 0
+    return Math.round((successful / bulkAssignmentResults.value.length) * 100)
+  })
+
+  const bulkAssignmentDuration = computed(() => {
+    if (!bulkAssignmentStartTime.value) return 0
+    const now = bulkAssignmentFinished.value ? 
+      new Date(bulkAssignmentResults.value[bulkAssignmentResults.value.length - 1]?.timestamp || Date.now()) : 
+      Date.now()
+    return Math.round((now - bulkAssignmentStartTime.value) / 1000)
+  })
+
+  // ==================== WATCHERS ====================
+  
+  // Calcular tiempo estimado restante
+  watch([bulkAssignmentCompleted, isBulkAssigning], ([completed, isAssigning]) => {
+    if (!isAssigning || completed === 0) {
+      estimatedTimeRemaining.value = 0
+      return
     }
+    
+    const elapsed = Date.now() - bulkAssignmentStartTime.value
+    const avgTimePerOrder = elapsed / completed
+    const remaining = selectedOrders.value.length - completed
+    estimatedTimeRemaining.value = Math.round((avgTimePerOrder * remaining) / 1000)
   })
 
-  /**
-   * Active drivers only
-   */
-  const activeDrivers = computed(() => {
-    return availableDrivers.value.filter(driver => driver.isActive)
-  })
-
-  // ==================== METHODS ====================
+  // ==================== MÉTODOS DE CONDUCTORES ====================
   
   /**
-   * Fetch available drivers from Shipday
+   * Obtener lista de conductores disponibles
    */
-  async function fetchAvailableDrivers() {
-    loadingDrivers.value = true
+  async function fetchDrivers() {
+    if (loadingDrivers.value) return
     
+    loadingDrivers.value = true
     try {
-      console.log('👥 Fetching available drivers from Shipday...')
+      console.log('👥 Obteniendo lista de conductores...')
+      const { data } = await apiService.shipday.getDrivers()
       
-      const response = await shipdayService.getDrivers()
-      console.log('📋 Drivers API response:', response)
+      // Filtrar solo conductores activos
+      drivers.value = data.filter(driver => driver.isActive)
       
-      // Handle different response formats
-      let drivers = []
-      if (response.data?.data) {
-        drivers = response.data.data
-      } else if (response.data && Array.isArray(response.data)) {
-        drivers = response.data
-      } else {
-        drivers = []
-      }
-      
-      // Filter active drivers
-      availableDrivers.value = drivers.filter(driver => driver.isActive)
-      
-      console.log('✅ Available drivers loaded:', {
-        total: drivers.length,
-        active: availableDrivers.value.length,
-        drivers: availableDrivers.value.map(d => ({ id: d.id, name: d.name, email: d.email }))
-      })
+      console.log(`✅ ${drivers.value.length} conductores activos encontrados`)
       
     } catch (error) {
-      console.error('❌ Error fetching drivers:', error)
-      toast.error('Error al cargar conductores desde Shipday')
-      availableDrivers.value = []
+      console.error('❌ Error obteniendo conductores:', error)
+      toast.error('Error al cargar conductores')
+      drivers.value = []
     } finally {
       loadingDrivers.value = false
     }
   }
 
+  // ==================== ASIGNACIÓN INDIVIDUAL ====================
+  
   /**
-   * Confirm individual driver assignment
+   * Asignar conductor a una sola orden
    */
-  async function confirmAssignment(orderId) {
+  async function assignDriver(orderId) {
     if (!selectedDriverId.value) {
-      toast.warning('Por favor, selecciona un conductor')
+      toast.error('Por favor, selecciona un conductor')
       return false
     }
     
-    if (!orderId) {
-      toast.error('ID de pedido no válido')
+    if (isAssigning.value) {
+      console.log('⚠️ Ya hay una asignación en progreso')
       return false
     }
     
     isAssigning.value = true
     
     try {
-      console.log('🚚 Assigning driver to order:', {
+      console.log('🔄 Asignando conductor individual:', {
         orderId,
         driverId: selectedDriverId.value,
         driverName: selectedDriver.value?.name
@@ -161,9 +150,34 @@ export function useDriverAssignment(selectedOrders, fetchOrders) {
     }
   }
 
+  // ==================== ASIGNACIÓN MASIVA ====================
+  
+  /**
+   * Abrir modal de asignación masiva
+   */
+  function openBulkAssignModal() {
+    if (selectedOrders.value.length === 0) {
+      toast.error('No hay pedidos seleccionados')
+      return
+    }
+    
+    console.log(`📦 Abriendo modal de asignación masiva para ${selectedOrders.value.length} pedidos`)
+    
+    // Reset states
+    bulkSelectedDriverId.value = ''
+    bulkAssignmentResults.value = []
+    bulkAssignmentCompleted.value = 0
+    bulkAssignmentFinished.value = false
+    rateLimitInfo.value = {}
+    currentBatch.value = 0
+    totalBatches.value = 0
+    estimatedTimeRemaining.value = 0
+    
+    showBulkAssignModal.value = true
+  }
 
   /**
-   * Confirm bulk driver assignment
+   * Confirmar asignación masiva
    */
   async function confirmBulkAssignment() {
     if (!bulkSelectedDriverId.value) {
@@ -181,7 +195,7 @@ export function useDriverAssignment(selectedOrders, fetchOrders) {
     
     // Confirm with user
     const confirmed = confirm(
-      `¿Estás seguro de asignar ${orderCount} pedidos al conductor ${driverName}?`
+      `¿Estás seguro de asignar ${orderCount} pedidos al conductor ${driverName}?\n\nEsto puede tomar varios minutos debido a los límites de la API.`
     )
     
     if (!confirmed) {
@@ -189,9 +203,12 @@ export function useDriverAssignment(selectedOrders, fetchOrders) {
       return false
     }
     
+    // Initialize states
     isBulkAssigning.value = true
     bulkAssignmentCompleted.value = 0
     bulkAssignmentResults.value = []
+    bulkAssignmentFinished.value = false
+    bulkAssignmentStartTime.value = Date.now()
     
     console.log('🚀 Starting bulk assignment:', {
       ordersCount: orderCount,
@@ -200,230 +217,246 @@ export function useDriverAssignment(selectedOrders, fetchOrders) {
     })
     
     try {
-      // Option 1: Try bulk assignment endpoint if available
-      try {
-        const response = await apiService.orders.bulkAssignDriver(
-          selectedOrders.value, 
-          bulkSelectedDriverId.value
-        )
-        
-        console.log('✅ Bulk assignment via endpoint successful:', response.data)
-        
-        // Process results
-        const results = response.data.results || response.data
-        await processBulkResults(response.data, selectedOrders.value)
-        
-      } catch (bulkError) {
-        console.warn('⚠️ Bulk endpoint failed, falling back to individual assignments:', bulkError)
-        
-        // Option 2: Fallback to individual assignments
-        await performIndividualAssignments()
-      }
+      // Intentar asignación masiva mejorada
+      const success = await performBulkAssignmentWithRateLimit()
       
-      // Finish up
-      isBulkAssigning.value = false
-      bulkAssignmentFinished.value = true
-      
-      // Show final results
-      const summary = assignmentSummary.value
-      if (summary.failed === 0) {
-        toast.success(`🎉 Todos los ${summary.successful} pedidos fueron asignados exitosamente`)
+      if (success) {
+        console.log('✅ Bulk assignment completed successfully')
+        toast.success(`✅ Asignación masiva completada: ${bulkAssignmentResults.value.filter(r => r.success).length}/${orderCount} exitosas`)
+        
+        // Refresh orders
+        await fetchOrders()
       } else {
-        toast.warning(`⚠️ ${summary.successful} pedidos asignados, ${summary.failed} fallaron`)
+        console.log('⚠️ Bulk assignment completed with some errors')
+        toast.warning(`⚠️ Asignación completada con errores. Ver detalles en el modal.`)
       }
-      
-      // Refresh orders
-      await fetchOrders()
-      
-      console.log('🏁 Bulk assignment completed:', summary)
-      return true
       
     } catch (error) {
       console.error('❌ Critical error in bulk assignment:', error)
-      toast.error('Error crítico en asignación masiva')
-      return false
-    }
-  }
-
-  /**
-   * Process bulk assignment results from API
-   */
-async function processBulkResults(apiResponse, orderObjects) {
-  console.log('🔍 Processing bulk API results:', apiResponse)
-  
-  const totalOrders = orderObjects.length
-  
-  // Handle enviGo bulk assignment response format
-  if (apiResponse.summary) {
-    const summary = apiResponse.summary
-    const successCount = summary.success || 0
-    
-    // Si todos fueron exitosos según el summary, marca todos como exitosos
-    // Los errores que aparecen son probablemente de validación UI, no de asignación real
-    for (let i = 0; i < totalOrders; i++) {
-      const orderData = orderObjects[i]
-      const orderId = typeof orderData === 'object' ? orderData._id : orderData
-      const orderNumber = typeof orderData === 'object' ? orderData.order_number : `Order-${orderId.slice(-6)}`
-      
-      bulkAssignmentResults.value.push({
-        orderId,
-        orderNumber,
-        success: true, // Marca como exitoso si el backend dice que fue exitoso
-        message: 'Asignado exitosamente en Shipday'
-      })
-      
-      bulkAssignmentCompleted.value = i + 1
-      await new Promise(resolve => setTimeout(resolve, 50))
+      toast.error(`Error crítico en asignación masiva: ${error.message}`)
+    } finally {
+      bulkAssignmentFinished.value = true
+      isBulkAssigning.value = false
     }
     
     return true
   }
-  
-  return false
-}
 
   /**
-   * Perform individual assignments as fallback
+   * Realizar asignación masiva con rate limiting mejorado
    */
-async function performIndividualAssignments() {
-  for (let i = 0; i < selectedOrders.value.length; i++) {
-    // Extraemos el objeto de la orden de la lista de selección
-    const orderObject = selectedOrders.value[i]; 
-    
-    // --- INICIO DE LA CORRECCIÓN ---
-    // Nos aseguramos de usar solo el ID para la llamada a la API y la lógica
-    const orderId = orderObject._id; 
-    const orderNumber = orderObject.order_number || `Order-${orderId.slice(-6)}`;
-    // --- FIN DE LA CORRECCIÓN ---
-
-    console.log(`📦 Procesando orden ${i + 1}/${selectedOrders.value.length}: ${orderNumber} (ID: ${orderId})`);
-    
+  async function performBulkAssignmentWithRateLimit() {
     try {
-      // Ahora pasamos el ID correcto (string) a la API
-      await apiService.orders.assignDriver(orderId, bulkSelectedDriverId.value);
+      console.log('🔄 Intentando asignación masiva optimizada...')
       
-      bulkAssignmentResults.value.push({
-        orderId: orderId,
-        orderNumber: orderNumber,
-        success: true,
-        message: 'Asignado exitosamente'
-      });
+      // Extraer solo los IDs de las órdenes
+      const orderIds = selectedOrders.value.map(order => order._id)
       
-      console.log(`✅ Orden ${orderNumber} asignada exitosamente`);
+      // Usar el endpoint de bulk assignment mejorado
+      const response = await apiService.orders.bulkAssignDriver(orderIds, bulkSelectedDriverId.value)
+      
+      console.log('✅ Respuesta de bulk assignment:', response.data)
+      
+      // Procesar resultados
+      const { successful, failed, rateLimitInfo: rateInfo } = response.data.results || response.data
+      
+      // Actualizar estados
+      bulkAssignmentResults.value = [
+        ...(successful || []).map(item => ({ ...item, success: true })),
+        ...(failed || []).map(item => ({ ...item, success: false }))
+      ]
+      
+      bulkAssignmentCompleted.value = bulkAssignmentResults.value.length
+      rateLimitInfo.value = rateInfo || {}
+      
+      // Simular progreso gradual para UX
+      if (successful && successful.length > 0) {
+        for (let i = 0; i <= successful.length; i++) {
+          bulkAssignmentCompleted.value = i + (failed?.length || 0)
+          await new Promise(resolve => setTimeout(resolve, 100))
+        }
+      }
+      
+      return (failed?.length || 0) === 0
       
     } catch (error) {
-      console.error(`❌ Error asignando orden ${orderNumber}:`, error);
+      console.error('❌ Error en bulk assignment optimizado:', error)
       
-      bulkAssignmentResults.value.push({
-        orderId: orderId,
-        orderNumber: orderNumber,
-        success: false,
-        message: error.response?.data?.error || error.message || 'Error desconocido'
-      });
-    }
-    
-    bulkAssignmentCompleted.value = i + 1;
-    
-    if (i < selectedOrders.value.length - 1) {
-      await new Promise(resolve => setTimeout(resolve, 300));
-    }
-  }
-}
-
-  /**
-   * Close bulk assignment modal
-   */
-    function closeBulkAssignModal() {
-      if (bulkAssignmentFinished.value) {
-        const successfulOrderIds = bulkAssignmentResults.value
-      .filter(r => r.success)
-      .map(r => r.orderId)
-    
-    // TODO: Fix this selection cleanup for selectedOrderObjects
-    // selectedOrders.value = selectedOrders.value.filter(id => 
-    //   !successfulOrderIds.includes(id)
-    // )
-    
-    console.log('🧹 Skipping selection cleanup for now')
-  }
-  
-  // Reset all bulk assignment state
-  bulkSelectedDriverId.value = ''
-  bulkAssignmentCompleted.value = 0
-  bulkAssignmentResults.value = []
-  bulkAssignmentFinished.value = false
-  isBulkAssigning.value = false
-  
-  console.log('❌ Bulk assignment modal closed and state reset')
-}
-
-  /**
-   * Get driver info for display
-   */
-  function getDriverInfo(driverId) {
-    const driver = availableDrivers.value.find(d => d.id === driverId)
-    if (!driver) return null
-    
-    return {
-      id: driver.id,
-      name: driver.name,
-      email: driver.email,
-      isActive: driver.isActive,
-      isOnShift: driver.isOnShift || false,
-      displayText: `${driver.name} (${driver.email}) - ${driver.isActive ? 'Activo' : 'Inactivo'}`
+      // Fallback a asignación individual si bulk falla
+      if (error.response?.status === 404 || error.response?.status === 501) {
+        console.log('🔄 Fallback a asignación individual...')
+        return await performIndividualAssignments()
+      }
+      
+      throw error
     }
   }
 
   /**
-   * Validate assignment readiness
+   * Realizar asignaciones individuales como fallback
    */
-  function validateAssignmentReadiness() {
-    if (availableDrivers.value.length === 0) {
-      return {
-        ready: false,
-        message: 'No hay conductores disponibles'
+  async function performIndividualAssignments() {
+    console.log('🔄 Ejecutando asignaciones individuales con rate limiting...')
+    
+    const batchSize = 3 // Lotes más pequeños
+    const batchDelay = 15000 // 15 segundos entre lotes
+    const orderDelay = 3000 // 3 segundos entre órdenes individuales
+    
+    totalBatches.value = Math.ceil(selectedOrders.value.length / batchSize)
+    
+    for (let i = 0; i < selectedOrders.value.length; i += batchSize) {
+      const batch = selectedOrders.value.slice(i, i + batchSize)
+      currentBatch.value = Math.floor(i / batchSize) + 1
+      
+      console.log(`📦 Procesando lote ${currentBatch.value}/${totalBatches.value} (${batch.length} órdenes)`)
+      
+      for (let j = 0; j < batch.length; j++) {
+        const orderObject = batch[j]
+        const orderId = orderObject._id
+        const orderNumber = orderObject.order_number || `Order-${orderId.slice(-6)}`
+        
+        console.log(`🔄 [${i + j + 1}/${selectedOrders.value.length}] Procesando orden ${orderNumber}`)
+        
+        try {
+          await apiService.orders.assignDriver(orderId, bulkSelectedDriverId.value)
+          
+          bulkAssignmentResults.value.push({
+            orderId: orderId,
+            orderNumber: orderNumber,
+            success: true,
+            message: 'Asignado exitosamente',
+            timestamp: Date.now()
+          })
+          
+          console.log(`✅ [${i + j + 1}/${selectedOrders.value.length}] Orden ${orderNumber} asignada`)
+          
+        } catch (error) {
+          console.error(`❌ [${i + j + 1}/${selectedOrders.value.length}] Error en orden ${orderNumber}:`, error.message)
+          
+          bulkAssignmentResults.value.push({
+            orderId: orderId,
+            orderNumber: orderNumber,
+            success: false,
+            message: error.response?.data?.error || error.message || 'Error desconocido',
+            timestamp: Date.now()
+          })
+        }
+        
+        // Actualizar progreso
+        bulkAssignmentCompleted.value = i + j + 1
+        
+        // Delay entre órdenes individuales (excepto la última del lote)
+        if (j < batch.length - 1) {
+          console.log(`⏱️ Delay de ${orderDelay/1000}s entre órdenes...`)
+          await new Promise(resolve => setTimeout(resolve, orderDelay))
+        }
+      }
+      
+      // Delay entre lotes (excepto el último)
+      if (i + batchSize < selectedOrders.value.length) {
+        console.log(`⏳ Delay de ${batchDelay/1000}s entre lotes...`)
+        await new Promise(resolve => setTimeout(resolve, batchDelay))
       }
     }
     
-    if (activeDrivers.value.length === 0) {
-      return {
-        ready: false,
-        message: 'No hay conductores activos disponibles'
-      }
+    // Verificar si todas fueron exitosas
+    const successfulCount = bulkAssignmentResults.value.filter(r => r.success).length
+    return successfulCount === selectedOrders.value.length
+  }
+
+  /**
+   * Cerrar modal de asignación masiva
+   */
+  function closeBulkAssignModal() {
+    if (isBulkAssigning.value) {
+      const confirmed = confirm('¿Estás seguro de cancelar la asignación en progreso?')
+      if (!confirmed) return
     }
     
-    return {
-      ready: true,
-      message: `${activeDrivers.value.length} conductores disponibles`
-    }
+    showBulkAssignModal.value = false
+    
+    // Reset states after modal closes
+    setTimeout(() => {
+      bulkSelectedDriverId.value = ''
+      bulkAssignmentResults.value = []
+      bulkAssignmentCompleted.value = 0
+      bulkAssignmentFinished.value = false
+      isBulkAssigning.value = false
+      rateLimitInfo.value = {}
+      currentBatch.value = 0
+      totalBatches.value = 0
+      estimatedTimeRemaining.value = 0
+    }, 300)
   }
+
+  // ==================== UTILIDADES ====================
+  
+  /**
+   * Formatear tiempo en formato legible
+   */
+  function formatTime(seconds) {
+    if (seconds < 60) return `${seconds}s`
+    const minutes = Math.floor(seconds / 60)
+    const remainingSeconds = seconds % 60
+    return `${minutes}m ${remainingSeconds}s`
+  }
+
+  /**
+   * Obtener estadísticas de la asignación
+   */
+  const assignmentStats = computed(() => {
+    const total = bulkAssignmentResults.value.length
+    const successful = bulkAssignmentResults.value.filter(r => r.success).length
+    const failed = total - successful
+    
+    return {
+      total,
+      successful,
+      failed,
+      successRate: total > 0 ? Math.round((successful / total) * 100) : 0,
+      duration: bulkAssignmentDuration.value,
+      estimatedRemaining: estimatedTimeRemaining.value
+    }
+  })
+
+  // ==================== LIFECYCLE ====================
+  
+  // Auto-fetch drivers when composable is used
+  fetchDrivers()
 
   // ==================== RETURN ====================
+  
   return {
-    // State
-    availableDrivers,
-    loadingDrivers,
+    // States
     selectedDriverId,
     isAssigning,
+    showBulkAssignModal,
     bulkSelectedDriverId,
     isBulkAssigning,
     bulkAssignmentCompleted,
     bulkAssignmentResults,
     bulkAssignmentFinished,
+    drivers,
+    loadingDrivers,
+    rateLimitInfo,
+    currentBatch,
+    totalBatches,
+    estimatedTimeRemaining,
     
     // Computed
-    bulkProgressPercentage,
     selectedDriver,
     bulkSelectedDriver,
-    assignmentSummary,
-    activeDrivers,
+    bulkAssignmentProgress,
+    bulkAssignmentSuccessRate,
+    bulkAssignmentDuration,
+    assignmentStats,
     
     // Methods
-    fetchAvailableDrivers,
-    confirmAssignment,
+    fetchDrivers,
+    assignDriver,
+    openBulkAssignModal,
     confirmBulkAssignment,
     closeBulkAssignModal,
-    getDriverInfo,
-    validateAssignmentReadiness
+    formatTime
   }
 }

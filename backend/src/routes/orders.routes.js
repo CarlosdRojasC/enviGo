@@ -220,102 +220,189 @@ router.post('/bulk-assign-driver', authenticateToken, isAdmin, async (req, res) 
   try {
     const { orderIds, driverId } = req.body;
 
-    // --- Validaciones ---
     if (!Array.isArray(orderIds) || orderIds.length === 0) {
       return res.status(400).json({ error: 'Se requiere un array de IDs de órdenes.' });
     }
+
     if (!driverId) {
-      return res.status(400).json({ error: 'Se requiere el ID del conductor.' });
+      return res.status(400).json({ error: 'Se requiere un ID de conductor.' });
     }
 
-    console.log(`🚀 INICIO: Asignación masiva de ${orderIds.length} pedidos al conductor ${driverId}`);
-    
-    const results = { successful: [], failed: [] };
-    const ordersToProcess = await Order.find({ _id: { $in: orderIds } });
-    const ordersThatFailedCreation = new Set();
+    console.log(`🚀 Iniciando asignación masiva MEJORADA: ${orderIds.length} pedidos al conductor ${driverId}`);
 
-    // --- FASE 1: Crear en Shipday todas las órdenes que no existan ---
-    console.log('--- FASE 1: Creando órdenes en Shipday ---');
-    for (const order of ordersToProcess) {
-      if (!order.shipday_order_id) {
+    const results = {
+      successful: [],
+      failed: [],
+      total: orderIds.length,
+      rateLimitInfo: {}
+    };
+
+    // --- FASE 1: Validar conductor ---
+    console.log('--- FASE 1: Validando conductor ---');
+    let driverInfo;
+    try {
+      const drivers = await ShipdayService.getDrivers();
+      driverInfo = drivers.find(d => d.id == driverId);
+      if (!driverInfo) {
+        throw new Error(`Conductor con ID ${driverId} no encontrado`);
+      }
+      console.log(`✅ Conductor validado: ${driverInfo.name} (${driverInfo.email})`);
+    } catch (error) {
+      console.error('❌ Error validando conductor:', error.message);
+      return res.status(400).json({ error: `Error validando conductor: ${error.message}` });
+    }
+
+    // --- FASE 2: Validar órdenes ---
+    console.log('--- FASE 2: Validando órdenes ---');
+    const validOrders = await Order.find({
+      _id: { $in: orderIds },
+      shipday_order_id: { $exists: true, $ne: null }
+    });
+
+    if (validOrders.length === 0) {
+      return res.status(400).json({ error: 'No se encontraron órdenes válidas con shipday_order_id.' });
+    }
+
+    console.log(`✅ ${validOrders.length} órdenes válidas encontradas de ${orderIds.length} solicitadas`);
+
+    // --- FASE 3: Asignación masiva con rate limiting inteligente ---
+    console.log('--- FASE 3: Procesando asignaciones con rate limiting ---');
+    
+    const batchSize = 5; // Procesar en lotes de 5
+    const batchDelay = 10000; // 10 segundos entre lotes
+    
+    for (let i = 0; i < validOrders.length; i += batchSize) {
+      const batch = validOrders.slice(i, i + batchSize);
+      console.log(`📦 Procesando lote ${Math.floor(i/batchSize) + 1}/${Math.ceil(validOrders.length/batchSize)} (${batch.length} órdenes)`);
+      
+      // Procesar órdenes del lote en paralelo (pero limitado)
+      const batchPromises = batch.map(async (order, batchIndex) => {
+        const overallIndex = i + batchIndex;
+        
         try {
-          console.log(`📦 Creando orden #${order.order_number} en Shipday...`);
-          const orderDataForShipday = {
+          console.log(`🔄 [${overallIndex + 1}/${validOrders.length}] Asignando orden ${order.order_number}...`);
+          
+          // Llamada con rate limiting automático
+          await ShipdayService.assignOrder(order.shipday_order_id, driverId);
+          
+          console.log(`✅ [${overallIndex + 1}/${validOrders.length}] Orden ${order.order_number} asignada exitosamente`);
+          
+          return {
+            orderId: order._id,
             orderNumber: order.order_number,
-            customerName: order.customer_name,
-            customerAddress: order.shipping_address,
-            restaurantName: "enviGo",
-            restaurantAddress: "santa hilda 1447, quilicura",
-            customerPhoneNumber: order.customer_phone || '',
-            deliveryInstruction: order.notes || '',
-            deliveryFee: 1800,
-            total: parseFloat(order.total_amount) || parseFloat(order.shipping_cost) || 1,
-            customerEmail: order.customer_email || '',
-            payment_method: '',
+            success: true,
+            message: 'Asignado exitosamente'
           };
-          const createdShipdayOrder = await ShipdayService.createOrder(orderDataForShipday);
-          order.shipday_order_id = createdShipdayOrder.orderId;
+          
+        } catch (error) {
+          console.error(`❌ [${overallIndex + 1}/${validOrders.length}] Error asignando orden ${order.order_number}:`, error.message);
+          
+          return {
+            orderId: order._id,
+            orderNumber: order.order_number,
+            success: false,
+            message: error.message
+          };
+        }
+      });
+      
+      // Esperar que el lote complete
+      const batchResults = await Promise.all(batchPromises);
+      
+      // Procesar resultados del lote
+      batchResults.forEach(result => {
+        if (result.success) {
+          results.successful.push(result);
+        } else {
+          results.failed.push(result);
+        }
+      });
+      
+      // Delay entre lotes (excepto en el último)
+      if (i + batchSize < validOrders.length) {
+        console.log(`⏳ Esperando ${batchDelay/1000}s antes del siguiente lote...`);
+        await new Promise(resolve => setTimeout(resolve, batchDelay));
+      }
+    }
+
+    // --- FASE 4: Actualizar base de datos local ---
+    console.log('--- FASE 4: Actualizando base de datos local ---');
+    
+    // Obtener datos actualizados de Shipday después de un delay
+    await new Promise(resolve => setTimeout(resolve, 5000)); // 5s de delay
+    
+    try {
+      const allShipdayOrders = await ShipdayService.getOrders();
+      const shipdayOrdersMap = new Map(allShipdayOrders.map(o => [o.orderId.toString(), o]));
+      
+      for (const successResult of results.successful) {
+        try {
+          const order = await Order.findById(successResult.orderId);
+          if (!order) continue;
+          
+          const updatedShipdayOrder = shipdayOrdersMap.get(order.shipday_order_id);
+          const trackingUrl = updatedShipdayOrder?.trackingLink || '';
+          
+          // Actualizar orden en base de datos
+          order.shipday_driver_id = driverId;
+          order.status = 'shipped';
+          order.shipday_tracking_url = trackingUrl;
+          order.driver_info = {
+            name: driverInfo.name,
+            phone: driverInfo.phone || '',
+            email: driverInfo.email,
+            status: driverInfo.isOnShift ? 'ONLINE' : 'OFFLINE'
+          };
+          
           await order.save();
-        } catch (creationError) {
-          console.error(`❌ Error creando #${order.order_number} en Shipday:`, creationError.message);
-          results.failed.push({ orderId: order._id, orderNumber: order.order_number, error: `Error al crear en Shipday: ${creationError.message}` });
-          ordersThatFailedCreation.add(order._id.toString());
+          
+          console.log(`📝 Orden ${order.order_number} actualizada en BD local`);
+          
+        } catch (updateError) {
+          console.error(`❌ Error actualizando BD para orden ${successResult.orderNumber}:`, updateError.message);
         }
       }
-    }
-
-    const validOrdersForAssignment = ordersToProcess.filter(
-      order => !ordersThatFailedCreation.has(order._id.toString())
-    );
-
-    // --- FASE 2: Asignar el conductor a todas las órdenes válidas ---
-    console.log(`--- FASE 2: Asignando conductor a ${validOrdersForAssignment.length} órdenes ---`);
-    for (const order of validOrdersForAssignment) {
-      try {
-        await ShipdayService.assignOrder(order.shipday_order_id, driverId);
-      } catch (assignError) {
-        console.error(`❌ Error asignando #${order.order_number}:`, assignError.message);
-        results.failed.push({ orderId: order._id, orderNumber: order.order_number, error: `Error en la asignación: ${assignError.message}` });
-      }
-    }
-    
-    // --- FASE 3: Consultar TODAS las órdenes de Shipday para obtener los datos actualizados ---
-    console.log('--- FASE 3: Obteniendo datos actualizados de Shipday ---');
-    await new Promise(resolve => setTimeout(resolve, 2000)); // Delay para dar tiempo a la API
-    const allShipdayOrders = await ShipdayService.getOrders();
-    const shipdayOrdersMap = new Map(allShipdayOrders.map(o => [o.orderId.toString(), o]));
-    const driverInfo = (await ShipdayService.getDrivers()).find(d => d.id == driverId);
-
-    // --- FASE 4: Actualizar la base de datos local con la información correcta ---
-    console.log('--- FASE 4: Actualizando base de datos local ---');
-    for (const order of validOrdersForAssignment) {
-      if (results.failed.some(f => f.orderId.equals(order._id))) continue;
-
-      const updatedShipdayOrder = shipdayOrdersMap.get(order.shipday_order_id);
-      const trackingUrl = updatedShipdayOrder?.trackingLink || '';
-
-      order.shipday_driver_id = driverId;
-      order.status = 'shipped';
-      order.shipday_tracking_url = trackingUrl;
-      if (driverInfo) {
-        order.driver_info = { name: driverInfo.name, phone: driverInfo.phone, email: driverInfo.email, status: driverInfo.isOnShift ? 'ONLINE' : 'OFFLINE' };
-      }
-      await order.save();
       
-      results.successful.push({ orderId: order._id, orderNumber: order.order_number });
-      console.log(`✅ Orden #${order.order_number} actualizada con Tracking URL: "${trackingUrl}"`);
+    } catch (shipdayError) {
+      console.warn('⚠️ No se pudieron obtener datos actualizados de Shipday:', shipdayError.message);
     }
 
-    console.log(`🏁 FIN: Proceso completado.`);
+    // --- FASE 5: Obtener estadísticas de rate limiting ---
+    results.rateLimitInfo = ShipdayService.getRateLimitStats();
+
+    // --- RESPUESTA FINAL ---
+    const summary = {
+      total: results.total,
+      successful: results.successful.length,
+      failed: results.failed.length,
+      successRate: `${((results.successful.length / results.total) * 100).toFixed(1)}%`
+    };
+
+    console.log(`🏁 Asignación masiva completada:`, summary);
+
     res.status(200).json({
-      message: `Asignación masiva completada: ${results.successful.length} exitosas, ${results.failed.length} fallidas.`,
-      summary: { total: orderIds.length, successful: results.successful.length, failed: results.failed.length },
-      details: results
+      message: `Asignación masiva completada: ${results.successful.length} exitosas, ${results.failed.length} fallidas de ${results.total} total.`,
+      summary,
+      results: {
+        successful: results.successful,
+        failed: results.failed
+      },
+      rateLimitInfo: results.rateLimitInfo,
+      driverInfo: {
+        id: driverInfo.id,
+        name: driverInfo.name,
+        email: driverInfo.email
+      },
+      timestamp: new Date().toISOString()
     });
 
   } catch (error) {
     console.error('❌ Error crítico en asignación masiva:', error);
-    res.status(500).json({ error: error.message || 'Error interno del servidor en asignación masiva' });
+    res.status(500).json({ 
+      error: 'Error interno del servidor en asignación masiva',
+      details: error.message,
+      timestamp: new Date().toISOString()
+    });
   }
 });
 

@@ -64,11 +64,14 @@
 
     <!-- Modales existentes (mantener tal como están) -->
     <Modal v-model="showOrderDetailsModal" :title="`Pedido #${selectedOrder?.order_number}`" width="800px">
-      <OrderDetails v-if="selectedOrder" :order="selectedOrder" />
-    </Modal>
+  <div v-if="loadingOrderDetails" class="loading-state">
+    <div class="loading-spinner"></div>
+    <p>Cargando detalles del pedido...</p>
+  </div>
+  <OrderDetails v-else-if="selectedOrder" :order="selectedOrder" />
+</Modal>
 
-<Modal v-model="showTrackingModal" :title="`🚚 Tracking - Pedido #${selectedTrackingOrder?.order_number}`"
-  width="700px">
+<Modal v-model="showTrackingModal" :title="`🚚 Tracking - Pedido #${selectedTrackingOrder?.order_number}`" width="700px">
   <OrderTracking 
     ref="orderTrackingRef"
     v-if="selectedTrackingOrder" 
@@ -80,36 +83,40 @@
   />
 </Modal>
 
-    <Modal v-model="showProofModal" :title="`📋 Prueba de Entrega - #${selectedProofOrder?.order_number}`"
-      width="700px">
-      <div v-if="loadingOrderDetails" class="loading-state">
-        <div class="loading-spinner"></div>
-      </div>
-      <ProofOfDelivery v-else-if="selectedProofOrder" :order="selectedProofOrder" />
-    </Modal>
+    <Modal v-model="showProofModal" :title="`📋 Prueba de Entrega - #${selectedProofOrder?.order_number}`" width="700px">
+  <div v-if="loadingOrderDetails" class="loading-state">
+    <div class="loading-spinner"></div>
+    <p>Cargando prueba de entrega...</p>
+  </div>
+  <div v-else-if="!selectedProofOrder" class="error-state">
+    <p>❌ No se pudo cargar la información de la prueba de entrega</p>
+    <button @click="showProofModal = false" class="btn btn-secondary">Cerrar</button>
+  </div>
+  <ProofOfDelivery v-else :order="selectedProofOrder" />
+</Modal>
 
     <!-- Modal de soporte -->
     <Modal v-model="showSupportModal" title="💬 Contactar Soporte" width="500px">
-      <div v-if="supportOrder" class="support-form">
-        <div class="support-order-info">
-          <h4>Pedido: #{{ supportOrder.order_number }}</h4>
-          <p>Cliente: {{ supportOrder.customer_name }}</p>
-          <p>Estado: {{ getStatusName(supportOrder.status) }}</p>
-        </div>
+  <div v-if="supportOrder" class="support-form">
+    <div class="support-order-info">
+      <h4>Pedido: #{{ supportOrder.order_number }}</h4>
+      <p>Cliente: {{ supportOrder.customer_name }}</p>
+      <p>Estado: {{ getStatusName(supportOrder.status) }}</p>
+    </div>
 
-        <div class="support-options">
-          <button @click="emailSupport(supportOrder)" class="support-option">
-            📧 Enviar Email
-          </button>
-          <button @click="whatsappSupport(supportOrder)" class="support-option">
-            💬 WhatsApp
-          </button>
-          <button @click="callSupport(supportOrder)" class="support-option">
-            📞 Llamar
-          </button>
-        </div>
-      </div>
-    </Modal>
+    <div class="support-options">
+      <button @click="emailSupport(supportOrder)" class="support-option">
+        📧 Enviar Email
+      </button>
+      <button @click="whatsappSupport(supportOrder)" class="support-option">
+        💬 WhatsApp
+      </button>
+      <button @click="callSupport(supportOrder)" class="support-option">
+        📞 Llamar
+      </button>
+    </div>
+  </div>
+</Modal>
   </div>
 </template>
 
@@ -382,16 +389,17 @@ function hasProofOfDelivery(order) {
     return orderTrackingRef.value.orderHasProofOfDelivery(order)
   }
   
-  // Fallback: lógica básica
+  // Fallback: lógica básica - MEJORADA
   if (order.status !== 'delivered') return false
   return !!(
     order.proof_of_delivery?.photo_url || 
     order.proof_of_delivery?.signature_url ||
     order.podUrls?.length > 0 ||
-    order.signatureUrl
+    order.signatureUrl ||
+    order.has_proof_of_delivery || // Agregar este campo adicional
+    order.delivery_date // Si tiene fecha de entrega, probablemente tenga prueba
   )
 }
-
 /**
  * Obtener configuración del botón de acción
  */
@@ -400,14 +408,14 @@ function getActionButton(order) {
     return orderTrackingRef.value.getActionButton(order)
   }
   
-  // Fallback: lógica básica
+  // Fallback: lógica básica MEJORADA
   if (order.status === 'delivered') {
     return {
       type: 'proof',
       label: 'Ver Prueba de Entrega',
       icon: '📸',
       class: 'btn-success',
-      available: hasProofOfDelivery(order)
+      available: true // Siempre disponible para pedidos entregados
     }
   }
   
@@ -423,6 +431,7 @@ function getActionButton(order) {
   
   return { type: 'none', available: false }
 }
+
 
 async function openLiveTracking(order) {
   console.log('📍 Intentando abrir tracking para orden:', order.order_number)
@@ -459,18 +468,47 @@ async function openLiveTracking(order) {
   }
 }
 function openTrackingModal(order) {
+  console.log('🚚 Abriendo modal de tracking:', order.order_number)
   selectedTrackingOrder.value = order
   showTrackingModal.value = true
-  console.log('🚚 Abriendo modal de tracking:', order.order_number)
 }
 
-function showProofOfDelivery(order) {
-  selectedProofOrder.value = order
+async function showProofOfDelivery(order) {
+  console.log('📸 Abriendo modal de prueba de entrega:', order.order_number)
+  
+  // Resetear estados
+  selectedProofOrder.value = null
+  loadingOrderDetails.value = true
   showProofModal.value = true
-  console.log('📸 Mostrando prueba de entrega:', order.order_number)
+  
+  try {
+    // Obtener datos actualizados de la orden
+    const { data } = await apiService.orders.getById(order._id)
+    
+    // Asignar la orden actualizada
+    selectedProofOrder.value = data
+    
+    console.log('✅ Datos de prueba de entrega cargados:', {
+      orderId: data._id,
+      orderNumber: data.order_number,
+      hasProof: data.proof_of_delivery,
+      podUrls: data.podUrls,
+      signatureUrl: data.signatureUrl,
+      deliveryDate: data.delivery_date
+    })
+    
+  } catch (error) {
+    console.error('❌ Error cargando prueba de entrega:', error)
+    toast.error('Error al cargar la prueba de entrega')
+    showProofModal.value = false
+  } finally {
+    loadingOrderDetails.value = false
+  }
 }
 
 async function openOrderDetailsModal(order) {
+  console.log('📋 Abriendo detalles de orden:', order.order_number)
+  
   selectedOrder.value = null
   showOrderDetailsModal.value = true
   loadingOrderDetails.value = true
@@ -479,7 +517,7 @@ async function openOrderDetailsModal(order) {
     const { data } = await apiService.orders.getById(order._id)
     selectedOrder.value = data
   } catch (error) {
-    console.error("Error al obtener detalles del pedido:", error)
+    console.error("❌ Error al obtener detalles del pedido:", error)
     showOrderDetailsModal.value = false
     toast.error('Error al cargar detalles del pedido')
   } finally {
@@ -503,10 +541,11 @@ function handleTrackingSupport(supportData) {
   showSupportModal.value = true
 }
 
+
 function handleShowProof(proofData) {
   showTrackingModal.value = false
-  selectedProofOrder.value = proofData.order
-  showProofModal.value = true
+  // Usar el método corregido
+  showProofOfDelivery(proofData.order)
 }
 
 // ==================== MÉTODOS DE SOPORTE ====================
@@ -752,7 +791,6 @@ async function refreshProofModal() {
     console.error('❌ [Orders] Error refrescando proof modal:', error)
   }
 }
-
 /**
  * Procesar actualizaciones pendientes
  */
@@ -1299,5 +1337,95 @@ onBeforeUnmount(() => {
   .real-time-status {
     border: 2px solid white;
   }
+}
+
+.loading-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  text-align: center;
+}
+
+.loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid #f3f3f3;
+  border-top: 4px solid #3498db;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-bottom: 16px;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.error-state {
+  padding: 20px;
+  text-align: center;
+  color: #dc3545;
+}
+
+.support-form {
+  padding: 20px;
+}
+
+.support-order-info {
+  background: #f8f9fa;
+  padding: 16px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+}
+
+.support-order-info h4 {
+  margin: 0 0 8px 0;
+  color: #333;
+}
+
+.support-order-info p {
+  margin: 4px 0;
+  color: #666;
+}
+
+.support-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+}
+
+.support-option {
+  padding: 12px 16px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  background: white;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 14px;
+}
+
+.support-option:hover {
+  background: #f8f9fa;
+  border-color: #007bff;
+}
+
+.btn {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.2s ease;
+}
+
+.btn-secondary {
+  background: #6c757d;
+  color: white;
+}
+
+.btn-secondary:hover {
+  background: #5a6268;
 }
 </style>
