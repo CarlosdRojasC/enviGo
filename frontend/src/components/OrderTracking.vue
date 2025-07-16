@@ -29,7 +29,7 @@
     
     <div v-else class="tracking-content">
       
-      <!-- 🆕 TRACKING EN VIVO - APARECE SIEMPRE QUE HAYA URL (independiente del estado) -->
+      <!-- TRACKING EN VIVO - APARECE SIEMPRE QUE HAYA URL (independiente del estado) -->
       <div v-if="hasTrackingUrl" class="live-tracking-section">
         <div class="live-tracking-card">
           <div class="live-tracking-header">
@@ -48,7 +48,7 @@
         </div>
       </div>
 
-      <!-- 🆕 PRUEBA DE ENTREGA - SOLO para pedidos entregados -->
+      <!-- PRUEBA DE ENTREGA - SOLO para pedidos entregados -->
       <div v-if="tracking.current_status === 'delivered' && hasProofOfDelivery" class="proof-section">
         <div class="section-header">
           <h3>📸 Prueba de Entrega</h3>
@@ -70,33 +70,33 @@
         </div>
       </div>
 
-      <!-- 🔧 CORREGIDO: Información del conductor con mejor detección -->
+      <!-- INFORMACIÓN DEL CONDUCTOR - Corregida y limpia -->
       <div v-if="hasDriverInfo" class="driver-section">
         <div class="section-header">
           <h3>👨‍💼 Tu Conductor</h3>
         </div>
         <div class="driver-card">
           <div class="driver-avatar">
-            {{ getDriverInitials(getDriverName) }}
+            {{ getDriverInitials(driverStatus.name) }}
           </div>
           <div class="driver-info">
-            <div class="driver-name">{{ getDriverName }}</div>
-            <div class="driver-phone" v-if="getDriverPhone">
-              📞 {{ getDriverPhone }}
+            <div class="driver-name">{{ driverStatus.name }}</div>
+            <div class="driver-phone" v-if="driverStatus.phone">
+              📞 {{ driverStatus.phone }}
             </div>
             <div class="driver-status" :class="getDriverStatusClass(driverStatus.status)">
-              <div class="status-indicator" :class="{ 'online': driverStatus.isConnected }"></div>
+              <div class="status-indicator" :class="getDriverStatusClass(driverStatus.status)"></div>
               <span class="status-text">{{ getDriverStatusText(driverStatus.status) }}</span>
               <div v-if="loadingDriverStatus" class="status-loading">
                 <div class="mini-spinner"></div>
               </div>
             </div>
-            <div v-if="!driverStatus.isConnected && driverStatus.lastSeen" class="last-seen">
+            <div v-if="driverStatus.status === 'offline' && driverStatus.lastSeen" class="last-seen">
               Visto por última vez: {{ formatLastSeen(driverStatus.lastSeen) }}
             </div>
             <div class="driver-actions">
               <button 
-                v-if="getDriverPhone" 
+                v-if="driverStatus.phone" 
                 @click="callDriver" 
                 class="action-btn call-btn"
                 title="Llamar al conductor"
@@ -104,7 +104,7 @@
                 📞
               </button>
               <button 
-                @click="fetchDriverStatus" 
+                @click="refreshDriverStatus" 
                 class="action-btn refresh-btn"
                 :disabled="loadingDriverStatus"
                 title="Actualizar estado"
@@ -113,23 +113,6 @@
               </button>
             </div>
           </div>
-        </div>
-      </div>
-
-      <!-- 🔍 DEBUG INFO (temporal - remover en producción) -->
-      <div v-if="showDebugInfo" class="debug-section">
-        <div class="section-header">
-          <h3>🔍 Debug Info</h3>
-        </div>
-        <div class="debug-content">
-          <pre>{{ JSON.stringify({
-            tracking_driver: tracking.driver,
-            tracking_driver_info: tracking.driver_info,
-            tracking_carrierId: tracking.carrierId,
-            tracking_carrierName: tracking.carrierName,
-            tracking_shipday_driver_id: tracking.shipday_driver_id,
-            driverStatus: driverStatus
-          }, null, 2) }}</pre>
         </div>
       </div>
 
@@ -292,11 +275,12 @@ const tracking = ref(null);
 const loadingTracking = ref(true);
 const refreshing = ref(false);
 const lastUpdated = ref(new Date());
-const showDebugInfo = ref(true); // 🔧 Cambiar a false después de probar
+
+// Estado del conductor - CORREGIDO Y SIMPLIFICADO
 const driverStatus = ref({
-  name: '',
+  name: 'Conductor',
   phone: '',
-  status: 'unknown', // online, offline, busy, unknown
+  status: 'unknown', // online, offline, busy, driving, unknown
   lastSeen: null,
   isConnected: false
 });
@@ -304,7 +288,7 @@ const loadingDriverStatus = ref(false);
 
 let refreshInterval = null;
 
-// 🆕 COMPUTED PROPERTIES PARA TRACKING
+// COMPUTED PROPERTIES PARA TRACKING
 const hasTrackingUrl = computed(() => {
   return !!(tracking.value?.tracking_url || tracking.value?.shipday_tracking_url);
 });
@@ -323,34 +307,9 @@ const hasProofOfDelivery = computed(() => {
   );
 });
 
-// 🆕 COMPUTED PROPERTIES PARA EL CONDUCTOR
+// COMPUTED PROPERTIES PARA EL CONDUCTOR
 const hasDriverInfo = computed(() => {
-  return !!(
-    tracking.value?.driver?.name || 
-    tracking.value?.driver_info?.name ||
-    tracking.value?.carrierName ||
-    driverStatus.value?.name !== ''
-  );
-});
-
-const getDriverName = computed(() => {
-  return (
-    driverStatus.value?.name ||
-    tracking.value?.driver?.name || 
-    tracking.value?.driver_info?.name ||
-    tracking.value?.carrierName ||
-    'Conductor Asignado'
-  );
-});
-
-const getDriverPhone = computed(() => {
-  return (
-    driverStatus.value?.phone ||
-    tracking.value?.driver?.phone || 
-    tracking.value?.driver_info?.phone ||
-    tracking.value?.carrierPhone ||
-    ''
-  );
+  return !!(driverStatus.value.name && driverStatus.value.name !== 'Conductor');
 });
 
 onMounted(() => {
@@ -377,36 +336,18 @@ async function fetchTracking() {
     
     const { data } = await apiService.orders.getTracking(props.orderId);
     
-    // 🔍 DEBUG ESPECÍFICO PARA TRACKING URL
-    console.log('🔍 VERIFICANDO TRACKING URL:');
-    console.log('- tracking.tracking_url:', data.tracking?.tracking_url);
-    console.log('- tracking.shipday_tracking_url:', data.tracking?.shipday_tracking_url);
-    console.log('- tracking.has_tracking:', data.tracking?.has_tracking);
-    
     tracking.value = data.tracking;
     lastUpdated.value = new Date(data.last_updated);
     
     console.log('✅ Tracking cargado:', {
       order_number: tracking.value?.order_number,
       has_tracking_url: hasTrackingUrl.value,
-      tracking_url_used: getTrackingUrl.value,
-      current_status: tracking.value?.current_status,
-      timeline_events: tracking.value?.timeline?.length || 0
+      current_status: tracking.value?.current_status
     });
     
-    // 🔍 DEBUG TEMPORAL: Mostrar estructura de datos del conductor
-    console.log('🔍 DEBUG - Estructura completa del tracking para conductor:', {
-      'tracking.driver': tracking.value?.driver,
-      'tracking.driver_info': tracking.value?.driver_info,
-      'tracking.carrierId': tracking.value?.carrierId,
-      'tracking.carrierName': tracking.value?.carrierName,
-      'tracking.carrierPhone': tracking.value?.carrierPhone,
-      'tracking.shipday_driver_id': tracking.value?.shipday_driver_id
-    });
-    
-    // 🔧 IMPORTANTE: Cargar estado del conductor después de cargar tracking
+    // CARGAR INFORMACIÓN DEL CONDUCTOR DESPUÉS DEL TRACKING
     if (tracking.value) {
-      await fetchDriverStatus();
+      loadDriverInfo();
     }
   } catch (error) {
     console.error('❌ Error cargando tracking:', error);
@@ -427,7 +368,119 @@ async function refreshTracking() {
   }
 }
 
-// 🆕 FUNCIÓN PARA MOSTRAR MODAL DE PRUEBA COMPLETA
+// FUNCIÓN CORREGIDA PARA CARGAR INFO DEL CONDUCTOR
+function loadDriverInfo() {
+  // PRIORIDAD DE FUENTES DE DATOS DEL CONDUCTOR
+  const driverName = (
+    tracking.value?.driver?.name || 
+    tracking.value?.driver_info?.name ||
+    tracking.value?.carrierName ||
+    'Conductor'
+  );
+
+  const driverPhone = (
+    tracking.value?.driver?.phone || 
+    tracking.value?.driver_info?.phone ||
+    tracking.value?.carrierPhone ||
+    ''
+  );
+
+  // DETERMINAR ESTADO BASADO EN LA INFORMACIÓN DISPONIBLE
+  let status = 'unknown';
+  let isConnected = false;
+
+  // Si hay información específica del estado
+  if (tracking.value?.driver?.status) {
+    status = tracking.value.driver.status.toLowerCase();
+  } else if (tracking.value?.driver_info?.status) {
+    status = tracking.value.driver_info.status.toLowerCase();
+  } else if (tracking.value?.current_status === 'shipped') {
+    // Si el pedido está en tránsito, asumir que el conductor está activo
+    status = 'driving';
+    isConnected = true;
+  } else if (tracking.value?.current_status === 'delivered') {
+    status = 'offline';
+  }
+
+  // ASIGNAR DATOS AL ESTADO
+  driverStatus.value = {
+    name: driverName,
+    phone: driverPhone,
+    status: status,
+    lastSeen: tracking.value?.driver?.lastSeen ? new Date(tracking.value.driver.lastSeen) : null,
+    isConnected: isConnected || status === 'online' || status === 'driving'
+  };
+
+  console.log('👨‍💼 Información del conductor cargada:', driverStatus.value);
+
+  // INTENTAR OBTENER ESTADO EN TIEMPO REAL SI HAY ID
+  const driverId = (
+    tracking.value?.driver?.id ||
+    tracking.value?.driver_info?.id ||
+    tracking.value?.shipday_driver_id ||
+    tracking.value?.carrierId
+  );
+
+  if (driverId) {
+    fetchDriverRealTimeStatus(driverId);
+  }
+}
+
+// FUNCIÓN PARA OBTENER ESTADO EN TIEMPO REAL DEL CONDUCTOR
+async function fetchDriverRealTimeStatus(driverId) {
+  if (!driverId || loadingDriverStatus.value) return;
+
+  try {
+    loadingDriverStatus.value = true;
+    console.log('📡 Obteniendo estado en tiempo real del conductor:', driverId);
+    
+    // VERIFICAR SI EL ENDPOINT EXISTE
+    if (!apiService.drivers || typeof apiService.drivers.getStatus !== 'function') {
+      console.log('⚠️ Endpoint de estado del conductor no disponible');
+      return;
+    }
+    
+    const { data: realTimeData } = await apiService.drivers.getStatus(driverId);
+    
+    // ACTUALIZAR SOLO SI HAY DATOS VÁLIDOS
+    if (realTimeData) {
+      driverStatus.value = {
+        ...driverStatus.value,
+        status: realTimeData.status || driverStatus.value.status,
+        phone: realTimeData.phone || driverStatus.value.phone,
+        lastSeen: realTimeData.lastSeen ? new Date(realTimeData.lastSeen) : driverStatus.value.lastSeen,
+        isConnected: realTimeData.status === 'online' || realTimeData.status === 'driving'
+      };
+      
+      console.log('✅ Estado del conductor actualizado en tiempo real:', driverStatus.value);
+    }
+    
+  } catch (error) {
+    console.log('⚠️ No se pudo obtener estado en tiempo real del conductor:', error.message);
+    // No mostrar error al usuario, mantener datos existentes
+  } finally {
+    loadingDriverStatus.value = false;
+  }
+}
+
+// FUNCIÓN PARA REFRESCAR ESTADO DEL CONDUCTOR
+async function refreshDriverStatus() {
+  const driverId = (
+    tracking.value?.driver?.id ||
+    tracking.value?.driver_info?.id ||
+    tracking.value?.shipday_driver_id ||
+    tracking.value?.carrierId
+  );
+
+  if (driverId) {
+    await fetchDriverRealTimeStatus(driverId);
+  } else {
+    // Si no hay ID, recargar desde los datos del tracking
+    loadDriverInfo();
+  }
+}
+
+// FUNCIÓN PARA MOSTRAR MODAL DE PRUEBA COMPLETA
 function showFullProofModal() {
   emit('show-proof', {
     orderId: props.orderId,
@@ -436,7 +489,7 @@ function showFullProofModal() {
   });
 }
 
-// Funciones de UI (mantener las existentes)
+// FUNCIONES DE UI
 function getStatusIcon(status) {
   const icons = {
     pending: '⏳',
@@ -460,7 +513,7 @@ function getStatusName(status) {
 }
 
 function getDriverInitials(name) {
-  if (!name) return '👤';
+  if (!name || name === 'Conductor') return '👤';
   const words = name.trim().split(' ');
   if (words.length >= 2) {
     return (words[0][0] + words[1][0]).toUpperCase();
@@ -468,13 +521,39 @@ function getDriverInitials(name) {
   return name.charAt(0).toUpperCase();
 }
 
-function getDriverStatus(status) {
-  const statuses = {
-    ONLINE: '🟢 En línea',
-    OFFLINE: '🔴 Desconectado',
-    BUSY: '🟡 Ocupado'
+function getDriverStatusText(status) {
+  const statusTexts = {
+    'online': 'En Línea',
+    'offline': 'Desconectado', 
+    'busy': 'Ocupado',
+    'driving': 'Conduciendo',
+    'unknown': 'Estado Desconocido'
   };
-  return statuses[status] || '📍 En servicio';
+  return statusTexts[status] || 'Desconocido';
+}
+
+function getDriverStatusClass(status) {
+  const statusClasses = {
+    'online': 'status-online',
+    'offline': 'status-offline',
+    'busy': 'status-busy', 
+    'driving': 'status-driving',
+    'unknown': 'status-unknown'
+  };
+  return statusClasses[status] || 'status-unknown';
+}
+
+function formatLastSeen(lastSeen) {
+  if (!lastSeen) return 'Hace tiempo';
+  
+  const now = new Date();
+  const diff = now - lastSeen;
+  const minutes = Math.floor(diff / 60000);
+  
+  if (minutes < 1) return 'hace un momento';
+  if (minutes < 60) return `hace ${minutes} minutos`;
+  if (minutes < 1440) return `hace ${Math.floor(minutes / 60)} horas`;
+  return lastSeen.toLocaleDateString();
 }
 
 function formatEventTime(timestamp) {
@@ -518,9 +597,16 @@ function formatCurrency(amount) {
   return new Intl.NumberFormat('es-CL').format(amount || 0);
 }
 
-// Funciones de acción
+// FUNCIONES DE ACCIÓN
 function trackLiveClick() {
   console.log('📍 Usuario abriendo tracking en vivo:', getTrackingUrl.value);
+}
+
+function callDriver() {
+  const phone = driverStatus.value.phone;
+  if (phone) {
+    window.location.href = `tel:${phone}`;
+  }
 }
 
 function callCompany() {
@@ -544,151 +630,7 @@ function reportIssue() {
   window.location.href = `mailto:soporte@tuempresa.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 }
 
-// ==================== MÉTODOS PARA ESTADO DEL CONDUCTOR ====================
-
-/**
- * 🔧 COMPLETAMENTE CORREGIDO: Obtener estado actual del conductor
- * Busca el driver ID en todas las ubicaciones posibles y maneja fallbacks
- */
-async function fetchDriverStatus() {
-  // 🔧 BUSCAR DRIVER ID EN TODAS LAS UBICACIONES POSIBLES
-  const possibleDriverIds = [
-    tracking.value?.driver_info?.shipday_driver_id,
-    tracking.value?.shipday_driver_id,
-    tracking.value?.driver?.id,
-    tracking.value?.driver_info?.id,
-    tracking.value?.driver_info?.driver_id,
-    tracking.value?.carrierId,
-    tracking.value?.driver_info?.carrierId,
-    tracking.value?.driver?.carrierId
-  ];
-
-  const driverId = possibleDriverIds.find(id => id && id !== null && id !== undefined && id !== '');
-
-  // 🔧 TAMBIÉN VERIFICAR SI HAY INFORMACIÓN BÁSICA DEL CONDUCTOR
-  const hasDriverInfo = !!(
-    tracking.value?.driver?.name || 
-    tracking.value?.driver_info?.name ||
-    tracking.value?.carrierName
-  );
-
-  console.log('🔍 DEBUG fetchDriverStatus:', {
-    possibleDriverIds,
-    foundDriverId: driverId,
-    hasDriverInfo,
-    trackingDriverInfo: tracking.value?.driver_info,
-    trackingDriver: tracking.value?.driver
-  });
-
-  if (!driverId && !hasDriverInfo) {
-    console.log('📍 No hay ID de conductor ni información del conductor disponible');
-    return;
-  }
-
-  // 🔧 SI NO HAY ID PERO SÍ HAY INFO, USAR LOS DATOS EXISTENTES
-  if (!driverId) {
-    console.log('📍 No hay driver ID, pero usando información existente del conductor');
-    driverStatus.value = {
-      name: tracking.value?.driver?.name || tracking.value?.driver_info?.name || tracking.value?.carrierName || 'Conductor',
-      phone: tracking.value?.driver?.phone || tracking.value?.driver_info?.phone || tracking.value?.carrierPhone || '',
-      status: tracking.value?.driver?.status || tracking.value?.driver_info?.status || 'unknown',
-      lastSeen: null,
-      isConnected: false
-    };
-    return;
-  }
-
-  try {
-    loadingDriverStatus.value = true;
-    console.log('👨‍💼 Obteniendo estado del conductor con ID:', driverId);
-    
-    // 🔧 VERIFICAR SI EL ENDPOINT EXISTE EN apiService
-    if (!apiService.drivers || typeof apiService.drivers.getStatus !== 'function') {
-      console.warn('⚠️ apiService.drivers.getStatus no está disponible, usando datos existentes');
-      throw new Error('Endpoint no disponible');
-    }
-    
-    // 🔧 CORREGIDO: Usar apiService con manejo de errores mejorado
-    const { data: driverData } = await apiService.drivers.getStatus(driverId);
-    
-    driverStatus.value = {
-      name: driverData.name || tracking.value?.driver_info?.name || tracking.value?.driver?.name || tracking.value?.carrierName || 'Conductor',
-      phone: driverData.phone || tracking.value?.driver_info?.phone || tracking.value?.driver?.phone || tracking.value?.carrierPhone || '',
-      status: driverData.status || 'unknown', // online, offline, busy
-      lastSeen: driverData.lastSeen ? new Date(driverData.lastSeen) : null,
-      isConnected: driverData.status === 'online',
-      location: driverData.location || null
-    };
-    
-    console.log('✅ Estado del conductor actualizado desde API:', driverStatus.value);
-    
-  } catch (error) {
-    console.error('❌ Error obteniendo estado del conductor:', error);
-    // Fallback a datos del tracking
-    driverStatus.value = {
-      name: tracking.value?.driver_info?.name || tracking.value?.driver?.name || tracking.value?.carrierName || 'Conductor',
-      phone: tracking.value?.driver_info?.phone || tracking.value?.driver?.phone || tracking.value?.carrierPhone || '',
-      status: 'offline',
-      lastSeen: null,
-      isConnected: false
-    };
-    console.log('📋 Usando datos fallback del conductor:', driverStatus.value);
-  } finally {
-    loadingDriverStatus.value = false;
-  }
-}
-
-/**
- * Formatear el texto del estado del conductor
- */
-function getDriverStatusText(status) {
-  const statusTexts = {
-    'online': 'En Línea',
-    'offline': 'Desconectado', 
-    'busy': 'Ocupado',
-    'driving': 'Conduciendo',
-    'unknown': 'Estado Desconocido'
-  };
-  return statusTexts[status] || 'Desconocido';
-}
-
-/**
- * Obtener clase CSS para el estado
- */
-function getDriverStatusClass(status) {
-  const statusClasses = {
-    'online': 'status-online',
-    'offline': 'status-offline',
-    'busy': 'status-busy', 
-    'driving': 'status-driving',
-    'unknown': 'status-unknown'
-  };
-  return statusClasses[status] || 'status-unknown';
-}
-
-function formatLastSeen(lastSeen) {
-  const now = new Date();
-  const diff = now - lastSeen;
-  const minutes = Math.floor(diff / 60000);
-  
-  if (minutes < 1) return 'hace un momento';
-  if (minutes < 60) return `hace ${minutes} minutos`;
-  if (minutes < 1440) return `hace ${Math.floor(minutes / 60)} horas`;
-  return lastSeen.toLocaleDateString();
-}
-
-function callDriver() {
-  const phone = getDriverPhone.value;
-  if (phone) {
-    window.location.href = `tel:${phone}`;
-  }
-}
-
-// ==================== EXPOSE FUNCTIONS PARA USO EXTERNO ====================
-
-/**
- * Verificar si una orden tiene información de tracking
- */
+// FUNCIONES EXPUESTAS PARA USO EXTERNO
 function hasTrackingInfo(order) {
   if (order.status === 'delivered') return false;
   return !!(
@@ -699,9 +641,6 @@ function hasTrackingInfo(order) {
   );
 }
 
-/**
- * Verificar si una orden tiene prueba de entrega
- */
 function orderHasProofOfDelivery(order) {
   if (order.status !== 'delivered') return false;
   return !!(
@@ -712,9 +651,6 @@ function orderHasProofOfDelivery(order) {
   );
 }
 
-/**
- * Abrir tracking en vivo desde componente externo
- */
 async function openLiveTrackingFromExternal(order, updateCallback) {
   console.log('📍 Abriendo tracking externo para orden:', order.order_number);
   
@@ -728,7 +664,6 @@ async function openLiveTrackingFromExternal(order, updateCallback) {
       
       if (data.shipday_tracking_url) {
         console.log('✅ URL obtenida después de refresh:', data.shipday_tracking_url);
-        // Actualizar orden localmente si hay callback
         if (updateCallback) {
           updateCallback(data);
         }
@@ -744,9 +679,6 @@ async function openLiveTrackingFromExternal(order, updateCallback) {
   }
 }
 
-/**
- * Obtener configuración del botón de acción
- */
 function getActionButton(order) {
   if (order.status === 'delivered') {
     return {
@@ -777,7 +709,7 @@ defineExpose({
   orderHasProofOfDelivery,
   openLiveTrackingFromExternal,
   getActionButton,
-  fetchDriverStatus,
+  refreshDriverStatus,
   refreshTracking
 });
 </script>
@@ -860,65 +792,6 @@ defineExpose({
   margin-top: 16px;
 }
 
-/* Tracking en vivo */
-.live-tracking-section {
-  margin-bottom: 30px;
-}
-
-.live-tracking-card {
-  background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
-  border: 2px solid #0ea5e9;
-  border-radius: 16px;
-  padding: 24px;
-  text-align: center;
-}
-
-.live-tracking-header {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  margin-bottom: 12px;
-}
-
-.live-icon {
-  animation: pulse 2s infinite;
-}
-
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
-}
-
-.live-tracking-card h3 {
-  margin: 0;
-  color: #0369a1;
-  font-size: 20px;
-}
-
-.live-tracking-card p {
-  color: #0284c7;
-  margin: 12px 0 20px;
-}
-
-.live-tracking-btn {
-  display: inline-block;
-  background: #0ea5e9;
-  color: white;
-  text-decoration: none;
-  padding: 12px 24px;
-  border-radius: 12px;
-  font-weight: 600;
-  font-size: 16px;
-  transition: all 0.2s ease;
-}
-
-.live-tracking-btn:hover {
-  background: #0284c7;
-  transform: translateY(-2px);
-  box-shadow: 0 8px 25px -5px rgba(14, 165, 233, 0.3);
-}
-
 /* Secciones */
 .section-header {
   margin-bottom: 16px;
@@ -931,7 +804,160 @@ defineExpose({
   font-weight: 600;
 }
 
-/* Conductor */
+/* Tracking en vivo */
+.live-tracking-section {
+  margin-bottom: 30px;
+}
+
+.live-tracking-card {
+  background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+  border: 2px solid #0ea5e9;
+  border-radius: 16px;
+  padding: 24px;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.live-tracking-card::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: linear-gradient(45deg, transparent, rgba(14, 165, 233, 0.1), transparent);
+  animation: shimmer 3s infinite;
+}
+
+@keyframes shimmer {
+  0% { transform: translateX(-100%) translateY(-100%) rotate(45deg); }
+  100% { transform: translateX(100%) translateY(100%) rotate(45deg); }
+}
+
+.live-tracking-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  position: relative;
+  z-index: 1;
+}
+
+.live-icon {
+  animation: pulse 2s infinite;
+  font-size: 16px;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.7; transform: scale(1.1); }
+}
+
+.live-tracking-card h3 {
+  margin: 0;
+  color: #0369a1;
+  font-size: 20px;
+  position: relative;
+  z-index: 1;
+}
+
+.live-tracking-card p {
+  color: #0284c7;
+  margin: 12px 0 20px;
+  position: relative;
+  z-index: 1;
+}
+
+.live-tracking-btn {
+  display: inline-block;
+  background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
+  color: white;
+  text-decoration: none;
+  padding: 14px 28px;
+  border-radius: 12px;
+  font-weight: 600;
+  font-size: 16px;
+  transition: all 0.3s ease;
+  position: relative;
+  z-index: 1;
+  box-shadow: 0 4px 15px rgba(14, 165, 233, 0.3);
+}
+
+.live-tracking-btn:hover {
+  background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(14, 165, 233, 0.4);
+}
+
+.live-tracking-btn:active {
+  transform: translateY(0);
+}
+
+/* Prueba de entrega */
+.proof-section {
+  margin-bottom: 30px;
+}
+
+.proof-card {
+  background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
+  border: 2px solid #10b981;
+  border-radius: 16px;
+  padding: 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.proof-summary {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.proof-icon {
+  font-size: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 60px;
+  height: 60px;
+  background: rgba(16, 185, 129, 0.1);
+  border-radius: 50%;
+}
+
+.proof-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #065f46;
+  margin-bottom: 4px;
+}
+
+.proof-description {
+  color: #047857;
+  font-size: 14px;
+}
+
+.proof-details-btn {
+  background: #10b981;
+  color: white;
+  border: none;
+  padding: 12px 20px;
+  border-radius: 12px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 14px;
+  transition: all 0.2s ease;
+}
+
+.proof-details-btn:hover {
+  background: #059669;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+}
+
+/* Conductor - ESTILOS CORREGIDOS */
 .driver-section {
   margin-bottom: 30px;
 }
@@ -961,6 +987,10 @@ defineExpose({
   flex-shrink: 0;
 }
 
+.driver-info {
+  flex: 1;
+}
+
 .driver-name {
   font-size: 18px;
   font-weight: 600;
@@ -968,24 +998,101 @@ defineExpose({
   margin-bottom: 4px;
 }
 
+.driver-phone {
+  font-size: 14px;
+  color: #6b7280;
+  margin-bottom: 8px;
+}
+
 .driver-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   font-size: 14px;
   margin-bottom: 8px;
 }
 
-.driver-status.online { color: #059669; }
-.driver-status.offline { color: #dc2626; }
-.driver-status.busy { color: #d97706; }
+.status-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
 
-.contact-btn {
-  background: #10b981;
-  color: white;
+.status-online .status-indicator { background: #10b981; }
+.status-offline .status-indicator { background: #ef4444; }
+.status-busy .status-indicator { background: #f59e0b; }
+.status-driving .status-indicator { background: #3b82f6; }
+.status-unknown .status-indicator { background: #6b7280; }
+
+.status-online { color: #059669; }
+.status-offline { color: #dc2626; }
+.status-busy { color: #d97706; }
+.status-driving { color: #2563eb; }
+.status-unknown { color: #6b7280; }
+
+.last-seen {
+  font-size: 12px;
+  color: #9ca3af;
+  margin-bottom: 8px;
+}
+
+.driver-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.action-btn {
+  width: 32px;
+  height: 32px;
   border: none;
-  padding: 6px 12px;
   border-radius: 6px;
   cursor: pointer;
-  font-size: 12px;
-  text-decoration: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  transition: all 0.2s ease;
+}
+
+.call-btn {
+  background: #10b981;
+  color: white;
+}
+
+.call-btn:hover {
+  background: #059669;
+  transform: scale(1.1);
+}
+
+.refresh-btn {
+  background: #f3f4f6;
+  color: #6b7280;
+}
+
+.refresh-btn:hover:not(:disabled) {
+  background: #e5e7eb;
+  transform: scale(1.1);
+}
+
+.refresh-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.status-loading {
+  display: flex;
+  align-items: center;
+  margin-left: 8px;
+}
+
+.mini-spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid #f3f4f6;
+  border-top: 2px solid #6366f1;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
 }
 
 /* Timeline */
@@ -1256,6 +1363,28 @@ defineExpose({
     gap: 12px;
   }
   
+  .proof-card {
+    flex-direction: column;
+    gap: 16px;
+    text-align: center;
+  }
+  
+  .proof-summary {
+    flex-direction: column;
+    text-align: center;
+    gap: 12px;
+  }
+  
+  .driver-card {
+    flex-direction: column;
+    text-align: center;
+    gap: 12px;
+  }
+  
+  .driver-actions {
+    justify-content: center;
+  }
+  
   .delivery-cards {
     grid-template-columns: 1fr;
   }
@@ -1273,194 +1402,10 @@ defineExpose({
     gap: 12px;
     text-align: center;
   }
-}
-/* 🆕 ESTILOS PARA DEBUG INFO */
-.debug-info {
-  background: #f0f0f0;
-  border: 1px solid #ddd;
-  padding: 8px;
-  margin: 8px 0;
-  font-size: 11px;
-  border-radius: 4px;
-  font-family: monospace;
-  color: #555;
-}
-
-/* 🆕 ESTILOS PARA SECCIÓN DE PRUEBA DE ENTREGA */
-.proof-section {
-  margin-bottom: 30px;
-}
-
-.proof-card {
-  background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
-  border: 2px solid #10b981;
-  border-radius: 16px;
-  padding: 20px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.proof-summary {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-.proof-icon {
-  font-size: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 60px;
-  height: 60px;
-  background: rgba(16, 185, 129, 0.1);
-  border-radius: 50%;
-}
-
-.proof-title {
-  font-size: 18px;
-  font-weight: 600;
-  color: #065f46;
-  margin-bottom: 4px;
-}
-
-.proof-description {
-  color: #047857;
-  font-size: 14px;
-}
-
-.proof-details-btn {
-  background: #10b981;
-  color: white;
-  border: none;
-  padding: 12px 20px;
-  border-radius: 12px;
-  cursor: pointer;
-  font-weight: 600;
-  font-size: 14px;
-  transition: all 0.2s ease;
-}
-
-.proof-details-btn:hover {
-  background: #059669;
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
-}
-
-/* 🆕 MEJORAR TRACKING EN VIVO PARA QUE SE VEA MEJOR */
-.live-tracking-section {
-  margin-bottom: 30px;
-}
-
-.live-tracking-card {
-  background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
-  border: 2px solid #0ea5e9;
-  border-radius: 16px;
-  padding: 24px;
-  text-align: center;
-  position: relative;
-  overflow: hidden;
-}
-
-.live-tracking-card::before {
-  content: '';
-  position: absolute;
-  top: -50%;
-  left: -50%;
-  width: 200%;
-  height: 200%;
-  background: linear-gradient(45deg, transparent, rgba(14, 165, 233, 0.1), transparent);
-  animation: shimmer 3s infinite;
-}
-
-@keyframes shimmer {
-  0% { transform: translateX(-100%) translateY(-100%) rotate(45deg); }
-  100% { transform: translateX(100%) translateY(100%) rotate(45deg); }
-}
-
-.live-tracking-header {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  margin-bottom: 12px;
-  position: relative;
-  z-index: 1;
-}
-
-.live-icon {
-  animation: pulse 2s infinite;
-  font-size: 16px;
-}
-
-@keyframes pulse {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.7; transform: scale(1.1); }
-}
-
-.live-tracking-card h3 {
-  margin: 0;
-  color: #0369a1;
-  font-size: 20px;
-  position: relative;
-  z-index: 1;
-}
-
-.live-tracking-card p {
-  color: #0284c7;
-  margin: 12px 0 20px;
-  position: relative;
-  z-index: 1;
-}
-
-.live-tracking-btn {
-  display: inline-block;
-  background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
-  color: white;
-  text-decoration: none;
-  padding: 14px 28px;
-  border-radius: 12px;
-  font-weight: 600;
-  font-size: 16px;
-  transition: all 0.3s ease;
-  position: relative;
-  z-index: 1;
-  box-shadow: 0 4px 15px rgba(14, 165, 233, 0.3);
-}
-
-.live-tracking-btn:hover {
-  background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
-  transform: translateY(-2px);
-  box-shadow: 0 8px 25px rgba(14, 165, 233, 0.4);
-}
-
-.live-tracking-btn:active {
-  transform: translateY(0);
-}
-
-/* 🆕 RESPONSIVE IMPROVEMENTS */
-@media (max-width: 768px) {
-  .proof-card {
-    flex-direction: column;
-    gap: 16px;
-    text-align: center;
-  }
-  
-  .proof-summary {
-    flex-direction: column;
-    text-align: center;
-    gap: 12px;
-  }
   
   .live-tracking-btn {
     padding: 12px 24px;
     font-size: 14px;
-  }
-  
-  .debug-info {
-    font-size: 10px;
-    padding: 6px;
   }
 }
 </style>
