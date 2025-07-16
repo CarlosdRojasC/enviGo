@@ -1,1034 +1,708 @@
 <template>
-  <div class="proof-container">
-    <!-- Debug Info (solo en desarrollo) -->
-    <div v-if="isDevelopment" class="debug-info">
-      <details>
-        <summary>🔍 Debug Info</summary>
-        <pre>{{ debugInfo }}</pre>
-      </details>
-    </div>
+  <div class="orders-page">
+    <!-- Header con estadísticas moderno -->
+    <OrdersHeader 
+      title="Mis Pedidos"
+      :stats="orderStats"
+      :additional-stats="additionalStats"
+      :loading="loadingOrders || refreshing"
+      :exporting="loadingStates?.exporting || false"
+      :last-update="lastUpdate"
+      :auto-refresh="autoRefreshEnabled"
+      @refresh="handleRefresh"
+      @export="handleExport"
+      @create-order="handleCreateOrder"
+      @toggle-auto-refresh="toggleAutoRefresh"
+    />
 
-    <!-- Header -->
-    <div class="proof-header">
-      <div class="header-info">
-        <h3>📋 Prueba de Entrega</h3>
-        <p class="delivery-info">
-          Entregado el {{ formatDate(order.delivery_date) }} 
-          <span v-if="order.driver_info?.name">por {{ order.driver_info.name }}</span>
-        </p>
-      </div>
-      <div class="delivery-status">
-        <span class="status-badge delivered">✅ Entregado</span>
-      </div>
-    </div>
+    <!-- Filtros modernos -->
+    <OrdersFilters
+      :filters="filters"
+      :advanced-filters="advancedFilters"
+      :channels="channels"
+      :available-communes="availableCommunes"
+      :presets="filterPresets"
+      :show-advanced="filtersUI?.showAdvanced || false"
+      :active-count="activeFiltersCount"
+      @filter-change="handleFilterChange"
+      @advanced-change="updateAdvancedFilter"
+      @apply-preset="applyPreset"
+      @toggle-advanced="toggleAdvancedFilters"
+      @search="debouncedSearch"
+      @clear-all="clearAllFilters"
+    />
 
-    <!-- Resumen del pedido -->
-    <div class="order-summary">
-      <div class="summary-item">
-        <span class="label">Cliente:</span>
-        <span class="value">{{ order.customer_name }}</span>
-      </div>
-      <div class="summary-item">
-        <span class="label">Dirección:</span>
-        <span class="value">{{ order.shipping_address }}</span>
-      </div>
-      <div v-if="order.shipping_commune" class="summary-item">
-        <span class="label">Comuna:</span>
-        <span class="value">{{ order.shipping_commune }}</span>
-      </div>
-    </div>
+    <!-- Tabla moderna -->
+    <OrdersTable
+       :orders="orders"
+  :selected-orders="selectedOrders"
+  :select-all-checked="selectAllChecked"
+  :select-all-indeterminate="selectAllIndeterminate"
+  :loading="loadingOrders"
+  :pagination="pagination"
+  @toggle-selection="toggleOrderSelection"
+  @toggle-select-all="toggleSelectAll"
+  @clear-selection="clearSelection"
+  @view-details="openOrderDetailsModal"
+  @mark-ready="markAsReady"
+  @track-live="openLiveTracking"
+  @view-tracking="openTrackingModal"
+  @view-proof="showProofOfDelivery"
+  @handle-action="handleActionButton"
+  @contact-support="contactSupport"
+  @bulk-mark-ready="handleBulkMarkReady"
+  @generate-manifest="generateManifestAndMarkReady"
+  @bulk-export="handleBulkExport"
+  @create-order="handleCreateOrder"
+  @go-to-page="goToPage"
+  @change-page-size="changePageSize"
+  @sort="handleSort"
+  :has-tracking-info="hasTrackingInfo"
+  :has-proof-of-delivery="hasProofOfDelivery"
+  :get-action-button="getActionButton"
+    />
 
-    <!-- Estado de disponibilidad de pruebas -->
-    <div class="proof-status">
-      <div class="status-grid">
-        <div class="status-item" :class="{ available: hasPhotos }">
-          <span class="icon">📸</span>
-          <span class="text">Fotos de Entrega</span>
-          <span class="status">{{ hasPhotos ? 'Disponibles' : 'No disponibles' }}</span>
+    <!-- Modales existentes (mantener tal como están) -->
+    <Modal v-model="showOrderDetailsModal" :title="`Pedido #${selectedOrder?.order_number}`" width="800px">
+      <OrderDetails v-if="selectedOrder" :order="selectedOrder" />
+    </Modal>
+
+<Modal v-model="showTrackingModal" :title="`🚚 Tracking - Pedido #${selectedTrackingOrder?.order_number}`"
+  width="700px">
+  <OrderTracking 
+    ref="orderTrackingRef"
+    v-if="selectedTrackingOrder" 
+    :order-id="selectedTrackingOrder._id" 
+    :order-number="selectedTrackingOrder.order_number"
+    @support-contact="handleTrackingSupport"
+    @show-proof="handleShowProof"
+    @close="showTrackingModal = false"
+  />
+</Modal>
+
+    <Modal v-model="showProofModal" :title="`📋 Prueba de Entrega - #${selectedProofOrder?.order_number}`"
+      width="700px">
+      <div v-if="loadingOrderDetails" class="loading-state">
+        <div class="loading-spinner"></div>
+      </div>
+      <ProofOfDelivery v-else-if="selectedProofOrder" :order="selectedProofOrder" />
+    </Modal>
+
+    <!-- Modal de soporte -->
+    <Modal v-model="showSupportModal" title="💬 Contactar Soporte" width="500px">
+      <div v-if="supportOrder" class="support-form">
+        <div class="support-order-info">
+          <h4>Pedido: #{{ supportOrder.order_number }}</h4>
+          <p>Cliente: {{ supportOrder.customer_name }}</p>
+          <p>Estado: {{ getStatusName(supportOrder.status) }}</p>
         </div>
-        <div class="status-item" :class="{ available: hasSignature }">
-          <span class="icon">✍️</span>
-          <span class="text">Firma Digital</span>
-          <span class="status">{{ hasSignature ? 'Disponible' : 'No disponible' }}</span>
-        </div>
-        <div class="status-item" :class="{ available: hasLocation }">
-          <span class="icon">📍</span>
-          <span class="text">Ubicación</span>
-          <span class="status">{{ hasLocation ? 'Disponible' : 'No disponible' }}</span>
-        </div>
-      </div>
-    </div>
 
-    <!-- Fotos de entrega -->
-    <div v-if="hasPhotos" class="photos-section">
-      <h4 class="section-title">📸 Fotos de Entrega ({{ deliveryPhotos.length }})</h4>
-      <div class="photos-grid">
-        <div 
-          v-for="(photo, index) in deliveryPhotos" 
-          :key="index"
-          class="photo-item"
-          @click="openPhotoModal(photo, index)">
-          <img 
-            :src="photo" 
-            :alt="`Foto de entrega ${index + 1}`"
-            class="delivery-photo"
-            @error="handleImageError($event, index)"
-            @load="handleImageLoad($event, index)"
-          />
-          <div class="photo-overlay">
-            <span class="zoom-icon">🔍</span>
-          </div>
-        </div>
-      </div>
-    </div>
-    
-    <!-- Mensaje cuando no hay fotos -->
-    <div v-else class="no-photos-message">
-      <div class="empty-state">
-        <span class="empty-icon">📸</span>
-        <h4>No hay fotos disponibles</h4>
-        <p>No se encontraron fotos de entrega para este pedido.</p>
-      </div>
-    </div>
-
-    <!-- Firma digital -->
-    <div v-if="hasSignature" class="signature-section">
-      <h4 class="section-title">✍️ Firma Digital</h4>
-      <div class="signature-container">
-        <img 
-          :src="signatureUrl" 
-          alt="Firma digital"
-          class="signature-image"
-          @click="openSignatureModal"
-          @error="handleSignatureError"
-          @load="handleSignatureLoad"
-        />
-        <div class="signature-info">
-          <p>Firma capturada digitalmente al momento de la entrega</p>
-          <button @click="openSignatureModal" class="view-signature-btn">
-            Ver firma completa
+        <div class="support-options">
+          <button @click="emailSupport(supportOrder)" class="support-option">
+            📧 Enviar Email
+          </button>
+          <button @click="whatsappSupport(supportOrder)" class="support-option">
+            💬 WhatsApp
+          </button>
+          <button @click="callSupport(supportOrder)" class="support-option">
+            📞 Llamar
           </button>
         </div>
       </div>
-    </div>
-    
-    <!-- Mensaje cuando no hay firma -->
-    <div v-else class="no-signature-message">
-      <div class="empty-state">
-        <span class="empty-icon">✍️</span>
-        <h4>No hay firma disponible</h4>
-        <p>No se encontró firma digital para este pedido.</p>
-      </div>
-    </div>
-
-    <!-- Información de ubicación -->
-    <div v-if="hasLocation" class="location-section">
-      <h4 class="section-title">📍 Ubicación de Entrega</h4>
-      <div class="location-info">
-        <p>Lat: {{ order.delivery_location.lat }}, Lng: {{ order.delivery_location.lng }}</p>
-        <button @click="openLocationInMaps" class="location-btn">
-          🗺️ Ver en Google Maps
-        </button>
-      </div>
-    </div>
-
-    <!-- Timeline de entrega -->
-    <div class="timeline-section">
-      <h4 class="section-title">⏰ Timeline de Entrega</h4>
-      <div class="timeline">
-        <div class="time-item">
-          <span class="time-label">Pedido creado:</span>
-          <span class="time-value">{{ formatDateTime(order.order_date) }}</span>
-        </div>
-        <div v-if="order.shipday_times?.assigned_time" class="time-item">
-          <span class="time-label">Conductor asignado:</span>
-          <span class="time-value">{{ formatDateTime(order.shipday_times.assigned_time) }}</span>
-        </div>
-        <div v-if="order.shipday_times?.pickup_time" class="time-item">
-          <span class="time-label">Recogido:</span>
-          <span class="time-value">{{ formatDateTime(order.shipday_times.pickup_time) }}</span>
-        </div>
-        <div class="time-item highlight">
-          <span class="time-label">Entregado:</span>
-          <span class="time-value">{{ formatDateTime(order.delivery_date) }}</span>
-        </div>
-        <div v-if="deliveryDuration" class="time-item total">
-          <span class="time-label">Tiempo total:</span>
-          <span class="time-value">{{ deliveryDuration }}</span>
-        </div>
-      </div>
-    </div>
-
-    <!-- Notas -->
-    <div v-if="order.notes || order.delivery_note" class="notes-section">
-      <h4 class="section-title">📝 Notas</h4>
-      <div class="notes-content">
-        <div v-if="order.notes" class="note-item">
-          <span class="note-label">Instrucciones del pedido:</span>
-          <span class="note-text">{{ order.notes }}</span>
-        </div>
-        <div v-if="order.delivery_note" class="note-item">
-          <span class="note-label">Notas de entrega:</span>
-          <span class="note-text">{{ order.delivery_note }}</span>
-        </div>
-      </div>
-    </div>
-
-    <!-- Acciones -->
-    <div class="actions-section">
-      <button @click="shareProof" class="action-btn share">
-        📤 Compartir
-      </button>
-      <button @click="reportIssue" class="action-btn report">
-        ⚠️ Reportar Problema
-      </button>
-    </div>
-
-    <!-- Modal de foto -->
-    <div v-if="showPhotoModal" class="photo-modal" @click="closePhotoModal">
-      <div class="photo-modal-content" @click.stop>
-        <button @click="closePhotoModal" class="close-btn">✕</button>
-        <img :src="selectedPhoto" alt="Foto de entrega ampliada" class="modal-image" />
-        <div class="photo-navigation" v-if="deliveryPhotos.length > 1">
-          <button @click="previousPhoto" :disabled="selectedPhotoIndex === 0" class="nav-btn">
-            ← Anterior
-          </button>
-          <span class="photo-counter">{{ selectedPhotoIndex + 1 }} / {{ deliveryPhotos.length }}</span>
-          <button @click="nextPhoto" :disabled="selectedPhotoIndex === deliveryPhotos.length - 1" class="nav-btn">
-            Siguiente →
-          </button>
-        </div>
-      </div>
-    </div>
-    
-    <!-- Modal de firma -->
-    <div v-if="showSignatureModal" class="signature-modal" @click="closeSignatureModal">
-      <div class="signature-modal-content" @click.stop>
-        <button @click="closeSignatureModal" class="close-btn">✕</button>
-        <img :src="signatureUrl" alt="Firma digital ampliada" class="modal-signature" />
-        <p class="signature-caption">Firma digital capturada al momento de la entrega</p>
-      </div>
-    </div>
+    </Modal>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue';
-import { useToast } from 'vue-toastification';
+import { ref, onMounted, computed, onBeforeUnmount } from 'vue'
+import { useRouter } from 'vue-router'
+import { useAuthStore } from '../store/auth'
+import { apiService } from '../services/api'
+import { useToast } from 'vue-toastification'
 
-const toast = useToast();
-const props = defineProps({
-  order: { type: Object, required: true }
-});
+// Componentes importados
+import Modal from '../components/Modal.vue'
+import OrderDetails from '../components/OrderDetails.vue'
+import OrderTracking from '../components/OrderTracking.vue'
+import ProofOfDelivery from '../components/ProofOfDelivery.vue'
 
-// Estado de modales
-const showPhotoModal = ref(false);
-const showSignatureModal = ref(false);
-const selectedPhoto = ref('');
-const selectedPhotoIndex = ref(0);
+// Nuevos componentes modernos
+import OrdersHeader from '../components/Orders/OrdersHeader.vue'
+import OrdersFilters from '../components/Orders/OrdersFilters.vue'
+import OrdersTable from '../components/Orders/OrdersTable.vue'
 
-// Estados de carga de imágenes
-const imageLoadStates = ref({});
-const signatureLoadState = ref({ loaded: false, error: false });
+// Composables (asumiendo que ya los extendiste)
+import { useOrdersData } from '../composables/useOrdersData'
+import { useOrdersFilters } from '../composables/useOrdersFilters'
+import { useOrdersSelection } from '../composables/useOrdersSelection'
 
-// Debug
-const isDevelopment = computed(() => process.env.NODE_ENV === 'development');
+const toast = useToast()
+const router = useRouter()
+const auth = useAuthStore()
 
-// Computed properties mejoradas
-const deliveryPhotos = computed(() => {
-  const photos = [];
-    
-  // Fotos desde proof_of_delivery (estructura local)
-  if (props.order.proof_of_delivery?.photo_url) {
-    if (Array.isArray(props.order.proof_of_delivery.photo_url)) {
-      photos.push(...props.order.proof_of_delivery.photo_url);
-    } else {
-      photos.push(props.order.proof_of_delivery.photo_url);
+// ==================== COMPOSABLES ====================
+
+// Datos principales
+const {
+  orders,
+  channels,
+  pagination,
+  loading: loadingOrders,
+  refreshing,
+  additionalStats,
+  loadingStates,
+  fetchOrders,
+  fetchChannels,
+  goToPage,
+  changePageSize,
+  refreshOrders,
+  markOrderAsReady,
+  markMultipleAsReady,
+  exportOrders,
+  startAutoRefresh,
+  stopAutoRefresh,
+  updateOrderLocally
+} = useOrdersData()
+
+// Filtros
+const {
+  filters,
+  advancedFilters,
+  filtersUI,
+  filterPresets,
+  allFilters,
+  activeFiltersCount,
+  availableCommunes,
+  applyPreset,
+  toggleAdvancedFilters,
+  updateAdvancedFilter,
+  debouncedSearch,
+  handleFilterChange,
+  clearAllFilters
+} = useOrdersFilters(orders, fetchOrders)
+
+// Selección múltiple
+const {
+  selectedOrders,
+  selectAllChecked,
+  selectAllIndeterminate,
+  selectedCount,
+  selectedOrderObjects,
+  toggleOrderSelection,
+  toggleSelectAll,
+  clearSelection
+} = useOrdersSelection(orders)
+
+// ==================== ESTADO LOCAL ====================
+
+const user = computed(() => auth.user)
+const lastUpdate = ref(Date.now())
+const autoRefreshEnabled = ref(false)
+const loadingOrderDetails = ref(false)
+const orderTrackingRef = ref(null)
+
+// Estados de modales (mantener los existentes)
+const selectedOrder = ref(null)
+const showOrderDetailsModal = ref(false)
+const selectedTrackingOrder = ref(null)
+const showTrackingModal = ref(false)
+const selectedProofOrder = ref(null)
+const showProofModal = ref(false)
+const supportOrder = ref(null)
+const showSupportModal = ref(false)
+
+// ==================== COMPUTED ====================
+
+/**
+ * Estadísticas para el header
+ */
+const orderStats = computed(() => ({
+  total: orders.value.length,
+  pending: orders.value.filter(o => o.status === 'pending').length,
+  processing: orders.value.filter(o => o.status === 'processing').length,
+  shipped: orders.value.filter(o => o.status === 'shipped').length,
+  delivered: orders.value.filter(o => o.status === 'delivered').length,
+  cancelled: orders.value.filter(o => o.status === 'cancelled').length,
+  ready_for_pickup: orders.value.filter(o => o.status === 'ready_for_pickup').length
+}))
+
+// ==================== MÉTODOS DEL HEADER ====================
+
+async function handleRefresh() {
+  try {
+    await refreshOrders(allFilters.value)
+    lastUpdate.value = Date.now()
+    toast.success('Pedidos actualizados')
+  } catch (error) {
+    toast.error('Error al actualizar pedidos')
+  }
+}
+
+async function handleExport() {
+  try {
+    await exportOrders('excel', allFilters.value)
+    toast.success('Exportación completada')
+  } catch (error) {
+    toast.error('Error al exportar pedidos')
+  }
+}
+
+function handleCreateOrder() {
+  // Navegar a crear pedido o abrir modal
+  router.push('/orders/create')
+}
+
+function toggleAutoRefresh() {
+  autoRefreshEnabled.value = !autoRefreshEnabled.value
+  if (autoRefreshEnabled.value) {
+    startAutoRefresh(5) // cada 5 minutos
+    toast.info('Auto-actualización activada (cada 5 min)')
+  } else {
+    stopAutoRefresh()
+    toast.info('Auto-actualización desactivada')
+  }
+}
+
+// ==================== MÉTODOS DE ACCIONES MASIVAS ====================
+
+async function handleBulkMarkReady() {
+  try {
+    const pendingOrders = selectedOrderObjects.value.filter(o => o.status === 'pending')
+    if (pendingOrders.length === 0) {
+      toast.warning('No hay pedidos pendientes seleccionados')
+      return
+    }
+
+    await markMultipleAsReady(pendingOrders.map(o => o._id))
+    clearSelection()
+    toast.success(`${pendingOrders.length} pedidos marcados como listos`)
+  } catch (error) {
+    toast.error('Error al marcar pedidos como listos')
+  }
+}
+
+async function generateManifestAndMarkReady() {
+  if (selectedOrders.value.length === 0) {
+    toast.warning('Selecciona al menos un pedido')
+    return
+  }
+
+  const confirmMsg = `¿Deseas generar el manifiesto y marcar ${selectedOrders.value.length} pedido(s) como "Listo para Retiro"?`
+  if (!confirm(confirmMsg)) return
+
+  try {
+    // 1. Marcar pedidos como listos
+    await markMultipleAsReady(selectedOrders.value)
+
+    // 2. Generar manifiesto
+    const ids = selectedOrders.value.join(',')
+    const routeData = router.resolve({ name: 'PickupManifest', query: { ids } })
+    const newWindow = window.open(routeData.href, '_blank')
+
+    if (!newWindow) {
+      toast.error('No se pudo abrir el manifiesto. Habilita las ventanas emergentes.')
+      return
+    }
+
+    // 3. Limpiar selección
+    clearSelection()
+
+    toast.success('✅ Pedidos marcados como listos y manifiesto generado exitosamente')
+  } catch (error) {
+    console.error('❌ Error al generar manifiesto:', error)
+    toast.error('Error al procesar los pedidos')
+  }
+}
+
+async function handleBulkExport() {
+  try {
+    const orderIds = selectedOrders.value
+    await exportOrders('excel', { order_ids: orderIds })
+    toast.success(`Exportación de ${orderIds.length} pedidos completada`)
+  } catch (error) {
+    toast.error('Error al exportar selección')
+  }
+}
+
+// ==================== MÉTODOS DE TABLA ====================
+
+function handleSort(column) {
+  // Implementar lógica de ordenamiento
+  console.log('Sorting by:', column)
+  // Aquí puedes implementar la lógica de ordenamiento
+}
+
+// ==================== MÉTODOS DE PEDIDOS INDIVIDUALES ====================
+
+async function markAsReady(order) {
+  try {
+    await markOrderAsReady(order)
+    // El composable ya actualiza localmente
+  } catch (error) {
+    // El composable ya maneja el error
+  }
+}
+
+// ==================== MÉTODOS DE TRACKING Y MODALES ====================
+/**
+ * Verificar si una orden tiene tracking disponible
+ */
+function hasTrackingInfo(order) {
+  // Usar la función del componente OrderTracking si está disponible
+  if (orderTrackingRef.value?.hasTrackingInfo) {
+    return orderTrackingRef.value.hasTrackingInfo(order)
+  }
+  
+  // Fallback: lógica básica
+  if (order.status === 'delivered') return false
+  return !!(
+    order.shipday_tracking_url ||
+    order.shipday_driver_id || 
+    order.shipday_order_id ||
+    ['processing', 'shipped'].includes(order.status)
+  )
+}
+
+/**
+ * Verificar si una orden tiene prueba de entrega
+ */
+function hasProofOfDelivery(order) {
+  if (orderTrackingRef.value?.orderHasProofOfDelivery) {
+    return orderTrackingRef.value.orderHasProofOfDelivery(order)
+  }
+  
+  // Fallback: lógica básica
+  if (order.status !== 'delivered') return false
+  return !!(
+    order.proof_of_delivery?.photo_url || 
+    order.proof_of_delivery?.signature_url ||
+    order.podUrls?.length > 0 ||
+    order.signatureUrl
+  )
+}
+
+/**
+ * Obtener configuración del botón de acción
+ */
+function getActionButton(order) {
+  if (orderTrackingRef.value?.getActionButton) {
+    return orderTrackingRef.value.getActionButton(order)
+  }
+  
+  // Fallback: lógica básica
+  if (order.status === 'delivered') {
+    return {
+      type: 'proof',
+      label: 'Ver Prueba de Entrega',
+      icon: '📸',
+      class: 'btn-success',
+      available: hasProofOfDelivery(order)
     }
   }
-    
-  // Fotos desde webhooks de Shipday (podUrls)
-  if (props.order.podUrls && Array.isArray(props.order.podUrls)) {
-    photos.push(...props.order.podUrls);
+  
+  if (['processing', 'shipped'].includes(order.status)) {
+    return {
+      type: 'tracking',
+      label: 'Tracking en Vivo',
+      icon: '📍',
+      class: 'btn-primary',
+      available: hasTrackingInfo(order)
+    }
   }
   
-  // Fotos desde otros campos posibles
-  if (props.order.delivery_photos && Array.isArray(props.order.delivery_photos)) {
-    photos.push(...props.order.delivery_photos);
+  return { type: 'none', available: false }
+}
+
+async function openLiveTracking(order) {
+  console.log('📍 Intentando abrir tracking para orden:', order.order_number)
+  
+  // Usar la función del componente si está disponible
+  if (orderTrackingRef.value?.openLiveTrackingFromExternal) {
+    await orderTrackingRef.value.openLiveTrackingFromExternal(order, updateOrderLocally)
+    return
   }
-    
-  // Eliminar duplicados y URLs vacías
-  const uniquePhotos = [...new Set(photos)].filter(photo => photo && photo.trim() !== '');
   
-  console.log('🔍 Fotos de entrega encontradas:', {
-    proof_of_delivery: props.order.proof_of_delivery?.photo_url,
-    podUrls: props.order.podUrls,
-    delivery_photos: props.order.delivery_photos,
-    uniquePhotos
-  });
-  
-  return uniquePhotos;
-});
-
-const signatureUrl = computed(() => {
-  const signature = props.order.proof_of_delivery?.signature_url || 
-                   props.order.signatureUrl || 
-                   null;
-  
-  console.log('🔍 Firma encontrada:', {
-    proof_of_delivery_signature: props.order.proof_of_delivery?.signature_url,
-    signatureUrl: props.order.signatureUrl,
-    final: signature
-  });
-  
-  return signature;
-});
-
-const hasPhotos = computed(() => deliveryPhotos.value.length > 0);
-const hasSignature = computed(() => !!signatureUrl.value);
-const hasLocation = computed(() => 
-  props.order.delivery_location?.lat && props.order.delivery_location?.lng
-);
-
-const debugInfo = computed(() => ({
-  orderId: props.order._id,
-  orderNumber: props.order.order_number,
-  status: props.order.status,
-  deliveryDate: props.order.delivery_date,
-  hasPhotos: hasPhotos.value,
-  hasSignature: hasSignature.value,
-  hasLocation: hasLocation.value,
-  photosCount: deliveryPhotos.value.length,
-  rawData: {
-    proof_of_delivery: props.order.proof_of_delivery,
-    podUrls: props.order.podUrls,
-    signatureUrl: props.order.signatureUrl,
-    delivery_location: props.order.delivery_location,
-    delivery_photos: props.order.delivery_photos
-  }
-}));
-
-const deliveryDuration = computed(() => {
-  if (!props.order.order_date || !props.order.delivery_date) return null;
-    
-  const orderDate = new Date(props.order.order_date);
-  const deliveryDate = new Date(props.order.delivery_date);
-  const diffMs = deliveryDate - orderDate;
-    
-  const hours = Math.floor(diffMs / (1000 * 60 * 60));
-  const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
-    
-  if (hours > 24) {
-    const days = Math.floor(hours / 24);
-    const remainingHours = hours % 24;
-    return `${days} día${days !== 1 ? 's' : ''} ${remainingHours}h ${minutes}m`;
+  // Fallback: lógica básica
+  if (order.shipday_tracking_url) {
+    console.log('✅ Abriendo tracking URL directa:', order.shipday_tracking_url)
+    window.open(order.shipday_tracking_url, '_blank')
+  } else if (order.shipday_order_id) {
+    console.log('⚠️ No hay tracking URL, intentando refrescar datos...')
+    try {
+      const { data } = await apiService.orders.getById(order._id)
+      
+      if (data.shipday_tracking_url) {
+        console.log('✅ URL obtenida después de refresh:', data.shipday_tracking_url)
+        // Actualizar orden localmente
+        updateOrderLocally(data)
+        window.open(data.shipday_tracking_url, '_blank')
+      } else {
+        toast.warning('No se encontró URL de tracking. El pedido puede no estar asignado a un conductor aún.')
+      }
+    } catch (error) {
+      console.error('❌ Error refrescando orden:', error)
+      toast.error('Error obteniendo información de tracking')
+    }
   } else {
-    return `${hours}h ${minutes}m`;
-  }
-});
-
-// Funciones de modal
-function openPhotoModal(photo, index) {
-  selectedPhoto.value = photo;
-  selectedPhotoIndex.value = index;
-  showPhotoModal.value = true;
-}
-
-function closePhotoModal() {
-  showPhotoModal.value = false;
-}
-
-function previousPhoto() {
-  if (selectedPhotoIndex.value > 0) {
-    selectedPhotoIndex.value--;
-    selectedPhoto.value = deliveryPhotos.value[selectedPhotoIndex.value];
+    toast.warning('No hay información de tracking disponible')
   }
 }
-
-function nextPhoto() {
-  if (selectedPhotoIndex.value < deliveryPhotos.value.length - 1) {
-    selectedPhotoIndex.value++;
-    selectedPhoto.value = deliveryPhotos.value[selectedPhotoIndex.value];
-  }
+function openTrackingModal(order) {
+  selectedTrackingOrder.value = order
+  showTrackingModal.value = true
+  console.log('🚚 Abriendo modal de tracking:', order.order_number)
 }
 
-function openSignatureModal() {
-  showSignatureModal.value = true;
+function showProofOfDelivery(order) {
+  selectedProofOrder.value = order
+  showProofModal.value = true
+  console.log('📸 Mostrando prueba de entrega:', order.order_number)
 }
 
-function closeSignatureModal() {
-  showSignatureModal.value = false;
-}
-
-// Manejo de errores de imágenes
-function handleImageError(event, index) {
-  console.error(`❌ Error cargando imagen ${index + 1}:`, event.target.src);
-  imageLoadStates.value[index] = { loaded: false, error: true };
-  toast.error(`Error cargando imagen ${index + 1}`);
-}
-
-function handleImageLoad(event, index) {
-  console.log(`✅ Imagen ${index + 1} cargada correctamente`);
-  imageLoadStates.value[index] = { loaded: true, error: false };
-}
-
-function handleSignatureError(event) {
-  console.error('❌ Error cargando firma:', event.target.src);
-  signatureLoadState.value = { loaded: false, error: true };
-  toast.error('Error cargando la firma digital');
-}
-
-function handleSignatureLoad(event) {
-  console.log('✅ Firma cargada correctamente');
-  signatureLoadState.value = { loaded: true, error: false };
-}
-
-// Funciones utilitarias
-function formatDate(dateStr) {
-  if (!dateStr) return 'N/A';
-  return new Date(dateStr).toLocaleDateString('es-CL', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric'
-  });
-}
-
-function formatDateTime(dateStr) {
-  if (!dateStr) return 'N/A';
-  return new Date(dateStr).toLocaleString('es-CL', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit'
-  });
-}
-
-function openLocationInMaps() {
-  if (props.order.delivery_location?.lat && props.order.delivery_location?.lng) {
-    const { lat, lng } = props.order.delivery_location;
-    const url = `https://www.google.com/maps?q=${lat},${lng}`;
-    window.open(url, '_blank');
+async function openOrderDetailsModal(order) {
+  selectedOrder.value = null
+  showOrderDetailsModal.value = true
+  loadingOrderDetails.value = true
+  
+  try {
+    const { data } = await apiService.orders.getById(order._id)
+    selectedOrder.value = data
+  } catch (error) {
+    console.error("Error al obtener detalles del pedido:", error)
+    showOrderDetailsModal.value = false
+    toast.error('Error al cargar detalles del pedido')
+  } finally {
+    loadingOrderDetails.value = false
   }
 }
 
-function shareProof() {
-  if (navigator.share) {
-    navigator.share({
-      title: `Comprobante de Entrega - Pedido #${props.order.order_number}`,
-      text: `Mi pedido #${props.order.order_number} fue entregado exitosamente el ${formatDate(props.order.delivery_date)}.`,
-      url: window.location.href
-    }).catch(console.error);
-  } else {
-    // Fallback para navegadores que no soportan Web Share API
-    const text = `Comprobante de Entrega - Pedido #${props.order.order_number}\nEntregado el ${formatDate(props.order.delivery_date)}`;
-    navigator.clipboard.writeText(text).then(() => {
-      toast.success('Información copiada al portapapeles');
-    }).catch(() => {
-      toast.error('No se pudo copiar la información');
-    });
+function contactSupport(order) {
+  supportOrder.value = order
+  showSupportModal.value = true
+}
+
+function handleTrackingSupport(supportData) {
+  showTrackingModal.value = false
+  supportOrder.value = {
+    _id: supportData.orderId,
+    order_number: supportData.orderNumber,
+    customer_name: supportData.customerName,
+    status: selectedTrackingOrder.value?.status || 'unknown'
+  }
+  showSupportModal.value = true
+}
+
+function handleShowProof(proofData) {
+  showTrackingModal.value = false
+  selectedProofOrder.value = proofData.order
+  showProofModal.value = true
+}
+
+// ==================== MÉTODOS DE SOPORTE ====================
+
+function emailSupport(order) {
+  const subject = `Consulta sobre Pedido #${order.order_number}`
+  const body = `Hola,\n\nTengo una consulta sobre mi pedido #${order.order_number}.\n\nDetalles:\n- Cliente: ${order.customer_name}\n- Estado: ${getStatusName(order.status)}\n\nMi consulta es:\n\n[Describe tu consulta aquí]\n\nGracias.`
+  window.location.href = `mailto:soporte@tuempresa.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
+  showSupportModal.value = false
+}
+
+function whatsappSupport(order) {
+  const message = `Hola, tengo una consulta sobre mi pedido #${order.order_number}. Estado: ${getStatusName(order.status)}`
+  const whatsappNumber = '56912345678'
+  window.open(`https://wa.me/${whatsappNumber}?text=${encodeURIComponent(message)}`, '_blank')
+  showSupportModal.value = false
+}
+
+function callSupport(order) {
+  const phoneNumber = '+56912345678'
+  window.location.href = `tel:${phoneNumber}`
+  showSupportModal.value = false
+}
+
+// ==================== MÉTODOS UTILITARIOS ====================
+
+function getStatusName(status) {
+  const names = {
+    pending: 'Pendiente',
+    processing: 'Procesando',
+    ready_for_pickup: 'Listo para Retiro',
+    shipped: 'En Tránsito',
+    delivered: 'Entregado',
+    cancelled: 'Cancelado'
+  }
+  return names[status] || status
+}
+async function handleActionButton(order) {
+  const action = getActionButton(order)
+  
+  if (!action.available) {
+    console.log('❌ Acción no disponible para orden:', order.order_number)
+    return
+  }
+
+  switch (action.type) {
+    case 'proof':
+      showProofOfDelivery(order)
+      break
+    case 'tracking':
+      await openLiveTracking(order)
+      break
+    default:
+      console.log('❌ Tipo de acción desconocido:', action.type)
   }
 }
 
-function reportIssue() {
-  const subject = `Problema con entrega del pedido #${props.order.order_number}`;
-  const body = `Hola,\n\nTengo un problema con la entrega de mi pedido #${props.order.order_number}.\n\nDetalles:\n- Cliente: ${props.order.customer_name}\n- Fecha de entrega: ${formatDate(props.order.delivery_date)}\n\nDescripción del problema:\n\n[Describe el problema aquí]\n\nGracias.`;
-  window.location.href = `mailto:soporte@tuempresa.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-}
+// ==================== LIFECYCLE ====================
 
-// Lifecycle
-onMounted(() => {
-  console.log('📋 ProofOfDelivery montado para orden:', props.order.order_number);
-  console.log('🔍 Datos de la orden:', debugInfo.value);
-});
+onMounted(async () => {
+  try {
+    await Promise.all([
+      fetchOrders(),
+      fetchChannels()
+    ])
+    lastUpdate.value = Date.now()
+  } catch (error) {
+    console.error('Error al inicializar Orders:', error)
+    toast.error('Error al cargar la página')
+  }
+})
+
+onBeforeUnmount(() => {
+  if (autoRefreshEnabled.value) {
+    stopAutoRefresh()
+  }
+})
 </script>
 
 <style scoped>
-.proof-container {
-  max-width: 800px;
+.orders-page {
+  padding: 24px;
+  max-width: 1600px;
   margin: 0 auto;
-  padding: 20px;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: #f8fafc;
+  min-height: 100vh;
 }
 
-.debug-info {
-  background: #f8f9fa;
-  border: 1px solid #dee2e6;
-  border-radius: 8px;
-  padding: 16px;
-  margin-bottom: 20px;
-  font-size: 12px;
-}
-
-.debug-info summary {
-  cursor: pointer;
-  font-weight: bold;
-  margin-bottom: 8px;
-}
-
-.debug-info pre {
-  background: white;
-  padding: 8px;
-  border-radius: 4px;
-  overflow-x: auto;
-  font-size: 11px;
-}
-
-.proof-header {
+/* Loading States */
+.loading-state {
   display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 24px;
-  padding-bottom: 16px;
-  border-bottom: 2px solid #e9ecef;
-}
-
-.header-info h3 {
-  margin: 0 0 8px 0;
-  color: #333;
-  font-size: 24px;
-}
-
-.delivery-info {
-  color: #666;
-  margin: 0;
-  font-size: 16px;
-}
-
-.status-badge {
-  padding: 8px 16px;
-  border-radius: 20px;
-  font-weight: 600;
-  font-size: 14px;
-}
-
-.status-badge.delivered {
-  background: #d4edda;
-  color: #155724;
-  border: 1px solid #c3e6cb;
-}
-
-.order-summary {
-  background: #f8f9fa;
-  padding: 20px;
-  border-radius: 12px;
-  margin-bottom: 24px;
-}
-
-.summary-item {
-  display: flex;
-  justify-content: space-between;
-  margin-bottom: 8px;
-  padding: 4px 0;
-}
-
-.summary-item:last-child {
-  margin-bottom: 0;
-}
-
-.label {
-  font-weight: 600;
-  color: #495057;
-}
-
-.value {
-  color: #212529;
-  text-align: right;
-  max-width: 60%;
-}
-
-.proof-status {
-  margin-bottom: 24px;
-}
-
-.status-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 16px;
-}
-
-.status-item {
-  display: flex;
-  align-items: center;
-  padding: 12px;
-  border: 2px solid #e9ecef;
-  border-radius: 8px;
-  background: #f8f9fa;
-}
-
-.status-item.available {
-  border-color: #28a745;
-  background: #d4edda;
-}
-
-.status-item .icon {
-  font-size: 20px;
-  margin-right: 12px;
-}
-
-.status-item .text {
-  font-weight: 500;
-  margin-right: auto;
-}
-
-.status-item .status {
-  font-size: 12px;
-  color: #666;
-}
-
-.status-item.available .status {
-  color: #155724;
-  font-weight: 600;
-}
-
-.photos-section, .signature-section, .location-section, .timeline-section, .notes-section {
-  margin-bottom: 24px;
-}
-
-.section-title {
-  font-size: 18px;
-  font-weight: 600;
-  color: #333;
-  margin: 0 0 16px 0;
-  padding-bottom: 8px;
-  border-bottom: 1px solid #e9ecef;
-}
-
-.photos-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  gap: 16px;
-}
-
-.photo-item {
-  position: relative;
-  aspect-ratio: 1;
-  border-radius: 8px;
-  overflow: hidden;
-  cursor: pointer;
-  transition: transform 0.2s ease;
-}
-
-.photo-item:hover {
-  transform: scale(1.05);
-}
-
-.delivery-photo {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.photo-overlay {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  opacity: 0;
-  transition: opacity 0.2s ease;
+  padding: 40px;
+  color: #6b7280;
 }
 
-.photo-item:hover .photo-overlay {
-  opacity: 1;
-}
-
-.zoom-icon {
-  color: white;
-  font-size: 24px;
-}
-
-.empty-state {
-  text-align: center;
-  padding: 40px 20px;
-  color: #6c757d;
-}
-
-.empty-state .empty-icon {
-  font-size: 48px;
-  opacity: 0.5;
-  margin-bottom: 16px;
-  display: block;
-}
-
-.empty-state h4 {
-  margin: 0 0 8px 0;
-  font-size: 18px;
-}
-
-.empty-state p {
-  margin: 0;
-  font-size: 14px;
-}
-
-.signature-container {
-  display: flex;
-  gap: 20px;
-  align-items: center;
-  padding: 16px;
-  background: #f8f9fa;
-  border-radius: 8px;
-}
-
-.signature-image {
-  max-width: 200px;
-  max-height: 100px;
-  border: 1px solid #dee2e6;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: transform 0.2s ease;
-}
-
-.signature-image:hover {
-  transform: scale(1.05);
-}
-
-.signature-info {
-  flex: 1;
-}
-
-.signature-info p {
-  margin: 0 0 12px 0;
-  color: #666;
-  font-size: 14px;
-}
-
-.view-signature-btn {
-  padding: 8px 16px;
-  background: #007bff;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 14px;
-  transition: background 0.2s ease;
-}
-
-.view-signature-btn:hover {
-  background: #0056b3;
-}
-
-.location-info {
-  background: #f8f9fa;
-  padding: 16px;
-  border-radius: 8px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.location-btn {
-  padding: 8px 16px;
-  background: #28a745;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 14px;
-  transition: background 0.2s ease;
-}
-
-.location-btn:hover {
-  background: #218838;
-}
-
-.timeline {
-  background: #f8f9fa;
-  padding: 20px;
-  border-radius: 8px;
-}
-
-.time-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 8px 0;
-  border-bottom: 1px solid #e9ecef;
-}
-
-.time-item:last-child {
-  border-bottom: none;
-}
-
-.time-item.highlight {
-  background: #d4edda;
-  margin: 8px -20px;
-  padding: 12px 20px;
-  border-radius: 4px;
-  border-bottom: none;
-}
-
-.time-item.total {
-  font-weight: 600;
-  background: #e9ecef;
-  margin: 8px -20px 0;
-  padding: 12px 20px;
-  border-radius: 4px;
-  border-bottom: none;
-}
-
-.time-label {
-  font-weight: 500;
-  color: #495057;
-}
-
-.time-value {
-  color: #212529;
-  font-family: monospace;
-}
-
-.notes-content {
-  background: #fff3cd;
-  padding: 16px;
-  border-radius: 8px;
-  border-left: 4px solid #ffc107;
-}
-
-.note-item {
-  margin-bottom: 12px;
-}
-
-.note-item:last-child {
-  margin-bottom: 0;
-}
-
-.note-label {
-  display: block;
-  font-weight: 600;
-  color: #856404;
-  margin-bottom: 4px;
-}
-
-.note-text {
-  color: #856404;
-  line-height: 1.5;
-}
-
-.actions-section {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 12px;
-  margin-top: 24px;
-}
-
-.action-btn {
-  padding: 12px 16px;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-  font-weight: 500;
-  transition: all 0.2s ease;
-  font-size: 14px;
-}
-
-.action-btn.share {
-  background: #17a2b8;
-  color: white;
-}
-
-.action-btn.share:hover {
-  background: #138496;
-}
-
-.action-btn.report {
-  background: #dc3545;
-  color: white;
-}
-
-.action-btn.report:hover {
-  background: #c82333;
-}
-
-.photo-modal,
-.signature-modal {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.9);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-}
-
-.photo-modal-content,
-.signature-modal-content {
-  position: relative;
-  max-width: 90vw;
-  max-height: 90vh;
-  text-align: center;
-}
-
-.close-btn {
-  position: absolute;
-  top: -40px;
-  right: 0;
-  background: rgba(0, 0, 0, 0.5);
-  border: none;
-  color: white;
-  font-size: 24px;
-  cursor: pointer;
+.loading-spinner {
   width: 32px;
   height: 32px;
+  border: 3px solid #f3f4f6;
+  border-top: 3px solid #6366f1;
   border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-bottom: 16px;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Support Modal Styles */
+.support-form {
+  padding: 20px;
+}
+
+.support-order-info {
+  background: #f9fafb;
+  padding: 16px;
+  border-radius: 12px;
+  margin-bottom: 20px;
+  border: 1px solid #e5e7eb;
+}
+
+.support-order-info h4 {
+  margin: 0 0 8px 0;
+  color: #1f2937;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.support-order-info p {
+  margin: 4px 0;
+  color: #6b7280;
+  font-size: 14px;
+}
+
+.support-options {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+.support-option {
   display: flex;
   align-items: center;
-  justify-content: center;
-  transition: background 0.2s ease;
-}
-
-.close-btn:hover {
-  background: rgba(0, 0, 0, 0.7);
-}
-
-.modal-image,
-.modal-signature {
-  max-width: 100%;
-  max-height: 80vh;
-  border-radius: 8px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
-}
-
-.photo-navigation {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-top: 16px;
-  color: white;
-}
-
-.nav-btn {
-  background: rgba(255, 255, 255, 0.2);
-  border: 1px solid rgba(255, 255, 255, 0.4);
-  color: white;
-  padding: 8px 16px;
-  border-radius: 6px;
+  gap: 12px;
+  padding: 16px;
+  background: white;
+  border: 2px solid #e5e7eb;
+  border-radius: 12px;
   cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.nav-btn:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.3);
-}
-
-.nav-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.photo-counter {
+  transition: all 0.3s ease;
   font-size: 14px;
   font-weight: 500;
+  color: #374151;
 }
 
-.signature-caption {
-  color: white;
-  margin-top: 16px;
-  font-style: italic;
-  font-size: 14px;
+.support-option:hover {
+  border-color: #6366f1;
+  background: #f8fafc;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.15);
 }
 
-/* Responsive */
-@media (max-width: 768px) {
-  .proof-container {
+/* Responsive Design */
+@media (max-width: 1024px) {
+  .orders-page {
     padding: 16px;
   }
-  
-  .proof-header {
-    flex-direction: column;
-    gap: 16px;
-  }
-  
-  .signature-container {
-    flex-direction: column;
-    text-align: center;
-  }
-  
-  .location-info {
-    flex-direction: column;
-    gap: 12px;
-    text-align: center;
-  }
-  
-  .photos-grid {
-    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-    gap: 12px;
-  }
-  
-  .status-grid {
-    grid-template-columns: 1fr;
-    gap: 12px;
-  }
-  
-  .time-item {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 4px;
+}
+
+@media (max-width: 768px) {
+  .orders-page {
+    padding: 12px;
+    background: white;
   }
 }
 
-/* Estados de carga de imágenes */
-.delivery-photo,
-.signature-image {
-  transition: opacity 0.3s ease;
+@media (max-width: 480px) {
+  .orders-page {
+    padding: 8px;
+  }
+  
+  .support-options {
+    gap: 8px;
+  }
+  
+  .support-option {
+    padding: 12px;
+    font-size: 13px;
+  }
 }
 
-.delivery-photo[src=""],
-.signature-image[src=""] {
-  opacity: 0.5;
-  background: #f8f9fa;
+/* Accessibility */
+.orders-page:focus-within {
+  outline: none;
 }
 
-/* Animaciones */
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(20px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-.photos-section,
-.signature-section,
-.location-section,
-.timeline-section,
-.notes-section {
-  animation: fadeIn 0.3s ease-out;
-}
-
-/* Tooltips para accesibilidad */
-.photo-item,
-.signature-image,
-.location-btn,
-.view-signature-btn {
-  position: relative;
-}
-
-.photo-item:focus,
-.signature-image:focus,
-.location-btn:focus,
-.view-signature-btn:focus {
-  outline: 2px solid #007bff;
-  outline-offset: 2px;
-}
-
-/* Estados de error para imágenes */
-.delivery-photo:not([src]),
-.signature-image:not([src]) {
-  background: #f8f9fa;
-  border: 2px dashed #dee2e6;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.delivery-photo:not([src])::before,
-.signature-image:not([src])::before {
-  content: "❌ Error";
-  color: #6c757d;
-  font-size: 12px;
+/* Print styles */
+@media print {
+  .orders-page {
+    background: white;
+    padding: 0;
+  }
 }
 </style>

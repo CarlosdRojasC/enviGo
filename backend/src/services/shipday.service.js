@@ -10,167 +10,6 @@ class ShipDayService {
     } else {
       console.log('✅ ShipDay API Key configurada:', `${API_KEY.substring(0, 10)}...`);
     }
-       this.requestQueue = [];
-    this.isProcessingQueue = false;
-    this.requestCounts = {
-      minute: { count: 0, resetTime: Date.now() + 60000 },
-      hour: { count: 0, resetTime: Date.now() + 3600000 }
-    };
-    
-    // Límites más conservadores para evitar 429
-    this.rateLimits = {
-      maxPerMinute: 40,    // Reducido de 60 a 40
-      maxPerHour: 800,     // Reducido de 1000 a 800
-      baseDelay: 1500,     // Aumentado de 1000 a 1500ms
-      backoffDelay: 3000   // Delay adicional después de error 429
-    };
-    
-    this.lastRequestTime = 0;
-    this.consecutiveErrors = 0;
-    this.backoffUntil = 0;
-  }
-  
-  updateRateLimitCounters() {
-    const now = Date.now();
-    
-    // Reset contadores si han pasado los intervalos
-    if (now > this.requestCounts.minute.resetTime) {
-      this.requestCounts.minute = { count: 0, resetTime: now + 60000 };
-    }
-    
-    if (now > this.requestCounts.hour.resetTime) {
-      this.requestCounts.hour = { count: 0, resetTime: now + 3600000 };
-    }
-    
-    // Incrementar contadores
-    this.requestCounts.minute.count++;
-    this.requestCounts.hour.count++;
-  }
-
-  /**
-   * Verificar si podemos hacer una request
-   */
-  canMakeRequest() {
-    const now = Date.now();
-    
-    // Verificar si estamos en backoff
-    if (now < this.backoffUntil) {
-      return false;
-    }
-    
-    // Verificar límites
-    if (this.requestCounts.minute.count >= this.rateLimits.maxPerMinute) {
-      return false;
-    }
-    
-    if (this.requestCounts.hour.count >= this.rateLimits.maxPerHour) {
-      return false;
-    }
-    
-    return true;
-  }
-
-  /**
-   * Calcular delay necesario antes de la próxima request
-   */
-  calculateDelay() {
-    const now = Date.now();
-    const timeSinceLastRequest = now - this.lastRequestTime;
-    
-    // Delay base
-    let delay = this.rateLimits.baseDelay;
-    
-    // Delay adicional basado en errores consecutivos
-    if (this.consecutiveErrors > 0) {
-      delay += this.consecutiveErrors * 1000; // +1s por cada error
-    }
-    
-    // Delay adicional si estamos cerca del límite
-    if (this.requestCounts.minute.count > this.rateLimits.maxPerMinute * 0.8) {
-      delay += 2000; // +2s si estamos al 80% del límite
-    }
-    
-    // Asegurar que no hagamos requests demasiado seguidas
-    const minimumDelay = Math.max(0, this.rateLimits.baseDelay - timeSinceLastRequest);
-    
-    return Math.max(delay, minimumDelay);
-  }
-
-  /**
-   * Wrapper para requests con rate limiting
-   */
-  async makeRateLimitedRequest(requestFn, description = 'Request') {
-    return new Promise((resolve, reject) => {
-      this.requestQueue.push({ requestFn, description, resolve, reject });
-      this.processQueue();
-    });
-  }
-
-  /**
-   * Procesar cola de requests
-   */
-  async processQueue() {
-    if (this.isProcessingQueue || this.requestQueue.length === 0) {
-      return;
-    }
-    
-    this.isProcessingQueue = true;
-    
-    while (this.requestQueue.length > 0) {
-      const { requestFn, description, resolve, reject } = this.requestQueue.shift();
-      
-      try {
-        // Esperar si no podemos hacer la request
-        while (!this.canMakeRequest()) {
-          const waitTime = Math.min(5000, this.requestCounts.minute.resetTime - Date.now());
-          console.log(`⏳ Rate limit alcanzado, esperando ${waitTime}ms...`);
-          await new Promise(resolve => setTimeout(resolve, waitTime));
-        }
-        
-        // Calcular y aplicar delay
-        const delay = this.calculateDelay();
-        if (delay > 0) {
-          console.log(`⏱️ Aplicando delay de ${delay}ms para ${description}`);
-          await new Promise(resolve => setTimeout(resolve, delay));
-        }
-        
-        // Actualizar contadores
-        this.updateRateLimitCounters();
-        this.lastRequestTime = Date.now();
-        
-        // Hacer la request
-        console.log(`📡 [${description}] Enviando request...`);
-        const result = await requestFn();
-        
-        // Request exitosa
-        this.consecutiveErrors = 0;
-        this.backoffUntil = 0;
-        
-        console.log(`✅ [${description}] Request exitosa`);
-        resolve(result);
-        
-      } catch (error) {
-        console.error(`❌ [${description}] Error:`, error.message);
-        
-        // Manejar error 429 específicamente
-        if (error.response?.status === 429) {
-          this.consecutiveErrors++;
-          this.backoffUntil = Date.now() + this.rateLimits.backoffDelay;
-          
-          console.log(`🚫 Rate limit exceeded, aplicando backoff de ${this.rateLimits.backoffDelay}ms`);
-          
-          // Reintentar después del backoff
-          this.requestQueue.unshift({ requestFn, description, resolve, reject });
-          continue;
-        }
-        
-        // Otros errores
-        this.consecutiveErrors++;
-        reject(this.handleError(error));
-      }
-    }
-    
-    this.isProcessingQueue = false;
   }
 
   // Método simple para obtener headers
@@ -200,19 +39,21 @@ class ShipDayService {
 
   // ==================== DRIVERS ====================
 
-async getDrivers() {
-  const requestFn = async () => {
-    console.log('👥 Obteniendo conductores de Shipday...');
-    
-    const headers = this.getHeaders();
-    const response = await axios.get(`${BASE_URL}/carriers`, { headers });
-    
-    console.log(`✅ ${response.data.length} conductores obtenidos`);
-    return response.data || [];
-  };
-  
-  return this.makeRateLimitedRequest(requestFn, 'Get Drivers');
-}
+  async getDrivers() {
+    try {
+      console.log('👥 Obteniendo conductores de Shipday...');
+      
+      const headers = this.getHeaders();
+      const response = await axios.get(`${BASE_URL}/carriers`, { headers });
+      
+      console.log(`✅ ${response.data.length} conductores obtenidos`);
+      return response.data || [];
+      
+    } catch (error) {
+      console.error('❌ Error obteniendo conductores:', error.message);
+      throw this.handleError(error);
+    }
+  }
 
   async getDriver(email) {
     try {
@@ -290,79 +131,86 @@ async getDrivers() {
 
   // ==================== ORDERS ====================
 
-async getOrders(filters = {}) {
-  const requestFn = async () => {
-    console.log('📦 Obteniendo órdenes de Shipday...');
-    
-    const headers = this.getHeaders();
-    const params = new URLSearchParams(filters).toString();
-    const response = await axios.get(`${BASE_URL}/orders${params ? `?${params}` : ''}`, { headers });
-    
-    console.log(`✅ ${response.data.length} órdenes obtenidas`);
-    return response.data || [];
-  };
-  
-  return this.makeRateLimitedRequest(requestFn, 'Get Orders');
-}
-
- async getOrder(orderId) {
-  const requestFn = async () => {
-    console.log('📦 Obteniendo orden:', orderId);
-    
-    const headers = this.getHeaders();
-    const response = await axios.get(`${BASE_URL}/orders/${orderId}`, { headers });
-    
-    return response.data;
-  };
-  
-  return this.makeRateLimitedRequest(requestFn, `Get Order ${orderId}`);
-}
-async createOrder(orderData) {
-  const requestFn = async () => {
-    console.log('🚢 Creando orden en Shipday...');
-
-    const payload = {
-      orderNumber: orderData.orderNumber,
-      customerName: orderData.customerName,
-      customerAddress: orderData.customerAddress,
-      restaurantName: orderData.restaurantName || "enviGo",
-      restaurantAddress: orderData.restaurantAddress || "santa hilda 1447, quilicura",
-      customerEmail: orderData.customerEmail || '',
-      customerPhoneNumber: orderData.customerPhoneNumber || '',
-      deliveryInstruction: orderData.deliveryInstruction || '',
-      deliveryFee: parseFloat(orderData.deliveryFee) || 1800,
-      total: parseFloat(orderData.total) || 1,
-      paymentMethod: "credit_card"
-    };
-
-    const headers = this.getHeaders();
-    const response = await axios.post(`${BASE_URL}/orders`, payload, { headers });
-    
-    console.log('✅ Orden creada exitosamente:', response.data.orderId);
-    return response.data;
-  };
-  
-  return this.makeRateLimitedRequest(requestFn, `Create Order ${orderData.orderNumber}`);
-}
-
-
-   async assignOrder(orderId, driverId) {
-    const requestFn = async () => {
-      const headers = this.getHeaders();
-      const payload = {
-        carrierId: parseInt(driverId, 10)
-      };
+  async getOrders() {
+    try {
+      console.log('📦 Obteniendo órdenes de Shipday...');
       
+      const headers = this.getHeaders();
+      const response = await axios.get(`${BASE_URL}/orders`, { headers });
+      
+      console.log(`✅ ${response.data.length} órdenes obtenidas`);
+      return response.data || [];
+      
+    } catch (error) {
+      console.error('❌ Error obteniendo órdenes:', error.message);
+      throw this.handleError(error);
+    }
+  }
+
+  async getOrder(orderId) {
+    try {
+      console.log('📦 Obteniendo orden:', orderId);
+      
+      const headers = this.getHeaders();
+      const response = await axios.get(`${BASE_URL}/orders/${orderId}`, { headers });
+      
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error obteniendo orden:', error.message);
+      throw this.handleError(error);
+    }
+  }
+
+  async createOrder(orderData) {
+    try {
+      console.log('🚢 Creando orden en Shipday...');
+
+      const payload = {
+        orderNumber: orderData.orderNumber,
+        customerName: orderData.customerName,
+        customerAddress: orderData.customerAddress,
+        restaurantName: orderData.restaurantName || "enviGo",
+        restaurantAddress: orderData.restaurantAddress || "santa hilda 1447, quilicura",
+        customerEmail: orderData.customerEmail || '',
+        customerPhoneNumber: orderData.customerPhoneNumber || '',
+        deliveryInstruction: orderData.deliveryInstruction || '',
+        deliveryFee: parseFloat(orderData.deliveryFee) || 1800,
+        total: parseFloat(orderData.total) || 1,
+        paymentMethod: "cash"
+      };
+
+      const headers = this.getHeaders();
+      const response = await axios.post(`${BASE_URL}/orders`, payload, { headers });
+      
+      console.log('✅ Orden creada exitosamente:', response.data.orderId);
+      return response.data;
+
+    } catch (error) {
+      console.error('❌ Error creando orden:', error.message);
+      throw this.handleError(error);
+    }
+  }
+
+  async assignOrder(orderId, driverId) {
+     try {
+      console.log(`🔗 Asignando orden: ${orderId} al conductor ID: ${driverId}`);
+
+      const headers = this.getHeaders();
+      
+      // --- CAMBIO CLAVE: Usar la nueva URL correcta sin cuerpo (payload) ---
       const response = await axios.put(
-        `${BASE_URL}/orders/${orderId}/assign`,
-        payload,
+        `${BASE_URL}/orders/assign/${orderId}/${driverId}`,
+        null, // No se envía cuerpo en la petición con este endpoint
         { headers }
       );
       
+      console.log('✅ Orden asignada exitosamente con el nuevo endpoint.');
       return response.data;
-    };
-    
-    return this.makeRateLimitedRequest(requestFn, `Assign Order ${orderId}`);
+
+    } catch (error) {
+      console.error('❌ Error asignando orden:', error.message);
+      throw this.handleError(error);
+    }
   }
 
   // ==================== TESTING ====================
@@ -382,20 +230,7 @@ async createOrder(orderData) {
       return false;
     }
   }
-
-   getRateLimitStats() {
-    return {
-      requestCounts: this.requestCounts,
-      queueLength: this.requestQueue.length,
-      isProcessingQueue: this.isProcessingQueue,
-      consecutiveErrors: this.consecutiveErrors,
-      backoffUntil: this.backoffUntil,
-      lastRequestTime: this.lastRequestTime
-    };
-  }
-
 }
-
 
 // Exportar como singleton
 module.exports = new ShipDayService();
