@@ -56,46 +56,54 @@
 
     <!-- Modales -->
     <AdminOrdersModals
-      :show-details="showOrderDetailsModal"
-      :show-update-status="showUpdateStatusModal"
-      :show-create="showCreateOrderModal"
-      :show-bulk-upload="showBulkUploadModal"
-      :show-assign="showAssignModal"
-      :show-bulk-assign="showBulkAssignModal"
-      :selected-order="selectedOrder"
-      :companies="companies"
-      :new-order="newOrder"
-      :is-creating="isCreatingOrder"
-      v-model:bulkUploadCompanyId="bulkUploadCompanyId"
-      :selected-file="selectedFile"
-      :upload-feedback="uploadFeedback"
-      :upload-status="uploadStatus"
-      :is-uploading="isUploading"
-      :available-drivers="availableDrivers"
-      :loading-drivers="loadingDrivers"
-      v-model:selectedDriverId="selectedDriverId"
-      :is-assigning="isAssigning"
-      :selected-orders="selectedOrderObjects"
-      v-model:bulkSelectedDriverId="bulkSelectedDriverId"
-      :is-bulk-assigning="isBulkAssigning"
-      :bulk-assignment-completed="bulkAssignmentCompleted"
-      :bulk-assignment-results="bulkAssignmentResults"
-      :bulk-assignment-finished="bulkAssignmentFinished"
-      :bulk-progress-percentage="bulkProgressPercentage"
-      @close-details="showOrderDetailsModal = false"
-      @close-update-status="showUpdateStatusModal = false"
-      @status-updated="handleStatusUpdate"
-      @close-create="showCreateOrderModal = false"
-      @create-order="handleCreateOrder"
-      @close-bulk-upload="showBulkUploadModal = false"
-      @file-selected="handleFileSelect"
-      @bulk-upload="handleBulkUpload"
-      @download-template="downloadTemplate"
-      @close-assign="showAssignModal = false"
-      @confirm-assignment="confirmAssignment"
-      @close-bulk-assign="closeBulkAssignModal"
-      @confirm-bulk-assignment="confirmBulkAssignment"
-    />
+  :show-details="showOrderDetailsModal"
+  :show-update-status="showUpdateStatusModal"
+  :show-create="showCreateOrderModal"
+  :show-bulk-upload="showBulkUploadModal"
+  :show-assign="showAssignModal"
+  :show-bulk-assign="showBulkAssignModal"
+  
+  :selected-order="selectedOrder"
+  :companies="companies"
+  :new-order="newOrder"
+  :is-creating="isCreatingOrder"
+  
+  :bulk-upload-company-id="bulkUploadCompanyId"
+  :selected-file="selectedFile"
+  :upload-feedback="uploadFeedback"
+  :upload-status="uploadStatus"
+  :is-uploading="isUploading"
+  
+  :available-drivers="drivers"                          
+  :loading-drivers="loadingDrivers"
+  :selected-driver-id="selectedDriverId"
+  :is-assigning="isAssigning"
+  
+  :selected-orders="selectedOrderObjects"
+  :bulk-selected-driver-id="bulkSelectedDriverId"
+  :is-bulk-assigning="isBulkAssigning"
+  :bulk-assignment-completed="bulkAssignmentCompleted"
+  :bulk-assignment-results="bulkAssignmentResults"
+  :bulk-assignment-finished="bulkAssignmentFinished"
+  :bulk-progress-percentage="bulkAssignmentProgress"     
+  
+  @close-details="closeOrderDetailsModal"
+  @close-update-status="closeUpdateStatusModal"
+  @status-updated="handleStatusUpdate"
+  @close-create="closeCreateOrderModal"
+  @create-order="handleCreateOrder"
+  @close-bulk-upload="closeBulkUploadModal"
+  @file-selected="handleFileSelect"
+  @bulk-upload="handleBulkUpload"
+  @download-template="downloadTemplate"
+  @close-assign="closeAssignModal"
+  @confirm-assignment="(orderId) => assignDriver(selectedOrder._id)"
+  @close-bulk-assign="closeBulkAssignModal"
+  @confirm-bulk-assignment="confirmBulkAssignment"
+  @update:bulk-upload-company-id="bulkUploadCompanyId = $event"
+  @update:selected-driver-id="selectedDriverId = $event"
+  @update:bulk-selected-driver-id="bulkSelectedDriverId = $event"
+/>
 
     <!-- Notificaciones Toast (si no están globales) -->
     <Teleport to="body">
@@ -201,7 +209,7 @@ const {
 
 // Asignación de conductores
 const {
-  availableDrivers,
+  drivers,                    // ← CAMBIO: era availableDrivers
   loadingDrivers,
   selectedDriverId,
   isAssigning,
@@ -210,13 +218,13 @@ const {
   bulkAssignmentCompleted,
   bulkAssignmentResults,
   bulkAssignmentFinished,
-  bulkProgressPercentage,
-  assignmentSummary,
-  confirmAssignment,
+  bulkAssignmentProgress,     // ← CAMBIO: era bulkProgressPercentage
+  assignmentStats,            // ← CAMBIO: era assignmentSummary
+  assignDriver,               // ← CAMBIO: era confirmAssignment
   confirmBulkAssignment,
   closeBulkAssignModal,
-  fetchAvailableDrivers
-} = useDriverAssignment(selectedOrderObjects, fetchOrders) 
+  fetchDrivers               // ← CAMBIO: era fetchAvailableDrivers
+} = useDriverAssignment(selectedOrderObjects, fetchOrders)
 
 // Upload masivo
 const {
@@ -646,18 +654,19 @@ function toggleAutoRefresh() {
  * handleOpenBulkAssignModal
  */
 function handleOpenBulkAssignModal() {
-  console.log('Solicitando apertura de modal masivo...');
-  fetchAvailableDrivers(); // Carga los conductores
-  openBulkAssignModal();   // Abre el modal
+  console.log('Solicitando apertura de modal masivo...')
+  fetchDrivers()        // ← CAMBIO: era fetchAvailableDrivers
+  openBulkAssignModal()
 }
 /**
  * Orquesta la apertura del modal de asignación individual
  */
 function handleOpenAssignModal(order) {
-  console.log('Solicitando apertura de modal individual...');
-  fetchAvailableDrivers(); // Carga los conductores
-  openAssignModal(order);  // Abre el modal con el pedido correcto
+  console.log('Solicitando apertura de modal individual...')
+  fetchDrivers()        // ← CAMBIO: era fetchAvailableDrivers
+  openAssignModal(order)
 }
+
 // ==================== LIFECYCLE ====================
 
 onMounted(async () => {
