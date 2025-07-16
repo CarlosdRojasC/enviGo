@@ -29,6 +29,7 @@ const allowedOrigins = [
   'http://localhost:3000', // otro puerto común
   'http://127.0.0.1:5173',
   'http://127.0.0.1:3000',
+  'https://envi-go.vercel.app',
   null // ← IMPORTANTE: esto permite archivos HTML locales (file://)
 ];
 
