@@ -464,10 +464,26 @@ function openTrackingModal(order) {
   console.log('🚚 Abriendo modal de tracking:', order.order_number)
 }
 
-function showProofOfDelivery(order) {
-  selectedProofOrder.value = order
-  showProofModal.value = true
-  console.log('📸 Mostrando prueba de entrega:', order.order_number)
+async function showProofOfDelivery(order) {
+  selectedProofOrder.value = null;      // 1. Limpia el estado anterior
+  loadingOrderDetails.value = true;   // 2. Activa el indicador de carga
+  showProofModal.value = true;          // 3. Muestra el modal (que mostrará el spinner)
+
+  try {
+    // 4. Llama a la API para obtener los datos más recientes y completos
+    const { data } = await apiService.orders.getById(order._id);
+    
+    // 5. Asigna los datos frescos para que el componente los muestre
+    selectedProofOrder.value = data;
+    console.log('✅ Prueba de entrega cargada para el modal:', data);
+
+  } catch (error) {
+    console.error('❌ Error cargando la prueba de entrega:', error);
+    toast.error('No se pudo cargar la información de la entrega.');
+    showProofModal.value = false; // Cierra el modal si hay un error
+  } finally {
+    loadingOrderDetails.value = false; // 6. Desactiva el indicador de carga
+  }
 }
 
 async function openOrderDetailsModal(order) {
