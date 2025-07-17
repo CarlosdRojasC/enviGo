@@ -119,7 +119,7 @@
         </div>
         <div v-if="order.shipday_times?.assigned_time" class="time-item">
           <span class="time-label">Conductor asignado:</span>
-          <span class="time-value">{{ formatDateTime(order.shipday_times.assigned_time) }}</span>
+          <strong v-if="order.driver_info?.name" class="driver-name-inline">: {{ order.driver_info.name }}</strong>
         </div>
         <div v-if="order.shipday_times?.pickup_time" class="time-item">
           <span class="time-label">Recogido:</span>
