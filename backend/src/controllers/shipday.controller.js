@@ -283,185 +283,252 @@ class ShipdayController {
 
   // ==================== TRACKING ====================
   
-  async getOrderTracking(req, res) {
-    try {
-      const { id } = req.params;
-      console.log('📍 Obteniendo tracking de orden:', id);
+async getOrderTracking(req, res) {
+  try {
+    const { id } = req.params;
+    console.log('📍 Obteniendo tracking de orden:', id);
+    
+    // ==================== PRIMERO: OBTENER ORDEN DE TU BASE DE DATOS ====================
+    const localOrder = await Order.findById(id).populate('company_id');
+    if (!localOrder) {
+      console.log(`❌ Orden no encontrada en BD local: ${id}`);
+      return res.status(404).json({
+        success: false,
+        error: 'Orden no encontrada'
+      });
+    }
+
+    console.log('📋 Orden local encontrada:', {
+      order_number: localOrder.order_number,
+      status: localOrder.status,
+      shipday_order_id: localOrder.shipday_order_id,
+      has_shipday_order: !!localOrder.shipday_order_id
+    });
+
+    // ==================== VERIFICAR SI TIENE ORDEN EN SHIPDAY ====================
+    if (!localOrder.shipday_order_id) {
+      console.log('⚠️ Esta orden no tiene ID de Shipday');
       
-      // ==================== OBTENER DATOS DE LA ORDEN DESDE SHIPDAY ====================
-      const order = await ShipdayService.getOrder(id);
-      console.log('📦 Datos básicos de orden obtenidos:', {
-        id: id,
-        status: order.status,
-        has_tracking_url: !!order.trackingUrl,
-        has_driver: !!(order.carrierId || order.carrierName)
+      // Generar tracking básico sin datos de Shipday
+      const basicTrackingData = {
+        order_number: localOrder.order_number,
+        customer_name: localOrder.customer_name,
+        current_status: localOrder.status,
+        tracking_url: null,
+        shipday_tracking_url: null,
+        has_tracking: false,
+        driver: null,
+        driver_info: null,
+        pickup_address: localOrder.pickup_address || localOrder.company_id?.address || 'Dirección no especificada',
+        delivery_address: localOrder.shipping_address,
+        order_date: localOrder.order_date,
+        delivery_date: localOrder.delivery_date,
+        shipday_status: null,
+        shipday_order_id: null,
+        timeline: this.generateBasicTimeline(localOrder),
+        notes: localOrder.notes || '',
+        total_amount: localOrder.total_amount || 0,
+        shipping_cost: localOrder.shipping_cost || 0,
+        company: {
+          name: localOrder.company_id?.name,
+          phone: localOrder.company_id?.phone
+        },
+        proof_of_delivery: localOrder.proof_of_delivery,
+        podUrls: localOrder.podUrls || [],
+        signatureUrl: localOrder.signatureUrl
+      };
+
+      return res.json({
+        success: true,
+        tracking: basicTrackingData,
+        last_updated: new Date(),
+        data_freshness: {
+          shipday_data_updated: false,
+          driver_data_updated: false,
+          tracking_url_source: 'none',
+          driver_data_source: 'none'
+        },
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    // ==================== OBTENER DATOS DE SHIPDAY ====================
+    let shipdayOrder = null;
+    let driverDetails = null;
+    let driverRealTimeStatus = 'unknown';
+    
+    try {
+      console.log('📦 Obteniendo orden desde Shipday:', localOrder.shipday_order_id);
+      shipdayOrder = await ShipdayService.getOrder(localOrder.shipday_order_id);
+      
+      console.log('📦 Datos básicos de Shipday obtenidos:', {
+        shipday_id: localOrder.shipday_order_id,
+        status: shipdayOrder?.status,
+        has_tracking_url: !!shipdayOrder?.trackingUrl,
+        has_driver: !!(shipdayOrder?.carrierId || shipdayOrder?.carrierName)
       });
 
-      // ==================== OBTENER DATOS DETALLADOS DEL CONDUCTOR ====================
-      let driverDetails = null;
-      let driverRealTimeStatus = 'unknown';
-      
-      if (order.carrierId) {
+      // ==================== OBTENER DATOS DEL CONDUCTOR ====================
+      if (shipdayOrder?.carrierId) {
         try {
-          console.log('👨‍💼 Obteniendo datos del conductor:', order.carrierId);
-          
-          // Obtener información detallada del conductor
-          driverDetails = await ShipdayService.getDriverDetails(order.carrierId);
+          console.log('👨‍💼 Obteniendo datos del conductor:', shipdayOrder.carrierId);
+          driverDetails = await ShipdayService.getDriverDetails(shipdayOrder.carrierId);
           
           console.log('✅ Datos del conductor obtenidos:', {
             name: driverDetails?.name || 'N/A',
             status: driverDetails?.status || 'unknown',
             isActive: driverDetails?.isActive ?? false,
-            isOnShift: driverDetails?.isOnShift ?? false,
             phone: driverDetails?.phoneNumber ? '✓' : '✗'
           });
           
           driverRealTimeStatus = driverDetails?.status || 'unknown';
           
         } catch (driverError) {
-          console.log('⚠️ No se pudieron obtener datos detallados del conductor:', driverError.message);
-          driverRealTimeStatus = 'unknown';
+          console.log('⚠️ No se pudieron obtener datos del conductor:', driverError.message);
         }
       }
 
-      // ==================== DETERMINAR ESTADO INTELIGENTE DEL CONDUCTOR ====================
-      let smartDriverStatus = driverRealTimeStatus;
-      let isDriverConnected = false;
-
-      if (smartDriverStatus === 'unknown' && order.status) {
-        switch (order.status.toLowerCase()) {
-          case 'picked_up':
-          case 'out_for_delivery':
-          case 'in_transit':
-            smartDriverStatus = 'driving';
-            isDriverConnected = true;
-            break;
-          case 'delivered':
-            smartDriverStatus = 'offline';
-            isDriverConnected = false;
-            break;
-          case 'assigned':
-          case 'ready_for_pickup':
-            smartDriverStatus = 'online';
-            isDriverConnected = true;
-            break;
-          default:
-            smartDriverStatus = 'unknown';
-            isDriverConnected = false;
-        }
-      } else {
-        isDriverConnected = ['online', 'driving', 'available'].includes(smartDriverStatus);
-      }
-
-      // ==================== GENERAR TIMELINE DE EVENTOS ====================
-      const timeline = this.generateShipdayTimeline(order, driverDetails);
-
-      // ==================== CONSTRUIR RESPUESTA COMPLETA ====================
-      const trackingData = {
-        // ... tu código de respuesta existente ...
-        order_number: order.orderNumber || id,
-        customer_name: order.customerName || order.customer?.name || 'Cliente',
-        current_status: order.status || 'unknown',
-        
-        tracking_url: order.trackingUrl || null,
-        shipday_tracking_url: order.trackingUrl || null,
-        has_tracking: !!order.trackingUrl,
-        
-        driver: (order.carrierId || order.carrierName) ? {
-          id: order.carrierId,
-          name: driverDetails?.name || order.carrierName || 'Conductor Asignado',
-          phone: driverDetails?.phoneNumber || order.carrierPhone || '',
-          email: driverDetails?.email || order.carrierEmail || '',
-          status: smartDriverStatus,
-          isActive: driverDetails?.isActive ?? true,
-          isOnShift: driverDetails?.isOnShift ?? false,
-          isConnected: isDriverConnected,
-          lastUpdated: new Date(),
-          rating: driverDetails?.rating || null,
-          vehicle: driverDetails?.vehicle || null,
-          location: driverDetails?.location || null
-        } : null,
-        
-        driver_info: (order.carrierId || order.carrierName) ? {
-          id: order.carrierId,
-          name: driverDetails?.name || order.carrierName,
-          phone: driverDetails?.phoneNumber || order.carrierPhone,
-          email: driverDetails?.email || order.carrierEmail,
-          status: smartDriverStatus,
-          isActive: driverDetails?.isActive ?? true,
-          isOnShift: driverDetails?.isOnShift ?? false,
-          lastUpdated: new Date()
-        } : null,
-        
-        shipday_driver_id: order.carrierId,
-        carrierId: order.carrierId,
-        carrierName: driverDetails?.name || order.carrierName,
-        carrierPhone: driverDetails?.phoneNumber || order.carrierPhone,
-        carrierEmail: driverDetails?.email || order.carrierEmail,
-        carrierStatus: smartDriverStatus,
-        
-        pickup_address: order.pickupAddress || order.pickup?.address || 'Dirección de recogida no especificada',
-        delivery_address: order.deliveryAddress || order.delivery?.address || 'Dirección de entrega no especificada',
-        delivery_location: order.delivery?.location ? {
-          lat: order.delivery.location.latitude,
-          lng: order.delivery.location.longitude,
-          formatted_address: order.delivery.location.address
-        } : null,
-        
-        order_date: order.orderDate || order.createdAt,
-        delivery_date: order.deliveryDate || order.completedAt,
-        estimated_delivery: order.expectedDeliveryTime || order.estimatedDelivery,
-        
-        shipday_status: order.status,
-        shipday_order_id: id,
-        
-        timeline: timeline,
-        
-        notes: order.notes || order.specialInstructions || '',
-        total_amount: order.totalAmount || order.orderValue || 0,
-        shipping_cost: order.shippingCost || order.deliveryFee || 0,
-        
-        company: order.restaurant ? {
-          name: order.restaurant.name,
-          phone: order.restaurant.phone
-        } : null,
-        
-        proof_of_delivery: order.proofOfDelivery || null,
-        podUrls: order.proofOfDelivery?.photos || [],
-        signatureUrl: order.proofOfDelivery?.signature || null
-      };
-
-      console.log('🚚 Tracking generado para #' + (order.orderNumber || id) + ':', {
-        has_tracking_url: trackingData.has_tracking,
-        tracking_url_source: trackingData.tracking_url ? 'shipday_api' : 'none',
-        has_driver: !!trackingData.driver?.name,
-        driver_status: trackingData.driver?.status || 'none',
-        driver_connected: trackingData.driver?.isConnected || false,
-        timeline_events: trackingData.timeline?.length || 0
-      });
-
-      res.json({
-        success: true,
-        tracking: trackingData,
-        last_updated: new Date(),
-        data_freshness: {
-          shipday_data_updated: true,
-          driver_data_updated: !!driverDetails,
-          tracking_url_source: trackingData.tracking_url ? 'shipday_api' : 'none',
-          driver_data_source: driverDetails ? 'shipday_api' : (order.carrierName ? 'basic' : 'none')
-        },
-        timestamp: new Date().toISOString()
-      });
-
-    } catch (error) {
-      console.error('❌ Error obteniendo tracking:', error);
-      res.status(500).json({
-        success: false,
-        error: error.message,
-        timestamp: new Date().toISOString()
-      });
+    } catch (shipdayError) {
+      console.log('⚠️ Error obteniendo datos de Shipday:', shipdayError.message);
+      // Continuar con datos locales solamente
     }
+
+    // ==================== DETERMINAR ESTADO INTELIGENTE DEL CONDUCTOR ====================
+    let smartDriverStatus = driverRealTimeStatus;
+    let isDriverConnected = false;
+
+    if (smartDriverStatus === 'unknown' && (shipdayOrder?.status || localOrder.status)) {
+      const orderStatus = (shipdayOrder?.status || localOrder.status).toLowerCase();
+      switch (orderStatus) {
+        case 'picked_up':
+        case 'out_for_delivery':
+        case 'in_transit':
+        case 'shipped':
+          smartDriverStatus = 'driving';
+          isDriverConnected = true;
+          break;
+        case 'delivered':
+          smartDriverStatus = 'offline';
+          isDriverConnected = false;
+          break;
+        case 'assigned':
+        case 'ready_for_pickup':
+        case 'processing':
+          smartDriverStatus = 'online';
+          isDriverConnected = true;
+          break;
+        default:
+          smartDriverStatus = 'unknown';
+          isDriverConnected = false;
+      }
+    } else {
+      isDriverConnected = ['online', 'driving', 'available'].includes(smartDriverStatus);
+    }
+
+    // ==================== GENERAR TIMELINE ====================
+    const timeline = this.generateShipdayTimeline(shipdayOrder || localOrder, driverDetails);
+
+    // ==================== CONSTRUIR RESPUESTA COMPLETA ====================
+    const trackingData = {
+      order_number: localOrder.order_number,
+      customer_name: localOrder.customer_name,
+      current_status: localOrder.status,
+      
+      // URLs de tracking
+      tracking_url: localOrder.shipday_tracking_url || shipdayOrder?.trackingUrl || null,
+      shipday_tracking_url: localOrder.shipday_tracking_url || shipdayOrder?.trackingUrl || null,
+      has_tracking: !!(localOrder.shipday_tracking_url || shipdayOrder?.trackingUrl),
+      
+      // Información del conductor
+      driver: (shipdayOrder?.carrierId || shipdayOrder?.carrierName || localOrder.driver_info) ? {
+        id: shipdayOrder?.carrierId || localOrder.shipday_driver_id,
+        name: driverDetails?.name || shipdayOrder?.carrierName || localOrder.driver_info?.name || 'Conductor Asignado',
+        phone: driverDetails?.phoneNumber || shipdayOrder?.carrierPhone || localOrder.driver_info?.phone || '',
+        email: driverDetails?.email || shipdayOrder?.carrierEmail || localOrder.driver_info?.email || '',
+        status: smartDriverStatus,
+        isActive: driverDetails?.isActive ?? true,
+        isOnShift: driverDetails?.isOnShift ?? false,
+        isConnected: isDriverConnected,
+        lastUpdated: new Date(),
+        rating: driverDetails?.rating || null,
+        vehicle: driverDetails?.vehicle || null,
+        location: driverDetails?.location || null
+      } : null,
+      
+      // Información adicional del conductor para compatibilidad
+      driver_info: localOrder.driver_info || null,
+      shipday_driver_id: localOrder.shipday_driver_id || shipdayOrder?.carrierId,
+      carrierId: shipdayOrder?.carrierId || localOrder.shipday_driver_id,
+      carrierName: driverDetails?.name || shipdayOrder?.carrierName || localOrder.driver_info?.name,
+      carrierPhone: driverDetails?.phoneNumber || shipdayOrder?.carrierPhone || localOrder.driver_info?.phone,
+      carrierStatus: smartDriverStatus,
+      
+      // Ubicaciones
+      pickup_address: localOrder.pickup_address || localOrder.company_id?.address || 'Dirección no especificada',
+      delivery_address: localOrder.shipping_address,
+      delivery_location: localOrder.delivery_location,
+      
+      // Fechas importantes
+      order_date: localOrder.order_date,
+      delivery_date: localOrder.delivery_date,
+      estimated_delivery: localOrder.estimated_delivery || shipdayOrder?.expectedDeliveryTime,
+      
+      // Estado en Shipday
+      shipday_status: shipdayOrder?.status || localOrder.shipday_status,
+      shipday_order_id: localOrder.shipday_order_id,
+      
+      // Timeline de eventos
+      timeline: timeline,
+      
+      // Información adicional
+      notes: localOrder.notes || shipdayOrder?.notes || shipdayOrder?.specialInstructions || '',
+      total_amount: localOrder.total_amount || 0,
+      shipping_cost: localOrder.shipping_cost || 0,
+      
+      // Información de la empresa
+      company: {
+        name: localOrder.company_id?.name,
+        phone: localOrder.company_id?.phone
+      },
+      
+      // Prueba de entrega
+      proof_of_delivery: localOrder.proof_of_delivery || shipdayOrder?.proofOfDelivery,
+      podUrls: localOrder.podUrls || shipdayOrder?.proofOfDelivery?.photos || [],
+      signatureUrl: localOrder.signatureUrl || shipdayOrder?.proofOfDelivery?.signature
+    };
+
+    console.log('🚚 Tracking generado para #' + localOrder.order_number + ':', {
+      has_tracking_url: trackingData.has_tracking,
+      tracking_url_source: trackingData.tracking_url ? (shipdayOrder ? 'shipday_api' : 'database') : 'none',
+      has_driver: !!trackingData.driver?.name,
+      driver_status: trackingData.driver?.status || 'none',
+      driver_connected: trackingData.driver?.isConnected || false,
+      timeline_events: trackingData.timeline?.length || 0
+    });
+
+    res.json({
+      success: true,
+      tracking: trackingData,
+      last_updated: new Date(),
+      data_freshness: {
+        shipday_data_updated: !!shipdayOrder,
+        driver_data_updated: !!driverDetails,
+        tracking_url_source: trackingData.tracking_url ? (shipdayOrder ? 'shipday_api' : 'database') : 'none',
+        driver_data_source: driverDetails ? 'shipday_api' : (localOrder.driver_info ? 'database' : 'none')
+      },
+      timestamp: new Date().toISOString()
+    });
+
+  } catch (error) {
+    console.error('❌ Error obteniendo tracking:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
   }
+}
+
 
   // ==================== WEBHOOKS ====================
   
@@ -849,6 +916,122 @@ async refreshDriverStatus(req, res) {
 
   // ==================== MÉTODOS AUXILIARES DENTRO DE LA CLASE ====================
   
+
+  generateBasicTimeline(localOrder) {
+  const timeline = [];
+  const currentTime = new Date();
+  
+  // Evento: Pedido creado
+  timeline.push({
+    status: 'completed',
+    icon: '📦',
+    title: 'Pedido Creado',
+    description: `Pedido #${localOrder.order_number} registrado en el sistema`,
+    timestamp: localOrder.order_date || localOrder.createdAt || currentTime
+  });
+
+  // Eventos basados en el estado local
+  switch (localOrder.status?.toLowerCase()) {
+    case 'processing':
+      timeline.push({
+        status: 'current',
+        icon: '⚙️',
+        title: 'Procesando',
+        description: 'El pedido está siendo preparado',
+        timestamp: localOrder.updated_at || currentTime
+      });
+      break;
+
+    case 'ready_for_pickup':
+      timeline.push({
+        status: 'completed',
+        icon: '⚙️',
+        title: 'Procesando',
+        description: 'El pedido fue preparado',
+        timestamp: localOrder.updated_at || currentTime
+      });
+      
+      timeline.push({
+        status: 'current',
+        icon: '📋',
+        title: 'Listo para Retiro',
+        description: 'El pedido está listo para ser retirado',
+        timestamp: localOrder.updated_at || currentTime
+      });
+      break;
+
+    case 'shipped':
+      timeline.push({
+        status: 'completed',
+        icon: '⚙️',
+        title: 'Procesando',
+        description: 'El pedido fue preparado',
+        timestamp: localOrder.updated_at || currentTime
+      });
+      
+      timeline.push({
+        status: 'completed',
+        icon: '📋',
+        title: 'Listo para Retiro',
+        description: 'El pedido estuvo listo para retiro',
+        timestamp: localOrder.updated_at || currentTime
+      });
+      
+      timeline.push({
+        status: 'current',
+        icon: '🚚',
+        title: 'En Tránsito',
+        description: 'El pedido está en camino',
+        timestamp: localOrder.updated_at || currentTime
+      });
+      break;
+
+    case 'delivered':
+      timeline.push({
+        status: 'completed',
+        icon: '⚙️',
+        title: 'Procesando',
+        description: 'El pedido fue preparado',
+        timestamp: localOrder.updated_at || currentTime
+      });
+      
+      timeline.push({
+        status: 'completed',
+        icon: '📋',
+        title: 'Listo para Retiro',
+        description: 'El pedido estuvo listo para retiro',
+        timestamp: localOrder.updated_at || currentTime
+      });
+      
+      timeline.push({
+        status: 'completed',
+        icon: '🚚',
+        title: 'En Tránsito',
+        description: 'El pedido estuvo en camino',
+        timestamp: localOrder.updated_at || currentTime
+      });
+      
+      timeline.push({
+        status: 'completed',
+        icon: '✅',
+        title: 'Entregado',
+        description: 'El pedido fue entregado exitosamente',
+        timestamp: localOrder.delivery_date || localOrder.updated_at || currentTime
+      });
+      break;
+
+    default:
+      timeline.push({
+        status: 'pending',
+        icon: '⏳',
+        title: 'Pendiente',
+        description: 'El pedido está pendiente de procesamiento',
+        timestamp: localOrder.updated_at || currentTime
+      });
+  }
+
+  return timeline.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+}
   /**
    * Generar timeline de eventos basado en datos de Shipday
    * @param {Object} order - Datos de la orden desde Shipday
