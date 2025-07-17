@@ -356,7 +356,7 @@ async getOrderTracking(req, res) {
     }
 
     // ==================== GENERAR TIMELINE DE EVENTOS ====================
-    const timeline = generateShipdayTimeline(order, driverDetails);
+    const timeline = this.generateShipdayTimeline(order, driverDetails);
 
     // ==================== CONSTRUIR RESPUESTA COMPLETA ====================
     const trackingData = {
