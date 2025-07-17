@@ -496,7 +496,8 @@ async handleWebhook(req, res) {
     // ========== ACTUALIZACIÓN DE UBICACIÓN DE ENTREGA ==========
     const deliveryLocation = webhookData.delivery_details?.location || 
                            webhookData.order?.deliveryLocation ||
-                           webhookData.proofOfDelivery?.location;
+                           webhookData.proofOfDelivery?.location ||
+                           webhookData.pod?.location;
                            
     if (deliveryLocation) {
       console.log('📍 Actualizando ubicación de entrega:', deliveryLocation);
@@ -556,10 +557,8 @@ async handleWebhook(req, res) {
       case 'proof_uploaded':
         console.log('📸 Evento de Prueba de Entrega detectado.');
         
-        // ========== CORRECCIÓN: LECTURA DEL ARRAY DE PODs ==========
+        // ========== CORRECCIÓN: PROCESAMIENTO COMPLETO DE PODs ==========
         const podData = webhookData.proofOfDelivery || webhookData.pod || webhookData.order?.proofOfDelivery;
-        
-        // 🆕 NUEVO: Buscar también en el array "pods" que envía Shipday
         const podsArray = webhookData.pods || webhookData.order?.pods || [];
         
         console.log('🔍 Datos de POD encontrados:', {
@@ -569,78 +568,119 @@ async handleWebhook(req, res) {
         });
         
         if (podData || podsArray.length > 0) {
-          // Estructura principal de proof_of_delivery
-          order.proof_of_delivery = {
-            photo_url: podData?.photo_url || podData?.photoUrl || podData?.photos?.[0] || order.proof_of_delivery?.photo_url,
-            signature_url: podData?.signature_url || podData?.signatureUrl || podData?.signature || order.proof_of_delivery?.signature_url,
-            notes: podData?.notes || podData?.deliveryNote || order.proof_of_delivery?.notes || '',
-            location: {
-              type: 'Point',
-              coordinates: [
-                podData?.location?.lng || podData?.location?.longitude || 0,
-                podData?.location?.lat || podData?.location?.latitude || 0
-              ]
-            }
-          };
-          
-          // 🆕 NUEVO: Procesar array de PODs de Shipday
+          // ========== PREPARAR DATOS PARA LA BASE DE DATOS ==========
           const allPhotos = [];
           let signatureUrl = null;
+          let deliveryNotes = '';
+          let podLocation = null;
           
-          // Fotos del podData principal
-          if (podData?.photos && Array.isArray(podData.photos)) {
-            allPhotos.push(...podData.photos);
+          // 1. Procesar podData principal
+          if (podData) {
+            if (podData.photo_url) allPhotos.push(podData.photo_url);
+            if (podData.photoUrl) allPhotos.push(podData.photoUrl);
+            if (podData.photos && Array.isArray(podData.photos)) {
+              allPhotos.push(...podData.photos);
+            }
+            
+            if (podData.signature_url || podData.signatureUrl || podData.signature) {
+              signatureUrl = podData.signature_url || podData.signatureUrl || podData.signature;
+            }
+            
+            if (podData.notes || podData.deliveryNote) {
+              deliveryNotes = podData.notes || podData.deliveryNote;
+            }
+            
+            if (podData.location) {
+              podLocation = {
+                lat: podData.location.lat || podData.location.latitude,
+                lng: podData.location.lng || podData.location.longitude,
+                formatted_address: podData.location.formatted_address || podData.location.address
+              };
+            }
           }
           
-          // Fotos del array pods
+          // 2. Procesar array de PODs
           podsArray.forEach((pod, index) => {
             console.log(`📸 Procesando POD ${index + 1}:`, pod);
             
-            // Agregar fotos de este POD
-            if (pod.photo_url) {
-              allPhotos.push(pod.photo_url);
-            }
-            if (pod.photoUrl) {
-              allPhotos.push(pod.photoUrl);
-            }
+            // Agregar fotos
+            if (pod.photo_url) allPhotos.push(pod.photo_url);
+            if (pod.photoUrl) allPhotos.push(pod.photoUrl);
             if (pod.photos && Array.isArray(pod.photos)) {
               allPhotos.push(...pod.photos);
             }
             
-            // Tomar la primera firma que encontremos
+            // Tomar la primera firma disponible
             if (!signatureUrl && (pod.signature_url || pod.signatureUrl || pod.signature)) {
               signatureUrl = pod.signature_url || pod.signatureUrl || pod.signature;
             }
+            
+            // Combinar notas
+            if (pod.notes || pod.deliveryNote) {
+              const notes = pod.notes || pod.deliveryNote;
+              deliveryNotes = deliveryNotes ? `${deliveryNotes}; ${notes}` : notes;
+            }
+            
+            // Usar primera ubicación disponible
+            if (!podLocation && pod.location) {
+              podLocation = {
+                lat: pod.location.lat || pod.location.latitude,
+                lng: pod.location.lng || pod.location.longitude,
+                formatted_address: pod.location.formatted_address || pod.location.address
+              };
+            }
           });
           
-          // Remover duplicados y URLs vacías
+          // 3. Filtrar y deduplicar fotos
           const uniquePhotos = [...new Set(allPhotos)].filter(url => url && url.trim() !== '');
           
-          // Guardar todas las fotos en podUrls
+          console.log('📸 Datos procesados para guardar:', {
+            photos_count: uniquePhotos.length,
+            photos: uniquePhotos,
+            has_signature: !!signatureUrl,
+            signature_url: signatureUrl,
+            notes: deliveryNotes,
+            location: podLocation
+          });
+          
+          // ========== GUARDAR EN PROOF_OF_DELIVERY (ESQUEMA CORRECTO) ==========
+          const currentPod = order.proof_of_delivery || {};
+          
+          order.proof_of_delivery = {
+            photo_url: uniquePhotos[0] || currentPod.photo_url || null,
+            signature_url: signatureUrl || currentPod.signature_url || null,
+            notes: deliveryNotes || currentPod.notes || 'Prueba de entrega recibida desde Shipday',
+            location: podLocation ? {
+              type: 'Point',
+              coordinates: [podLocation.lng || 0, podLocation.lat || 0]
+            } : currentPod.location || null
+          };
+          
+          // ========== CAMPOS DE COMPATIBILIDAD (PARA EL FRONTEND) ==========
           if (uniquePhotos.length > 0) {
             order.podUrls = uniquePhotos;
-            console.log(`📸 ${uniquePhotos.length} fotos guardadas:`, uniquePhotos);
+            console.log(`📸 ${uniquePhotos.length} fotos guardadas en podUrls:`, uniquePhotos);
           }
           
-          // Guardar firma si existe
           if (signatureUrl) {
             order.signatureUrl = signatureUrl;
-            console.log('✍️ Firma guardada:', signatureUrl);
+            console.log('✍️ Firma guardada en signatureUrl:', signatureUrl);
           }
           
-          // Si no hay foto principal pero hay en el array, usar la primera
-          if (!order.proof_of_delivery.photo_url && uniquePhotos.length > 0) {
-            order.proof_of_delivery.photo_url = uniquePhotos[0];
-          }
-          
-          // Si no hay firma principal pero hay en el array, usar la encontrada
-          if (!order.proof_of_delivery.signature_url && signatureUrl) {
-            order.proof_of_delivery.signature_url = signatureUrl;
+          // Actualizar ubicación de entrega si no existe
+          if (podLocation && (!order.delivery_location || (!order.delivery_location.lat && !order.delivery_location.lng))) {
+            order.delivery_location = podLocation;
+            console.log('📍 Ubicación de entrega actualizada desde POD:', podLocation);
           }
           
           orderUpdated = true;
           notificationEventType = 'proof_uploaded';
-          console.log('📝 Prueba de entrega guardada con éxito.');
+          
+          console.log('📝 ✅ Prueba de entrega guardada CORRECTAMENTE en la BD:', {
+            proof_of_delivery: order.proof_of_delivery,
+            podUrls_count: order.podUrls?.length || 0,
+            has_signatureUrl: !!order.signatureUrl
+          });
         }
         break;
 
@@ -666,24 +706,34 @@ async handleWebhook(req, res) {
         break;
     }
 
-    // ========== GUARDAR CAMBIOS Y NOTIFICAR ==========
+    // ========== GUARDAR CAMBIOS EN LA BASE DE DATOS ==========
     if (orderUpdated) {
       order.updated_at = new Date();
-      await order.save();
-      console.log(`💾 Cambios guardados para la orden #${order.order_number}.`);
       
-      console.log('🔍 Datos actualizados en la orden:', {
-        order_number: order.order_number,
-        status: order.status,
-        company: order.company_id?.name,
-        shipday_tracking_url: order.shipday_tracking_url,
-        has_driver_info: !!order.driver_info?.name,
-        has_delivery_location: !!order.delivery_location,
-        has_proof_of_delivery: !!order.proof_of_delivery,
-        pod_photos_count: order.podUrls?.length || 0,
-        has_signature: !!order.signatureUrl,
-        shipday_times_count: Object.keys(order.shipday_times || {}).length
-      });
+      try {
+        await order.save();
+        console.log(`💾 ✅ Cambios guardados EXITOSAMENTE en la BD para la orden #${order.order_number}.`);
+        
+        // Verificar que se guardó correctamente
+        const savedOrder = await Order.findById(order._id).lean();
+        console.log('🔍 Verificación de datos guardados en BD:', {
+          order_number: savedOrder.order_number,
+          status: savedOrder.status,
+          company: order.company_id?.name,
+          shipday_tracking_url: savedOrder.shipday_tracking_url,
+          has_driver_info: !!savedOrder.driver_info?.name,
+          has_delivery_location: !!savedOrder.delivery_location,
+          proof_of_delivery_saved: !!savedOrder.proof_of_delivery,
+          proof_of_delivery_details: savedOrder.proof_of_delivery,
+          podUrls_count: savedOrder.podUrls?.length || 0,
+          has_signature: !!savedOrder.signatureUrl,
+          shipday_times_count: Object.keys(savedOrder.shipday_times || {}).length
+        });
+        
+      } catch (saveError) {
+        console.error('❌ ERROR CRÍTICO guardando en la BD:', saveError);
+        throw saveError;
+      }
 
       // Enviar notificaciones WebSocket
       if (global.wsService && notificationEventType) {
@@ -714,7 +764,8 @@ async handleWebhook(req, res) {
       company_name: order.company_id?.name,
       notification_sent: orderUpdated && !!global.wsService && !!notificationEventType,
       notification_type: notificationEventType,
-      pods_processed: webhookData.pods?.length || 0
+      pods_processed: (webhookData.pods?.length || 0) + (webhookData.proofOfDelivery ? 1 : 0),
+      proof_of_delivery_saved: orderUpdated && !!order.proof_of_delivery
     });
 
   } catch (error) {
