@@ -439,11 +439,11 @@ async handleWebhook(req, res) {
     const webhookData = req.body;
     console.log('📥 Webhook recibido de Shipday:', JSON.stringify(webhookData, null, 2));
 
-    const shipdayOrderId = webhookData.order?.id || webhookData.orderId;
+    const shipdayOrderId = webhookData.order?.orderId || webhookData.orderId;
     const eventType = webhookData.event || webhookData.eventType;
 
     if (!shipdayOrderId || !eventType) {
-      console.warn('⚠️ Webhook ignorado: Payload no contiene order.id o event.');
+      console.warn('⚠️ Webhook ignorado: Payload no contiene order.orderId o event.');
       return res.status(400).json({ success: false, error: 'Payload inválido.' });
     }
 
@@ -461,7 +461,7 @@ async handleWebhook(req, res) {
     // ========== ACTUALIZACIÓN DE TRACKING URL ==========
     const possibleTrackingUrls = [
       webhookData.trackingUrl,
-      webhookData.order?.trackingUrl,
+      webhookData.order?.trackingLink,
       webhookData.tracking_url,
       webhookData.order?.tracking_url
     ];
@@ -475,15 +475,15 @@ async handleWebhook(req, res) {
     }
 
     // ========== ACTUALIZACIÓN DE INFORMACIÓN DEL CONDUCTOR ==========
-    const carrierInfo = webhookData.carrier || webhookData.order?.carrier || webhookData.assignedCarrier;
+    const carrierInfo = webhookData.carrier || webhookData.order?.assignedCarrier || webhookData.assignedCarrier;
     if (carrierInfo) {
       console.log('👨‍💼 Actualizando información del conductor:', carrierInfo);
       
       order.driver_info = {
         name: carrierInfo.name || order.driver_info?.name,
-        phone: carrierInfo.phone || carrierInfo.phoneNumber || order.driver_info?.phone,
+        phone: carrierInfo.phoneNumber || order.driver_info?.phone,
         email: carrierInfo.email || order.driver_info?.email,
-        status: carrierInfo.status || order.driver_info?.status
+        status: carrierInfo.isOnShift ? 'ONLINE' : 'OFFLINE'
       };
       
       if (carrierInfo.id && !order.shipday_driver_id) {
@@ -493,34 +493,18 @@ async handleWebhook(req, res) {
       orderUpdated = true;
     }
 
-    // ========== ACTUALIZACIÓN DE UBICACIÓN DE ENTREGA ==========
-    const deliveryLocation = webhookData.delivery_details?.location || 
-                           webhookData.order?.deliveryLocation ||
-                           webhookData.proofOfDelivery?.location ||
-                           webhookData.pod?.location;
-                           
-    if (deliveryLocation) {
-      console.log('📍 Actualizando ubicación de entrega:', deliveryLocation);
-      order.delivery_location = {
-        lat: deliveryLocation.lat || deliveryLocation.latitude,
-        lng: deliveryLocation.lng || deliveryLocation.longitude,
-        formatted_address: deliveryLocation.formatted_address || deliveryLocation.address || order.delivery_location?.formatted_address
-      };
-      orderUpdated = true;
-    }
-
     // ========== ACTUALIZACIÓN DE TIEMPOS SHIPDAY ==========
-    if (webhookData.order || webhookData.timestamps) {
-      const timestamps = webhookData.timestamps || webhookData.order;
+    const activityLog = webhookData.order?.activityLog || webhookData.activityLog;
+    if (activityLog) {
       const currentTimes = order.shipday_times || {};
       
       order.shipday_times = {
-        placement_time: timestamps.placement_time ? new Date(timestamps.placement_time) : currentTimes.placement_time,
-        assigned_time: timestamps.assigned_time || timestamps.assignedAt ? new Date(timestamps.assigned_time || timestamps.assignedAt) : currentTimes.assigned_time,
-        pickup_time: timestamps.pickup_time || timestamps.pickedUpAt ? new Date(timestamps.pickup_time || timestamps.pickedUpAt) : currentTimes.pickup_time,
-        delivery_time: timestamps.delivery_time || timestamps.deliveredAt ? new Date(timestamps.delivery_time || timestamps.deliveredAt) : currentTimes.delivery_time,
-        expected_pickup_time: timestamps.expected_pickup_time ? new Date(timestamps.expected_pickup_time) : currentTimes.expected_pickup_time,
-        expected_delivery_time: timestamps.expected_delivery_time ? new Date(timestamps.expected_delivery_time) : currentTimes.expected_delivery_time
+        placement_time: activityLog.placementTime ? new Date(activityLog.placementTime) : currentTimes.placement_time,
+        assigned_time: activityLog.assignedTime ? new Date(activityLog.assignedTime) : currentTimes.assigned_time,
+        pickup_time: activityLog.pickedUpTime ? new Date(activityLog.pickedUpTime) : currentTimes.pickup_time,
+        delivery_time: activityLog.deliveryTime ? new Date(activityLog.deliveryTime) : currentTimes.delivery_time,
+        expected_pickup_time: activityLog.expectedPickupTime ? new Date(`${activityLog.expectedDeliveryDate}T${activityLog.expectedPickupTime}:00`) : currentTimes.expected_pickup_time,
+        expected_delivery_time: activityLog.expectedDeliveryTime ? new Date(`${activityLog.expectedDeliveryDate}T${activityLog.expectedDeliveryTime}:00`) : currentTimes.expected_delivery_time
       };
       orderUpdated = true;
     }
@@ -555,143 +539,88 @@ async handleWebhook(req, res) {
       case 'ORDER_POD_UPLOAD':
       case 'order_pod_upload':
       case 'proof_uploaded':
-        console.log('📸 Evento de Prueba de Entrega detectado.');
-        
-        // ========== CORRECCIÓN: PROCESAMIENTO COMPLETO DE PODs ==========
-        const podData = webhookData.proofOfDelivery || webhookData.pod || webhookData.order?.proofOfDelivery;
-        const podsArray = webhookData.pods || webhookData.order?.pods || [];
-        
-        console.log('🔍 Datos de POD encontrados:', {
-          podData,
-          podsArray,
-          podsCount: podsArray.length
-        });
-        
-        if (podData || podsArray.length > 0) {
-          // ========== PREPARAR DATOS PARA LA BASE DE DATOS ==========
-          const allPhotos = [];
-          let signatureUrl = null;
-          let deliveryNotes = '';
-          let podLocation = null;
-          
-          // 1. Procesar podData principal
-          if (podData) {
-            if (podData.photo_url) allPhotos.push(podData.photo_url);
-            if (podData.photoUrl) allPhotos.push(podData.photoUrl);
-            if (podData.photos && Array.isArray(podData.photos)) {
-              allPhotos.push(...podData.photos);
-            }
-            
-            if (podData.signature_url || podData.signatureUrl || podData.signature) {
-              signatureUrl = podData.signature_url || podData.signatureUrl || podData.signature;
-            }
-            
-            if (podData.notes || podData.deliveryNote) {
-              deliveryNotes = podData.notes || podData.deliveryNote;
-            }
-            
-            if (podData.location) {
-              podLocation = {
-                lat: podData.location.lat || podData.location.latitude,
-                lng: podData.location.lng || podData.location.longitude,
-                formatted_address: podData.location.formatted_address || podData.location.address
-              };
-            }
-          }
-          
-          // 2. Procesar array de PODs
-          podsArray.forEach((pod, index) => {
-            console.log(`📸 Procesando POD ${index + 1}:`, pod);
-            
-            // Agregar fotos
-            if (pod.photo_url) allPhotos.push(pod.photo_url);
-            if (pod.photoUrl) allPhotos.push(pod.photoUrl);
-            if (pod.photos && Array.isArray(pod.photos)) {
-              allPhotos.push(...pod.photos);
-            }
-            
-            // Tomar la primera firma disponible
-            if (!signatureUrl && (pod.signature_url || pod.signatureUrl || pod.signature)) {
-              signatureUrl = pod.signature_url || pod.signatureUrl || pod.signature;
-            }
-            
-            // Combinar notas
-            if (pod.notes || pod.deliveryNote) {
-              const notes = pod.notes || pod.deliveryNote;
-              deliveryNotes = deliveryNotes ? `${deliveryNotes}; ${notes}` : notes;
-            }
-            
-            // Usar primera ubicación disponible
-            if (!podLocation && pod.location) {
-              podLocation = {
-                lat: pod.location.lat || pod.location.latitude,
-                lng: pod.location.lng || pod.location.longitude,
-                formatted_address: pod.location.formatted_address || pod.location.address
-              };
-            }
-          });
-          
-          // 3. Filtrar y deduplicar fotos
-          const uniquePhotos = [...new Set(allPhotos)].filter(url => url && url.trim() !== '');
-          
-          console.log('📸 Datos procesados para guardar:', {
-            photos_count: uniquePhotos.length,
-            photos: uniquePhotos,
-            has_signature: !!signatureUrl,
-            signature_url: signatureUrl,
-            notes: deliveryNotes,
-            location: podLocation
-          });
-          
-          // ========== GUARDAR EN PROOF_OF_DELIVERY (ESQUEMA CORRECTO) ==========
-          const currentPod = order.proof_of_delivery || {};
-          
-          order.proof_of_delivery = {
-            photo_url: uniquePhotos[0] || currentPod.photo_url || null,
-            signature_url: signatureUrl || currentPod.signature_url || null,
-            notes: deliveryNotes || currentPod.notes || 'Prueba de entrega recibida desde Shipday',
-            location: podLocation ? {
-              type: 'Point',
-              coordinates: [podLocation.lng || 0, podLocation.lat || 0]
-            } : currentPod.location || null
-          };
-          
-          // ========== CAMPOS DE COMPATIBILIDAD (PARA EL FRONTEND) ==========
-          if (uniquePhotos.length > 0) {
-            order.podUrls = uniquePhotos;
-            console.log(`📸 ${uniquePhotos.length} fotos guardadas en podUrls:`, uniquePhotos);
-          }
-          
-          if (signatureUrl) {
-            order.signatureUrl = signatureUrl;
-            console.log('✍️ Firma guardada en signatureUrl:', signatureUrl);
-          }
-          
-          // Actualizar ubicación de entrega si no existe
-          if (podLocation && (!order.delivery_location || (!order.delivery_location.lat && !order.delivery_location.lng))) {
-            order.delivery_location = podLocation;
-            console.log('📍 Ubicación de entrega actualizada desde POD:', podLocation);
-          }
-          
-          orderUpdated = true;
-          notificationEventType = 'proof_uploaded';
-          
-          console.log('📝 ✅ Prueba de entrega guardada CORRECTAMENTE en la BD:', {
-            proof_of_delivery: order.proof_of_delivery,
-            podUrls_count: order.podUrls?.length || 0,
-            has_signatureUrl: !!order.signatureUrl
-          });
-        }
-        break;
-
-      case 'ORDER_COMPLETED':
       case 'ORDER_DELIVERED':
-      case 'order_completed':
       case 'order_delivered':
-        console.log('✅ Evento de Orden Completada/Entregada detectado.');
-        if (order.status !== 'delivered') {
+        console.log('📸 Evento de Prueba de Entrega o Entrega detectado.');
+        
+        // ========== ESTRUCTURA REAL DE SHIPDAY ==========
+        const proofOfDelivery = webhookData.order?.proofOfDelivery || webhookData.proofOfDelivery;
+        
+        console.log('🔍 Buscando proofOfDelivery en webhook:', proofOfDelivery);
+        
+        if (proofOfDelivery) {
+          // Extraer datos según la estructura oficial de Shipday
+          const imageUrls = proofOfDelivery.imageUrls || [];
+          const signaturePath = proofOfDelivery.signaturePath;
+          const deliveryLatitude = proofOfDelivery.latitude;
+          const deliveryLongitude = proofOfDelivery.longitude;
+          
+          console.log('📸 Datos de POD extraídos:', {
+            imageUrls_count: imageUrls.length,
+            imageUrls: imageUrls,
+            signaturePath: signaturePath,
+            latitude: deliveryLatitude,
+            longitude: deliveryLongitude
+          });
+          
+          // ========== VALIDAR Y PROCESAR DATOS ==========
+          const validImageUrls = imageUrls.filter(url => url && url.trim() !== '');
+          
+          if (validImageUrls.length > 0 || signaturePath || (deliveryLatitude && deliveryLongitude)) {
+            console.log('💾 Guardando proof of delivery desde Shipday...');
+            
+            // ========== GUARDAR EN ESTRUCTURA DE BD ==========
+            order.proof_of_delivery = {
+              photo_url: validImageUrls[0] || null,
+              signature_url: signaturePath || null,
+              notes: 'Prueba de entrega recibida desde Shipday',
+              location: (deliveryLatitude && deliveryLongitude) ? {
+                type: 'Point',
+                coordinates: [deliveryLongitude, deliveryLatitude]
+              } : null
+            };
+            
+            // ========== CAMPOS DE COMPATIBILIDAD ==========
+            if (validImageUrls.length > 0) {
+              order.podUrls = validImageUrls;
+              console.log(`📸 ${validImageUrls.length} fotos guardadas en podUrls:`, validImageUrls);
+            }
+            
+            if (signaturePath) {
+              order.signatureUrl = signaturePath;
+              console.log('✍️ Firma guardada en signatureUrl:', signaturePath);
+            }
+            
+            // ========== ACTUALIZAR UBICACIÓN DE ENTREGA ==========
+            if (deliveryLatitude && deliveryLongitude) {
+              order.delivery_location = {
+                lat: deliveryLatitude,
+                lng: deliveryLongitude,
+                formatted_address: `${deliveryLatitude}, ${deliveryLongitude}`
+              };
+              console.log('📍 Ubicación de entrega actualizada:', order.delivery_location);
+            }
+            
+            orderUpdated = true;
+            notificationEventType = 'proof_uploaded';
+            
+            console.log('📝 ✅ Proof of Delivery guardado correctamente:', {
+              proof_of_delivery: order.proof_of_delivery,
+              podUrls_count: order.podUrls?.length || 0,
+              has_signature: !!order.signatureUrl,
+              has_location: !!order.delivery_location
+            });
+          } else {
+            console.warn('⚠️ ProofOfDelivery encontrado pero sin datos válidos:', proofOfDelivery);
+          }
+        } else {
+          console.warn('⚠️ No se encontró proofOfDelivery en el webhook');
+        }
+        
+        // ========== MARCAR COMO ENTREGADO SI ES NECESARIO ==========
+        if (['ORDER_DELIVERED', 'order_delivered'].includes(eventType) && order.status !== 'delivered') {
           order.status = 'delivered';
-          order.delivery_date = webhookData.order?.delivery_time ? new Date(webhookData.order.delivery_time) : new Date();
+          order.delivery_date = activityLog?.deliveryTime ? new Date(activityLog.deliveryTime) : new Date();
           orderUpdated = true;
           notificationEventType = 'delivered';
           console.log(`📦 Orden #${order.order_number} marcada como "entregado".`);
@@ -699,7 +628,7 @@ async handleWebhook(req, res) {
         break;
           
       default:
-        console.log(`ℹ️  Evento "${eventType}" recibido, datos generales actualizados.`);
+        console.log(`ℹ️  Evento "${eventType}" recibido, actualizando datos generales.`);
         if (orderUpdated) {
           notificationEventType = 'status_updated';
         }
@@ -712,47 +641,32 @@ async handleWebhook(req, res) {
       
       try {
         await order.save();
-        console.log(`💾 ✅ Cambios guardados EXITOSAMENTE en la BD para la orden #${order.order_number}.`);
+        console.log(`💾 ✅ Cambios guardados exitosamente para la orden #${order.order_number}.`);
         
-        // Verificar que se guardó correctamente
+        // Verificación inmediata
         const savedOrder = await Order.findById(order._id).lean();
-        console.log('🔍 Verificación de datos guardados en BD:', {
+        console.log('🔍 Verificación en BD:', {
           order_number: savedOrder.order_number,
           status: savedOrder.status,
-          company: order.company_id?.name,
-          shipday_tracking_url: savedOrder.shipday_tracking_url,
-          has_driver_info: !!savedOrder.driver_info?.name,
-          has_delivery_location: !!savedOrder.delivery_location,
-          proof_of_delivery_saved: !!savedOrder.proof_of_delivery,
-          proof_of_delivery_details: savedOrder.proof_of_delivery,
-          podUrls_count: savedOrder.podUrls?.length || 0,
-          has_signature: !!savedOrder.signatureUrl,
-          shipday_times_count: Object.keys(savedOrder.shipday_times || {}).length
+          proof_of_delivery: savedOrder.proof_of_delivery,
+          podUrls: savedOrder.podUrls,
+          signatureUrl: savedOrder.signatureUrl,
+          delivery_location: savedOrder.delivery_location
         });
         
       } catch (saveError) {
-        console.error('❌ ERROR CRÍTICO guardando en la BD:', saveError);
+        console.error('❌ ERROR guardando en la BD:', saveError);
         throw saveError;
       }
 
       // Enviar notificaciones WebSocket
       if (global.wsService && notificationEventType) {
-        console.log(`📡 Enviando notificaciones dirigidas para evento: ${notificationEventType}`);
-        
         try {
           const notificationStats = global.wsService.notifyOrderUpdate(order, notificationEventType);
-          console.log(`📊 Notificaciones enviadas:`, {
-            company_users: notificationStats.company_notifications,
-            admin_users: notificationStats.admin_notifications,
-            company_name: order.company_id?.name,
-            order_number: order.order_number,
-            event_type: notificationEventType
-          });
+          console.log(`📡 Notificaciones enviadas:`, notificationStats);
         } catch (notificationError) {
           console.error('❌ Error enviando notificaciones WebSocket:', notificationError);
         }
-      } else if (!global.wsService) {
-        console.warn('⚠️ WebSocket no disponible para notificaciones');
       }
     }
 
@@ -762,9 +676,7 @@ async handleWebhook(req, res) {
       order_updated: orderUpdated,
       order_number: order.order_number,
       company_name: order.company_id?.name,
-      notification_sent: orderUpdated && !!global.wsService && !!notificationEventType,
-      notification_type: notificationEventType,
-      pods_processed: (webhookData.pods?.length || 0) + (webhookData.proofOfDelivery ? 1 : 0),
+      event_processed: eventType,
       proof_of_delivery_saved: orderUpdated && !!order.proof_of_delivery
     });
 
