@@ -293,8 +293,6 @@ getTracking: async (orderId) => {
   }
 },
 
-refreshDriverStatus: (orderId) => api.get(`/orders/${orderId}/driver-refresh`),
-
 // 🆕 NUEVO: Método para refrescar datos de una orden específica
 refreshOrderData: async (orderId) => {
   try {
@@ -566,7 +564,41 @@ const drivers = {
   // Obtener conductores por empresa (si necesitas)
   getByCompany: (companyId) => api.get(`/companies/${companyId}/drivers`)
 }
+// Servicios de Shipday
+const shipday = {
+  // ==================== CONEXIÓN ====================
+  testConnection: () => api.get('/shipday/test-connection'),
+  
+  // ==================== DRIVERS ====================
+  getDrivers: () => api.get('/shipday/drivers'),
+  getDriver: (id) => api.get(`/shipday/drivers/${id}`),
+  createDriver: (driverData) => api.post('/shipday/drivers', driverData),
+  updateDriver: (id, driverData) => api.put(`/shipday/drivers/${id}`, driverData),
+  deleteDriver: (id) => api.delete(`/shipday/drivers/${id}`),
+  
+  // ==================== ORDERS ====================
+  getOrders: (filters = {}) => {
+    const params = new URLSearchParams(filters).toString()
+    return api.get(`/shipday/orders${params ? `?${params}` : ''}`)
+  },
+  getOrder: (id) => api.get(`/shipday/orders/${id}`),
+  createOrder: (orderData) => api.post('/shipday/orders', orderData),
+  assignOrder: (orderId, driverId) => api.put(`/shipday/orders/${orderId}/assign`, { driverId }),
+  updateOrderStatus: (id, status) => api.put(`/shipday/orders/${id}/status`, { status }),
+  
+  // ==================== TRACKING ====================
+  getOrderTracking: (id) => api.get(`/shipday/orders/${id}/tracking`),
+  
+  // ==================== WEBHOOKS ====================
+  setupWebhook: (webhookData) => api.post('/shipday/webhooks/setup', webhookData),
+  
+  // ==================== DEBUG/TESTING ====================
+  testAssignOrder: (orderId, driverId) => api.post(`/shipday/test-assign/${orderId}/${driverId}`),
+  getDriversDetailed: () => api.get('/shipday/drivers-detailed'),
+  fullInvestigation: () => api.get('/shipday/full-investigation')
+}
 
+// ACTUALIZAR la exportación para incluir shipday
 // Exportar todos los servicios
 export const apiService = {
   auth,
@@ -577,7 +609,8 @@ export const apiService = {
   drivers,
   billing,
   dashboard,
-  users
+  users,
+  shipday
 }
 
 // Exportar instancia de axios para casos especiales

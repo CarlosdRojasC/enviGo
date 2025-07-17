@@ -10,7 +10,6 @@ const upload = multer({ storage: multer.memoryStorage() });
 const Order = require('../models/Order');
 const ShipdayService = require('../services/shipday.service');
 const Company = require('../models/Company');
-const shipdayController = require('../controllers/shipday.controller');
 
 
 // ==================== PEDIDOS ====================
@@ -598,9 +597,6 @@ router.get('/:orderId/shipday-status', authenticateToken, async (req, res) => {
 });
 
 // ==================== TRACKING DE PEDIDOS ====================
-
-router.get('/:id/tracking', authenticateToken, shipdayController.getOrderTracking);
-router.get('/:id/driver-refresh', authenticateToken, shipdayController.refreshDriverStatus);
 /**
  * Generar timeline de eventos del pedido
  */
