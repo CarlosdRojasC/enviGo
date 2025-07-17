@@ -293,6 +293,8 @@ getTracking: async (orderId) => {
   }
 },
 
+refreshDriverStatus: (orderId) => api.get(`/orders/${orderId}/driver-refresh`),
+
 // 🆕 NUEVO: Método para refrescar datos de una orden específica
 refreshOrderData: async (orderId) => {
   try {
