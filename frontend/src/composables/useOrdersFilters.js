@@ -39,17 +39,39 @@ const filtersUI = ref({
   /**
    * Available communes from current orders and API
    */
-  const availableCommunes = computed(() => {
-    if (!orders.value?.length) return []
-    
-    const communes = new Set(
-      orders.value
-        .map(order => order.shipping_commune)
-        .filter(commune => commune && commune.trim() !== '')
-    )
-    
-    return Array.from(communes).sort()
-  })
+const availableCommunes = computed(() => {
+  if (!orders.value?.length) return []
+  
+  const communes = new Set()
+  
+  try {
+    orders.value.forEach(order => {
+      let commune = order.shipping_commune
+      
+      // Verificar y normalizar el tipo de dato
+      if (commune != null && commune !== undefined) {
+        // Si es array, convertir a string
+        if (Array.isArray(commune)) {
+          commune = commune.length > 0 ? commune.join(', ') : ''
+        }
+        // Si no es string, convertir
+        else if (typeof commune !== 'string') {
+          commune = String(commune)
+        }
+        
+        // Solo agregar si es válido
+        if (commune.trim() !== '' && commune !== 'null' && commune !== 'undefined') {
+          communes.add(commune.trim())
+        }
+      }
+    })
+  } catch (error) {
+    console.error('❌ Error procesando comunas:', error)
+    return []
+  }
+  
+  return Array.from(communes).sort()
+})
 
   /**
    * Active filters count (for UI feedback)

@@ -330,7 +330,7 @@ const startServer = async () => {
     await connectDB();  // <-- conecta a MongoDB
     
     // ← CAMBIAR app.listen por server.listen
-    server.listen(PORT, () => {
+    server.listen(PORT, '0.0.0.0', () => {
       console.log(`🚀 Servidor corriendo en http://localhost:${PORT}`);
       console.log(`🔗 WebSocket disponible en ws://localhost:${PORT}/ws`); // ← AGREGAR
       console.log(`📊 Ambiente: ${process.env.NODE_ENV}`);
