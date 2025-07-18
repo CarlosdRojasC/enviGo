@@ -7,7 +7,7 @@ export function useOrdersFilters(orders, fetchOrders) {
   const filters = ref({
     company_id: '',
     status: '',
-    shipping_commune: '',
+    shipping_commune: [],
     date_from: '',
     date_to: '',
     search: ''
@@ -137,8 +137,16 @@ const filterPresets = computed(() => [
    * Apply filters to orders
    */
   function applyFilters() {
-    console.log('🎯 Applying filters:', filters.value)
-    fetchOrders(filters.value)
+    const activeFilters = JSON.parse(JSON.stringify(filters.value));
+    
+    if (activeFilters.shipping_commune && activeFilters.shipping_commune.length > 0) {
+      activeFilters.shipping_commune = activeFilters.shipping_commune.join(',');
+    } else {
+      delete activeFilters.shipping_commune;
+    }
+    
+    // Reiniciar a la primera página con cada nuevo filtro
+    fetchOrders(1, activeFilters); 
   }
 
   /**
@@ -148,7 +156,7 @@ const filterPresets = computed(() => [
     filters.value = {
       company_id: '',
       status: '',
-      shipping_commune: '',
+      shipping_commune: [], // <--- CAMBIO: Resetear como array vacío
       date_from: '',
       date_to: '',
       search: ''
@@ -326,13 +334,23 @@ function updateAdvancedFilter(key, value) {
   }
 }
 
+  function applySearch(searchTerm) {
+    if (filters.value.search !== searchTerm) {
+      filters.value.search = searchTerm;
+    }
+    applyFilters();
+  }
+
 // Búsqueda con mejor debounce
-function debouncedSearch(searchTerm, delay = 300) {
-  clearTimeout(searchTimeout)
-  searchTimeout = setTimeout(() => {
-    handleFilterChange('search', searchTerm)
-  }, delay)
-}
+    function handleFilterChange(filterKey, value) {
+    filters.value[filterKey] = value;
+    applyFilters();
+  }
+    function handleSearch(searchTerm) {
+    filters.value.search = searchTerm;
+    applyFilters();
+  }
+
   // ==================== RETURN ====================
   return {
     // State
@@ -350,6 +368,7 @@ function debouncedSearch(searchTerm, delay = 300) {
     
     // Methods
     handleFilterChange,
+    handleSearch,
     applyFilters,
     resetFilters,
     setFilter,
@@ -362,6 +381,6 @@ function debouncedSearch(searchTerm, delay = 300) {
     applyPreset,
     toggleAdvancedFilters,
     updateAdvancedFilter,
-    debouncedSearch
+    applySearch
   }
 }

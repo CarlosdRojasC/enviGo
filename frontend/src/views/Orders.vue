@@ -24,12 +24,12 @@
       :presets="filterPresets"
       :show-advanced="filtersUI?.showAdvanced || false"
       :active-count="activeFiltersCount"
-      @filter-change="handleFilterChange"
+      @filter-change="handleFilterChangeEvent"
       @advanced-change="updateAdvancedFilter"
       @apply-preset="applyPreset"
       @toggle-advanced="toggleAdvancedFilters"
-      @search="debouncedSearch"
-      @clear-all="clearAllFilters"
+      @search="handleSearchEvent"
+      @clear-all="resetFilters"
     />
 
     <!-- Tabla moderna -->
@@ -136,6 +136,7 @@ import { useOrdersData } from '../composables/useOrdersData'
 import { useOrdersFilters } from '../composables/useOrdersFilters'
 import { useOrdersSelection } from '../composables/useOrdersSelection'
 
+
 const toast = useToast()
 const router = useRouter()
 const auth = useAuthStore()
@@ -176,7 +177,8 @@ const {
   applyPreset,
   toggleAdvancedFilters,
   updateAdvancedFilter,
-  debouncedSearch,
+  applySearch,
+  resetFilters,
   handleFilterChange,
   clearAllFilters
 } = useOrdersFilters(orders, fetchOrders)
@@ -261,6 +263,15 @@ async function handleExport() {
 function handleCreateOrder() {
   // Navegar a crear pedido o abrir modal
   router.push('/orders/create')
+}
+
+function handleSearchEvent(newSearchTerm) {
+  applySearch(newSearchTerm);
+}
+
+// Función que se llamará desde el evento @filter-change de OrdersFilters
+function handleFilterChangeEvent(key, value) {
+  handleFilterChange(key, value);
 }
 
 function toggleAutoRefresh() {

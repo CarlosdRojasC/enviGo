@@ -42,22 +42,40 @@
         </div>
 
         <!-- Commune Filter -->
-        <div class="filter-group" v-if="availableCommunes.length > 0">
-          <label class="filter-label">Comuna</label>
-          <select 
-            v-model="localFilters.shipping_commune" 
-            @change="emitChange" 
-            class="filter-select commune-select"
-          >
-            <option value="">📍 Todas las comunas</option>
-            <option 
-              v-for="commune in availableCommunes" 
-              :key="commune" 
-              :value="commune"
-            >
-              {{ commune }}
-            </option>
-          </select>
+               <div class="filter-group">
+          <label class="filter-label">Comuna(s)</label>
+          <div class="multiselect-container" @click="focusInput">
+            <div class="multiselect-tags">
+              <span v-for="commune in localFilters.shipping_commune" :key="commune" class="tag">
+                {{ commune }}
+                <button @click.stop="removeCommune(commune)" class="tag-remove">×</button>
+              </span>
+              <input
+                ref="communeInput"
+                type="text"
+                v-model="communeSearch"
+                @focus="showCommuneDropdown = true"
+                @blur="closeDropdown"
+                placeholder="Seleccionar comunas..."
+                class="multiselect-input"
+              />
+            </div>
+            <transition name="slide-down">
+              <div v-if="showCommuneDropdown" class="multiselect-dropdown">
+                <div
+                  v-for="commune in filteredCommunes"
+                  :key="commune"
+                  @mousedown.prevent="addCommune(commune)"
+                  class="dropdown-item"
+                >
+                  {{ commune }}
+                </div>
+                <div v-if="filteredCommunes.length === 0 && communeSearch" class="dropdown-empty">
+                  No se encontraron coincidencias.
+                </div>
+              </div>
+            </transition>
+          </div>
         </div>
 
         <!-- Date Range -->
@@ -312,9 +330,19 @@ const emit = defineEmits([
 ])
 
 // Local reactive copies
-const localFilters = ref({ ...props.filters })
-const localAdvancedFilters = ref({ ...props.advancedFilters })
+const localFilters = ref({ ...props.filters, shipping_commune: Array.isArray(props.filters.shipping_commune) ? props.filters.shipping_commune : [] });const localAdvancedFilters = ref({ ...props.advancedFilters })
 const searchTerm = ref(props.filters.search || '')
+
+const communeInput = ref(null);
+const showCommuneDropdown = ref(false);
+const communeSearch = ref('');
+
+const filteredCommunes = computed(() => {
+  return props.availableCommunes.filter(commune =>
+    !localFilters.value.shipping_commune.includes(commune) &&
+    commune.toLowerCase().includes(communeSearch.value.toLowerCase())
+  ).sort();
+});
 
 // Watch for external changes
 watch(() => props.filters, (newFilters) => {
@@ -326,9 +354,31 @@ watch(() => props.advancedFilters, (newFilters) => {
   localAdvancedFilters.value = { ...newFilters }
 }, { deep: true })
 
+
+function addCommune(commune) {
+  if (!localFilters.value.shipping_commune.includes(commune)) {
+    localFilters.value.shipping_commune.push(commune);
+    communeSearch.value = '';
+    emitChange();
+  }
+}
+
+function removeCommune(communeToRemove) {
+  localFilters.value.shipping_commune = localFilters.value.shipping_commune.filter(c => c !== communeToRemove);
+  emitChange();
+}
+function focusInput() {
+  communeInput.value?.focus();
+}
+
+function closeDropdown() {
+  setTimeout(() => { showCommuneDropdown.value = false; }, 200);
+}
+
+
 // Methods
 function emitChange() {
-  emit('filter-change', localFilters.value)
+  emit('filter-change', { shipping_commune: localFilters.value.shipping_commune });
 }
 
 function emitAdvancedChange() {
@@ -364,10 +414,14 @@ function clearSearch() {
 // Debounced search
 let searchTimeout
 function debouncedSearch() {
-  clearTimeout(searchTimeout)
+  // Cancela el timeout anterior si el usuario sigue escribiendo
+  clearTimeout(searchTimeout);
+
+  // Establece un nuevo timeout de 500ms
   searchTimeout = setTimeout(() => {
-    emit('search', searchTerm.value)
-  }, 300)
+    // Cuando el tiempo pasa, emite el evento 'search' al componente padre
+    emit('search', searchTerm.value);
+  }, 500); 
 }
 
 // Utility functions
@@ -387,6 +441,16 @@ function isPresetActive(preset) {
     return localFilters.value[key] === value
   })
 }
+
+watch(() => props.filters, (newFilters) => {
+  localFilters.value = { ...newFilters, shipping_commune: Array.isArray(newFilters.shipping_commune) ? newFilters.shipping_commune : [] };
+}, { deep: true });
+
+watch(() => props.filters.search, (newSearchValue) => {
+  if (searchTerm.value !== newSearchValue) {
+    searchTerm.value = newSearchValue;
+  }
+});
 </script>
 
 <style scoped>
@@ -878,5 +942,68 @@ function isPresetActive(preset) {
   .advanced-select {
     font-size: 16px; /* Prevent zoom on iOS */
   }
+}
+/* NUEVOS ESTILOS para el multiselect de comunas */
+.multiselect-container {
+  position: relative;
+  background: white;
+  border: 2px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 6px;
+  cursor: text;
+}
+.multiselect-selected-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.tag {
+  display: flex;
+  align-items: center;
+  background: #e0e7ff;
+  color: #4f46e5;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+}
+.tag-remove {
+  background: none;
+  border: none;
+  color: #4f46e5;
+  margin-left: 6px;
+  cursor: pointer;
+  font-size: 14px;
+}
+.multiselect-input {
+  border: none;
+  outline: none;
+  flex-grow: 1;
+  padding: 6px;
+  font-size: 14px;
+}
+.multiselect-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  max-height: 200px;
+  overflow-y: auto;
+  z-index: 10;
+  margin-top: 4px;
+}
+.dropdown-item {
+  padding: 10px 12px;
+  cursor: pointer;
+}
+.dropdown-item:hover {
+  background: #f1f5f9;
+}
+.dropdown-empty {
+  padding: 10px 12px;
+  color: #6b7280;
 }
 </style>
