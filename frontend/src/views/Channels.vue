@@ -641,21 +641,35 @@ function showChannelDetails(channel) {
 }
 
 async function syncChannel(channelId) {
-  if (syncingChannels.value.includes(channelId)) return
+  if (syncingChannels.value.includes(channelId)) return;
   
-  syncingChannels.value.push(channelId)
+  syncingChannels.value.push(channelId);
+  
   try {
-    await channelsService.sync(channelId, {
+    console.log('🔄 Iniciando sincronización del canal:', channelId);
+    
+    const response = await apiService.channels.syncOrders(channelId, {
       date_from: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
       date_to: new Date().toISOString()
-    })
+    });
     
-    toast.success('Sincronización iniciada. Los pedidos aparecerán en unos momentos.')
-    await fetchChannels()
+    console.log('✅ Respuesta de sincronización:', response.data);
+    
+    if (response.data.success) {
+      const ordersImported = response.data.orders_imported || 0;
+      toast.success(`Sincronización completada: ${ordersImported} pedidos importados`);
+    } else {
+      toast.warning('Sincronización completada sin nuevos pedidos');
+    }
+    
+    // Recargar canales para mostrar estado actualizado
+    await fetchChannels();
+    
   } catch (error) {
-    toast.error(`Error en la sincronización: ${error.message}`)
+    console.error('❌ Error en sincronización:', error);
+    toast.error(`Error en la sincronización: ${error.response?.data?.error || error.message}`);
   } finally {
-    syncingChannels.value = syncingChannels.value.filter(id => id !== channelId)
+    syncingChannels.value = syncingChannels.value.filter(id => id !== channelId);
   }
 }
 
@@ -685,6 +699,50 @@ function clearFilters() {
   filterType.value = ''
   filterStatus.value = ''
   selectedCompanyId.value = ''
+}
+function getChannelSyncStatus(channel) {
+  const syncInfo = channel.sync_status_info;
+  
+  if (syncInfo) {
+    return {
+      class: syncInfo.needsSync ? 'needs-sync' : 'synced',
+      text: syncInfo.message,
+      needsSync: syncInfo.needsSync
+    };
+  }
+  
+  // Fallback al método anterior
+  const lastSync = channel.last_sync_at || channel.last_sync;
+  
+  if (!lastSync) {
+    return {
+      class: 'needs-sync',
+      text: 'Necesita sincronización',
+      needsSync: true
+    };
+  }
+  
+  const daysSinceSync = Math.floor((new Date() - new Date(lastSync)) / (1000 * 60 * 60 * 24));
+  
+  if (daysSinceSync <= 1) {
+    return {
+      class: 'synced',
+      text: 'Sincronizado',
+      needsSync: false
+    };
+  } else if (daysSinceSync <= 7) {
+    return {
+      class: 'needs-sync',
+      text: `Hace ${daysSinceSync} días`,
+      needsSync: true
+    };
+  } else {
+    return {
+      class: 'outdated',
+      text: `Hace ${daysSinceSync} días`,
+      needsSync: true
+    };
+  }
 }
 
 // ==================== LIFECYCLE ====================

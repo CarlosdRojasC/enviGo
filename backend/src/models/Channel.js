@@ -160,5 +160,51 @@ channelSchema.methods.isConfiguredCorrectly = function() {
 channelSchema.statics.getChannelTypes = function() {
   return Object.values(CHANNEL_TYPES);
 };
-
+channelSchema.methods.getSyncStatus = function() {
+  const lastSync = this.last_sync_at || this.last_sync;
+  
+  if (!lastSync) {
+    return {
+      status: 'never_synced',
+      message: 'Nunca sincronizado',
+      needsSync: true,
+      daysSinceSync: null
+    };
+  }
+  
+  const now = new Date();
+  const syncDate = new Date(lastSync);
+  const diffTime = Math.abs(now - syncDate);
+  const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+  
+  if (diffDays === 0) {
+    return {
+      status: 'synced_today',
+      message: 'Sincronizado hoy',
+      needsSync: false,
+      daysSinceSync: 0
+    };
+  } else if (diffDays <= 1) {
+    return {
+      status: 'recent',
+      message: 'Sincronizado recientemente',
+      needsSync: false,
+      daysSinceSync: diffDays
+    };
+  } else if (diffDays <= 7) {
+    return {
+      status: 'needs_sync',
+      message: `Hace ${diffDays} días`,
+      needsSync: true,
+      daysSinceSync: diffDays
+    };
+  } else {
+    return {
+      status: 'outdated',
+      message: `Hace ${diffDays} días`,
+      needsSync: true,
+      daysSinceSync: diffDays
+    };
+  }
+};
 module.exports = mongoose.model('Channel', channelSchema);

@@ -461,20 +461,41 @@ function formatChannelType(type) {
 }
 
 function getChannelStatus(channel) {
-  const daysSinceSync = channel.last_sync_at 
-    ? Math.floor((new Date() - new Date(channel.last_sync_at)) / (1000 * 60 * 60 * 24)) 
-    : 999
+  const lastSync = channel.last_sync_at || channel.last_sync
   
-  if (daysSinceSync <= 1) return 'Activo'
-  if (daysSinceSync <= 7) return 'Atrasado'
-  return 'Inactivo'
+  if (!lastSync) {
+    return 'Necesita sincronización'
+  }
+  
+  const daysSinceSync = Math.floor((new Date() - new Date(lastSync)) / (1000 * 60 * 60 * 24))
+  
+  if (daysSinceSync === 0) {
+    return 'Sincronizado hoy'
+  } else if (daysSinceSync <= 1) {
+    return 'Sincronizado'
+  } else if (daysSinceSync <= 7) {
+    return `Hace ${daysSinceSync} días`
+  } else {
+    return 'Necesita sincronización'
+  }
 }
 
 function getChannelStatusClass(channel) {
-  const status = getChannelStatus(channel)
-  if (status === 'Activo') return 'active'
-  if (status === 'Atrasado') return 'warning'
-  return 'inactive'
+  const lastSync = channel.last_sync_at || channel.last_sync
+  
+  if (!lastSync) {
+    return 'inactive'
+  }
+  
+  const daysSinceSync = Math.floor((new Date() - new Date(lastSync)) / (1000 * 60 * 60 * 24))
+  
+  if (daysSinceSync <= 1) {
+    return 'active'
+  } else if (daysSinceSync <= 7) {
+    return 'warning'
+  } else {
+    return 'inactive'
+  }
 }
 
 function getTrendIcon(direction) {
