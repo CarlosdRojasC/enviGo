@@ -169,24 +169,26 @@ export function useOrdersFilters(orders, fetchOrders) {
   /**
    * Apply filters to orders - CORREGIDO
    */
-  function applyFilters() {
-    console.log('🎯 Applying filters:', filters.value)
+function applyFilters() {
+    console.log('🎯 Applying filters:', filters.value);
     
-    const cleanFilters = {}
+    const cleanFilters = {};
     
     Object.entries(filters.value).forEach(([key, value]) => {
+      // ESTA ES LA LÓGICA CLAVE
       if (key === 'shipping_commune') {
-        // Manejar array de comunas
+        // Convierte el array de comunas en un string separado por comas
         if (Array.isArray(value) && value.length > 0) {
-          cleanFilters[key] = value.join(',') // Enviar como string separada por comas
+          cleanFilters[key] = value.join(','); 
         }
       } else if (value !== '' && value !== null && value !== undefined) {
-        cleanFilters[key] = value
+        cleanFilters[key] = value;
       }
-    })
+    });
     
-    console.log('📡 Sending filters to backend:', cleanFilters)
-    fetchOrders(cleanFilters)
+    console.log('📡 Sending filters to backend:', cleanFilters);
+    // Asumimos que fetchOrders está definido en este composable y usa estos filtros
+    fetchOrders(cleanFilters);
   }
 
   /**

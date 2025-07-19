@@ -43,23 +43,21 @@ class OrderController {
         if (date_to) filters.order_date.$lte = new Date(date_to);
       }
 
-  if (shipping_commune) {
-  console.log('📍 Filtro de comuna recibido:', shipping_commune, typeof shipping_commune)
-  
-  if (Array.isArray(shipping_commune)) {
-    // Si es array, usar $in para múltiples comunas
-    filters.shipping_commune = { $in: shipping_commune }
-  } else if (typeof shipping_commune === 'string') {
-    // Si es string separado por comas, convertir a array
-    const communeArray = shipping_commune.split(',').map(c => c.trim()).filter(c => c)
-    if (communeArray.length > 1) {
-      filters.shipping_commune = { $in: communeArray }
-    } else {
-      // Una sola comuna, usar regex para coincidencia parcial
-      filters.shipping_commune = new RegExp(shipping_commune.trim(), 'i')
-    }
-  }
-}
+   if (shipping_commune) {
+        // Log para ver qué llega desde el frontend
+        console.log('📍 Filtro de comuna recibido:', shipping_commune);
+
+        // Si es un string (lo será), lo separamos por comas
+        const communeArray = shipping_commune.split(',').map(c => c.trim()).filter(c => c);
+
+        if (communeArray.length > 1) {
+          // Si hay más de una comuna, usamos el operador $in de MongoDB
+          filters.shipping_commune = { $in: communeArray.map(c => new RegExp(c, 'i')) };
+        } else if (communeArray.length === 1) {
+          // Si solo hay una, usamos una búsqueda flexible (insensible a mayúsculas)
+          filters.shipping_commune = new RegExp(communeArray[0], 'i');
+        }
+      }
       if (search) {
         const searchRegex = new RegExp(search, 'i');
         filters.$or = [
