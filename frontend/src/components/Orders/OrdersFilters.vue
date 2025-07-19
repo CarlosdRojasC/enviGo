@@ -9,7 +9,7 @@
           <label class="filter-label">Estado</label>
           <select 
             v-model="localFilters.status" 
-            @change="emitChange" 
+            @change="emit('filter-change', 'status', $event.target.value)" 
             class="filter-select status-select"
           >
             <option value="">📋 Todos los estados</option>
@@ -27,7 +27,7 @@
           <label class="filter-label">Canal</label>
           <select 
             v-model="localFilters.channel_id" 
-            @change="emitChange" 
+            @change="emit('filter-change', 'channel_id', $event.target.value)" 
             class="filter-select channel-select"
           >
             <option value="">🏪 Todos los canales</option>
@@ -85,7 +85,7 @@
             <input 
               type="date" 
               v-model="localFilters.date_from" 
-              @change="emitChange" 
+              @change="emit('filter-change', 'date_from', $event.target.value)" 
               class="filter-input date-input"
               placeholder="Desde"
             />
@@ -93,7 +93,7 @@
             <input 
               type="date" 
               v-model="localFilters.date_to" 
-              @change="emitChange" 
+              @change="emit('filter-change', 'date_to', $event.target.value)"
               class="filter-input date-input"
               placeholder="Hasta"
             />
@@ -108,7 +108,7 @@
             <input 
               type="text" 
               v-model="searchTerm" 
-              @input="debouncedSearch" 
+              @input="emit('filter-change', 'search', searchTerm)" 
               placeholder="Buscar por #pedido, cliente, email..."
               class="filter-input search-input"
             />
@@ -381,10 +381,7 @@ function closeDropdown() {
 
 
 // Methods
-function emitChange() {
-  console.log('📡 Emitiendo todos los filtros:', localFilters.value)
-  emit('filter-change', localFilters.value) // ← ENVIAR TODOS LOS FILTROS
-}
+
 
 function emitAdvancedChange() {
   emit('advanced-change', localAdvancedFilters.value)
@@ -416,18 +413,7 @@ function clearSearch() {
   debouncedSearch()
 }
 
-// Debounced search
-let searchTimeout
-function debouncedSearch() {
-  // Cancela el timeout anterior si el usuario sigue escribiendo
-  clearTimeout(searchTimeout);
 
-  // Establece un nuevo timeout de 500ms
-  searchTimeout = setTimeout(() => {
-    // Cuando el tiempo pasa, emite el evento 'search' al componente padre
-    emit('search', searchTerm.value);
-  }, 500); 
-}
 
 // Utility functions
 function getChannelIcon(channelType) {
