@@ -384,6 +384,83 @@ class ChannelController {
       res.status(500).json({ error: ERRORS.SERVER_ERROR });
     }
   }
+  async getAllChannelsForAdmin(req, res) {
+  try {
+    // Solo admins pueden acceder a esta función
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ error: ERRORS.FORBIDDEN });
+    }
+
+    // Obtener todos los canales activos con información de la empresa
+    const channels = await Channel.aggregate([
+      {
+        $match: { is_active: true }
+      },
+      {
+        $lookup: {
+          from: 'companies',
+          localField: 'company_id',
+          foreignField: '_id',
+          as: 'company'
+        }
+      },
+      {
+        $unwind: '$company'
+      },
+      {
+        $project: {
+          _id: 1,
+          channel_type: 1,
+          channel_name: 1,
+          store_url: 1,
+          company_id: 1,
+          company_name: '$company.name',
+          last_sync_at: 1,
+          created_at: 1,
+          updated_at: 1,
+          is_active: 1
+        }
+      },
+      {
+        $sort: { created_at: -1 }
+      }
+    ]);
+
+    // Para cada canal, calcular estadísticas
+    const channelsWithStats = await Promise.all(channels.map(async (channel) => {
+      const totalOrders = await Order.countDocuments({ channel_id: channel._id });
+      const deliveredOrders = await Order.countDocuments({ 
+        channel_id: channel._id, 
+        status: 'delivered' 
+      });
+      
+      // Calcular ingresos totales
+      const revenueAgg = await Order.aggregate([
+        { $match: { channel_id: channel._id } },
+        { $group: { _id: null, total: { $sum: '$total_amount' } } }
+      ]);
+      const totalRevenue = revenueAgg.length > 0 ? revenueAgg[0].total : 0;
+
+      // Último pedido
+      const lastOrder = await Order.findOne({ channel_id: channel._id })
+        .sort({ order_date: -1 })
+        .select('order_date');
+
+      return {
+        ...channel,
+        total_orders: totalOrders,
+        delivered_orders: deliveredOrders,
+        total_revenue: totalRevenue,
+        last_order_date: lastOrder ? lastOrder.order_date : null,
+      };
+    }));
+
+    res.json(channelsWithStats);
+  } catch (error) {
+    console.error('Error obteniendo todos los canales:', error);
+    res.status(500).json({ error: ERRORS.SERVER_ERROR });
+  }
+}
 }
 
 module.exports = new ChannelController();

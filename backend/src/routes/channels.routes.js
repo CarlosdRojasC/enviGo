@@ -1,13 +1,22 @@
+// backend/src/routes/channels.routes.js - Versión actualizada
+
 const express = require('express');
 const router = express.Router();
 const ChannelController = require('../controllers/channel.controller');
-const { authenticateToken } = require('../middlewares/auth.middleware');
+const { authenticateToken, isAdmin } = require('../middlewares/auth.middleware');
 
 // Todas las rutas requieren autenticación
 router.use(authenticateToken);
 
-// Obtener canales de una empresa
+// ==================== RUTAS PARA ADMINISTRADORES ====================
+
+// Obtener TODOS los canales (solo admin) - NUEVA RUTA
+router.get('/admin/all', isAdmin, ChannelController.getAllChannelsForAdmin);
+
+// Obtener canales de una empresa específica (admin o usuarios de la empresa)
 router.get('/company/:companyId', ChannelController.getByCompany);
+
+// ==================== RUTAS PARA CANALES ESPECÍFICOS ====================
 
 // Obtener un canal específico con estadísticas
 router.get('/:id', ChannelController.getById);
@@ -27,7 +36,7 @@ router.post('/:id/sync', ChannelController.syncOrders);
 // Probar conexión con el canal
 router.post('/:id/test-connection', ChannelController.testConnection);
 
-// NUEVO: Obtener historial de sincronizaciones
+// Obtener historial de sincronizaciones
 router.get('/:id/sync-logs', ChannelController.getSyncLogs);
 
 module.exports = router;
