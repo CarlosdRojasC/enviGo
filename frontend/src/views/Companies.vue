@@ -196,7 +196,7 @@
 
         <div class="card-content">
           <h3 class="company-name">{{ company.name }}</h3>
-          <p class="company-email">{{ company.contact_email || 'Sin email' }}</p>
+          <p class="company-email">{{ getCompanyEmail(company) }}</p>
           
           <div class="company-metrics">
             <div class="metric-item">
@@ -292,7 +292,7 @@
                   </div>
                   <div>
                     <div class="company-name-table">{{ company.name }}</div>
-                    <div class="company-email-table">{{ company.contact_email || 'Sin email' }}</div>
+                    <div class="company-email-table">{{ getCompanyEmail(company) }}</div>
                   </div>
                 </div>
               </td>
@@ -357,7 +357,7 @@
           <div class="detail-grid">
             <div class="detail-item">
               <span class="detail-label">Email:</span>
-              <span class="detail-value">{{ selectedCompany.contact_email || 'No registrado' }}</span>
+              <span class="detail-value">{{ getCompanyEmail(selectedCompany) }}</span>
             </div>
             <div class="detail-item">
               <span class="detail-label">Teléfono:</span>
@@ -417,8 +417,6 @@
 <script setup>
 import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { useToast } from 'vue-toastification'
-import { apiService } from '../services/api'
-
 
 // Estado reactivo
 const companies = ref([])
@@ -439,6 +437,7 @@ const filters = ref({
 const sortField = ref('name')
 const sortDirection = ref('asc')
 
+const toast = useToast()
 
 // Computed properties
 const filteredCompanies = computed(() => {
@@ -449,7 +448,9 @@ const filteredCompanies = computed(() => {
     const query = searchQuery.value.toLowerCase()
     result = result.filter(company => 
       company.name.toLowerCase().includes(query) ||
-      (company.contact_email || '').toLowerCase().includes(query)
+      (company.contact_email || '').toLowerCase().includes(query) ||
+      (company.email || '').toLowerCase().includes(query) ||
+      (company.rut || '').toLowerCase().includes(query)
     )
   }
 
@@ -538,8 +539,8 @@ const newCompaniesThisMonth = computed(() => {
   const thisMonth = new Date().getMonth()
   const thisYear = new Date().getFullYear()
   return companies.value.filter(c => {
-    if (!c.created_at) return false
-    const createdDate = new Date(c.created_at)
+    if (!c.created_at && !c.createdAt) return false
+    const createdDate = new Date(c.created_at || c.createdAt)
     return createdDate.getMonth() === thisMonth && createdDate.getFullYear() === thisYear
   }).length
 })
@@ -570,18 +571,79 @@ const activeFilters = computed(() => {
 const loadCompanies = async () => {
   loading.value = true
   try {
-    // Simular carga de datos
+    console.log('🔄 Cargando empresas desde la base de datos...')
     const { data } = await apiService.companies.getAll()
-    companies.value = data
+    
+    // Procesar datos para asegurar que tengan todas las propiedades necesarias
+    companies.value = data.map(company => ({
+      ...company,
+      // Asegurar valores por defecto basados en tu modelo
+      price_per_order: company.price_per_order || 0,
+      plan_type: company.plan_type || 'basic',
+      billing_cycle: company.billing_cycle || 'monthly',
+      contact_email: company.contact_email || company.email || '',
+      phone: company.phone || '',
+      address: company.address || '',
+      rut: company.rut || '',
+      is_active: company.is_active !== undefined ? company.is_active : true,
+      
+      // Datos computados desde el backend (si están disponibles)
+      orders_count: company.orders_count || 0,
+      users_count: company.users_count || 0,
+      channels_count: company.channels_count || 0,
+      
+      // Para métricas calculadas - estos pueden venir del backend o calcularse
+      orders_this_month: company.orders_this_month || company.orders_count || 0,
+      completed_orders: company.completed_orders || Math.floor((company.orders_count || 0) * 0.85), // Estimación del 85%
+      
+      // Fechas
+      created_at: company.created_at || company.createdAt,
+      updated_at: company.updated_at || company.updatedAt
+    }))
+    
+    console.log(`✅ ${companies.value.length} empresas cargadas exitosamente`)
+    
+    // Cargar estadísticas adicionales si es necesario
+    await loadAdditionalStats()
+    
   } catch (error) {
-    console.error('Error loading companies:', error)
+    console.error('❌ Error loading companies:', error)
+    toast.error('Error al cargar las empresas: ' + (error.response?.data?.message || error.message))
+    companies.value = []
   } finally {
     loading.value = false
   }
 }
 
-const refreshData = () => {
-  loadCompanies()
+// Cargar estadísticas adicionales (pedidos del mes, revenue, etc.)
+const loadAdditionalStats = async () => {
+  try {
+    // Si tu API no proporciona orders_this_month, puedes calcularlo aquí
+    for (const company of companies.value) {
+      if (!company.orders_this_month && apiService.companies.getStats) {
+        try {
+          const statsResponse = await apiService.companies.getStats(company._id, {
+            period: 'current_month'
+          })
+          
+          if (statsResponse.data) {
+            company.orders_this_month = statsResponse.data.orders_count || 0
+            company.completed_orders = statsResponse.data.completed_orders || 0
+            company.monthly_revenue = statsResponse.data.revenue || 0
+          }
+        } catch (error) {
+          console.warn(`No se pudieron cargar estadísticas para ${company.name}:`, error.message)
+        }
+      }
+    }
+  } catch (error) {
+    console.warn('Error cargando estadísticas adicionales:', error)
+  }
+}
+
+const refreshData = async () => {
+  await loadCompanies()
+  toast.success('Datos actualizados')
 }
 
 const handleSearch = () => {
@@ -616,6 +678,10 @@ const sortBy = (field) => {
 
 const selectCompany = (company) => {
   selectedCompany.value = selectedCompany.value?._id === company._id ? null : company
+}
+
+const getCompanyEmail = (company) => {
+  return company.contact_email || company.email || 'Sin email registrado'
 }
 
 const getCompanyInitials = (name) => {
@@ -675,29 +741,111 @@ const formatLargeNumber = (num) => {
   return formatNumber(num)
 }
 
-const openAddCompanyModal = () => {
-  console.log('Abrir modal nueva empresa')
+const openAddCompanyModal = async () => {
+  try {
+    console.log('➕ Abriendo modal para nueva empresa')
+    // Aquí puedes implementar la lógica del modal
+    // Por ejemplo, emitir un evento o usar un composable de modales
+    toast.info('Funcionalidad de nueva empresa - implementar modal')
+  } catch (error) {
+    console.error('Error opening add company modal:', error)
+    toast.error('Error al abrir el modal de nueva empresa')
+  }
 }
 
-const openPricingModal = (company) => {
-  console.log('Abrir modal pricing para:', company.name)
+const openPricingModal = async (company) => {
+  try {
+    console.log('💰 Abriendo modal pricing para:', company.name)
+    // Implementar modal de pricing
+    toast.info(`Configurar pricing para ${company.name}`)
+  } catch (error) {
+    console.error('Error opening pricing modal:', error)
+    toast.error('Error al abrir el modal de pricing')
+  }
 }
 
-const openStatsModal = (company) => {
-  console.log('Abrir modal estadísticas para:', company.name)
+const openStatsModal = async (company) => {
+  try {
+    console.log('📊 Abriendo modal estadísticas para:', company.name)
+    // Implementar modal de estadísticas
+    toast.info(`Ver estadísticas de ${company.name}`)
+  } catch (error) {
+    console.error('Error opening stats modal:', error)
+    toast.error('Error al abrir el modal de estadísticas')
+  }
 }
 
-const openUsersModal = (company) => {
-  console.log('Abrir modal usuarios para:', company.name)
+const openUsersModal = async (company) => {
+  try {
+    console.log('👥 Abriendo modal usuarios para:', company.name)
+    // Implementar modal de usuarios
+    toast.info(`Gestionar usuarios de ${company.name}`)
+  } catch (error) {
+    console.error('Error opening users modal:', error)
+    toast.error('Error al abrir el modal de usuarios')
+  }
 }
 
-const toggleCompanyStatus = (company) => {
-  company.is_active = !company.is_active
-  console.log(`Estado de ${company.name} cambiado a:`, company.is_active ? 'activa' : 'inactiva')
+const toggleCompanyStatus = async (company) => {
+  const newStatus = !company.is_active
+  const confirmation = confirm(`¿Estás seguro de que quieres ${newStatus ? 'activar' : 'desactivar'} la empresa ${company.name}?`)
+  
+  if (confirmation) {
+    try {
+      console.log(`🔄 Cambiando estado de ${company.name} a:`, newStatus ? 'activa' : 'inactiva')
+      
+      // Llamar a la API para actualizar el estado
+      await apiService.companies.update(company._id, {
+        is_active: newStatus
+      })
+      
+      // Actualizar el estado local
+      company.is_active = newStatus
+      
+      toast.success(`${company.name} ${newStatus ? 'activada' : 'desactivada'} exitosamente`)
+    } catch (error) {
+      console.error('Error toggling company status:', error)
+      toast.error('Error al cambiar el estado de la empresa: ' + (error.response?.data?.message || error.message))
+    }
+  }
 }
 
-const exportData = () => {
-  console.log('Exportar datos de empresas')
+const exportData = async () => {
+  try {
+    console.log('📊 Exportando datos de empresas')
+    
+    // Llamar a la API de exportación si existe
+    if (apiService.companies.export) {
+      const response = await apiService.companies.export()
+      
+      // Manejar la descarga del archivo
+      const url = window.URL.createObjectURL(new Blob([response.data]))
+      const link = document.createElement('a')
+      link.href = url
+      link.setAttribute('download', `empresas_${new Date().toISOString().split('T')[0]}.xlsx`)
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(url)
+      
+      toast.success('Datos exportados exitosamente')
+    } else {
+      // Fallback: exportar como JSON
+      const dataStr = JSON.stringify(companies.value, null, 2)
+      const dataBlob = new Blob([dataStr], { type: 'application/json' })
+      const url = URL.createObjectURL(dataBlob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `empresas_${new Date().toISOString().split('T')[0]}.json`
+      link.click()
+      URL.revokeObjectURL(url)
+      
+      toast.success('Datos exportados como JSON')
+    }
+  } catch (error) {
+    console.error('Error exporting data:', error)
+    toast.error('Error al exportar datos: ' + (error.response?.data?.message || error.message))
+  }
 }
 
 // Lifecycle
