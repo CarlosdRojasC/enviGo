@@ -60,18 +60,30 @@
 
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
-import * as Chart from 'chart.js'
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  LineController,
+  Title,
+  Tooltip,
+  Legend,
+  Filler
+} from 'chart.js'
 
-// Registrar componentes necesarios de Chart.js
-Chart.Chart.register(
-  Chart.CategoryScale,
-  Chart.LinearScale,
-  Chart.PointElement,
-  Chart.LineElement,
-  Chart.Title,
-  Chart.Tooltip,
-  Chart.Legend,
-  Chart.Filler
+// Registrar componentes necesarios
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  LineController,
+  Title,
+  Tooltip,
+  Legend,
+  Filler
 )
 
 const props = defineProps({
@@ -204,7 +216,7 @@ function createChart() {
   
   const data = processedData.value.map(item => item.count)
   
-  chartInstance.value = new Chart.Chart(ctx, {
+  chartInstance.value = new ChartJS(ctx, {
     type: 'line',
     data: {
       labels: labels,
