@@ -31,6 +31,7 @@ const orderSchema = new mongoose.Schema({
   external_order_id: { type: String, required: true }, // ID del pedido en la plataforma externa
   order_number: { type: String, required: true }, // Número de pedido visible
   
+  shopify_fulfillment_id: { type: String }, // ID de fulfillment en Shopify (si aplica)
   // Información del cliente
   customer_name: { type: String, required: true },
   customer_email: { type: String },

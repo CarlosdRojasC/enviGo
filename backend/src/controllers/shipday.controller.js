@@ -538,7 +538,18 @@ async handleWebhook(req, res) {
         order.delivery_date = webhookData.order?.delivery_time ? new Date(webhookData.order.delivery_time) : new Date();
         notificationEventType = 'delivered';
         break;
-
+      case 'driver_en_route':
+      case 'order_en_route': 
+      case 'order_out_for_delivery':
+        console.log('🚗 Evento: Repartidor en camino al domicilio');
+        
+        // Actualizar estado local
+        order.status = 'shipped'; // Usar estado existente
+        notificationEventType = 'en_route';
+        
+        // 🎯 NOTIFICAR A SHOPIFY
+        await this.notifyShopifyEnRoute(order);
+        break;
       default:
         console.log(`ℹ️ Evento "${eventType}" no mapeado para cambio de estado.`);
         break;
@@ -571,6 +582,41 @@ async handleWebhook(req, res) {
   } catch (error) {
     console.error('❌ Error fatal procesando el webhook de Shipday:', error);
     res.status(500).json({ success: false, error: error.message });
+  }
+}
+async notifyShopifyEnRoute(order) {
+  try {
+    // Buscar el canal de la orden
+    const Channel = require('../models/Channel');
+    const channel = await Channel.findById(order.channel_id);
+    
+    // Solo procesar si es de Shopify
+    if (!channel || channel.channel_type !== 'shopify') {
+      console.log('⚠️ Orden no es de Shopify, no se notifica');
+      return;
+    }
+    
+    const ShopifyService = require('../services/shopify.service');
+    
+    // Notificar a Shopify
+    const result = await ShopifyService.notifyOrderEnRoute(
+      channel, 
+      order, 
+      order.shipday_tracking_url
+    );
+    
+    if (result.success) {
+      console.log('✅ Shopify notificado exitosamente');
+      
+      // Guardar ID del fulfillment para referencia
+      if (result.fulfillment_id) {
+        order.shopify_fulfillment_id = result.fulfillment_id;
+      }
+    }
+    
+  } catch (error) {
+    console.error('❌ Error notificando Shopify:', error);
+    // No fallar el webhook por esto
   }
 }
 }

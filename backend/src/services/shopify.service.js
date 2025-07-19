@@ -267,6 +267,76 @@ class ShopifyService {
       throw error;
     }
   }
+  static async notifyOrderEnRoute(channel, order, trackingUrl) {
+  try {
+    console.log(`🚗 Notificando a Shopify que repartidor va en camino para pedido #${order.order_number}`);
+    
+    const shopifyOrderId = order.external_order_id;
+    
+    // Crear fulfillment (esto notifica al cliente)
+    const fulfillmentData = {
+      tracking_number: order.order_number,
+      tracking_company: 'enviGo',
+      notify_customer: true, // ✅ Esto envía email al cliente
+      tracking_urls: trackingUrl ? [trackingUrl] : []
+    };
+    
+    const response = await axios.post(
+      `${this.getApiUrl(channel)}/orders/${shopifyOrderId}/fulfillments.json`,
+      { fulfillment: fulfillmentData },
+      { headers: this.getHeaders(channel) }
+    );
+    
+    console.log('✅ Shopify notificado: repartidor en camino');
+    return { success: true, fulfillment_id: response.data.fulfillment.id };
+    
+  } catch (error) {
+    console.error('❌ Error notificando Shopify:', error);
+    
+    if (error.response?.status === 422) {
+      console.log('⚠️ Fulfillment ya existe - actualizando tracking');
+      // Intentar actualizar fulfillment existente
+      return await this.updateExistingFulfillment(channel, shopifyOrderId, trackingUrl);
+    }
+    
+    throw error;
+  }
+}
+
+// Función auxiliar para actualizar fulfillment existente
+static async updateExistingFulfillment(channel, shopifyOrderId, trackingUrl) {
+  try {
+    // Obtener fulfillments existentes
+    const response = await axios.get(
+      `${this.getApiUrl(channel)}/orders/${shopifyOrderId}/fulfillments.json`,
+      { headers: this.getHeaders(channel) }
+    );
+    
+    const fulfillments = response.data.fulfillments;
+    if (fulfillments.length > 0) {
+      const fulfillmentId = fulfillments[0].id;
+      
+      // Actualizar el fulfillment con tracking
+      await axios.put(
+        `${this.getApiUrl(channel)}/orders/${shopifyOrderId}/fulfillments/${fulfillmentId}.json`,
+        {
+          fulfillment: {
+            tracking_urls: trackingUrl ? [trackingUrl] : [],
+            notify_customer: true
+          }
+        },
+        { headers: this.getHeaders(channel) }
+      );
+      
+      console.log('✅ Fulfillment existente actualizado con tracking');
+      return { success: true };
+    }
+    
+  } catch (error) {
+    console.error('❌ Error actualizando fulfillment existente:', error);
+    return { success: false };
+  }
+}
   
   // Actualizar pedido existente
   static async updateExistingOrder(existingOrder, shopifyOrder) {
