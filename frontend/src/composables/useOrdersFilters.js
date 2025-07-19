@@ -149,22 +149,23 @@ export function useOrdersFilters(orders, fetchOrders) {
   /**
    * Handle filter changes with debouncing for search - ÚNICA VERSIÓN
    */
-  function handleFilterChange(filterKey, value) {
-    console.log('🔍 Filter changing:', { filterKey, value, isArray: Array.isArray(value) })
-    
-    filters.value[filterKey] = value
-    
-    if (filterKey === 'search') {
-      // Debounce search input
-      clearTimeout(searchTimeout)
-      searchTimeout = setTimeout(() => {
-        applyFilters()
-      }, 500)
-    } else {
-      // Apply immediately for other filters
-      applyFilters()
-    }
+function handleFilterChange(filterKey, value) {
+  console.log('🔍 Filter changing:', { filterKey, value, isArray: Array.isArray(value) });
+
+  filters.value[filterKey] = value;
+
+  // Si el filtro es de búsqueda O de comuna, aplica un retraso
+  // para permitir que el usuario siga escribiendo o seleccionando.
+  if (filterKey === 'search' || filterKey === 'shipping_commune') {
+    clearTimeout(searchTimeout);
+    searchTimeout = setTimeout(() => {
+      applyFilters();
+    }, 500); // 500ms de espera
+  } else {
+    // Los otros filtros (como estado o fecha) se aplican al instante.
+    applyFilters();
   }
+}
 
   /**
    * Apply filters to orders - CORREGIDO
