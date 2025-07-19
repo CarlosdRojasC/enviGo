@@ -356,30 +356,18 @@ watch(() => props.advancedFilters, (newFilters) => {
 
 
 function addCommune(commune) {
-  console.log('🏘️ Agregando comuna:', commune)
-  console.log('📊 Array antes:', localFilters.value.shipping_commune)
-  
   if (!localFilters.value.shipping_commune.includes(commune)) {
-    localFilters.value.shipping_commune.push(commune)
-    console.log('✅ Array después:', localFilters.value.shipping_commune)
-    
-    communeSearch.value = ''
-    showCommuneDropdown.value = false // ← CERRAR DROPDOWN
-    emitChange()
-  } else {
-    console.log('⚠️ Comuna ya existe en el array')
+    localFilters.value.shipping_commune.push(commune);
+    emitChange(); // Actualiza al instante
   }
+  communeSearch.value = '';
 }
 
 function removeCommune(communeToRemove) {
-  console.log('❌ Removiendo comuna:', communeToRemove)
-  console.log('📊 Array antes:', localFilters.value.shipping_commune)
-  
-  localFilters.value.shipping_commune = localFilters.value.shipping_commune.filter(c => c !== communeToRemove)
-  
-  console.log('📊 Array después:', localFilters.value.shipping_commune)
-  emitChange()
+  localFilters.value.shipping_commune = localFilters.value.shipping_commune.filter(c => c !== communeToRemove);
+  emitChange(); // Actualiza al instante
 }
+
 function focusInput() {
   communeInput.value?.focus();
 }
@@ -967,6 +955,68 @@ watch(() => props.filters.search, (newSearchValue) => {
   cursor: text;
 }
 .multiselect-selected-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.tag {
+  display: flex;
+  align-items: center;
+  background: #e0e7ff;
+  color: #4f46e5;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+}
+.tag-remove {
+  background: none;
+  border: none;
+  color: #4f46e5;
+  margin-left: 6px;
+  cursor: pointer;
+  font-size: 14px;
+}
+.multiselect-input {
+  border: none;
+  outline: none;
+  flex-grow: 1;
+  padding: 6px;
+  font-size: 14px;
+}
+.multiselect-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  max-height: 200px;
+  overflow-y: auto;
+  z-index: 10;
+  margin-top: 4px;
+}
+.dropdown-item {
+  padding: 10px 12px;
+  cursor: pointer;
+}
+.dropdown-item:hover {
+  background: #f1f5f9;
+}
+.dropdown-empty {
+  padding: 10px 12px;
+  color: #6b7280;
+}
+.multiselect-container {
+  position: relative;
+  background: white;
+  border: 2px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 6px;
+  cursor: text;
+}
+.multiselect-tags {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
