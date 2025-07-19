@@ -344,6 +344,7 @@ import { useToast } from 'vue-toastification'
 import { useAuthStore } from '../store/auth'
 import { apiService } from '../services/api'
 import Modal from '../components/Modal.vue'
+import channelsService from '../services/channels.service'
 
 // ==================== ESTADO ====================
 const auth = useAuthStore()
@@ -391,6 +392,14 @@ const isAdmin = computed(() => auth.isAdmin)
 
 const canAddChannel = computed(() => {
   return auth.isCompanyOwner || auth.isAdmin
+})
+const getCompanyId = computed(() => {
+  if (auth.isAdmin) return null
+  
+  return auth.user?.company?._id || 
+         auth.user?.company_id || 
+         auth.companyId || 
+         null
 })
 
 const filteredChannels = computed(() => {
@@ -442,7 +451,16 @@ async function fetchChannels() {
       }
     } else {
       // Usuario normal: solo sus canales
-      const response = await apiService.channels.getByCompany(auth.user.company_id)
+      const companyId = getCompanyId.value
+if (!companyId) {
+  console.error('❌ No se encontró company_id en el usuario:', auth.user)
+  toast.error('Error: Usuario sin empresa asignada. Contacta al administrador.')
+  channels.value = []
+  return
+}
+
+console.log('🔍 Obteniendo canales para empresa:', companyId)
+const response = await apiService.channels.getByCompany(companyId)
       channels.value = response.data || []
     }
     
@@ -581,7 +599,7 @@ function openAddChannelModal() {
     store_url: '',
     api_key: '',
     api_secret: '',
-    company_id: auth.isAdmin ? '' : auth.user.company_id
+    company_id: auth.isAdmin ? '' : getCompanyId.value
   }
   showAddChannelModal.value = true
 }
@@ -590,11 +608,22 @@ async function addChannel() {
   try {
     addingChannel.value = true
     
-    if (auth.isAdmin) {
-      await apiService.channels.create(channelData.value.company_id, channelData.value)
-    } else {
-      await apiService.channels.create(auth.user.company_id, channelData.value)
-    }
+  let companyId
+if (auth.isAdmin) {
+  companyId = channelData.value.company_id
+  if (!companyId) {
+    toast.error('Selecciona una empresa para el canal')
+    return
+  }
+} else {
+  companyId = getCompanyId.value
+  if (!companyId) {
+    toast.error('Error: Usuario sin empresa asignada')
+    return
+  }
+}
+
+await apiService.channels.create(companyId, channelData.value)
     
     toast.success('Canal creado exitosamente')
     await fetchChannels()
@@ -616,7 +645,7 @@ async function syncChannel(channelId) {
   
   syncingChannels.value.push(channelId)
   try {
-    await apiService.channels.sync(channelId, {
+    await channelsService.sync(channelId, {
       date_from: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
       date_to: new Date().toISOString()
     })
@@ -640,7 +669,7 @@ async function confirmDelete() {
   
   try {
     deleting.value = true
-    await apiService.channels.delete(channelToDelete.value._id)
+    await channelsService.delete(channelToDelete.value._id)
     toast.success('Canal eliminado exitosamente')
     await fetchChannels()
     showDeleteModal.value = false
@@ -660,6 +689,12 @@ function clearFilters() {
 
 // ==================== LIFECYCLE ====================
 onMounted(async () => {
+  console.log('🔍 Debug usuario en Channels:', {
+  user: auth.user,
+  isAdmin: auth.isAdmin,
+  companyId: getCompanyId.value,
+  authCompanyId: auth.companyId
+})
   await fetchCompanies()
   await fetchChannels()
 })
