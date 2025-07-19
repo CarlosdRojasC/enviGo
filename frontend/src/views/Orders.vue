@@ -24,12 +24,12 @@
       :presets="filterPresets"
       :show-advanced="filtersUI?.showAdvanced || false"
       :active-count="activeFiltersCount"
-      @filter-change="handleFilterChange"
+      @filter-change="handleFilterChangeEvent"
       @advanced-change="updateAdvancedFilter"
       @apply-preset="applyPreset"
       @toggle-advanced="toggleAdvancedFilters"
-      @search="debouncedSearch"
-      @clear-all="clearAllFilters"
+      @search="handleSearchEvent"
+      @clear-all="resetFilters"
     />
 
     <!-- Tabla moderna -->
@@ -179,8 +179,7 @@ const {
   updateAdvancedFilter,
   applySearch,
   resetFilters,
-  handleFilterChange,
-  handleFilterObjectChange,  // NUEVA FUNCIÓN
+  handleFilterChange,  // NUEVA FUNCIÓN
   clearAllFilters
 } = useOrdersFilters(orders, fetchOrders)
 
