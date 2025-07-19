@@ -43,12 +43,23 @@ class OrderController {
         if (date_to) filters.order_date.$lte = new Date(date_to);
       }
 
-     if (shipping_commune) {
-        // Convierte el string "comuna1,comuna2" en un array de expresiones regulares
-        // para buscar coincidencias exactas sin importar mayúsculas/minúsculas.
-        const communesArray = shipping_commune.split(',').map(c => c.trim());
-        filters.shipping_commune = { $in: communesArray.map(c => new RegExp(`^${c}$`, 'i')) };
-      }
+  if (shipping_commune) {
+  console.log('📍 Filtro de comuna recibido:', shipping_commune, typeof shipping_commune)
+  
+  if (Array.isArray(shipping_commune)) {
+    // Si es array, usar $in para múltiples comunas
+    filters.shipping_commune = { $in: shipping_commune }
+  } else if (typeof shipping_commune === 'string') {
+    // Si es string separado por comas, convertir a array
+    const communeArray = shipping_commune.split(',').map(c => c.trim()).filter(c => c)
+    if (communeArray.length > 1) {
+      filters.shipping_commune = { $in: communeArray }
+    } else {
+      // Una sola comuna, usar regex para coincidencia parcial
+      filters.shipping_commune = new RegExp(shipping_commune.trim(), 'i')
+    }
+  }
+}
       if (search) {
         const searchRegex = new RegExp(search, 'i');
         filters.$or = [

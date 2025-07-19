@@ -76,11 +76,14 @@ const availableCommunes = computed(() => {
   /**
    * Active filters count (for UI feedback)
    */
-  const activeFiltersCount = computed(() => {
-    return Object.values(filters.value).filter(value => 
-      value !== '' && value !== null && value !== undefined
-    ).length
-  })
+const activeFiltersCount = computed(() => {
+  return Object.values(filters.value).filter(value => {
+    if (Array.isArray(value)) {
+      return value.length > 0
+    }
+    return value !== '' && value !== null && value !== undefined
+  }).length
+})
 
   /**
    * Check if any filters are active
@@ -158,18 +161,25 @@ const filterPresets = computed(() => [
   /**
    * Apply filters to orders
    */
-  function applyFilters() {
-    const activeFilters = JSON.parse(JSON.stringify(filters.value));
-    
-    if (activeFilters.shipping_commune && activeFilters.shipping_commune.length > 0) {
-      activeFilters.shipping_commune = activeFilters.shipping_commune.join(',');
-    } else {
-      delete activeFilters.shipping_commune;
+function applyFilters() {
+  console.log('🎯 Applying filters:', filters.value)
+  
+  const cleanFilters = {}
+  
+  Object.entries(filters.value).forEach(([key, value]) => {
+    if (key === 'shipping_commune') {
+      // Manejar array de comunas
+      if (Array.isArray(value) && value.length > 0) {
+        cleanFilters[key] = value.join(',') // Enviar como string separada por comas
+      }
+    } else if (value !== '' && value !== null && value !== undefined) {
+      cleanFilters[key] = value
     }
-    
-    // Reiniciar a la primera página con cada nuevo filtro
-    fetchOrders(1, activeFilters); 
-  }
+  })
+  
+  console.log('📡 Sending filters to backend:', cleanFilters)
+  fetchOrders(cleanFilters)
+}
 
   /**
    * Reset all filters
@@ -372,6 +382,31 @@ function updateAdvancedFilter(key, value) {
     filters.value.search = searchTerm;
     applyFilters();
   }
+   function removeCommune(communeToRemove) {
+    filters.value.shipping_commune = filters.value.shipping_commune.filter(
+      commune => commune !== communeToRemove
+    )
+    applyFilters()
+  }
+
+  // Agregar comuna
+  function addCommune(commune) {
+    if (!filters.value.shipping_commune.includes(commune)) {
+      filters.value.shipping_commune.push(commune)
+      applyFilters()
+    }
+  }
+
+  // Toggle comuna (agregar si no está, remover si está)
+  function toggleCommune(commune) {
+    const index = filters.value.shipping_commune.indexOf(commune)
+    if (index === -1) {
+      filters.value.shipping_commune.push(commune)
+    } else {
+      filters.value.shipping_commune.splice(index, 1)
+    }
+    applyFilters()
+  }
 
   // ==================== RETURN ====================
   return {
@@ -403,6 +438,12 @@ function updateAdvancedFilter(key, value) {
     applyPreset,
     toggleAdvancedFilters,
     updateAdvancedFilter,
-    applySearch
+    applySearch,
+
+    
+      // 🆕 NUEVAS FUNCIONES PARA COMUNAS:
+    removeCommune,
+    addCommune,
+    toggleCommune
   }
 }
