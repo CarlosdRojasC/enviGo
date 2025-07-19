@@ -152,7 +152,7 @@
             <button @click="updateFilter('status', '')" class="tag-remove">✕</button>
           </span>
           
-            <span v-if="Array.isArray(filters.shipping_commune) && filters.shipping_commune.length" class="filter-tag">
+<span v-if="Array.isArray(filters.shipping_commune) && filters.shipping_commune.length" class="filter-tag">
             <span class="tag-label">Comuna(s):</span>
             <span class="tag-value">{{ filters.shipping_commune.join(', ') }}</span>
             <button @click="updateFilter('shipping_commune', [])" class="tag-remove">✕</button>
