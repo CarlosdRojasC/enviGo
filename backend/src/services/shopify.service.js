@@ -14,7 +14,7 @@ class ShopifyService {
   // Construir headers de autenticación
   static getHeaders(channel) {
     return {
-      'X-Shopify-Access-Token': channel.api_secret,
+      'X-Shopify-Access-Token': channel.api_key || channel.api_secret,
       'Content-Type': 'application/json'
     };
   }
