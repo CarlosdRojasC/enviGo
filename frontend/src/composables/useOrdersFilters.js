@@ -160,7 +160,7 @@ function handleFilterChange(filterKey, value) {
     clearTimeout(searchTimeout);
     searchTimeout = setTimeout(() => {
       applyFilters();
-    }, 5000); // 500ms de espera
+    }, 2000); // 500ms de espera
   } else {
     // Los otros filtros (como estado o fecha) se aplican al instante.
     applyFilters();
