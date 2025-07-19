@@ -239,7 +239,14 @@ async function addChannel() {
   addingChannel.value = true;
   try {
     const companyId = isAdminView.value ? selectedCompanyId.value : (user.value?.company_id || user.value?.company?._id);
-    
+    console.log('🔍 Debug info:', {
+    isAdminView: isAdminView.value,
+    selectedCompanyId: selectedCompanyId.value,
+    userCompanyId: user.value?.company_id,
+    userCompanyFromObject: user.value?.company?._id,
+    finalCompanyId: companyId,
+    userData: user.value
+  });
     // Convierte el string de comunas en un array limpio antes de enviar
     const communesArray = channelData.value.accepted_communes
       .split(',')
