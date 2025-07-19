@@ -596,11 +596,11 @@ onUnmounted(() => {
 }
 
 .chart-section {
-  grid-column: 1 / 9;
+  grid-column: 1 / 8; /* Reducir el ancho del gráfico */
 }
 
 .content-section:not(.full-width):not(.chart-section) {
-  grid-column: span 4;
+  grid-column: span 5; /* Aumentar el ancho de las otras secciones */
 }
 
 /* ==================== SECCIONES ==================== */
@@ -754,9 +754,10 @@ onUnmounted(() => {
 }
 
 /* ==================== GRÁFICOS ==================== */
-.chart-container {
-  height: 320px;
+.chart-container-wrapper {
+  height: 280px;
   position: relative;
+  margin-top: -8px; /* Reducir espacio superior */
 }
 
 .chart-loading, .chart-empty {

@@ -60,31 +60,9 @@
 
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  LineController,
-  Title,
-  Tooltip,
-  Legend,
-  Filler
-} from 'chart.js'
 
-// Registrar componentes necesarios
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  LineController,
-  Title,
-  Tooltip,
-  Legend,
-  Filler
-)
+// Importación más simple de Chart.js
+import Chart from 'chart.js/auto'
 
 const props = defineProps({
   title: {
@@ -133,6 +111,8 @@ const hasData = computed(() => {
 
 const processedData = computed(() => {
   if (!hasData.value) return []
+  
+  console.log('📊 Procesando datos para el gráfico:', props.data)
   
   // Procesar datos para Chart.js
   return props.data.map(item => {
@@ -193,7 +173,12 @@ const chartStats = computed(() => {
 })
 
 function createChart() {
-  if (!chartCanvas.value || !hasData.value) return
+  if (!chartCanvas.value || !hasData.value) {
+    console.log('⚠️ No se puede crear gráfico: canvas o datos faltantes')
+    return
+  }
+  
+  console.log('📊 Creando gráfico con datos procesados:', processedData.value)
   
   // Destruir gráfico existente
   if (chartInstance.value) {
@@ -216,100 +201,109 @@ function createChart() {
   
   const data = processedData.value.map(item => item.count)
   
-  chartInstance.value = new ChartJS(ctx, {
-    type: 'line',
-    data: {
-      labels: labels,
-      datasets: [{
-        label: 'Pedidos',
-        data: data,
-        borderColor: '#3b82f6',
-        backgroundColor: 'rgba(59, 130, 246, 0.1)',
-        borderWidth: 3,
-        fill: true,
-        tension: 0.4,
-        pointBackgroundColor: '#3b82f6',
-        pointBorderColor: '#ffffff',
-        pointBorderWidth: 2,
-        pointRadius: 4,
-        pointHoverRadius: 6,
-        pointHoverBackgroundColor: '#1d4ed8',
-        pointHoverBorderColor: '#ffffff',
-        pointHoverBorderWidth: 3
-      }]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      interaction: {
-        intersect: false,
-        mode: 'index'
-      },
-      plugins: {
-        legend: {
-          display: false
-        },
-        tooltip: {
-          backgroundColor: 'rgba(0, 0, 0, 0.8)',
-          titleColor: '#ffffff',
-          bodyColor: '#ffffff',
+  console.log('📊 Labels:', labels)
+  console.log('📊 Data:', data)
+  
+  try {
+    chartInstance.value = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: labels,
+        datasets: [{
+          label: 'Pedidos',
+          data: data,
           borderColor: '#3b82f6',
-          borderWidth: 1,
-          cornerRadius: 8,
-          displayColors: false,
-          callbacks: {
-            title: function(context) {
-              const index = context[0].dataIndex
-              return processedData.value[index]?.dateString || ''
-            },
-            label: function(context) {
-              return `${context.parsed.y} pedidos`
-            }
-          }
-        }
+          backgroundColor: 'rgba(59, 130, 246, 0.1)',
+          borderWidth: 3,
+          fill: true,
+          tension: 0.4,
+          pointBackgroundColor: '#3b82f6',
+          pointBorderColor: '#ffffff',
+          pointBorderWidth: 2,
+          pointRadius: 4,
+          pointHoverRadius: 6,
+          pointHoverBackgroundColor: '#1d4ed8',
+          pointHoverBorderColor: '#ffffff',
+          pointHoverBorderWidth: 3
+        }]
       },
-      scales: {
-        y: {
-          beginAtZero: true,
-          ticks: {
-            stepSize: 1,
-            color: '#6b7280',
-            font: {
-              size: 12
-            },
-            callback: function(value) {
-              return Math.floor(value)
-            }
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: {
+          intersect: false,
+          mode: 'index'
+        },
+        plugins: {
+          legend: {
+            display: false
           },
-          grid: {
-            color: 'rgba(107, 114, 128, 0.1)',
-            drawBorder: false
+          tooltip: {
+            backgroundColor: 'rgba(0, 0, 0, 0.8)',
+            titleColor: '#ffffff',
+            bodyColor: '#ffffff',
+            borderColor: '#3b82f6',
+            borderWidth: 1,
+            cornerRadius: 8,
+            displayColors: false,
+            callbacks: {
+              title: function(context) {
+                const index = context[0].dataIndex
+                return processedData.value[index]?.dateString || ''
+              },
+              label: function(context) {
+                return `${context.parsed.y} pedidos`
+              }
+            }
           }
         },
-        x: {
-          ticks: {
-            color: '#6b7280',
-            font: {
-              size: 12
+        scales: {
+          y: {
+            beginAtZero: true,
+            ticks: {
+              stepSize: 1,
+              color: '#6b7280',
+              font: {
+                size: 12
+              },
+              callback: function(value) {
+                return Math.floor(value)
+              }
             },
-            maxTicksLimit: 8
+            grid: {
+              color: 'rgba(107, 114, 128, 0.1)',
+              drawBorder: false
+            }
           },
-          grid: {
-            display: false
+          x: {
+            ticks: {
+              color: '#6b7280',
+              font: {
+                size: 12
+              },
+              maxTicksLimit: 8
+            },
+            grid: {
+              display: false
+            }
           }
+        },
+        elements: {
+          point: {
+            hoverRadius: 8
+          }
+        },
+        animation: {
+          duration: 1000,
+          easing: 'easeInOutQuart'
         }
-      },
-      elements: {
-        point: {
-          hoverRadius: 8
-        }
-      },
-      animation: {
-        duration: 1000,
-        easing: 'easeInOutQuart'
       }
-    }
-  })
+    })
+    
+    console.log('✅ Gráfico creado exitosamente')
+  } catch (error) {
+    console.error('❌ Error creando gráfico:', error)
+  }
 }
 
 function handlePeriodChange() {
@@ -327,6 +321,7 @@ function getTrendIcon(direction) {
 
 // Watchers
 watch(() => props.data, async () => {
+  console.log('📊 Datos del gráfico cambiaron:', props.data)
   if (hasData.value) {
     await nextTick()
     createChart()
@@ -334,6 +329,7 @@ watch(() => props.data, async () => {
 }, { deep: true })
 
 watch(() => props.loading, (newLoading) => {
+  console.log('📊 Estado de carga cambió:', newLoading)
   if (!newLoading && hasData.value) {
     nextTick(() => createChart())
   }
@@ -341,6 +337,7 @@ watch(() => props.loading, (newLoading) => {
 
 // Lifecycle
 onMounted(() => {
+  console.log('📊 Componente montado con datos:', props.data)
   if (hasData.value) {
     nextTick(() => createChart())
   }
@@ -475,8 +472,8 @@ onUnmounted(() => {
 .chart-summary {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 16px;
-  padding: 24px;
+  gap: 12px;
+  padding: 16px 24px;
   border-top: 1px solid #e5e7eb;
   background: #f8fafc;
 }
@@ -495,7 +492,7 @@ onUnmounted(() => {
 
 .summary-value {
   display: block;
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 700;
   color: #1f2937;
 }
