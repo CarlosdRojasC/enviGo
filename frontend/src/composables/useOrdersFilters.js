@@ -166,7 +166,18 @@ function handleFilterChange(filterKey, value) {
     applyFilters();
   }
 }
-
+ function handleFilterObjectChange(newFilters) {
+    // Actualizar todos los filtros
+    Object.keys(filters.value).forEach(key => {
+      if (newFilters.hasOwnProperty(key)) {
+        filters.value[key] = newFilters[key]
+      }
+    })
+    
+    // Aplicar cambios
+    applyFilters()
+    console.log('🔍 Filters updated:', newFilters)
+  }
   /**
    * Apply filters to orders - CORREGIDO
    */
@@ -191,7 +202,20 @@ function applyFilters() {
     // Asumimos que fetchOrders está definido en este composable y usa estos filtros
     fetchOrders(cleanFilters);
   }
-
+  function clearAllFilters() {
+    // Reset basic filters
+    Object.keys(filters.value).forEach(key => {
+      filters.value[key] = ''
+    })
+    
+    // Reset advanced filters
+    Object.keys(advancedFilters.value).forEach(key => {
+      advancedFilters.value[key] = ''
+    })
+    
+    console.log('🔄 All filters cleared')
+    applyFilters()
+  }
   /**
    * Reset all filters - CORREGIDO
    */
@@ -480,7 +504,8 @@ function applyFilters() {
     resetFilters,
     setFilter,
     getFilter,
-    
+    handleFilterObjectChange,  // NUEVA
+    clearAllFilters,
     // Funciones auxiliares
     fetchAvailableCommunes,
     validateDateRange,

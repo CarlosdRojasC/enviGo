@@ -16,20 +16,20 @@
     />
 
     <!-- Filtros modernos -->
-    <OrdersFilters
+<OrdersFilters
       :filters="filters"
       :advanced-filters="advancedFilters"
       :channels="channels"
       :available-communes="availableCommunes"
       :presets="filterPresets"
       :show-advanced="filtersUI?.showAdvanced || false"
-      :active-count="activeCount"
-      @filter-change="handleFilterChangeEvent"
+      :active-count="activeFiltersCount"
+      @filter-change="handleFilterObjectChange"
       @advanced-change="updateAdvancedFilter"
       @apply-preset="applyPreset"
       @toggle-advanced="toggleAdvancedFilters"
-      @search="handleSearchEvent"
-      @clear-all="resetFilters"
+      @search="debouncedSearch"
+      @clear-all="clearAllFilters"
     />
 
     <!-- Tabla moderna -->
@@ -178,8 +178,9 @@ const {
   toggleAdvancedFilters,
   updateAdvancedFilter,
   applySearch,
-  resetFilters,
+  clearAllFilters,
   handleFilterChange,
+  handleFilterObjectChange,  // NUEVA FUNCIÓN
   clearAllFilters
 } = useOrdersFilters(orders, fetchOrders)
 
