@@ -327,7 +327,6 @@
 
 <script setup>
 import { ref, computed } from 'vue'
-import { useOrdersFilters } from '../composables/useOrdersFilters'
 
 // ==================== PROPS ====================
 const props = defineProps({
