@@ -330,7 +330,7 @@ const emit = defineEmits([
 ])
 
 // Local reactive copies
-const localFilters = ref({ ...props.filters, shipping_commune: Array.isArray(props.filters.shipping_commune) ? props.filters.shipping_commune : [] });const localAdvancedFilters = ref({ ...props.advancedFilters })
+const localFilters = ref({ ...props.filters, shipping_commune: Array.isArray(props.filters.shipping_commune) ? [...props.filters.shipping_commune] : [] });const localAdvancedFilters = ref({ ...props.advancedFilters })
 const searchTerm = ref(props.filters.search || '')
 
 const communeInput = ref(null);
@@ -356,16 +356,29 @@ watch(() => props.advancedFilters, (newFilters) => {
 
 
 function addCommune(commune) {
+  console.log('🏘️ Agregando comuna:', commune)
+  console.log('📊 Array antes:', localFilters.value.shipping_commune)
+  
   if (!localFilters.value.shipping_commune.includes(commune)) {
-    localFilters.value.shipping_commune.push(commune);
-    communeSearch.value = '';
-    emitChange();
+    localFilters.value.shipping_commune.push(commune)
+    console.log('✅ Array después:', localFilters.value.shipping_commune)
+    
+    communeSearch.value = ''
+    showCommuneDropdown.value = false // ← CERRAR DROPDOWN
+    emitChange()
+  } else {
+    console.log('⚠️ Comuna ya existe en el array')
   }
 }
 
 function removeCommune(communeToRemove) {
-  localFilters.value.shipping_commune = localFilters.value.shipping_commune.filter(c => c !== communeToRemove);
-  emitChange();
+  console.log('❌ Removiendo comuna:', communeToRemove)
+  console.log('📊 Array antes:', localFilters.value.shipping_commune)
+  
+  localFilters.value.shipping_commune = localFilters.value.shipping_commune.filter(c => c !== communeToRemove)
+  
+  console.log('📊 Array después:', localFilters.value.shipping_commune)
+  emitChange()
 }
 function focusInput() {
   communeInput.value?.focus();
@@ -378,7 +391,8 @@ function closeDropdown() {
 
 // Methods
 function emitChange() {
-  emit('filter-change', { shipping_commune: localFilters.value.shipping_commune });
+  console.log('📡 Emitiendo todos los filtros:', localFilters.value)
+  emit('filter-change', localFilters.value) // ← ENVIAR TODOS LOS FILTROS
 }
 
 function emitAdvancedChange() {
