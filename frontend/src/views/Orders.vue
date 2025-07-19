@@ -24,7 +24,7 @@
       :presets="filterPresets"
       :show-advanced="filtersUI?.showAdvanced || false"
       :active-count="activeFiltersCount"
-      @filter-change="handleFilterObjectChange"
+      @filter-change="handleFilterChange"
       @advanced-change="updateAdvancedFilter"
       @apply-preset="applyPreset"
       @toggle-advanced="toggleAdvancedFilters"
