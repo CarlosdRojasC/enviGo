@@ -30,9 +30,9 @@
         <span class="value">{{ order.shipping_address || 'No especificada' }}</span>
       </div>
       <div class="detail-item">
-        <span class="label">Comuna:</span>
-        <span class="value commune-highlight">{{ order.shipping_commune || 'No especificada' }}</span>
-      </div>
+  <span class="label">Comuna:</span>
+  <span class="value commune-highlight">{{ formatCommune(order.shipping_commune) }}</span>
+</div>
       <div class="detail-item">
         <span class="label">Región:</span>
         <span class="value">{{ order.shipping_state || 'Región Metropolitana' }}</span>
@@ -158,6 +158,23 @@ function formatDate(dateStr) {
     hour: '2-digit',
     minute: '2-digit'
   });
+}
+
+function formatCommune(commune) {
+  if (!commune) return 'No especificada'
+  
+  // Si es array, unir con comas
+  if (Array.isArray(commune)) {
+    return commune.length > 0 ? commune.join(', ') : 'No especificada'
+  }
+  
+  // Si es string, devolver directamente
+  if (typeof commune === 'string') {
+    return commune.trim() || 'No especificada'
+  }
+  
+  // Si es otro tipo, convertir a string
+  return String(commune) || 'No especificada'
 }
 
 function getPriorityClass(priority) {
