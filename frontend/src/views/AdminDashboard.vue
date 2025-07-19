@@ -114,7 +114,13 @@
             <div class="empty-icon">📊</div>
             <p>No hay datos suficientes para mostrar el gráfico</p>
           </div>
-          <OrdersTrendChart v-else :data="chartData" :loading="loadingChart" height="320" />
+          <OrdersTrendChart 
+            :data="chartData" 
+            :loading="loadingChart" 
+            :height="320"
+            :show-header="false"
+            @period-change="handlePeriodChange"
+          />
         </div>
       </section>
 
@@ -423,6 +429,12 @@ async function fetchTopCompanies() {
 function refreshAllData() {
   console.log('🔄 Admin: Refrescando datos...')
   fetchAllData()
+}
+
+function handlePeriodChange(period) {
+  console.log('📊 Admin: Cambiando período del gráfico a:', period)
+  chartPeriod.value = period
+  fetchChartData()
 }
 
 function formatCurrency(amount) {

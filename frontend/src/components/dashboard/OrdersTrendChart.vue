@@ -1,24 +1,88 @@
 <template>
-  <div class="chart-container">
-    <div v-if="loading" class="chart-loading">
-      <div class="loading-spinner"></div>
-      <p>Cargando datos del gráfico...</p>
+  <div class="trend-chart-container">
+    <div class="chart-header" v-if="showHeader">
+      <div class="chart-title-section">
+        <h3 class="chart-title">{{ title }}</h3>
+        <p class="chart-subtitle" v-if="subtitle">{{ subtitle }}</p>
+      </div>
+      <div class="chart-controls" v-if="showControls">
+        <select v-model="selectedPeriod" @change="handlePeriodChange" class="period-selector">
+          <option value="7d">7 días</option>
+          <option value="30d">30 días</option>
+          <option value="90d">3 meses</option>
+        </select>
+      </div>
     </div>
-    <div v-else-if="!hasData" class="no-data">
-      <div class="no-data-icon">📊</div>
-      <h4>Sin datos disponibles</h4>
-      <p>No hay información suficiente para mostrar el gráfico</p>
+    
+    <div class="chart-content">
+      <div v-if="loading" class="chart-loading">
+        <div class="loading-spinner"></div>
+        <p>Cargando datos del gráfico...</p>
+      </div>
+      
+      <div v-else-if="!hasData" class="chart-empty">
+        <div class="empty-icon">📊</div>
+        <h4>No hay datos disponibles</h4>
+        <p>No se encontraron pedidos para el período seleccionado</p>
+      </div>
+      
+      <div v-else class="chart-wrapper">
+        <canvas 
+          ref="chartCanvas" 
+          :style="{ height: height + 'px' }"
+        ></canvas>
+      </div>
     </div>
-    <div v-else class="chart-content">
-      <canvas ref="chartCanvas" :height="height"></canvas>
+    
+    <!-- Resumen de estadísticas -->
+    <div class="chart-summary" v-if="hasData && chartStats">
+      <div class="summary-item">
+        <span class="summary-label">Total</span>
+        <span class="summary-value">{{ chartStats.total }}</span>
+      </div>
+      <div class="summary-item">
+        <span class="summary-label">Promedio</span>
+        <span class="summary-value">{{ chartStats.average }}</span>
+      </div>
+      <div class="summary-item">
+        <span class="summary-label">Tendencia</span>
+        <span class="summary-value" :class="chartStats.trend.direction">
+          {{ getTrendIcon(chartStats.trend.direction) }} {{ chartStats.trend.percentage }}%
+        </span>
+      </div>
+      <div class="summary-item">
+        <span class="summary-label">Máximo</span>
+        <span class="summary-value">{{ chartStats.max }}</span>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
+import * as Chart from 'chart.js'
+
+// Registrar componentes necesarios de Chart.js
+Chart.Chart.register(
+  Chart.CategoryScale,
+  Chart.LinearScale,
+  Chart.PointElement,
+  Chart.LineElement,
+  Chart.Title,
+  Chart.Tooltip,
+  Chart.Legend,
+  Chart.Filler
+)
 
 const props = defineProps({
+  title: {
+    type: String,
+    default: 'Tendencia de Pedidos'
+  },
+  subtitle: {
+    type: String,
+    default: ''
+  },
   data: {
     type: Array,
     default: () => []
@@ -28,295 +92,458 @@ const props = defineProps({
     default: false
   },
   height: {
-    type: [Number, String],
+    type: Number,
     default: 300
   },
-  showLegend: {
+  showControls: {
     type: Boolean,
-    default: false
+    default: true
+  },
+  showHeader: {
+    type: Boolean,
+    default: true
+  },
+  initialPeriod: {
+    type: String,
+    default: '30d'
   }
 })
 
-// Referencias
-const chartCanvas = ref(null)
-let chartInstance = null
+const emit = defineEmits(['period-change'])
 
-// Computed
+const chartCanvas = ref(null)
+const chartInstance = ref(null)
+const selectedPeriod = ref(props.initialPeriod)
+
 const hasData = computed(() => {
   return props.data && props.data.length > 0
 })
 
-// Función para crear el gráfico con canvas nativo (sin dependencias)
+const processedData = computed(() => {
+  if (!hasData.value) return []
+  
+  // Procesar datos para Chart.js
+  return props.data.map(item => {
+    // Manejar diferentes formatos de datos
+    let date, count
+    
+    if (item._id) {
+      // Formato de agregación de MongoDB
+      if (item._id.year && item._id.month && item._id.day) {
+        date = new Date(item._id.year, item._id.month - 1, item._id.day)
+      } else if (item._id.year && item._id.month) {
+        date = new Date(item._id.year, item._id.month - 1, 1)
+      } else {
+        date = new Date()
+      }
+      count = item.count || 0
+    } else {
+      // Formato simple
+      date = new Date(item.date || item.order_date)
+      count = item.orders || item.count || 0
+    }
+    
+    return {
+      date: date,
+      dateString: date.toLocaleDateString('es-ES'),
+      count: count
+    }
+  }).sort((a, b) => a.date - b.date)
+})
+
+const chartStats = computed(() => {
+  if (!hasData.value) return null
+  
+  const counts = processedData.value.map(item => item.count)
+  const total = counts.reduce((sum, count) => sum + count, 0)
+  const average = Math.round(total / counts.length)
+  const max = Math.max(...counts)
+  
+  // Calcular tendencia comparando primera y segunda mitad
+  const midPoint = Math.floor(counts.length / 2)
+  const firstHalf = counts.slice(0, midPoint)
+  const secondHalf = counts.slice(midPoint)
+  
+  const firstAvg = firstHalf.reduce((sum, val) => sum + val, 0) / firstHalf.length
+  const secondAvg = secondHalf.reduce((sum, val) => sum + val, 0) / secondHalf.length
+  
+  const trendPercentage = firstAvg > 0 ? Math.round(((secondAvg - firstAvg) / firstAvg) * 100) : 0
+  
+  return {
+    total,
+    average,
+    max,
+    trend: {
+      direction: trendPercentage > 0 ? 'up' : trendPercentage < 0 ? 'down' : 'neutral',
+      percentage: Math.abs(trendPercentage)
+    }
+  }
+})
+
 function createChart() {
   if (!chartCanvas.value || !hasData.value) return
-
-  const canvas = chartCanvas.value
-  const ctx = canvas.getContext('2d')
-  const rect = canvas.getBoundingClientRect()
   
-  // Ajustar el tamaño del canvas
-  canvas.width = rect.width * window.devicePixelRatio
-  canvas.height = parseInt(props.height) * window.devicePixelRatio
-  ctx.scale(window.devicePixelRatio, window.devicePixelRatio)
+  // Destruir gráfico existente
+  if (chartInstance.value) {
+    chartInstance.value.destroy()
+    chartInstance.value = null
+  }
   
-  // Configurar estilos
-  const width = rect.width
-  const height = parseInt(props.height)
-  const padding = { top: 20, right: 30, bottom: 40, left: 50 }
-  const chartWidth = width - padding.left - padding.right
-  const chartHeight = height - padding.top - padding.bottom
-
-  // Limpiar canvas
-  ctx.clearRect(0, 0, width, height)
-
-  // Preparar datos
-  const maxValue = Math.max(...props.data.map(d => d.count || d.value || 0))
-  const minValue = Math.min(...props.data.map(d => d.count || d.value || 0))
-  const range = maxValue - minValue || 1
-
-  // Función para convertir data a coordenadas
-  function dataToCoords(index, value) {
-    const x = padding.left + (index / (props.data.length - 1)) * chartWidth
-    const y = padding.top + ((maxValue - value) / range) * chartHeight
-    return { x, y }
-  }
-
-  // Dibujar grid
-  ctx.strokeStyle = '#f3f4f6'
-  ctx.lineWidth = 1
+  const ctx = chartCanvas.value.getContext('2d')
   
-  // Líneas horizontales
-  for (let i = 0; i <= 5; i++) {
-    const y = padding.top + (i / 5) * chartHeight
-    ctx.beginPath()
-    ctx.moveTo(padding.left, y)
-    ctx.lineTo(padding.left + chartWidth, y)
-    ctx.stroke()
-  }
-
-  // Líneas verticales
-  const verticalLines = Math.min(props.data.length, 7)
-  for (let i = 0; i < verticalLines; i++) {
-    const x = padding.left + (i / (verticalLines - 1)) * chartWidth
-    ctx.beginPath()
-    ctx.moveTo(x, padding.top)
-    ctx.lineTo(x, padding.top + chartHeight)
-    ctx.stroke()
-  }
-
-  // Dibujar área bajo la curva
-  if (props.data.length > 1) {
-    const gradient = ctx.createLinearGradient(0, padding.top, 0, padding.top + chartHeight)
-    gradient.addColorStop(0, 'rgba(59, 130, 246, 0.3)')
-    gradient.addColorStop(1, 'rgba(59, 130, 246, 0.05)')
-    
-    ctx.fillStyle = gradient
-    ctx.beginPath()
-    
-    // Comenzar desde la esquina inferior izquierda
-    const firstPoint = dataToCoords(0, props.data[0].count || props.data[0].value || 0)
-    ctx.moveTo(firstPoint.x, padding.top + chartHeight)
-    ctx.lineTo(firstPoint.x, firstPoint.y)
-    
-    // Dibujar la curva
-    props.data.forEach((item, index) => {
-      const coords = dataToCoords(index, item.count || item.value || 0)
-      ctx.lineTo(coords.x, coords.y)
-    })
-    
-    // Cerrar el área
-    const lastPoint = dataToCoords(props.data.length - 1, props.data[props.data.length - 1].count || props.data[props.data.length - 1].value || 0)
-    ctx.lineTo(lastPoint.x, padding.top + chartHeight)
-    ctx.closePath()
-    ctx.fill()
-  }
-
-  // Dibujar la línea principal
-  if (props.data.length > 1) {
-    ctx.strokeStyle = '#3b82f6'
-    ctx.lineWidth = 3
-    ctx.lineCap = 'round'
-    ctx.lineJoin = 'round'
-    
-    ctx.beginPath()
-    props.data.forEach((item, index) => {
-      const coords = dataToCoords(index, item.count || item.value || 0)
-      if (index === 0) {
-        ctx.moveTo(coords.x, coords.y)
-      } else {
-        ctx.lineTo(coords.x, coords.y)
-      }
-    })
-    ctx.stroke()
-  }
-
-  // Dibujar puntos
-  props.data.forEach((item, index) => {
-    const coords = dataToCoords(index, item.count || item.value || 0)
-    
-    // Punto exterior
-    ctx.fillStyle = '#3b82f6'
-    ctx.beginPath()
-    ctx.arc(coords.x, coords.y, 5, 0, Math.PI * 2)
-    ctx.fill()
-    
-    // Punto interior
-    ctx.fillStyle = 'white'
-    ctx.beginPath()
-    ctx.arc(coords.x, coords.y, 2, 0, Math.PI * 2)
-    ctx.fill()
+  const labels = processedData.value.map(item => {
+    // Formatear etiquetas según el período
+    if (selectedPeriod.value === '7d') {
+      return item.date.toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric' })
+    } else if (selectedPeriod.value === '30d') {
+      return item.date.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })
+    } else {
+      return item.date.toLocaleDateString('es-ES', { month: 'short' })
+    }
   })
-
-  // Dibujar etiquetas del eje Y
-  ctx.fillStyle = '#6b7280'
-  ctx.font = '12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'
-  ctx.textAlign = 'right'
-  ctx.textBaseline = 'middle'
   
-  for (let i = 0; i <= 5; i++) {
-    const value = maxValue - (i / 5) * range
-    const y = padding.top + (i / 5) * chartHeight
-    ctx.fillText(Math.round(value).toString(), padding.left - 10, y)
-  }
-
-  // Dibujar etiquetas del eje X
-  ctx.textAlign = 'center'
-  ctx.textBaseline = 'top'
+  const data = processedData.value.map(item => item.count)
   
-  const labelStep = Math.max(1, Math.floor(props.data.length / 6))
-  props.data.forEach((item, index) => {
-    if (index % labelStep === 0 || index === props.data.length - 1) {
-      const coords = dataToCoords(index, 0)
-      const label = formatDateLabel(item.date || item.label || index.toString())
-      ctx.fillText(label, coords.x, padding.top + chartHeight + 10)
+  chartInstance.value = new Chart.Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: labels,
+      datasets: [{
+        label: 'Pedidos',
+        data: data,
+        borderColor: '#3b82f6',
+        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+        borderWidth: 3,
+        fill: true,
+        tension: 0.4,
+        pointBackgroundColor: '#3b82f6',
+        pointBorderColor: '#ffffff',
+        pointBorderWidth: 2,
+        pointRadius: 4,
+        pointHoverRadius: 6,
+        pointHoverBackgroundColor: '#1d4ed8',
+        pointHoverBorderColor: '#ffffff',
+        pointHoverBorderWidth: 3
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: {
+        intersect: false,
+        mode: 'index'
+      },
+      plugins: {
+        legend: {
+          display: false
+        },
+        tooltip: {
+          backgroundColor: 'rgba(0, 0, 0, 0.8)',
+          titleColor: '#ffffff',
+          bodyColor: '#ffffff',
+          borderColor: '#3b82f6',
+          borderWidth: 1,
+          cornerRadius: 8,
+          displayColors: false,
+          callbacks: {
+            title: function(context) {
+              const index = context[0].dataIndex
+              return processedData.value[index]?.dateString || ''
+            },
+            label: function(context) {
+              return `${context.parsed.y} pedidos`
+            }
+          }
+        }
+      },
+      scales: {
+        y: {
+          beginAtZero: true,
+          ticks: {
+            stepSize: 1,
+            color: '#6b7280',
+            font: {
+              size: 12
+            },
+            callback: function(value) {
+              return Math.floor(value)
+            }
+          },
+          grid: {
+            color: 'rgba(107, 114, 128, 0.1)',
+            drawBorder: false
+          }
+        },
+        x: {
+          ticks: {
+            color: '#6b7280',
+            font: {
+              size: 12
+            },
+            maxTicksLimit: 8
+          },
+          grid: {
+            display: false
+          }
+        }
+      },
+      elements: {
+        point: {
+          hoverRadius: 8
+        }
+      },
+      animation: {
+        duration: 1000,
+        easing: 'easeInOutQuart'
+      }
     }
   })
 }
 
-function formatDateLabel(dateStr) {
-  if (!dateStr) return ''
-  
-  try {
-    const date = new Date(dateStr)
-    return date.toLocaleDateString('es-ES', { 
-      day: '2-digit', 
-      month: '2-digit' 
-    })
-  } catch (e) {
-    return dateStr.toString()
-  }
+function handlePeriodChange() {
+  emit('period-change', selectedPeriod.value)
 }
 
-function destroyChart() {
-  if (chartInstance) {
-    chartInstance = null
-  }
-}
-
-function handleResize() {
-  if (hasData.value) {
-    setTimeout(createChart, 100)
+function getTrendIcon(direction) {
+  switch(direction) {
+    case 'up': return '↗️'
+    case 'down': return '↘️'
+    case 'neutral': return '➡️'
+    default: return '➡️'
   }
 }
 
 // Watchers
-watch(() => props.data, () => {
+watch(() => props.data, async () => {
   if (hasData.value) {
-    setTimeout(createChart, 100)
+    await nextTick()
+    createChart()
   }
 }, { deep: true })
 
 watch(() => props.loading, (newLoading) => {
   if (!newLoading && hasData.value) {
-    setTimeout(createChart, 100)
+    nextTick(() => createChart())
   }
 })
 
 // Lifecycle
 onMounted(() => {
-  window.addEventListener('resize', handleResize)
   if (hasData.value) {
-    setTimeout(createChart, 100)
+    nextTick(() => createChart())
   }
 })
 
 onUnmounted(() => {
-  window.removeEventListener('resize', handleResize)
-  destroyChart()
+  if (chartInstance.value) {
+    chartInstance.value.destroy()
+  }
 })
 </script>
 
 <style scoped>
-.chart-container {
-  width: 100%;
-  height: 100%;
-  position: relative;
+.trend-chart-container {
   background: white;
-  border-radius: 8px;
+  border-radius: 12px;
+  overflow: hidden;
 }
 
-.chart-loading,
-.no-data {
+.chart-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 24px 24px 0 24px;
+  margin-bottom: 20px;
+}
+
+.chart-title-section {
+  flex: 1;
+}
+
+.chart-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #1f2937;
+  margin: 0 0 4px 0;
+}
+
+.chart-subtitle {
+  font-size: 14px;
+  color: #6b7280;
+  margin: 0;
+}
+
+.chart-controls {
+  flex-shrink: 0;
+}
+
+.period-selector {
+  padding: 8px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: white;
+  font-size: 14px;
+  color: #374151;
+  cursor: pointer;
+  transition: border-color 0.2s ease;
+}
+
+.period-selector:hover {
+  border-color: #3b82f6;
+}
+
+.period-selector:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.chart-content {
+  padding: 0 24px;
+  position: relative;
+}
+
+.chart-loading {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  height: 100%;
+  height: 300px;
   color: #6b7280;
-  text-align: center;
-  padding: 40px 20px;
 }
 
 .loading-spinner {
   width: 32px;
   height: 32px;
   border: 3px solid #e5e7eb;
-  border-top-color: #3b82f6;
+  border-top: 3px solid #3b82f6;
   border-radius: 50%;
   animation: spin 1s linear infinite;
   margin-bottom: 16px;
 }
 
 @keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
 }
 
-.no-data-icon {
+.chart-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 300px;
+  color: #6b7280;
+  text-align: center;
+}
+
+.empty-icon {
   font-size: 48px;
-  margin-bottom: 16px;
   opacity: 0.5;
+  margin-bottom: 16px;
 }
 
-.no-data h4 {
-  font-size: 18px;
+.chart-empty h4 {
+  font-size: 16px;
   font-weight: 600;
-  color: #1f2937;
+  color: #374151;
   margin: 0 0 8px 0;
 }
 
-.no-data p {
+.chart-empty p {
   font-size: 14px;
   margin: 0;
 }
 
-.chart-content {
-  width: 100%;
-  height: 100%;
+.chart-wrapper {
   position: relative;
+  width: 100%;
 }
 
-.chart-content canvas {
-  width: 100%;
-  height: 100%;
+.chart-summary {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  padding: 24px;
+  border-top: 1px solid #e5e7eb;
+  background: #f8fafc;
+}
+
+.summary-item {
+  text-align: center;
+}
+
+.summary-label {
   display: block;
+  font-size: 12px;
+  color: #6b7280;
+  margin-bottom: 4px;
+  font-weight: 500;
+}
+
+.summary-value {
+  display: block;
+  font-size: 18px;
+  font-weight: 700;
+  color: #1f2937;
+}
+
+.summary-value.up {
+  color: #10b981;
+}
+
+.summary-value.down {
+  color: #ef4444;
+}
+
+.summary-value.neutral {
+  color: #6b7280;
 }
 
 /* Responsive */
 @media (max-width: 768px) {
-  .chart-container {
-    font-size: 12px;
+  .chart-header {
+    flex-direction: column;
+    gap: 16px;
+    align-items: stretch;
+  }
+  
+  .chart-summary {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+    padding: 20px;
+  }
+  
+  .chart-content {
+    padding: 0 16px;
+  }
+}
+
+@media (max-width: 480px) {
+  .chart-summary {
+    grid-template-columns: 1fr;
+  }
+  
+  .summary-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+    border-bottom: 1px solid #e5e7eb;
+  }
+  
+  .summary-item:last-child {
+    border-bottom: none;
+  }
+  
+  .summary-label,
+  .summary-value {
+    display: inline;
+    margin: 0;
+  }
+  
+  .summary-value {
+    font-size: 16px;
   }
 }
 </style>

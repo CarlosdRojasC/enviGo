@@ -128,7 +128,13 @@
             <div class="empty-icon">📊</div>
             <p>No hay datos suficientes para mostrar el gráfico</p>
           </div>
-          <OrdersTrendChart v-else :data="chartData" :loading="loadingChart" height="320" />
+          <OrdersTrendChart 
+            :data="chartData" 
+            :loading="loadingChart" 
+            :height="320"
+            :show-header="false"
+            @period-change="handlePeriodChange"
+          />
         </div>
       </section>
 
@@ -424,6 +430,12 @@ async function fetchChannels() {
 function refreshAllData() {
   console.log('🔄 Refrescando datos...')
   fetchAllData()
+}
+
+function handlePeriodChange(period) {
+  console.log('📊 Cambiando período del gráfico a:', period)
+  chartPeriod.value = period
+  fetchChartData()
 }
 
 function formatCurrency(amount) {
