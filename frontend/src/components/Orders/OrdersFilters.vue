@@ -3,81 +3,66 @@
   <div class="filters-container">
     <!-- Filtros principales -->
     <div class="filters-main">
-      <div class="filters-row">
-        <!-- Status Filter -->
-        <div class="filter-group">
-          <label class="filter-label">Estado</label>
-          <select 
-            v-model="localFilters.status" 
-            @change="emitChange" 
-            class="filter-select status-select"
-          >
-            <option value="">📋 Todos los estados</option>
-            <option value="pending">⏳ Pendientes</option>
-            <option value="processing">⚙️ Procesando</option>
-            <option value="ready_for_pickup">📦 Listos para Retiro</option>
-            <option value="shipped">🚚 En Tránsito</option>
-            <option value="delivered">✅ Entregados</option>
-            <option value="cancelled">❌ Cancelados</option>
-          </select>
-        </div>
+<div class="filters-row">
+  <!-- Status Filter -->
+  <div class="filter-group">
+    <label class="filter-label">Estado</label>
+    <select 
+      v-model="localFilters.status" 
+      @change="emitChange" 
+      class="filter-select status-select"
+    >
+      <option value="">📋 Todos los estados</option>
+      <option value="pending">⏳ Pendientes</option>
+      <option value="processing">⚙️ Procesando</option>
+      <option value="ready_for_pickup">📦 Listos para Retiro</option>
+      <option value="shipped">🚚 En Tránsito</option>
+      <option value="delivered">✅ Entregados</option>
+      <option value="cancelled">❌ Cancelados</option>
+    </select>
+  </div>
 
-        <!-- Channel Filter -->
-        <div class="filter-group">
-          <label class="filter-label">Canal</label>
-          <select 
-            v-model="localFilters.channel_id" 
-            @change="emitChange" 
-            class="filter-select channel-select"
-          >
-            <option value="">🏪 Todos los canales</option>
-            <option 
-              v-for="channel in channels" 
-              :key="channel._id" 
-              :value="channel._id"
-            >
-              {{ getChannelIcon(channel.channel_type) }} {{ channel.channel_name }}
-            </option>
-          </select>
-        </div>
+  <!-- Channel Filter -->
+  <div class="filter-group">
+    <label class="filter-label">Canal</label>
+    <select 
+      v-model="localFilters.channel_id" 
+      @change="emitChange" 
+      class="filter-select channel-select"
+    >
+      <option value="">🏪 Todos los canales</option>
+      <option 
+        v-for="channel in channels" 
+        :key="channel._id" 
+        :value="channel._id"
+      >
+        {{ getChannelIcon(channel.channel_type) }} {{ channel.channel_name }}
+      </option>
+    </select>
+  </div>
 
-        <!-- Commune Filter -->
-               <div class="filter-group">
-        <label class="filter-label">Comuna(s)</label>
-        <div class="multiselect-container" @click="focusCommuneInput">
-          <div class="multiselect-tags">
-            <span v-for="commune in filters.shipping_commune" :key="commune" class="tag">
-              {{ commune }}
-              <button @click.stop="removeCommune(commune)" class="tag-remove">×</button>
-            </span>
-            <input
-              ref="communeInput"
-              type="text"
-              v-model="communeSearch"
-              @focus="showCommuneDropdown = true"
-              @blur="closeCommuneDropdown"
-              placeholder="Seleccionar comunas..."
-              class="multiselect-input"
-            />
-          </div>
-          <transition name="slide-down">
-            <div v-if="showCommuneDropdown" class="multiselect-dropdown">
-              <div
-                v-for="commune in filteredCommunes"
-                :key="commune"
-                @mousedown.prevent="addCommune(commune)"
-                class="dropdown-item"
-              >
-                {{ commune }}
-              </div>
-              <div v-if="filteredCommunes.length === 0 && communeSearch" class="dropdown-empty">
-                No se encontraron coincidencias.
-              </div>
-            </div>
-          </transition>
-        </div>
-      </div>
+  <!-- Commune Filter -->
+  <div class="filter-group" v-if="availableCommunes.length > 0">
+    <label class="filter-label">Comuna</label>
+    <select 
+      v-model="localFilters.shipping_commune" 
+      @change="emitChange" 
+      class="filter-select commune-select"
+    >
+      <option value="">📍 Todas las comunas</option>
+      <option 
+        v-for="commune in availableCommunes" 
+        :key="commune" 
+        :value="commune"
+      >
+        {{ commune }}
+      </option>
+    </select>
+  </div>
+</div>
 
+<!-- NUEVA FILA PARA FECHA Y BÚSQUEDA -->
+ <div class="filters-row-2">
         <!-- Date Range -->
         <div class="filter-group date-range">
           <label class="filter-label">Rango de Fechas</label>
@@ -99,29 +84,7 @@
             />
           </div>
         </div>
-
-        <!-- Search -->
-        <div class="filter-group search-group">
-          <label class="filter-label">Búsqueda</label>
-          <div class="search-input-wrapper">
-            <span class="search-icon">🔍</span>
-            <input 
-              type="text" 
-              v-model="searchTerm" 
-              @input="debouncedSearch" 
-              placeholder="Buscar por #pedido, cliente, email..."
-              class="filter-input search-input"
-            />
-            <button 
-              v-if="searchTerm" 
-              @click="clearSearch" 
-              class="clear-search-btn"
-            >
-              ✕
-            </button>
-          </div>
-        </div>
-      </div>
+ </div>
     </div>
 
     <!-- Presets de filtros rápidos -->
@@ -479,6 +442,12 @@ watch(() => props.filters.search, (newSearchValue) => {
 .filters-row {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 20px;
+  align-items: end;
+}
+.filters-row-2 {
+  display: grid;
+  grid-template-columns: 1fr 1.5fr; /* Fecha 1fr, Búsqueda 1.5fr */
   gap: 20px;
   align-items: end;
 }
@@ -883,6 +852,10 @@ watch(() => props.filters.search, (newSearchValue) => {
   .filter-group.search-group {
     grid-column: span 1;
   }
+  .filters-row-2 {
+  grid-template-columns: 1fr;
+  gap: 16px;
+}
 }
 
 @media (max-width: 768px) {
@@ -890,7 +863,10 @@ watch(() => props.filters.search, (newSearchValue) => {
     margin: 0 -16px 24px -16px;
     border-radius: 0;
   }
-  
+  .filters-row-2 {
+  grid-template-columns: 1fr;
+  gap: 16px;
+}
   .filters-main,
   .filter-presets,
   .advanced-header,

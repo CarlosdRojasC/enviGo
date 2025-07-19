@@ -24,12 +24,12 @@
       :presets="filterPresets"
       :show-advanced="filtersUI?.showAdvanced || false"
       :active-count="activeFiltersCount"
-      @filter-change="handleFilterObjectChange"
-      @advanced-change="updateAdvancedFilter"
-      @apply-preset="applyPreset"
-      @toggle-advanced="toggleAdvancedFilters"
-      @search="debouncedSearch"
-      @clear-all="clearAllFilters"
+      @filter-change="handleFiltersUpdate"
+@advanced-change="updateAdvancedFilter"
+@apply-preset="handleApplyPreset"
+@toggle-advanced="toggleAdvancedFilters"
+@search="handleSearch"
+@clear-all="handleClearAllFilters"
     />
 
     <!-- Tabla moderna -->
@@ -184,6 +184,11 @@ const {
   clearAllFilters
 } = useOrdersFilters(orders, fetchOrders)
 
+// Función debouncedSearch para compatibilidad
+const debouncedSearch = (searchTerm) => {
+  handleSearch(searchTerm)
+}
+
 // Selección múltiple
 const {
   selectedOrders,
@@ -234,7 +239,53 @@ const orderStats = computed(() => ({
   cancelled: orders.value.filter(o => o.status === 'cancelled').length,
   ready_for_pickup: orders.value.filter(o => o.status === 'ready_for_pickup').length
 }))
+// ==================== MÉTODOS PARA FILTROS ====================
 
+/**
+ * Manejar cambios de filtros básicos (desde OrdersFilters)
+ */
+function handleFiltersUpdate(newFilters) {
+  console.log('📝 Updating filters:', newFilters)
+  
+  // Aplicar cada filtro individualmente usando el composable
+  Object.entries(newFilters).forEach(([key, value]) => {
+    if (filters.value.hasOwnProperty(key)) {
+      filters.value[key] = value
+    }
+  })
+  
+  // Aplicar los cambios
+  fetchOrders(filters.value)
+}
+
+/**
+ * Manejar búsqueda con debounce
+ */
+function handleSearch(searchTerm) {
+  console.log('🔍 Search term:', searchTerm)
+  
+  // Actualizar el filtro de búsqueda
+  filters.value.search = searchTerm
+  
+  // Aplicar filtros
+  fetchOrders(filters.value)
+}
+
+/**
+ * Aplicar preset de filtros
+ */
+function handleApplyPreset(presetId) {
+  console.log('⭐ Applying preset:', presetId)
+  applyPreset(presetId)
+}
+
+/**
+ * Limpiar todos los filtros
+ */
+function handleClearAllFilters() {
+  console.log('🧹 Clearing all filters')
+  clearAllFilters()
+}
 // ==================== MÉTODOS DEL HEADER ====================
 
 async function handleRefresh() {
@@ -266,14 +317,6 @@ function handleCreateOrder() {
   router.push('/orders/create')
 }
 
-function handleSearchEvent(newSearchTerm) {
-  applySearch(newSearchTerm);
-}
-
-// Función que se llamará desde el evento @filter-change de OrdersFilters
-function handleFilterChangeEvent(key, value) {
-  handleFilterChange(key, value);
-}
 
 function toggleAutoRefresh() {
   autoRefreshEnabled.value = !autoRefreshEnabled.value
