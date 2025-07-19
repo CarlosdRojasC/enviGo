@@ -550,14 +550,59 @@ const billing = {
 // Servicios de dashboard
 const dashboard = {
   // Método existente
-  getStats: () => api.get('/dashboard'),
+ getStats: async () => {
+    try {
+      console.log('📊 API: Solicitando estadísticas del dashboard...');
+      const response = await api.get('/dashboard');
+      
+      // Manejar tanto respuesta nueva como antigua
+      const data = response.data?.data || response.data;
+      
+      console.log('✅ API: Estadísticas recibidas:', data);
+      return { data };
+    } catch (error) {
+      console.error('❌ API: Error obteniendo estadísticas:', {
+        status: error.response?.status,
+        message: error.response?.data?.error || error.message
+      });
+      throw error;
+    }
+  },
   
-  // Nuevo método para obtener trends reales
-  getTrends: () => api.get('/dashboard/trends'),
+  getTrends: async () => {
+    try {
+      console.log('📈 API: Solicitando trends del dashboard...');
+      const response = await api.get('/dashboard/trends');
+      
+      // Manejar tanto respuesta nueva como antigua
+      const data = response.data?.data || response.data;
+      
+      console.log('✅ API: Trends recibidos:', data);
+      return { data };
+    } catch (error) {
+      console.error('❌ API: Error obteniendo trends:', {
+        status: error.response?.status,
+        message: error.response?.data?.error || error.message
+      });
+      throw error;
+    }
+  },
   
-  // Método para estadísticas de admin
-  getAdminStats: () => api.get('/dashboard'), // Para admins
-  
+  // Método para admin (si necesitas funcionalidad específica)
+  getAdminStats: async () => {
+    try {
+      console.log('👑 API: Solicitando estadísticas de administrador...');
+      const response = await api.get('/dashboard');
+      const data = response.data?.data || response.data;
+      
+      console.log('✅ API: Stats admin recibidas:', data);
+      return { data };
+    } catch (error) {
+      console.error('❌ API: Error obteniendo stats admin:', error);
+      throw error;
+    }
+  },
+
   // Método para comparar períodos específicos
   getComparison: (params) => api.get('/dashboard/comparison', { params })
 }

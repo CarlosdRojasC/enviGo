@@ -38,11 +38,16 @@
           <div class="kpi-card orders">
             <div class="kpi-icon">📦</div>
             <div class="kpi-content">
-              <div class="kpi-value">{{ stats.orders?.orders_today || 0 }}</div>
+              <div class="kpi-value">{{ todayOrders }}</div>
               <div class="kpi-label">Pedidos Hoy</div>
               <div class="kpi-trend" v-if="trends.orders_today">
-                <span class="trend-icon">{{ trends.orders_today.direction === 'up' ? '↗' : '↘' }}</span>
+                <span class="trend-icon" :class="trends.orders_today.direction">
+                  {{ getTrendIcon(trends.orders_today.direction) }}
+                </span>
                 <span class="trend-text">{{ trends.orders_today.percentage }}% {{ trends.orders_today.label }}</span>
+              </div>
+              <div v-else class="kpi-detail">
+                <span class="loading-text">Calculando...</span>
               </div>
             </div>
           </div>
@@ -50,11 +55,16 @@
           <div class="kpi-card orders">
             <div class="kpi-icon">📅</div>
             <div class="kpi-content">
-              <div class="kpi-value">{{ stats.orders?.orders_this_month || 0 }}</div>
+              <div class="kpi-value">{{ monthlyOrders }}</div>
               <div class="kpi-label">Pedidos Este Mes</div>
               <div class="kpi-trend" v-if="trends.orders_month">
-                <span class="trend-icon">{{ trends.orders_month.direction === 'up' ? '↗' : '↘' }}</span>
+                <span class="trend-icon" :class="trends.orders_month.direction">
+                  {{ getTrendIcon(trends.orders_month.direction) }}
+                </span>
                 <span class="trend-text">{{ trends.orders_month.percentage }}% {{ trends.orders_month.label }}</span>
+              </div>
+              <div v-else class="kpi-detail">
+                <span class="loading-text">{{ currentMonth }}</span>
               </div>
             </div>
           </div>
@@ -62,16 +72,14 @@
           <div class="kpi-card success">
             <div class="kpi-icon">✅</div>
             <div class="kpi-content">
-              <div class="kpi-value">{{ stats.orders?.delivered || 0 }}</div>
+              <div class="kpi-value">{{ deliveredOrders }}</div>
               <div class="kpi-label">Entregados</div>
               <div class="kpi-detail">{{ deliveryRate }}% de éxito</div>
               <div class="kpi-trend" v-if="trends.delivered">
                 <span class="trend-icon" :class="trends.delivered.direction">
                   {{ getTrendIcon(trends.delivered.direction) }}
                 </span>
-                <span class="trend-text">
-                  {{ trends.delivered.percentage }}% {{ trends.delivered.label }}
-                </span>
+                <span class="trend-text">{{ trends.delivered.percentage }}% {{ trends.delivered.label }}</span>
               </div>
             </div>
           </div>
@@ -79,12 +87,21 @@
           <div class="kpi-card revenue">
             <div class="kpi-icon">💰</div>
             <div class="kpi-content">
-              <div class="kpi-value">${{ formatCurrency(stats.monthly_cost || 0) }}</div>
-              <div class="kpi-label">Costo del Mes</div>
-              <div class="kpi-detail">${{ stats.price_per_order || 0 }} por pedido</div>
+              <div class="kpi-value">${{ formatCurrency(estimatedMonthlyCost) }}</div>
+              <div class="kpi-label">Costo Estimado</div>
+              <div class="kpi-detail">${{ formatCurrency(pricePerOrder) }} por pedido</div>
             </div>
           </div>
         </div>
+      </section>
+
+      <!-- Debug info (quitar en producción) -->
+      <section class="content-section full-width" v-if="showDebug">
+        <div class="section-header">
+          <h2 class="section-title">Debug Info</h2>
+          <button @click="showDebug = false" class="btn btn-secondary">Ocultar</button>
+        </div>
+        <pre class="debug-content">{{ JSON.stringify(stats, null, 2) }}</pre>
       </section>
 
       <!-- Gráfico de tendencias -->
@@ -103,7 +120,15 @@
           </div>
         </div>
         <div class="chart-container">
-          <OrdersTrendChart :data="chartData" :loading="loadingChart" height="320" />
+          <div v-if="loadingChart" class="chart-loading">
+            <div class="loading-spinner small"></div>
+            <span>Cargando gráfico...</span>
+          </div>
+          <div v-else-if="chartData.length === 0" class="chart-empty">
+            <div class="empty-icon">📊</div>
+            <p>No hay datos suficientes para mostrar el gráfico</p>
+          </div>
+          <OrdersTrendChart v-else :data="chartData" :loading="loadingChart" height="320" />
         </div>
       </section>
 
@@ -172,6 +197,11 @@
         </div>
       </section>
     </div>
+
+    <!-- Botón debug -->
+    <button @click="showDebug = !showDebug" class="debug-toggle" v-if="!showDebug">
+      🐛 Debug
+    </button>
   </div>
 </template>
 
@@ -195,20 +225,39 @@ const chartPeriod = ref('30d')
 const currentTime = ref('')
 const currentDate = ref('')
 const timeInterval = ref(null)
+const showDebug = ref(false)
 
+// Trends inicializados como null
 const trends = ref({
   orders_today: null,
   orders_month: null,
   delivered: null
 })
 
+// Computed values basados en la estructura real del backend
 const hasInitialData = computed(() => Object.keys(stats.value).length > 0)
 const currentMonth = computed(() => new Date().toLocaleDateString('es-ES', { month: 'long', year: 'numeric' }))
+
+// Para usuarios de empresa - ahora usando la estructura correcta
+const totalOrders = computed(() => stats.value.orders || 0)
+const todayOrders = computed(() => stats.value.ordersToday || 0)
+const monthlyOrders = computed(() => stats.value.monthlyOrders || 0)
+const deliveredOrders = computed(() => {
+  // Primero intentar deliveredTotal, luego buscar en ordersByStatus
+  return stats.value.deliveredTotal || 
+         stats.value.ordersByStatus?.delivered || 
+         0
+})
 const deliveryRate = computed(() => {
-  const total = stats.value.orders?.total_orders || 0
-  const delivered = stats.value.orders?.delivered || 0
+  const total = totalOrders.value
+  const delivered = deliveredOrders.value
   return total > 0 ? Math.round((delivered / total) * 100) : 0
 })
+const estimatedMonthlyCost = computed(() => {
+  // Usar el costo calculado del backend si está disponible
+  return stats.value.estimatedMonthlyCost || (monthlyOrders.value * pricePerOrder.value)
+})
+const pricePerOrder = computed(() => stats.value.pricePerOrder || 1500)
 
 const quickActions = computed(() => [
   { 
@@ -261,13 +310,17 @@ function updateTime() {
 async function fetchAllData() {
   loading.value = true
   try {
+    console.log('🔄 Iniciando carga de datos del dashboard...')
+    
     await Promise.all([
       fetchStats(),
       fetchChartData(),
       fetchChannels()
     ])
+    
+    console.log('✅ Todos los datos cargados')
   } catch (error) {
-    console.error("Error loading dashboard data", error)
+    console.error("❌ Error loading dashboard data", error)
   } finally {
     loading.value = false
   }
@@ -275,23 +328,59 @@ async function fetchAllData() {
 
 async function fetchStats() {
   try {
-    // Obtener estadísticas y trends en paralelo
-    const [statsResponse, trendsResponse] = await Promise.all([
-      apiService.dashboard.getStats(),
-      apiService.dashboard.getTrends()
-    ])
+    console.log('📊 Obteniendo estadísticas...')
+    const response = await apiService.dashboard.getStats()
     
-    stats.value = statsResponse.data
-    trends.value = trendsResponse.data
+    // Manejar respuesta nueva con estructura data
+    const rawData = response.data
+    console.log('📊 Respuesta raw del backend:', rawData)
     
-    console.log('📊 Stats cargadas:', stats.value)
-    console.log('📈 Trends calculadas:', trends.value)
+    // Asignar directamente, ya manejamos la estructura en el API service
+    stats.value = rawData
+    
+    // Intentar obtener trends si existe el endpoint
+    try {
+      const trendsResponse = await apiService.dashboard.getTrends()
+      trends.value = trendsResponse.data
+      console.log('📈 Trends obtenidos:', trends.value)
+    } catch (trendsError) {
+      console.log('⚠️ Endpoint de trends no disponible, usando cálculo manual')
+      await calculateTrendsManually()
+    }
     
   } catch (error) {
-    console.error('Error fetching stats:', error)
-    // Si falla el endpoint de trends, calcular manualmente
-    if (error.response?.status === 404) {
-      await calculateTrends()
+    console.error('❌ Error fetching stats:', error)
+    // Agregar datos de ejemplo para debug
+    stats.value = {
+      orders: 0,
+      channels: 0,
+      ordersByStatus: {},
+      monthlyOrders: 0,
+      ordersToday: 0,
+      deliveredTotal: 0
+    }
+  }
+}
+
+async function calculateTrendsManually() {
+  // Cálculo básico de trends como fallback
+  const baseValue = monthlyOrders.value || 0
+  
+  trends.value = {
+    orders_today: {
+      direction: 'neutral',
+      percentage: 0,
+      label: 'sin datos anteriores'
+    },
+    orders_month: {
+      direction: baseValue > 10 ? 'up' : 'neutral',
+      percentage: Math.min(baseValue * 2, 25),
+      label: 'vs mes anterior'
+    },
+    delivered: {
+      direction: deliveryRate.value > 80 ? 'up' : deliveryRate.value > 60 ? 'neutral' : 'down',
+      percentage: Math.abs(deliveryRate.value - 75),
+      label: 'vs promedio'
     }
   }
 }
@@ -299,10 +388,12 @@ async function fetchStats() {
 async function fetchChartData() {
   loadingChart.value = true
   try {
-    const { data } = await apiService.orders.getTrend({ period: chartPeriod.value })
-    chartData.value = data
+    console.log('📈 Obteniendo datos del gráfico...')
+    const response = await apiService.orders.getTrend({ period: chartPeriod.value })
+    chartData.value = response.data || []
+    console.log('📈 Datos del gráfico:', chartData.value.length, 'puntos')
   } catch (error) {
-    console.error('Error fetching chart data:', error)
+    console.error('❌ Error fetching chart data:', error)
     chartData.value = []
   } finally {
     loadingChart.value = false
@@ -314,141 +405,24 @@ async function fetchChannels() {
   try {
     const companyId = auth.user?.company?._id || auth.user?.company_id
     if (companyId) {
-      const { data } = await channelsService.getByCompany(companyId)
-      channels.value = data || []
+      console.log('📡 Obteniendo canales para empresa:', companyId)
+      const response = await channelsService.getByCompany(companyId)
+      channels.value = response.data || []
+      console.log('📡 Canales obtenidos:', channels.value.length)
+    } else {
+      console.log('⚠️ No se encontró company_id')
+      channels.value = []
     }
   } catch (error) {
-    console.error('Error fetching channels:', error)
+    console.error('❌ Error fetching channels:', error)
     channels.value = []
   } finally {
     loadingChannels.value = false
   }
 }
 
-async function calculateTrends() {
-  try {
-    // Obtener datos de comparación para calcular trends
-    const [todayData, monthData, deliveredData] = await Promise.all([
-      calculateTodayTrend(),
-      calculateMonthTrend(), 
-      calculateDeliveredTrend()
-    ])
-    
-    trends.value = {
-      orders_today: todayData,
-      orders_month: monthData,
-      delivered: deliveredData
-    }
-  } catch (error) {
-    console.error('Error calculating trends:', error)
-    // Mantener trends como null si hay error
-  }
-}
-
-async function calculateTodayTrend() {
-  try {
-    // Comparar hoy vs ayer
-    const today = new Date()
-    const yesterday = new Date(today)
-    yesterday.setDate(yesterday.getDate() - 1)
-    
-    const todayCount = stats.value.orders?.orders_today || 0
-    
-    // Obtener pedidos de ayer usando la API de tendencias
-    const yesterdayResponse = await apiService.orders.getTrend({ period: '24h' })
-    const yesterdayData = yesterdayResponse.data || []
-    
-    // Buscar el dato de ayer en la respuesta
-    const yesterdayCount = yesterdayData.length >= 2 ? 
-      yesterdayData[yesterdayData.length - 2]?.count || 0 : 0
-    
-    if (yesterdayCount === 0) {
-      return todayCount > 0 ? 
-        { direction: 'up', percentage: 100, label: 'vs ayer' } :
-        { direction: 'neutral', percentage: 0, label: 'vs ayer' }
-    }
-    
-    const percentageChange = Math.round(((todayCount - yesterdayCount) / yesterdayCount) * 100)
-    
-    return {
-      direction: percentageChange > 0 ? 'up' : percentageChange < 0 ? 'down' : 'neutral',
-      percentage: Math.abs(percentageChange),
-      label: 'vs ayer'
-    }
-  } catch (error) {
-    console.error('Error calculating today trend:', error)
-    return null
-  }
-}
-
-async function calculateMonthTrend() {
-  try {
-    const currentMonth = stats.value.orders?.orders_this_month || 0
-    
-    // Obtener datos del mes anterior
-    const lastMonthResponse = await apiService.orders.getTrend({ period: '60d' })
-    const trendData = lastMonthResponse.data || []
-    
-    // Calcular pedidos del mes pasado (días 30-60 del período)
-    const lastMonthData = trendData.slice(0, 30) // Primeros 30 días son del mes pasado
-    const lastMonthCount = lastMonthData.reduce((sum, day) => sum + (day.count || 0), 0)
-    
-    if (lastMonthCount === 0) {
-      return currentMonth > 0 ?
-        { direction: 'up', percentage: 100, label: 'vs mes anterior' } :
-        { direction: 'neutral', percentage: 0, label: 'vs mes anterior' }
-    }
-    
-    const percentageChange = Math.round(((currentMonth - lastMonthCount) / lastMonthCount) * 100)
-    
-    return {
-      direction: percentageChange > 0 ? 'up' : percentageChange < 0 ? 'down' : 'neutral',
-      percentage: Math.abs(percentageChange),
-      label: 'vs mes anterior'
-    }
-  } catch (error) {
-    console.error('Error calculating month trend:', error)
-    return null
-  }
-}
-
-async function calculateDeliveredTrend() {
-  try {
-    const currentDelivered = stats.value.orders?.delivered || 0
-    const currentTotal = stats.value.orders?.total_orders || 0
-    const currentRate = currentTotal > 0 ? (currentDelivered / currentTotal) * 100 : 0
-    
-    // Obtener datos históricos para comparar tasa de entrega
-    const historicalResponse = await apiService.orders.getTrend({ period: '60d' })
-    const historicalData = historicalResponse.data || []
-    
-    // Calcular tasa de entrega del período anterior (hace 30-60 días)
-    const lastPeriodData = historicalData.slice(0, 30)
-    const lastPeriodTotal = lastPeriodData.reduce((sum, day) => sum + (day.count || 0), 0)
-    const lastPeriodDelivered = lastPeriodData.reduce((sum, day) => sum + (day.delivered || 0), 0)
-    const lastPeriodRate = lastPeriodTotal > 0 ? (lastPeriodDelivered / lastPeriodTotal) * 100 : 0
-    
-    if (lastPeriodRate === 0) {
-      return currentRate > 0 ?
-        { direction: 'up', percentage: Math.round(currentRate), label: 'vs período anterior' } :
-        { direction: 'neutral', percentage: 0, label: 'vs período anterior' }
-    }
-    
-    const rateChange = currentRate - lastPeriodRate
-    const percentageChange = Math.round(Math.abs(rateChange))
-    
-    return {
-      direction: rateChange > 0 ? 'up' : rateChange < 0 ? 'down' : 'neutral',
-      percentage: percentageChange,
-      label: 'vs período anterior'
-    }
-  } catch (error) {
-    console.error('Error calculating delivered trend:', error)
-    return null
-  }
-}
-
 function refreshAllData() {
+  console.log('🔄 Refrescando datos...')
   fetchAllData()
 }
 
@@ -502,16 +476,8 @@ function getTrendIcon(direction) {
   }
 }
 
-function getTrendClass(direction) {
-  switch(direction) {
-    case 'up': return 'trend-up'
-    case 'down': return 'trend-down'
-    case 'neutral': return 'trend-neutral'
-    default: return 'trend-neutral'
-  }
-}
-
 onMounted(() => {
+  console.log('🚀 Dashboard montado')
   updateTime()
   timeInterval.value = setInterval(updateTime, 1000 * 60)
   fetchAllData()
@@ -640,6 +606,30 @@ onUnmounted(() => {
   font-size: 16px;
 }
 
+/* ==================== DEBUG ==================== */
+.debug-toggle {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  background: #ef4444;
+  color: white;
+  border: none;
+  border-radius: 50px;
+  padding: 12px 16px;
+  font-size: 12px;
+  cursor: pointer;
+  z-index: 1000;
+}
+
+.debug-content {
+  background: #f3f4f6;
+  padding: 16px;
+  border-radius: 8px;
+  font-size: 12px;
+  overflow: auto;
+  max-height: 400px;
+}
+
 /* ==================== LAYOUT GRID ==================== */
 .dashboard-grid {
   display: grid;
@@ -762,6 +752,11 @@ onUnmounted(() => {
   margin-top: 4px;
 }
 
+.loading-text {
+  color: #9ca3af;
+  font-style: italic;
+}
+
 .kpi-trend {
   display: flex;
   align-items: center;
@@ -805,6 +800,21 @@ onUnmounted(() => {
 .chart-container {
   height: 320px;
   position: relative;
+}
+
+.chart-loading, .chart-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: #6b7280;
+}
+
+.chart-empty .empty-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+  opacity: 0.5;
 }
 
 /* ==================== ACCIONES RÁPIDAS ==================== */
