@@ -411,6 +411,329 @@
         </div>
       </div>
     </div>
+
+    <!-- MODALES -->
+    
+    <!-- Modal Nueva Empresa -->
+    <div v-if="showAddCompanyModal" class="modal-overlay" @click="closeModal('add')">
+      <div class="modal-container" @click.stop>
+        <div class="modal-header">
+          <h3>Nueva Empresa</h3>
+          <button @click="closeModal('add')" class="modal-close">✕</button>
+        </div>
+        
+        <div class="modal-content">
+          <form @submit.prevent="createCompany">
+            <div class="form-section">
+              <h4>Información de la Empresa</h4>
+              <div class="form-grid">
+                <div class="form-group">
+                  <label>Nombre de la Empresa *</label>
+                  <input v-model="newCompanyForm.name" type="text" required placeholder="Ej: Mi Empresa SpA">
+                </div>
+                <div class="form-group">
+                  <label>RUT</label>
+                  <input v-model="newCompanyForm.rut" type="text" placeholder="12.345.678-9">
+                </div>
+                <div class="form-group">
+                  <label>Email de Contacto *</label>
+                  <input v-model="newCompanyForm.contact_email" type="email" required placeholder="contacto@miempresa.com">
+                </div>
+                <div class="form-group">
+                  <label>Teléfono</label>
+                  <input v-model="newCompanyForm.phone" type="tel" placeholder="+56 9 1234 5678">
+                </div>
+                <div class="form-group full-width">
+                  <label>Dirección</label>
+                  <input v-model="newCompanyForm.address" type="text" placeholder="Av. Providencia 1234, Santiago">
+                </div>
+              </div>
+            </div>
+
+            <div class="form-section">
+              <h4>Configuración de Precios</h4>
+              <div class="form-grid">
+                <div class="form-group">
+                  <label>Plan</label>
+                  <select v-model="newCompanyForm.plan_type">
+                    <option value="basic">Básico</option>
+                    <option value="pro">Pro</option>
+                    <option value="enterprise">Enterprise</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label>Precio por Pedido (CLP) *</label>
+                  <input v-model.number="newCompanyForm.price_per_order" type="number" required min="0">
+                </div>
+                <div class="form-group">
+                  <label>Ciclo de Facturación</label>
+                  <select v-model="newCompanyForm.billing_cycle">
+                    <option value="monthly">Mensual</option>
+                    <option value="quarterly">Trimestral</option>
+                    <option value="annual">Anual</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div class="form-section">
+              <h4>Usuario Administrador</h4>
+              <div class="form-grid">
+                <div class="form-group">
+                  <label>Nombre Completo *</label>
+                  <input v-model="newCompanyForm.owner_name" type="text" required placeholder="Juan Pérez">
+                </div>
+                <div class="form-group">
+                  <label>Email *</label>
+                  <input v-model="newCompanyForm.owner_email" type="email" required placeholder="admin@miempresa.com">
+                </div>
+                <div class="form-group full-width">
+                  <label>Contraseña Temporal *</label>
+                  <input v-model="newCompanyForm.owner_password" type="password" required minlength="8" placeholder="Mínimo 8 caracteres">
+                </div>
+              </div>
+            </div>
+          </form>
+        </div>
+        
+        <div class="modal-footer">
+          <button @click="closeModal('add')" class="btn-cancel">Cancelar</button>
+          <button @click="createCompany" :disabled="isCreatingCompany" class="btn-primary">
+            {{ isCreatingCompany ? 'Creando...' : 'Crear Empresa' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal Pricing -->
+    <div v-if="showPricingModal" class="modal-overlay" @click="closeModal('pricing')">
+      <div class="modal-container" @click.stop>
+        <div class="modal-header">
+          <h3>Configurar Pricing - {{ selectedCompany?.name }}</h3>
+          <button @click="closeModal('pricing')" class="modal-close">✕</button>
+        </div>
+        
+        <div class="modal-content">
+          <div class="pricing-current">
+            <h4>Configuración Actual</h4>
+            <div class="pricing-summary">
+              <div class="pricing-item">
+                <span>Plan Actual:</span>
+                <span class="plan-badge" :class="selectedCompany?.plan_type">{{ getPlanName(selectedCompany?.plan_type) }}</span>
+              </div>
+              <div class="pricing-item">
+                <span>Precio por Pedido:</span>
+                <span>${{ formatNumber(selectedCompany?.price_per_order || 0) }}</span>
+              </div>
+              <div class="pricing-item">
+                <span>Con IVA:</span>
+                <span>${{ formatNumber(getTotalPriceWithIVA(selectedCompany?.price_per_order || 0)) }}</span>
+              </div>
+            </div>
+          </div>
+
+          <form @submit.prevent="savePricing">
+            <div class="form-grid">
+              <div class="form-group">
+                <label>Plan</label>
+                <select v-model="pricingForm.plan_type">
+                  <option value="basic">Básico</option>
+                  <option value="pro">Pro</option>
+                  <option value="enterprise">Enterprise</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Precio por Pedido (CLP)</label>
+                <input v-model.number="pricingForm.price_per_order" type="number" min="0">
+              </div>
+              <div class="form-group">
+                <label>Ciclo de Facturación</label>
+                <select v-model="pricingForm.billing_cycle">
+                  <option value="monthly">Mensual</option>
+                  <option value="quarterly">Trimestral</option>
+                  <option value="annual">Anual</option>
+                </select>
+              </div>
+              <div class="form-group full-width">
+                <label>Notas de Pricing</label>
+                <textarea v-model="pricingForm.pricing_notes" rows="3" placeholder="Notas adicionales sobre el pricing..."></textarea>
+              </div>
+            </div>
+
+            <div class="pricing-preview">
+              <h4>Vista Previa</h4>
+              <div class="preview-grid">
+                <div class="preview-item">
+                  <span>Precio Base:</span>
+                  <span>${{ formatNumber(pricingForm.price_per_order || 0) }}</span>
+                </div>
+                <div class="preview-item">
+                  <span>IVA (19%):</span>
+                  <span>${{ formatNumber(Math.round((pricingForm.price_per_order || 0) * 0.19)) }}</span>
+                </div>
+                <div class="preview-item total">
+                  <span>Total por Pedido:</span>
+                  <span>${{ formatNumber(getTotalPriceWithIVA(pricingForm.price_per_order || 0)) }}</span>
+                </div>
+              </div>
+            </div>
+          </form>
+        </div>
+        
+        <div class="modal-footer">
+          <button @click="closeModal('pricing')" class="btn-cancel">Cancelar</button>
+          <button @click="savePricing" :disabled="isSavingPricing" class="btn-primary">
+            {{ isSavingPricing ? 'Guardando...' : 'Guardar Cambios' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal Estadísticas -->
+    <div v-if="showStatsModal" class="modal-overlay" @click="closeModal('stats')">
+      <div class="modal-container large" @click.stop>
+        <div class="modal-header">
+          <h3>Estadísticas - {{ selectedCompany?.name }}</h3>
+          <button @click="closeModal('stats')" class="modal-close">✕</button>
+        </div>
+        
+        <div class="modal-content">
+          <div class="stats-grid">
+            <div class="stat-box">
+              <div class="stat-icon">📦</div>
+              <div class="stat-details">
+                <div class="stat-value">{{ companyStats.orders_total || 0 }}</div>
+                <div class="stat-label">Total Pedidos</div>
+              </div>
+            </div>
+            
+            <div class="stat-box">
+              <div class="stat-icon">📅</div>
+              <div class="stat-details">
+                <div class="stat-value">{{ companyStats.orders_this_month || 0 }}</div>
+                <div class="stat-label">Pedidos Este Mes</div>
+              </div>
+            </div>
+            
+            <div class="stat-box">
+              <div class="stat-icon">💰</div>
+              <div class="stat-details">
+                <div class="stat-value">${{ formatNumber(companyStats.revenue_this_month || 0) }}</div>
+                <div class="stat-label">Revenue Este Mes</div>
+              </div>
+            </div>
+            
+            <div class="stat-box">
+              <div class="stat-icon">👥</div>
+              <div class="stat-details">
+                <div class="stat-value">{{ companyStats.users_count || 0 }}</div>
+                <div class="stat-label">Usuarios Activos</div>
+              </div>
+            </div>
+            
+            <div class="stat-box">
+              <div class="stat-icon">📡</div>
+              <div class="stat-details">
+                <div class="stat-value">{{ companyStats.channels_count || 0 }}</div>
+                <div class="stat-label">Canales Conectados</div>
+              </div>
+            </div>
+            
+            <div class="stat-box">
+              <div class="stat-icon">⚡</div>
+              <div class="stat-details">
+                <div class="stat-value">{{ selectedCompany ? Math.round(calculateMonthlyRevenue(selectedCompany) / (selectedCompany.orders_this_month || 1)) : 0 }}</div>
+                <div class="stat-label">Revenue/Pedido Promedio</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="chart-container">
+            <h4>Tendencia de Pedidos (Últimos 7 días)</h4>
+            <div class="chart-placeholder">
+              <p>📈 Gráfico de tendencias aquí</p>
+              <small>Implementar con Chart.js o similar</small>
+            </div>
+          </div>
+        </div>
+        
+        <div class="modal-footer">
+          <button @click="closeModal('stats')" class="btn-primary">Cerrar</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal Usuarios -->
+    <div v-if="showUsersModal" class="modal-overlay" @click="closeModal('users')">
+      <div class="modal-container large" @click.stop>
+        <div class="modal-header">
+          <h3>Usuarios - {{ selectedCompany?.name }}</h3>
+          <button @click="closeModal('users')" class="modal-close">✕</button>
+        </div>
+        
+        <div class="modal-content">
+          <div v-if="isLoadingUsers" class="loading-section">
+            <div class="loading-spinner"></div>
+            <p>Cargando usuarios...</p>
+          </div>
+          
+          <div v-else>
+            <div class="users-summary">
+              <div class="summary-item">
+                <span class="summary-value">{{ companyUsers.length }}</span>
+                <span class="summary-label">Total Usuarios</span>
+              </div>
+              <div class="summary-item">
+                <span class="summary-value">{{ companyUsers.filter(u => u.is_active).length }}</span>
+                <span class="summary-label">Activos</span>
+              </div>
+              <div class="summary-item">
+                <span class="summary-value">{{ companyUsers.filter(u => u.role === 'company_owner').length }}</span>
+                <span class="summary-label">Administradores</span>
+              </div>
+            </div>
+
+            <div class="users-table">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Nombre</th>
+                    <th>Email</th>
+                    <th>Rol</th>
+                    <th>Estado</th>
+                    <th>Último Acceso</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-if="companyUsers.length === 0">
+                    <td colspan="5" class="empty-row">No hay usuarios registrados</td>
+                  </tr>
+                  <tr v-else v-for="user in companyUsers" :key="user._id">
+                    <td>{{ user.full_name }}</td>
+                    <td>{{ user.email }}</td>
+                    <td>
+                      <span class="role-badge" :class="user.role">
+                        {{ getRoleName(user.role) }}
+                      </span>
+                    </td>
+                    <td>
+                      <span class="status-badge" :class="user.is_active ? 'active' : 'inactive'">
+                        {{ user.is_active ? 'Activo' : 'Inactivo' }}
+                      </span>
+                    </td>
+                    <td>{{ formatDate(user.last_login) }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        
+        <div class="modal-footer">
+          <button @click="closeModal('users')" class="btn-primary">Cerrar</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -418,6 +741,9 @@
 import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { useToast } from 'vue-toastification'
 import { apiService } from '../services/api'
+
+const toast = useToast()
+
 // Estado reactivo
 const companies = ref([])
 const loading = ref(false)
@@ -425,6 +751,42 @@ const searchQuery = ref('')
 const viewMode = ref('grid')
 const selectedCompany = ref(null)
 const chartRefs = ref({})
+
+// Estados de modales
+const showAddCompanyModal = ref(false)
+const showPricingModal = ref(false)
+const showStatsModal = ref(false)
+const showUsersModal = ref(false)
+
+// Estados de formularios
+const isCreatingCompany = ref(false)
+const isSavingPricing = ref(false)
+const isLoadingUsers = ref(false)
+
+// Datos de formularios
+const newCompanyForm = ref({
+  name: '',
+  contact_email: '',
+  phone: '',
+  address: '',
+  rut: '',
+  price_per_order: 500,
+  plan_type: 'basic',
+  billing_cycle: 'monthly',
+  owner_name: '',
+  owner_email: '',
+  owner_password: ''
+})
+
+const pricingForm = ref({
+  plan_type: 'basic',
+  price_per_order: 0,
+  billing_cycle: 'monthly',
+  pricing_notes: ''
+})
+
+const companyUsers = ref([])
+const companyStats = ref({})
 
 // Filtros
 const filters = ref({
@@ -436,8 +798,6 @@ const filters = ref({
 // Ordenamiento
 const sortField = ref('name')
 const sortDirection = ref('asc')
-
-const toast = useToast()
 
 // Computed properties
 const filteredCompanies = computed(() => {
@@ -741,12 +1101,42 @@ const formatLargeNumber = (num) => {
   return formatNumber(num)
 }
 
+const formatDate = (dateStr) => {
+  if (!dateStr) return 'Nunca'
+  return new Date(dateStr).toLocaleDateString('es-ES', {
+    day: '2-digit', 
+    month: '2-digit', 
+    year: 'numeric'
+  })
+}
+
+const getRoleName = (role) => {
+  const roles = {
+    company_owner: 'Administrador',
+    company_employee: 'Empleado',
+    admin: 'Super Admin'
+  }
+  return roles[role] || role
+}
+
 const openAddCompanyModal = async () => {
   try {
     console.log('➕ Abriendo modal para nueva empresa')
-    // Aquí puedes implementar la lógica del modal
-    // Por ejemplo, emitir un evento o usar un composable de modales
-    toast.info('Funcionalidad de nueva empresa - implementar modal')
+    // Resetear formulario
+    newCompanyForm.value = {
+      name: '',
+      contact_email: '',
+      phone: '',
+      address: '',
+      rut: '',
+      price_per_order: 500,
+      plan_type: 'basic',
+      billing_cycle: 'monthly',
+      owner_name: '',
+      owner_email: '',
+      owner_password: ''
+    }
+    showAddCompanyModal.value = true
   } catch (error) {
     console.error('Error opening add company modal:', error)
     toast.error('Error al abrir el modal de nueva empresa')
@@ -756,8 +1146,17 @@ const openAddCompanyModal = async () => {
 const openPricingModal = async (company) => {
   try {
     console.log('💰 Abriendo modal pricing para:', company.name)
-    // Implementar modal de pricing
-    toast.info(`Configurar pricing para ${company.name}`)
+    selectedCompany.value = company
+    
+    // Cargar datos actuales en el formulario
+    pricingForm.value = {
+      plan_type: company.plan_type || 'basic',
+      price_per_order: company.price_per_order || 0,
+      billing_cycle: company.billing_cycle || 'monthly',
+      pricing_notes: company.pricing_notes || ''
+    }
+    
+    showPricingModal.value = true
   } catch (error) {
     console.error('Error opening pricing modal:', error)
     toast.error('Error al abrir el modal de pricing')
@@ -767,8 +1166,24 @@ const openPricingModal = async (company) => {
 const openStatsModal = async (company) => {
   try {
     console.log('📊 Abriendo modal estadísticas para:', company.name)
-    // Implementar modal de estadísticas
-    toast.info(`Ver estadísticas de ${company.name}`)
+    selectedCompany.value = company
+    
+    // Cargar estadísticas de la empresa
+    if (apiService.companies.getStats) {
+      const { data } = await apiService.companies.getStats(company._id)
+      companyStats.value = data
+    } else {
+      // Estadísticas básicas si no hay endpoint
+      companyStats.value = {
+        orders_total: company.orders_count || 0,
+        orders_this_month: company.orders_this_month || 0,
+        revenue_this_month: calculateMonthlyRevenue(company),
+        users_count: company.users_count || 0,
+        channels_count: company.channels_count || 0
+      }
+    }
+    
+    showStatsModal.value = true
   } catch (error) {
     console.error('Error opening stats modal:', error)
     toast.error('Error al abrir el modal de estadísticas')
@@ -778,11 +1193,28 @@ const openStatsModal = async (company) => {
 const openUsersModal = async (company) => {
   try {
     console.log('👥 Abriendo modal usuarios para:', company.name)
-    // Implementar modal de usuarios
-    toast.info(`Gestionar usuarios de ${company.name}`)
+    selectedCompany.value = company
+    isLoadingUsers.value = true
+    
+    // Cargar usuarios de la empresa
+    if (apiService.companies.getUsers) {
+      const { data } = await apiService.companies.getUsers(company._id)
+      companyUsers.value = data
+    } else if (apiService.users.getByCompany) {
+      const { data } = await apiService.users.getByCompany(company._id)
+      companyUsers.value = data
+    } else {
+      companyUsers.value = []
+      toast.warning('No se pudo cargar la lista de usuarios')
+    }
+    
+    showUsersModal.value = true
   } catch (error) {
     console.error('Error opening users modal:', error)
-    toast.error('Error al abrir el modal de usuarios')
+    toast.error('Error al cargar usuarios: ' + (error.response?.data?.message || error.message))
+    companyUsers.value = []
+  } finally {
+    isLoadingUsers.value = false
   }
 }
 
@@ -845,6 +1277,103 @@ const exportData = async () => {
   } catch (error) {
     console.error('Error exporting data:', error)
     toast.error('Error al exportar datos: ' + (error.response?.data?.message || error.message))
+  }
+}
+
+// Funciones de formularios
+const createCompany = async () => {
+  if (!newCompanyForm.value.name || !newCompanyForm.value.contact_email) {
+    toast.error('Por favor completa los campos obligatorios')
+    return
+  }
+  
+  isCreatingCompany.value = true
+  try {
+    console.log('🏢 Creando nueva empresa:', newCompanyForm.value.name)
+    
+    await apiService.companies.create({
+      // Datos de la empresa
+      name: newCompanyForm.value.name,
+      contact_email: newCompanyForm.value.contact_email,
+      phone: newCompanyForm.value.phone,
+      address: newCompanyForm.value.address,
+      rut: newCompanyForm.value.rut,
+      price_per_order: newCompanyForm.value.price_per_order,
+      plan_type: newCompanyForm.value.plan_type,
+      billing_cycle: newCompanyForm.value.billing_cycle,
+      
+      // Datos del usuario administrador
+      owner_name: newCompanyForm.value.owner_name,
+      owner_email: newCompanyForm.value.owner_email,
+      owner_password: newCompanyForm.value.owner_password
+    })
+    
+    toast.success('Empresa creada exitosamente')
+    showAddCompanyModal.value = false
+    await loadCompanies() // Recargar lista
+  } catch (error) {
+    console.error('Error creating company:', error)
+    toast.error('Error al crear empresa: ' + (error.response?.data?.message || error.message))
+  } finally {
+    isCreatingCompany.value = false
+  }
+}
+
+const savePricing = async () => {
+  if (!selectedCompany.value) return
+  
+  isSavingPricing.value = true
+  try {
+    console.log('💰 Guardando pricing para:', selectedCompany.value.name)
+    
+    // Actualizar precio
+    if (apiService.companies.updatePrice) {
+      await apiService.companies.updatePrice(selectedCompany.value._id, pricingForm.value.price_per_order)
+    }
+    
+    // Actualizar otros datos
+    await apiService.companies.update(selectedCompany.value._id, {
+      plan_type: pricingForm.value.plan_type,
+      billing_cycle: pricingForm.value.billing_cycle,
+      pricing_notes: pricingForm.value.pricing_notes
+    })
+    
+    // Actualizar datos locales
+    const companyIndex = companies.value.findIndex(c => c._id === selectedCompany.value._id)
+    if (companyIndex !== -1) {
+      companies.value[companyIndex] = {
+        ...companies.value[companyIndex],
+        price_per_order: pricingForm.value.price_per_order,
+        plan_type: pricingForm.value.plan_type,
+        billing_cycle: pricingForm.value.billing_cycle,
+        pricing_notes: pricingForm.value.pricing_notes
+      }
+    }
+    
+    toast.success('Configuración de precios guardada exitosamente')
+    showPricingModal.value = false
+  } catch (error) {
+    console.error('Error saving pricing:', error)
+    toast.error('Error al guardar pricing: ' + (error.response?.data?.message || error.message))
+  } finally {
+    isSavingPricing.value = false
+  }
+}
+
+const closeModal = (modalName) => {
+  switch (modalName) {
+    case 'add':
+      showAddCompanyModal.value = false
+      break
+    case 'pricing':
+      showPricingModal.value = false
+      break
+    case 'stats':
+      showStatsModal.value = false
+      break
+    case 'users':
+      showUsersModal.value = false
+      break
   }
 }
 
@@ -1749,52 +2278,400 @@ onMounted(() => {
   color: #64748b;
 }
 
-/* Responsive Design */
-@media (max-width: 1200px) {
-  .companies-grid {
-    grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
-  }
-  
-  .details-panel {
-    width: 350px;
-  }
+/* Modal Styles */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: fadeIn 0.2s ease;
 }
 
-@media (max-width: 768px) {
-  .dashboard-header {
-    flex-direction: column;
-    gap: 20px;
-    align-items: stretch;
-  }
-  
-  .filters-row {
-    flex-direction: column;
-    gap: 16px;
-  }
-  
-  .search-container {
-    min-width: auto;
-  }
-  
-  .filter-group {
-    flex-wrap: wrap;
-  }
-  
-  .companies-grid {
-    grid-template-columns: 1fr;
-  }
-  
-  .details-panel {
-    width: 100%;
-  }
-  
-  .metrics-grid {
-    grid-template-columns: 1fr;
-  }
-  
-  .table-wrapper {
-    overflow-x: scroll;
-  }
+.modal-container {
+  background: white;
+  border-radius: 16px;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  max-width: 600px;
+  width: 90%;
+  max-height: 90vh;
+  overflow-y: auto;
+  animation: slideIn 0.3s ease;
+}
+
+.modal-container.large {
+  max-width: 800px;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 24px;
+  border-bottom: 1px solid #e2e8f0;
+  background: #f8fafc;
+  border-radius: 16px 16px 0 0;
+}
+
+.modal-header h3 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.modal-close {
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: #e2e8f0;
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #64748b;
+  font-size: 16px;
+  transition: all 0.2s ease;
+}
+
+.modal-close:hover {
+  background: #cbd5e1;
+  color: #475569;
+}
+
+.modal-content {
+  padding: 24px;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 24px;
+  border-top: 1px solid #e2e8f0;
+  background: #f8fafc;
+  border-radius: 0 0 16px 16px;
+}
+
+/* Form Styles */
+.form-section {
+  margin-bottom: 32px;
+}
+
+.form-section h4 {
+  margin: 0 0 16px 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #374151;
+  padding-bottom: 8px;
+  border-bottom: 2px solid #e2e8f0;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.form-group.full-width {
+  grid-column: span 2;
+}
+
+.form-group label {
+  font-size: 14px;
+  font-weight: 500;
+  color: #374151;
+}
+
+.form-group input,
+.form-group select,
+.form-group textarea {
+  padding: 12px 16px;
+  border: 2px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 14px;
+  transition: all 0.2s ease;
+  background: white;
+}
+
+.form-group input:focus,
+.form-group select:focus,
+.form-group textarea:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.form-group textarea {
+  resize: vertical;
+  min-height: 80px;
+}
+
+.btn-cancel {
+  padding: 12px 20px;
+  background: #f8fafc;
+  color: #475569;
+  border: 2px solid #e2e8f0;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.btn-cancel:hover {
+  background: #e2e8f0;
+}
+
+/* Pricing Modal Specific */
+.pricing-current {
+  background: #f1f5f9;
+  padding: 20px;
+  border-radius: 12px;
+  margin-bottom: 24px;
+}
+
+.pricing-current h4 {
+  margin: 0 0 12px 0;
+  color: #1e293b;
+  border: none;
+  padding: 0;
+}
+
+.pricing-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pricing-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.pricing-preview {
+  background: #f0f9ff;
+  padding: 20px;
+  border-radius: 12px;
+  margin-top: 24px;
+}
+
+.pricing-preview h4 {
+  margin: 0 0 12px 0;
+  color: #0369a1;
+  border: none;
+  padding: 0;
+}
+
+.preview-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.preview-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+}
+
+.preview-item.total {
+  border-top: 2px solid #0284c7;
+  padding-top: 12px;
+  margin-top: 8px;
+  font-weight: 700;
+  color: #0369a1;
+}
+
+/* Stats Modal Specific */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 20px;
+  margin-bottom: 32px;
+}
+
+.stat-box {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 20px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.stat-box:nth-child(2) {
+  background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+}
+
+.stat-box:nth-child(3) {
+  background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+}
+
+.stat-box:nth-child(4) {
+  background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+}
+
+.stat-box:nth-child(5) {
+  background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+}
+
+.stat-box:nth-child(6) {
+  background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);
+  color: #1e293b;
+}
+
+.stat-icon {
+  font-size: 32px;
+}
+
+.stat-details {
+  flex: 1;
+}
+
+.stat-value {
+  font-size: 24px;
+  font-weight: 800;
+  line-height: 1;
+  margin-bottom: 4px;
+}
+
+.stat-label {
+  font-size: 14px;
+  opacity: 0.9;
+}
+
+.chart-container {
+  background: #f8fafc;
+  padding: 24px;
+  border-radius: 12px;
+  text-align: center;
+}
+
+.chart-container h4 {
+  margin: 0 0 16px 0;
+  color: #1e293b;
+}
+
+.chart-placeholder {
+  height: 200px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border: 2px dashed #cbd5e1;
+  border-radius: 8px;
+  color: #64748b;
+}
+
+.chart-placeholder p {
+  margin: 0 0 8px 0;
+  font-size: 18px;
+}
+
+.chart-placeholder small {
+  font-size: 14px;
+  opacity: 0.7;
+}
+
+/* Users Modal Specific */
+.loading-section {
+  text-align: center;
+  padding: 40px 20px;
+  color: #64748b;
+}
+
+.users-summary {
+  display: flex;
+  gap: 32px;
+  margin-bottom: 24px;
+  padding: 20px;
+  background: #f8fafc;
+  border-radius: 12px;
+}
+
+.summary-item {
+  text-align: center;
+  flex: 1;
+}
+
+.summary-value {
+  display: block;
+  font-size: 24px;
+  font-weight: 700;
+  color: #1e293b;
+  margin-bottom: 4px;
+}
+
+.summary-label {
+  font-size: 14px;
+  color: #64748b;
+}
+
+.users-table {
+  overflow-x: auto;
+}
+
+.users-table table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.users-table th {
+  background: #f1f5f9;
+  padding: 12px 16px;
+  text-align: left;
+  font-weight: 600;
+  color: #374151;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.users-table td {
+  padding: 12px 16px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.empty-row {
+  text-align: center;
+  color: #64748b;
+  font-style: italic;
+}
+
+.role-badge {
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.role-badge.company_owner {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.role-badge.company_employee {
+  background: #e0e7ff;
+  color: #3730a3;
+}
+
+.role-badge.admin {
+  background: #fee2e2;
+  color: #991b1b;
 }
 
 /* Loading States */
@@ -1940,6 +2817,145 @@ onMounted(() => {
 .shadow-md { box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); }
 .shadow-lg { box-shadow: 0 10px 15px rgba(0, 0, 0, 0.1); }
 
+/* Responsive Design */
+@media (max-width: 1200px) {
+  .companies-grid {
+    grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+  }
+  
+  .details-panel {
+    width: 350px;
+  }
+}
+
+@media (max-width: 768px) {
+  .companies-dashboard-container {
+    padding: 16px;
+  }
+
+  .dashboard-header {
+    flex-direction: column;
+    gap: 20px;
+    align-items: stretch;
+  }
+  
+  .header-metrics {
+    justify-content: center;
+  }
+
+  .header-actions {
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+  
+  .filters-row {
+    flex-direction: column;
+    gap: 16px;
+  }
+  
+  .search-container {
+    min-width: auto;
+  }
+  
+  .filter-group {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  
+  .companies-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .details-panel {
+    width: 100%;
+  }
+  
+  .metrics-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .table-wrapper {
+    overflow-x: scroll;
+  }
+
+  .modal-container {
+    width: 95%;
+    margin: 20px;
+  }
+  
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .form-group.full-width {
+    grid-column: span 1;
+  }
+  
+  .stats-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .users-summary {
+    flex-direction: column;
+    gap: 16px;
+  }
+  
+  .pricing-item,
+  .preview-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+
+  .company-metrics {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .action-buttons {
+    flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 480px) {
+  .dashboard-title {
+    font-size: 24px;
+  }
+
+  .metric-badge {
+    min-width: 60px;
+    padding: 8px 12px;
+  }
+
+  .metric-value {
+    font-size: 18px;
+  }
+
+  .action-btn {
+    padding: 10px 16px;
+    font-size: 13px;
+  }
+
+  .company-card {
+    padding: 16px;
+  }
+
+  .company-avatar {
+    width: 50px;
+    height: 50px;
+    font-size: 16px;
+  }
+
+  .modal-content {
+    padding: 16px;
+  }
+
+  .modal-header,
+  .modal-footer {
+    padding: 16px;
+  }
+}
+
 /* Dark mode support (opcional) */
 @media (prefers-color-scheme: dark) {
   .companies-dashboard-container {
@@ -1949,9 +2965,10 @@ onMounted(() => {
   
   .dashboard-header,
   .filters-panel,
-  .metric-card,
+  .metric-card:not(.revenue):not(.orders):not(.efficiency):not(.growth),
   .company-card,
-  .table-container {
+  .table-container,
+  .modal-container {
     background: #1e293b;
     border-color: #334155;
   }
@@ -1963,10 +2980,57 @@ onMounted(() => {
   }
   
   .search-input,
-  .filter-select {
+  .filter-select,
+  .form-group input,
+  .form-group select,
+  .form-group textarea {
     background: #374151;
     border-color: #4b5563;
     color: #f1f5f9;
   }
+
+  .enhanced-table th {
+    background: #374151;
+    color: #f1f5f9;
+  }
+
+  .table-row:hover {
+    background: #374151;
+  }
+
+  .details-panel {
+    background: #1e293b;
+  }
+
+  .details-header {
+    background: #374151;
+  }
+
+  .activity-item {
+    background: #374151;
+  }
 }
+
+/* Print styles */
+@media print {
+  .companies-dashboard-container {
+    background: white;
+    padding: 0;
+  }
+
+  .header-actions,
+  .filters-panel,
+  .card-actions,
+  .action-buttons,
+  .details-panel {
+    display: none;
+  }
+
+  .company-card,
+  .table-container {
+    box-shadow: none;
+    border: 1px solid #e2e8f0;
+  }
+}
+
 </style>
