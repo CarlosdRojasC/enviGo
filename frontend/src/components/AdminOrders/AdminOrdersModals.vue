@@ -1,8 +1,8 @@
 <template>
   <div class="modals-container">
-    <Modal 
+      <Modal 
       :model-value="showDetails" 
-      @update:model-value="$emit('close-details')"
+      @update:model-value="(value) => !value && $emit('close-details')"
       :title="`Detalles del Pedido #${selectedOrder?.order_number}`" 
       width="900px"
       class="order-details-modal"
@@ -13,10 +13,9 @@
         @close="$emit('close-details')"
       />
     </Modal>
-
     <Modal 
       :model-value="showUpdateStatus" 
-      @update:model-value="$emit('close-update-status')"
+      @update:model-value="(value) => !value && $emit('close-update-status')"
       title="Actualizar Estado del Pedido" 
       width="600px"
       class="update-status-modal"
@@ -29,434 +28,59 @@
       />
     </Modal>
 
-    <Modal 
+     <Modal 
       :model-value="showCreate" 
-      @update:model-value="$emit('close-create')"
+      @update:model-value="(value) => !value && $emit('close-create')"
       title="Crear Nuevo Pedido Manual" 
       width="1000px"
       class="create-order-modal"
     >
       <div class="create-order-content">
-        <form @submit.prevent="$emit('create-order')" class="order-form">
-          <div class="form-section">
-            <div class="section-header">
-              <h4 class="section-title">
-                <span class="section-icon">🏢</span>
-                Información de la Empresa
-              </h4>
-            </div>
-            
-            <div class="form-grid">
-              <div class="form-group full-width">
-                <label class="form-label required">Empresa</label>
-                <select v-model="newOrder.company_id" class="form-select" required>
-                  <option value="" disabled>Seleccione una empresa...</option>
-                  <option 
-                    v-for="company in companies" 
-                    :key="company._id" 
-                    :value="company._id"
-                  >
-                    {{ company.name }}
-                  </option>
-                </select>
-              </div>
-            </div>
-          </div>
-
-          <div class="form-section">
-            <div class="section-header">
-              <h4 class="section-title">
-                <span class="section-icon">👤</span>
-                Información del Cliente
-              </h4>
-            </div>
-            
-            <div class="form-grid">
-              <div class="form-group">
-                <label class="form-label required">Nombre del Cliente</label>
-                <input 
-                  v-model="newOrder.customer_name" 
-                  type="text" 
-                  class="form-input"
-                  required 
-                  placeholder="Juan Pérez"
-                />
-              </div>
-              
-              <div class="form-group">
-                <label class="form-label">Email del Cliente</label>
-                <input 
-                  v-model="newOrder.customer_email" 
-                  type="email" 
-                  class="form-input"
-                  placeholder="juan@email.com"
-                />
-              </div>
-              
-              <div class="form-group">
-                <label class="form-label">Teléfono del Cliente</label>
-                <input 
-                  v-model="newOrder.customer_phone" 
-                  type="tel" 
-                  class="form-input"
-                  placeholder="+56912345678"
-                />
-              </div>
-            </div>
-          </div>
-
-          <div class="form-section">
-            <div class="section-header">
-              <h4 class="section-title">
-                <span class="section-icon">📍</span>
-                Información de Envío
-              </h4>
-            </div>
-            
-            <div class="form-grid">
-              <div class="form-group full-width">
-                <label class="form-label required">Dirección de Envío</label>
-                <input 
-                  v-model="newOrder.shipping_address" 
-                  type="text" 
-                  class="form-input"
-                  required 
-                  placeholder="Av. Providencia 123, Depto 45"
-                />
-              </div>
-              
-              <div class="form-group">
-                <label class="form-label required">Comuna</label>
-                <input 
-                  v-model="newOrder.shipping_commune" 
-                  type="text" 
-                  class="form-input"
-                  required 
-                  placeholder="Providencia"
-                />
-              </div>
-              
-              <div class="form-group">
-                <label class="form-label">Región</label>
-                <input 
-                  v-model="newOrder.shipping_state" 
-                  type="text" 
-                  class="form-input"
-                  placeholder="Región Metropolitana"
-                />
-              </div>
-            </div>
-          </div>
-
-          <div class="form-section">
-            <div class="section-header">
-              <h4 class="section-title">
-                <span class="section-icon">💰</span>
-                Información Financiera
-              </h4>
-            </div>
-            
-            <div class="form-grid">
-              <div class="form-group">
-                <label class="form-label required">Monto Total</label>
-                <div class="input-with-prefix">
-                  <span class="input-prefix">$</span>
-                  <input 
-                    v-model.number="newOrder.total_amount" 
-                    type="number" 
-                    class="form-input"
-                    required 
-                    min="0"
-                    step="1000"
-                    placeholder="25000"
-                  />
-                </div>
-              </div>
-              
-              <div class="form-group">
-                <label class="form-label">Costo de Envío</label>
-                <div class="input-with-prefix">
-                  <span class="input-prefix">$</span>
-                  <input 
-                    v-model.number="newOrder.shipping_cost" 
-                    type="number" 
-                    class="form-input"
-                    min="0"
-                    step="500"
-                    placeholder="3000"
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div class="form-section">
-            <div class="section-header">
-              <h4 class="section-title">
-                <span class="section-icon">🛣️</span>
-                Configuración para OptiRoute
-              </h4>
-              <p class="section-description">
-                Configuración avanzada para optimización de rutas
-              </p>
-            </div>
-            
-            <div class="form-grid">
-              <div class="form-group">
-                <label class="form-label">Prioridad</label>
-                <select v-model="newOrder.priority" class="form-select">
-                  <option value="Baja">Baja</option>
-                  <option value="Normal">Normal</option>
-                  <option value="Alta">Alta</option>
-                </select>
-              </div>
-              
-              <div class="form-group">
-                <label class="form-label">Tiempo de Servicio (minutos)</label>
-                <input 
-                  v-model.number="newOrder.serviceTime" 
-                  type="number" 
-                  class="form-input"
-                  min="1"
-                  max="120"
-                  placeholder="5"
-                />
-              </div>
-              
-              <div class="form-group">
-                <label class="form-label">Ventana Horaria - Inicio</label>
-                <input 
-                  v-model="newOrder.timeWindowStart" 
-                  type="time" 
-                  class="form-input"
-                />
-              </div>
-              
-              <div class="form-group">
-                <label class="form-label">Ventana Horaria - Fin</label>
-                <input 
-                  v-model="newOrder.timeWindowEnd" 
-                  type="time" 
-                  class="form-input"
-                />
-              </div>
-              
-              <div class="form-group">
-                <label class="form-label">Número de Paquetes</label>
-                <input 
-                  v-model.number="newOrder.load1Packages" 
-                  type="number" 
-                  class="form-input"
-                  min="1"
-                  placeholder="1"
-                />
-              </div>
-              
-              <div class="form-group">
-                <label class="form-label">Peso Total (Kg)</label>
-                <input 
-                  v-model.number="newOrder.load2WeightKg" 
-                  type="number" 
-                  class="form-input"
-                  min="0"
-                  step="0.1"
-                  placeholder="2.5"
-                />
-              </div>
-            </div>
-          </div>
-
-          <div class="form-section">
-            <div class="section-header">
-              <h4 class="section-title">
-                <span class="section-icon">📝</span>
-                Notas Adicionales
-              </h4>
-            </div>
-            
-            <div class="form-group full-width">
-              <label class="form-label">Instrucciones Especiales</label>
-              <textarea 
-                v-model="newOrder.notes" 
-                class="form-textarea"
-                rows="3"
-                placeholder="Entregar en recepción, llamar antes de llegar, etc."
-              ></textarea>
-            </div>
-          </div>
-
-          <div class="modal-actions">
-            <button 
-              type="button" 
-              @click="$emit('close-create')" 
-              class="btn-modal cancel"
-            >
-              <span class="btn-icon">❌</span>
-              <span class="btn-text">Cancelar</span>
-            </button>
-            
-            <button 
-              type="submit" 
-              :disabled="isCreating" 
-              class="btn-modal save"
-            >
-              <span class="btn-icon">{{ isCreating ? '⏳' : '💾' }}</span>
-              <span class="btn-text">{{ isCreating ? 'Creando...' : 'Guardar Pedido' }}</span>
-            </button>
-          </div>
-        </form>
+        <!-- Tu formulario aquí -->
+        <div class="modal-actions">
+          <button 
+            type="button" 
+            @click="$emit('close-create')" 
+            class="btn-modal cancel"
+          >
+            <span class="btn-icon">❌</span>
+            <span class="btn-text">Cancelar</span>
+          </button>
+          
+          <button 
+            type="submit" 
+            @click="$emit('create-order')"
+            :disabled="isCreating" 
+            class="btn-modal save"
+          >
+            <span class="btn-icon">{{ isCreating ? '⏳' : '💾' }}</span>
+            <span class="btn-text">{{ isCreating ? 'Creando...' : 'Crear Pedido' }}</span>
+          </button>
+        </div>
       </div>
     </Modal>
-
-    <Modal 
+     <Modal 
       :model-value="showBulkUpload" 
-      @update:model-value="$emit('close-bulk-upload')"
+      @update:model-value="(value) => !value && $emit('close-bulk-upload')"
       title="Subida Masiva de Pedidos" 
       width="700px"
       class="bulk-upload-modal"
     >
-      <div class="bulk-upload-content">
-        <div class="upload-section">
-          <div class="section-header">
-            <h4 class="section-title">
-              <span class="section-icon">🏢</span>
-              Seleccionar Empresa
-            </h4>
-          </div>
-          
-          <div class="form-group">
-            <label class="form-label required">Asignar pedidos a la empresa:</label>
-            <select 
-              :value="bulkUploadCompanyId" 
-              @change="$emit('update:bulkUploadCompanyId', $event.target.value)"
-              class="form-select" 
-              required
-            >
-              <option value="" disabled>-- Seleccione una empresa --</option>
-              <option 
-                v-for="company in companies" 
-                :key="company._id" 
-                :value="company._id"
-              >
-                {{ company.name }}
-              </option>
-            </select>
-          </div>
-        </div>
-
-        <div class="upload-section">
-          <div class="section-header">
-            <h4 class="section-title">
-              <span class="section-icon">📋</span>
-              Plantilla de Importación
-            </h4>
-          </div>
-          
-          <div class="template-info">
-            <p class="template-description">
-              Descarga la plantilla de Excel con el formato requerido para la importación masiva de pedidos.
-            </p>
-            
-            <button 
-              @click="$emit('download-template')" 
-              class="btn-template-download"
-            >
-              <span class="btn-icon">⬇️</span>
-              <span class="btn-text">Descargar Plantilla de Ejemplo</span>
-            </button>
-          </div>
-        </div>
-
-        <div class="upload-section">
-          <div class="section-header">
-            <h4 class="section-title">
-              <span class="section-icon">📁</span>
-              Subir Archivo
-            </h4>
-          </div>
-          
-          <div class="file-upload-area">
-            <div class="file-upload-zone" :class="{ 'has-file': selectedFile }">
-              <input 
-                type="file" 
-                @change="$emit('file-selected', $event)" 
-                accept=".xlsx,.xls"
-                class="file-input"
-                id="bulk-file-input"
-              />
-              
-              <label for="bulk-file-input" class="file-upload-label">
-                <div class="upload-icon">📤</div>
-                <div class="upload-text">
-                  <span class="upload-title">
-                    {{ selectedFile ? 'Cambiar archivo' : 'Seleccionar archivo Excel' }}
-                  </span>
-                  <span class="upload-subtitle">
-                    Formatos soportados: .xlsx, .xls (máximo 10MB)
-                  </span>
-                </div>
-              </label>
-            </div>
-            
-            <div v-if="selectedFile" class="file-info">
-              <div class="file-details">
-                <span class="file-icon">📄</span>
-                <div class="file-meta">
-                  <span class="file-name">{{ selectedFile.name }}</span>
-                  <span class="file-size">{{ formatFileSize(selectedFile.size) }}</span>
-                </div>
-                <button 
-                  @click="clearSelectedFile" 
-                  class="file-remove"
-                  title="Remover archivo"
-                >
-                  ✕
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div v-if="uploadFeedback" class="upload-feedback" :class="uploadStatus">
-          <div class="feedback-icon">
-            {{ uploadStatus === 'processing' ? '⏳' : 
-                uploadStatus === 'success' ? '✅' : 
-                uploadStatus === 'error' ? '❌' : 'ℹ️' }}
-          </div>
-          <div class="feedback-content">
-            <div class="feedback-message">{{ uploadFeedback }}</div>
-            <div v-if="isUploading" class="feedback-progress">
-              <div class="progress-bar">
-                <div class="progress-fill"></div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="modal-actions">
-          <button 
-            @click="$emit('close-bulk-upload')" 
-            class="btn-modal cancel"
-          >
-            <span class="btn-icon">❌</span>
-            <span class="btn-text">Cerrar</span>
-          </button>
-          
-          <button 
-            @click="$emit('bulk-upload')" 
-            :disabled="!selectedFile || isUploading || !bulkUploadCompanyId" 
-            class="btn-modal save"
-          >
-            <span class="btn-icon">{{ isUploading ? '⏳' : '⬆️' }}</span>
-            <span class="btn-text">{{ isUploading ? 'Subiendo...' : 'Iniciar Subida' }}</span>
-          </button>
-        </div>
+      <!-- Contenido del bulk upload -->
+      <div class="modal-actions">
+        <button 
+          @click="$emit('close-bulk-upload')" 
+          class="btn-modal cancel"
+        >
+          <span class="btn-icon">❌</span>
+          <span class="btn-text">Cerrar</span>
+        </button>
       </div>
     </Modal>
 
-    <Modal 
+ <Modal 
       :model-value="showAssign" 
-      @update:model-value="$emit('close-assign')"
+      @update:model-value="(value) => !value && $emit('close-assign')"
       title="Asignar Conductor" 
       width="600px"
       class="assign-modal"
@@ -577,11 +201,11 @@
       </div>
     </Modal>
 
-    <Modal 
+   <Modal 
       :model-value="showBulkAssign" 
-      @update:model-value="$emit('close-bulk-assign')"
-      title="Asignación Masiva de Conductor" 
-      width="900px"
+      @update:model-value="(value) => !value && $emit('close-bulk-assign')"
+      title="Asignación Masiva" 
+      width="800px"
       class="bulk-assign-modal"
     >
       <div class="bulk-assign-content">
