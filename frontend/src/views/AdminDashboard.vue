@@ -398,14 +398,21 @@ async function fetchStats() {
 async function fetchChartData() {
   loadingChart.value = true
   try {
-    console.log('📈 Admin: Obteniendo datos del gráfico...')
+    console.log('📈 Admin: Obteniendo datos del gráfico para período:', chartPeriod.value)
     const response = await apiService.orders.getTrend({ period: chartPeriod.value })
-    chartData.value = response.data || []
-    console.log('📈 Admin: Datos del gráfico:', chartData.value.length, 'puntos')
+    const newData = response.data || []
+    
+    console.log('📈 Admin: Datos del gráfico recibidos:', newData.length, 'puntos')
+    
+    // Asignar datos después de un pequeño delay para asegurar que el loading se muestre
+    setTimeout(() => {
+      chartData.value = newData
+      loadingChart.value = false
+    }, 200)
+    
   } catch (error) {
     console.error('❌ Admin: Error fetching chart data:', error)
     chartData.value = []
-  } finally {
     loadingChart.value = false
   }
 }
@@ -434,6 +441,7 @@ function refreshAllData() {
 function handlePeriodChange(period) {
   console.log('📊 Admin: Cambiando período del gráfico a:', period)
   chartPeriod.value = period
+  // Hacer la llamada inmediatamente y manejar el estado de carga
   fetchChartData()
 }
 

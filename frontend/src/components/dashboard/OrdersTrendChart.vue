@@ -173,20 +173,34 @@ const chartStats = computed(() => {
 })
 
 function createChart() {
-  if (!chartCanvas.value || !hasData.value) {
-    console.log('⚠️ No se puede crear gráfico: canvas o datos faltantes')
+  if (!chartCanvas.value) {
+    console.log('⚠️ Canvas no disponible para crear gráfico')
+    return
+  }
+  
+  if (!hasData.value) {
+    console.log('⚠️ No hay datos para crear gráfico')
     return
   }
   
   console.log('📊 Creando gráfico con datos procesados:', processedData.value)
   
-  // Destruir gráfico existente
+  // Destruir gráfico existente de forma segura
   if (chartInstance.value) {
-    chartInstance.value.destroy()
+    try {
+      chartInstance.value.destroy()
+    } catch (error) {
+      console.warn('⚠️ Error destruyendo gráfico anterior:', error)
+    }
     chartInstance.value = null
   }
   
   const ctx = chartCanvas.value.getContext('2d')
+  
+  if (!ctx) {
+    console.error('❌ No se pudo obtener contexto del canvas')
+    return
+  }
   
   const labels = processedData.value.map(item => {
     // Formatear etiquetas según el período
@@ -203,6 +217,11 @@ function createChart() {
   
   console.log('📊 Labels:', labels)
   console.log('📊 Data:', data)
+  
+  if (labels.length === 0 || data.length === 0) {
+    console.warn('⚠️ Labels o datos están vacíos')
+    return
+  }
   
   try {
     chartInstance.value = new Chart(ctx, {
@@ -294,7 +313,7 @@ function createChart() {
           }
         },
         animation: {
-          duration: 1000,
+          duration: 800,
           easing: 'easeInOutQuart'
         }
       }
@@ -303,6 +322,16 @@ function createChart() {
     console.log('✅ Gráfico creado exitosamente')
   } catch (error) {
     console.error('❌ Error creando gráfico:', error)
+    
+    // Intentar limpiar en caso de error
+    if (chartInstance.value) {
+      try {
+        chartInstance.value.destroy()
+      } catch (destroyError) {
+        console.warn('⚠️ Error limpiando gráfico después de fallo:', destroyError)
+      }
+      chartInstance.value = null
+    }
   }
 }
 
@@ -320,19 +349,42 @@ function getTrendIcon(direction) {
 }
 
 // Watchers
-watch(() => props.data, async () => {
-  console.log('📊 Datos del gráfico cambiaron:', props.data)
+watch(() => props.data, async (newData, oldData) => {
+  console.log('📊 Datos del gráfico cambiaron:', { 
+    nuevos: newData?.length || 0, 
+    anteriores: oldData?.length || 0 
+  })
+  
+  // Destruir gráfico anterior antes de crear uno nuevo
+  if (chartInstance.value) {
+    chartInstance.value.destroy()
+    chartInstance.value = null
+  }
+  
   if (hasData.value) {
     await nextTick()
     createChart()
   }
 }, { deep: true })
 
-watch(() => props.loading, (newLoading) => {
-  console.log('📊 Estado de carga cambió:', newLoading)
-  if (!newLoading && hasData.value) {
+watch(() => props.loading, (newLoading, oldLoading) => {
+  console.log('📊 Estado de carga cambió:', { nuevo: newLoading, anterior: oldLoading })
+  
+  if (newLoading) {
+    // Si está cargando, destruir gráfico actual
+    if (chartInstance.value) {
+      chartInstance.value.destroy()
+      chartInstance.value = null
+    }
+  } else if (hasData.value) {
+    // Si terminó de cargar y hay datos, crear gráfico
     nextTick(() => createChart())
   }
+})
+
+watch(() => props.initialPeriod, (newPeriod) => {
+  console.log('📊 Período inicial cambió:', newPeriod)
+  selectedPeriod.value = newPeriod
 })
 
 // Lifecycle
