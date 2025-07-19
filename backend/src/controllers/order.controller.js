@@ -43,9 +43,11 @@ class OrderController {
         if (date_to) filters.order_date.$lte = new Date(date_to);
       }
 
- if (shipping_commune) {
-        // Usamos una expresión regular para que la búsqueda no sea sensible a mayúsculas/minúsculas
-        filters.shipping_commune = new RegExp(shipping_commune, 'i');
+     if (shipping_commune) {
+        // Convierte el string "comuna1,comuna2" en un array de expresiones regulares
+        // para buscar coincidencias exactas sin importar mayúsculas/minúsculas.
+        const communesArray = shipping_commune.split(',').map(c => c.trim());
+        filters.shipping_commune = { $in: communesArray.map(c => new RegExp(`^${c}$`, 'i')) };
       }
       if (search) {
         const searchRegex = new RegExp(search, 'i');
