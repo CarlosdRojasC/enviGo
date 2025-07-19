@@ -549,9 +549,18 @@ const billing = {
 
 // Servicios de dashboard
 const dashboard = {
-  getStats: () => api.get('/dashboard')
+  // Método existente
+  getStats: () => api.get('/dashboard'),
+  
+  // Nuevo método para obtener trends reales
+  getTrends: () => api.get('/dashboard/trends'),
+  
+  // Método para estadísticas de admin
+  getAdminStats: () => api.get('/dashboard'), // Para admins
+  
+  // Método para comparar períodos específicos
+  getComparison: (params) => api.get('/dashboard/comparison', { params })
 }
-
 // Servicios de conductores
 const drivers = {
   // Obtener todos los conductores (desde tu BD local)

@@ -1,131 +1,24 @@
 <template>
   <div class="chart-container">
-    <div class="chart-header">
-      <div class="chart-title-section">
-        <h3 class="chart-title">{{ title }}</h3>
-        <p class="chart-subtitle" v-if="subtitle">{{ subtitle }}</p>
-      </div>
-      <div class="chart-controls" v-if="showControls">
-        <select v-model="selectedPeriod" @change="handlePeriodChange" class="period-selector">
-          <option value="7d">7 días</option>
-          <option value="30d">30 días</option>
-          <option value="90d">3 meses</option>
-          <option value="1y">1 año</option>
-        </select>
-      </div>
+    <div v-if="loading" class="chart-loading">
+      <div class="loading-spinner"></div>
+      <p>Cargando datos del gráfico...</p>
     </div>
-    
-    <div class="chart-content">
-      <div v-if="loading" class="chart-loading">
-        <div class="loading-spinner"></div>
-        <p>Cargando datos...</p>
-      </div>
-      
-      <div v-else-if="!chartData || chartData.length === 0" class="chart-empty">
-        <div class="empty-icon">📊</div>
-        <p>No hay datos para mostrar</p>
-      </div>
-      
-      <div v-else class="chart-wrapper">
-        <!-- Aquí iría un gráfico real como Chart.js o similar -->
-        <!-- Por ahora simulo con SVG básico -->
-        <svg width="100%" height="300" class="chart-svg">
-          <!-- Grid lines -->
-          <defs>
-            <pattern id="grid" width="40" height="30" patternUnits="userSpaceOnUse">
-              <path d="M 40 0 L 0 0 0 30" fill="none" stroke="#f0f0f0" stroke-width="1"/>
-            </pattern>
-          </defs>
-          <rect width="100%" height="100%" fill="url(#grid)" />
-          
-          <!-- Chart area -->
-          <g class="chart-area">
-            <!-- Simulate line chart -->
-            <polyline
-              :points="linePoints"
-              fill="none"
-              stroke="#3b82f6"
-              stroke-width="3"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            />
-            
-            <!-- Data points -->
-            <circle
-              v-for="(point, index) in dataPoints"
-              :key="index"
-              :cx="point.x"
-              :cy="point.y"
-              r="4"
-              fill="#3b82f6"
-              stroke="white"
-              stroke-width="2"
-              class="data-point"
-              @mouseover="showTooltip(point, $event)"
-              @mouseout="hideTooltip"
-            />
-          </g>
-          
-          <!-- X-axis labels -->
-          <g class="x-axis">
-            <text
-              v-for="(point, index) in dataPoints"
-              :key="index"
-              :x="point.x"
-              y="290"
-              text-anchor="middle"
-              class="axis-label"
-            >
-              {{ formatDateForAxis(chartData[index]?.date) }}
-            </text>
-          </g>
-        </svg>
-        
-        <!-- Tooltip -->
-        <div 
-          v-if="tooltip.show" 
-          class="chart-tooltip"
-          :style="{ left: tooltip.x + 'px', top: tooltip.y + 'px' }"
-        >
-          <div class="tooltip-date">{{ tooltip.date }}</div>
-          <div class="tooltip-value">{{ tooltip.value }} pedidos</div>
-        </div>
-      </div>
+    <div v-else-if="!hasData" class="no-data">
+      <div class="no-data-icon">📊</div>
+      <h4>Sin datos disponibles</h4>
+      <p>No hay información suficiente para mostrar el gráfico</p>
     </div>
-    
-    <!-- Chart Summary -->
-    <div class="chart-summary" v-if="summary">
-      <div class="summary-item">
-        <span class="summary-label">Total:</span>
-        <span class="summary-value">{{ summary.total }}</span>
-      </div>
-      <div class="summary-item">
-        <span class="summary-label">Promedio:</span>
-        <span class="summary-value">{{ summary.average }}</span>
-      </div>
-      <div class="summary-item">
-        <span class="summary-label">Tendencia:</span>
-        <span class="summary-value" :class="summary.trend.direction">
-          {{ summary.trend.direction === 'up' ? '↗️' : '↘️' }} 
-          {{ summary.trend.percentage }}%
-        </span>
-      </div>
+    <div v-else class="chart-content">
+      <canvas ref="chartCanvas" :height="height"></canvas>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 
 const props = defineProps({
-  title: {
-    type: String,
-    default: 'Tendencia de Pedidos'
-  },
-  subtitle: {
-    type: String,
-    default: ''
-  },
   data: {
     type: Array,
     default: () => []
@@ -134,324 +27,296 @@ const props = defineProps({
     type: Boolean,
     default: false
   },
-  showControls: {
-    type: Boolean,
-    default: true
+  height: {
+    type: [Number, String],
+    default: 300
   },
-  initialPeriod: {
-    type: String,
-    default: '30d'
+  showLegend: {
+    type: Boolean,
+    default: false
   }
 })
 
-const emit = defineEmits(['period-change'])
+// Referencias
+const chartCanvas = ref(null)
+let chartInstance = null
 
-const selectedPeriod = ref(props.initialPeriod)
-const tooltip = ref({
-  show: false,
-  x: 0,
-  y: 0,
-  date: '',
-  value: 0
+// Computed
+const hasData = computed(() => {
+  return props.data && props.data.length > 0
 })
 
-const chartData = computed(() => {
-  if (!props.data || props.data.length === 0) return []
+// Función para crear el gráfico con canvas nativo (sin dependencias)
+function createChart() {
+  if (!chartCanvas.value || !hasData.value) return
+
+  const canvas = chartCanvas.value
+  const ctx = canvas.getContext('2d')
+  const rect = canvas.getBoundingClientRect()
   
-  // Simular datos si no hay datos reales
-  if (props.data.length === 0) {
-    const mockData = []
-    const days = selectedPeriod.value === '7d' ? 7 : selectedPeriod.value === '30d' ? 30 : 90
+  // Ajustar el tamaño del canvas
+  canvas.width = rect.width * window.devicePixelRatio
+  canvas.height = parseInt(props.height) * window.devicePixelRatio
+  ctx.scale(window.devicePixelRatio, window.devicePixelRatio)
+  
+  // Configurar estilos
+  const width = rect.width
+  const height = parseInt(props.height)
+  const padding = { top: 20, right: 30, bottom: 40, left: 50 }
+  const chartWidth = width - padding.left - padding.right
+  const chartHeight = height - padding.top - padding.bottom
+
+  // Limpiar canvas
+  ctx.clearRect(0, 0, width, height)
+
+  // Preparar datos
+  const maxValue = Math.max(...props.data.map(d => d.count || d.value || 0))
+  const minValue = Math.min(...props.data.map(d => d.count || d.value || 0))
+  const range = maxValue - minValue || 1
+
+  // Función para convertir data a coordenadas
+  function dataToCoords(index, value) {
+    const x = padding.left + (index / (props.data.length - 1)) * chartWidth
+    const y = padding.top + ((maxValue - value) / range) * chartHeight
+    return { x, y }
+  }
+
+  // Dibujar grid
+  ctx.strokeStyle = '#f3f4f6'
+  ctx.lineWidth = 1
+  
+  // Líneas horizontales
+  for (let i = 0; i <= 5; i++) {
+    const y = padding.top + (i / 5) * chartHeight
+    ctx.beginPath()
+    ctx.moveTo(padding.left, y)
+    ctx.lineTo(padding.left + chartWidth, y)
+    ctx.stroke()
+  }
+
+  // Líneas verticales
+  const verticalLines = Math.min(props.data.length, 7)
+  for (let i = 0; i < verticalLines; i++) {
+    const x = padding.left + (i / (verticalLines - 1)) * chartWidth
+    ctx.beginPath()
+    ctx.moveTo(x, padding.top)
+    ctx.lineTo(x, padding.top + chartHeight)
+    ctx.stroke()
+  }
+
+  // Dibujar área bajo la curva
+  if (props.data.length > 1) {
+    const gradient = ctx.createLinearGradient(0, padding.top, 0, padding.top + chartHeight)
+    gradient.addColorStop(0, 'rgba(59, 130, 246, 0.3)')
+    gradient.addColorStop(1, 'rgba(59, 130, 246, 0.05)')
     
-    for (let i = 0; i < days; i++) {
-      const date = new Date()
-      date.setDate(date.getDate() - (days - i - 1))
-      mockData.push({
-        date: date.toISOString(),
-        orders: Math.floor(Math.random() * 50) + 10
-      })
+    ctx.fillStyle = gradient
+    ctx.beginPath()
+    
+    // Comenzar desde la esquina inferior izquierda
+    const firstPoint = dataToCoords(0, props.data[0].count || props.data[0].value || 0)
+    ctx.moveTo(firstPoint.x, padding.top + chartHeight)
+    ctx.lineTo(firstPoint.x, firstPoint.y)
+    
+    // Dibujar la curva
+    props.data.forEach((item, index) => {
+      const coords = dataToCoords(index, item.count || item.value || 0)
+      ctx.lineTo(coords.x, coords.y)
+    })
+    
+    // Cerrar el área
+    const lastPoint = dataToCoords(props.data.length - 1, props.data[props.data.length - 1].count || props.data[props.data.length - 1].value || 0)
+    ctx.lineTo(lastPoint.x, padding.top + chartHeight)
+    ctx.closePath()
+    ctx.fill()
+  }
+
+  // Dibujar la línea principal
+  if (props.data.length > 1) {
+    ctx.strokeStyle = '#3b82f6'
+    ctx.lineWidth = 3
+    ctx.lineCap = 'round'
+    ctx.lineJoin = 'round'
+    
+    ctx.beginPath()
+    props.data.forEach((item, index) => {
+      const coords = dataToCoords(index, item.count || item.value || 0)
+      if (index === 0) {
+        ctx.moveTo(coords.x, coords.y)
+      } else {
+        ctx.lineTo(coords.x, coords.y)
+      }
+    })
+    ctx.stroke()
+  }
+
+  // Dibujar puntos
+  props.data.forEach((item, index) => {
+    const coords = dataToCoords(index, item.count || item.value || 0)
+    
+    // Punto exterior
+    ctx.fillStyle = '#3b82f6'
+    ctx.beginPath()
+    ctx.arc(coords.x, coords.y, 5, 0, Math.PI * 2)
+    ctx.fill()
+    
+    // Punto interior
+    ctx.fillStyle = 'white'
+    ctx.beginPath()
+    ctx.arc(coords.x, coords.y, 2, 0, Math.PI * 2)
+    ctx.fill()
+  })
+
+  // Dibujar etiquetas del eje Y
+  ctx.fillStyle = '#6b7280'
+  ctx.font = '12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'
+  ctx.textAlign = 'right'
+  ctx.textBaseline = 'middle'
+  
+  for (let i = 0; i <= 5; i++) {
+    const value = maxValue - (i / 5) * range
+    const y = padding.top + (i / 5) * chartHeight
+    ctx.fillText(Math.round(value).toString(), padding.left - 10, y)
+  }
+
+  // Dibujar etiquetas del eje X
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'top'
+  
+  const labelStep = Math.max(1, Math.floor(props.data.length / 6))
+  props.data.forEach((item, index) => {
+    if (index % labelStep === 0 || index === props.data.length - 1) {
+      const coords = dataToCoords(index, 0)
+      const label = formatDateLabel(item.date || item.label || index.toString())
+      ctx.fillText(label, coords.x, padding.top + chartHeight + 10)
     }
-    return mockData
-  }
-  
-  return props.data
-})
-
-const dataPoints = computed(() => {
-  if (!chartData.value || chartData.value.length === 0) return []
-  
-  const width = 800 // SVG width
-  const height = 250 // Chart area height
-  const padding = 40
-  
-  const maxValue = Math.max(...chartData.value.map(d => d.orders || 0))
-  const minValue = Math.min(...chartData.value.map(d => d.orders || 0))
-  const valueRange = maxValue - minValue || 1
-  
-  return chartData.value.map((item, index) => ({
-    x: padding + (index * ((width - 2 * padding) / (chartData.value.length - 1 || 1))),
-    y: height - padding - ((item.orders - minValue) / valueRange) * (height - 2 * padding),
-    value: item.orders,
-    date: item.date
-  }))
-})
-
-const linePoints = computed(() => {
-  if (!dataPoints.value || dataPoints.value.length === 0) return ''
-  return dataPoints.value.map(point => `${point.x},${point.y}`).join(' ')
-})
-
-const summary = computed(() => {
-  if (!chartData.value || chartData.value.length === 0) return null
-  
-  const values = chartData.value.map(d => d.orders || 0)
-  const total = values.reduce((sum, val) => sum + val, 0)
-  const average = Math.round(total / values.length)
-  
-  // Calcular tendencia comparando primera y última mitad
-  const firstHalf = values.slice(0, Math.floor(values.length / 2))
-  const secondHalf = values.slice(Math.floor(values.length / 2))
-  const firstAvg = firstHalf.reduce((sum, val) => sum + val, 0) / firstHalf.length
-  const secondAvg = secondHalf.reduce((sum, val) => sum + val, 0) / secondHalf.length
-  
-  const trendPercentage = Math.round(((secondAvg - firstAvg) / firstAvg) * 100)
-  
-  return {
-    total,
-    average,
-    trend: {
-      direction: trendPercentage >= 0 ? 'up' : 'down',
-      percentage: Math.abs(trendPercentage)
-    }
-  }
-})
-
-const handlePeriodChange = () => {
-  emit('period-change', selectedPeriod.value)
-}
-
-const showTooltip = (point, event) => {
-  const rect = event.target.closest('.chart-container').getBoundingClientRect()
-  tooltip.value = {
-    show: true,
-    x: event.clientX - rect.left,
-    y: event.clientY - rect.top - 60,
-    date: formatDateForTooltip(point.date),
-    value: point.value
-  }
-}
-
-const hideTooltip = () => {
-  tooltip.value.show = false
-}
-
-const formatDateForAxis = (dateStr) => {
-  if (!dateStr) return ''
-  const date = new Date(dateStr)
-  return date.toLocaleDateString('es-ES', { 
-    month: 'short', 
-    day: 'numeric' 
   })
 }
 
-const formatDateForTooltip = (dateStr) => {
+function formatDateLabel(dateStr) {
   if (!dateStr) return ''
-  const date = new Date(dateStr)
-  return date.toLocaleDateString('es-ES', { 
-    year: 'numeric',
-    month: 'long', 
-    day: 'numeric' 
-  })
+  
+  try {
+    const date = new Date(dateStr)
+    return date.toLocaleDateString('es-ES', { 
+      day: '2-digit', 
+      month: '2-digit' 
+    })
+  } catch (e) {
+    return dateStr.toString()
+  }
 }
+
+function destroyChart() {
+  if (chartInstance) {
+    chartInstance = null
+  }
+}
+
+function handleResize() {
+  if (hasData.value) {
+    setTimeout(createChart, 100)
+  }
+}
+
+// Watchers
+watch(() => props.data, () => {
+  if (hasData.value) {
+    setTimeout(createChart, 100)
+  }
+}, { deep: true })
+
+watch(() => props.loading, (newLoading) => {
+  if (!newLoading && hasData.value) {
+    setTimeout(createChart, 100)
+  }
+})
+
+// Lifecycle
+onMounted(() => {
+  window.addEventListener('resize', handleResize)
+  if (hasData.value) {
+    setTimeout(createChart, 100)
+  }
+})
+
+onUnmounted(() => {
+  window.removeEventListener('resize', handleResize)
+  destroyChart()
+})
 </script>
 
 <style scoped>
 .chart-container {
-  background: white;
-  border-radius: 12px;
-  padding: 24px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-  border: 1px solid #e5e7eb;
+  width: 100%;
+  height: 100%;
   position: relative;
-}
-
-.chart-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 20px;
-}
-
-.chart-title {
-  font-size: 18px;
-  font-weight: 600;
-  color: #1f2937;
-  margin: 0 0 4px 0;
-}
-
-.chart-subtitle {
-  font-size: 14px;
-  color: #6b7280;
-  margin: 0;
-}
-
-.period-selector {
-  padding: 6px 12px;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
   background: white;
-  font-size: 14px;
-  color: #374151;
+  border-radius: 8px;
 }
 
-.chart-content {
-  position: relative;
-  min-height: 300px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.chart-loading {
+.chart-loading,
+.no-data {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 16px;
+  justify-content: center;
+  height: 100%;
   color: #6b7280;
+  text-align: center;
+  padding: 40px 20px;
 }
 
 .loading-spinner {
   width: 32px;
   height: 32px;
   border: 3px solid #e5e7eb;
-  border-top: 3px solid #3b82f6;
+  border-top-color: #3b82f6;
   border-radius: 50%;
   animation: spin 1s linear infinite;
+  margin-bottom: 16px;
 }
 
 @keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
-.chart-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  color: #6b7280;
-}
-
-.empty-icon {
+.no-data-icon {
   font-size: 48px;
+  margin-bottom: 16px;
   opacity: 0.5;
 }
 
-.chart-wrapper {
+.no-data h4 {
+  font-size: 18px;
+  font-weight: 600;
+  color: #1f2937;
+  margin: 0 0 8px 0;
+}
+
+.no-data p {
+  font-size: 14px;
+  margin: 0;
+}
+
+.chart-content {
   width: 100%;
+  height: 100%;
   position: relative;
 }
 
-.chart-svg {
+.chart-content canvas {
   width: 100%;
-  height: 300px;
-}
-
-.data-point {
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.data-point:hover {
-  r: 6;
-  stroke-width: 3;
-}
-
-.axis-label {
-  font-size: 12px;
-  fill: #6b7280;
-}
-
-.chart-tooltip {
-  position: absolute;
-  background: #1f2937;
-  color: white;
-  padding: 8px 12px;
-  border-radius: 6px;
-  font-size: 12px;
-  pointer-events: none;
-  z-index: 10;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-}
-
-.tooltip-date {
-  font-weight: 500;
-  margin-bottom: 2px;
-}
-
-.tooltip-value {
-  color: #93c5fd;
-}
-
-.chart-summary {
-  display: flex;
-  justify-content: space-around;
-  padding-top: 20px;
-  border-top: 1px solid #e5e7eb;
-  margin-top: 20px;
-}
-
-.summary-item {
-  text-align: center;
-}
-
-.summary-label {
+  height: 100%;
   display: block;
-  font-size: 12px;
-  color: #6b7280;
-  margin-bottom: 4px;
-}
-
-.summary-value {
-  display: block;
-  font-size: 16px;
-  font-weight: 600;
-  color: #1f2937;
-}
-
-.summary-value.up {
-  color: #10b981;
-}
-
-.summary-value.down {
-  color: #ef4444;
 }
 
 /* Responsive */
 @media (max-width: 768px) {
   .chart-container {
-    padding: 16px;
-  }
-  
-  .chart-header {
-    flex-direction: column;
-    gap: 12px;
-  }
-  
-  .chart-summary {
-    flex-direction: column;
-    gap: 12px;
-  }
-  
-  .summary-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-  }
-  
-  .summary-label,
-  .summary-value {
-    display: inline;
+    font-size: 12px;
   }
 }
 </style>
