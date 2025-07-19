@@ -23,7 +23,7 @@
       :available-communes="availableCommunes"
       :presets="filterPresets"
       :show-advanced="filtersUI?.showAdvanced || false"
-      :active-count="activeFiltersCount"
+      :active-count="activeCount"
       @filter-change="handleFilterChangeEvent"
       @advanced-change="updateAdvancedFilter"
       @apply-preset="applyPreset"
