@@ -178,7 +178,7 @@ const {
   toggleAdvancedFilters,
   updateAdvancedFilter,
   applySearch,
-  clearAllFilters,
+  resetFilters,
   handleFilterChange,
   handleFilterObjectChange,  // NUEVA FUNCIÓN
   clearAllFilters
