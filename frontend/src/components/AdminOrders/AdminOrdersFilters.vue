@@ -43,25 +43,38 @@
 
       <!-- Commune Filter -->
       <div class="filter-group">
-        <label class="filter-label">Comuna</label>
-        <select 
-          :value="filters.shipping_commune" 
-          @change="updateFilter('shipping_commune', $event.target.value)"
-          class="filter-select commune-filter"
-          :disabled="loading"
-        >
-          <option value="">Todas las Comunas</option>
-          <option 
-            v-for="commune in availableCommunes" 
-            :key="commune" 
-            :value="commune"
-          >
-            {{ commune }}
-          </option>
-        </select>
-        <div v-if="availableCommunes.length === 0" class="filter-note">
-          <span class="note-icon">💡</span>
-          <span>Las comunas aparecerán cuando haya pedidos</span>
+        <label class="filter-label">Comuna(s)</label>
+        <div class="multiselect-container" @click="focusCommuneInput">
+          <div class="multiselect-tags">
+            <span v-for="commune in filters.shipping_commune" :key="commune" class="tag">
+              {{ commune }}
+              <button @click.stop="removeCommune(commune)" class="tag-remove">×</button>
+            </span>
+            <input
+              ref="communeInput"
+              type="text"
+              v-model="communeSearch"
+              @focus="showCommuneDropdown = true"
+              @blur="closeCommuneDropdown"
+              placeholder="Seleccionar comunas..."
+              class="multiselect-input"
+            />
+          </div>
+          <transition name="slide-down">
+            <div v-if="showCommuneDropdown" class="multiselect-dropdown">
+              <div
+                v-for="commune in filteredCommunes"
+                :key="commune"
+                @mousedown.prevent="addCommune(commune)"
+                class="dropdown-item"
+              >
+                {{ commune }}
+              </div>
+              <div v-if="filteredCommunes.length === 0 && communeSearch" class="dropdown-empty">
+                No se encontraron coincidencias.
+              </div>
+            </div>
+          </transition>
         </div>
       </div>
 
@@ -139,10 +152,10 @@
             <button @click="updateFilter('status', '')" class="tag-remove">✕</button>
           </span>
           
-          <span v-if="filters.shipping_commune" class="filter-tag">
-            <span class="tag-label">Comuna:</span>
-            <span class="tag-value">{{ filters.shipping_commune }}</span>
-            <button @click="updateFilter('shipping_commune', '')" class="tag-remove">✕</button>
+            <span v-if="Array.isArray(filters.shipping_commune) && filters.shipping_commune.length" class="filter-tag">
+            <span class="tag-label">Comuna(s):</span>
+            <span class="tag-value">{{ filters.shipping_commune.join(', ') }}</span>
+            <button @click="updateFilter('shipping_commune', [])" class="tag-remove">✕</button>
           </span>
           
           <span v-if="filters.date_from" class="filter-tag">
@@ -363,6 +376,9 @@ const advancedFilters = ref({
   shipday_status: '',
   customer_email: ''
 })
+const communeInput = ref(null);
+const showCommuneDropdown = ref(false);
+const communeSearch = ref('');
 
 // ==================== COMPUTED ====================
 
@@ -374,6 +390,13 @@ const activeFiltersCount = computed(() => {
     value !== '' && value !== null && value !== undefined
   ).length
 })
+const filteredCommunes = computed(() => {
+  const currentSelection = Array.isArray(props.filters.shipping_commune) ? props.filters.shipping_commune : [];
+  return props.availableCommunes.filter(commune =>
+    !currentSelection.includes(commune) &&
+    commune.toLowerCase().includes(communeSearch.value.toLowerCase())
+  ).sort();
+});
 
 // ==================== METHODS ====================
 
@@ -382,6 +405,27 @@ const activeFiltersCount = computed(() => {
  */
 function updateFilter(key, value) {
   emit('filter-changed', key, value)
+}
+function addCommune(commune) {
+  const currentSelection = Array.isArray(props.filters.shipping_commune) ? [...props.filters.shipping_commune] : [];
+  if (!currentSelection.includes(commune)) {
+    currentSelection.push(commune);
+    emit('filter-changed', 'shipping_commune', currentSelection);
+  }
+  communeSearch.value = '';
+}
+
+function removeCommune(commune) {
+  const currentSelection = Array.isArray(props.filters.shipping_commune) ? props.filters.shipping_commune.filter(c => c !== commune) : [];
+  emit('filter-changed', 'shipping_commune', currentSelection);
+}
+
+function focusCommuneInput() {
+  communeInput.value?.focus();
+}
+
+function closeCommuneDropdown() {
+  setTimeout(() => { showCommuneDropdown.value = false; }, 200);
 }
 
 /**
