@@ -42,40 +42,41 @@
         </div>
 
         <!-- Commune Filter -->
-<div class="filter-group">
-  <label class="filter-label">Comunas</label>
-  <select 
-    v-model="filters.shipping_commune" 
-    @change="handleFilterChange('shipping_commune', filters.shipping_commune)"
-    multiple
-    class="filter-select commune-select"
-  >
-    <option 
-      v-for="commune in availableCommunes" 
-      :key="commune" 
-      :value="commune"
-    >
-      {{ commune }}
-    </option>
-  </select>
-  
-  <!-- Mostrar comunas seleccionadas -->
-  <div v-if="filters.shipping_commune.length > 0" class="selected-communes">
-    <span 
-      v-for="commune in filters.shipping_commune" 
-      :key="commune"
-      class="commune-tag"
-    >
-      {{ commune }}
-      <button 
-        @click="removeCommune(commune)"
-        class="remove-commune"
-      >
-        ×
-      </button>
-    </span>
-  </div>
-</div>
+               <div class="filter-group">
+          <label class="filter-label">Comuna(s)</label>
+          <div class="multiselect-container" @click="focusInput">
+            <div class="multiselect-tags">
+              <span v-for="commune in localFilters.shipping_commune" :key="commune" class="tag">
+                {{ commune }}
+                <button @click.stop="removeCommune(commune)" class="tag-remove">×</button>
+              </span>
+              <input
+                ref="communeInput"
+                type="text"
+                v-model="communeSearch"
+                @focus="showCommuneDropdown = true"
+                @blur="closeDropdown"
+                placeholder="Seleccionar comunas..."
+                class="multiselect-input"
+              />
+            </div>
+            <transition name="slide-down">
+              <div v-if="showCommuneDropdown" class="multiselect-dropdown">
+                <div
+                  v-for="commune in filteredCommunes"
+                  :key="commune"
+                  @mousedown.prevent="addCommune(commune)"
+                  class="dropdown-item"
+                >
+                  {{ commune }}
+                </div>
+                <div v-if="filteredCommunes.length === 0 && communeSearch" class="dropdown-empty">
+                  No se encontraron coincidencias.
+                </div>
+              </div>
+            </transition>
+          </div>
+        </div>
 
         <!-- Date Range -->
         <div class="filter-group date-range">
@@ -1004,41 +1005,5 @@ watch(() => props.filters.search, (newSearchValue) => {
 .dropdown-empty {
   padding: 10px 12px;
   color: #6b7280;
-}
-
-.filter-select[multiple] {
-  min-height: 80px;
-}
-
-.selected-communes {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  margin-top: 8px;
-}
-
-.commune-tag {
-  background: #e0e7ff;
-  color: #3730a3;
-  padding: 4px 8px;
-  border-radius: 12px;
-  font-size: 12px;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.remove-commune {
-  background: none;
-  border: none;
-  color: #6b7280;
-  cursor: pointer;
-  font-size: 14px;
-  padding: 0;
-  margin-left: 4px;
-}
-
-.remove-commune:hover {
-  color: #ef4444;
 }
 </style>
