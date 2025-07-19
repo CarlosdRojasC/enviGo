@@ -417,7 +417,8 @@
 <script setup>
 import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { useToast } from 'vue-toastification'
-import apiService from '../services/api'
+import { apiService } from '../services/api'
+
 
 // Estado reactivo
 const companies = ref([])
@@ -438,48 +439,6 @@ const filters = ref({
 const sortField = ref('name')
 const sortDirection = ref('asc')
 
-// Mock data para demostración
-const mockCompanies = [
-  {
-    _id: '1',
-    name: 'Empresa Demo 1',
-    contact_email: 'demo1@empresa.com',
-    phone: '+56912345678',
-    address: 'Av. Providencia 1234, Santiago',
-    is_active: true,
-    plan_type: 'pro',
-    price_per_order: 350,
-    orders_this_month: 124,
-    completed_orders: 98,
-    created_at: '2024-01-15'
-  },
-  {
-    _id: '2',
-    name: 'Empresa Demo 2',
-    contact_email: 'demo2@empresa.com',
-    phone: '+56987654321',
-    address: 'Las Condes 5678, Santiago',
-    is_active: true,
-    plan_type: 'enterprise',
-    price_per_order: 250,
-    orders_this_month: 256,
-    completed_orders: 240,
-    created_at: '2024-02-20'
-  },
-  {
-    _id: '3',
-    name: 'Empresa Demo 3',
-    contact_email: 'demo3@empresa.com',
-    phone: '+56911223344',
-    address: 'Ñuñoa 9876, Santiago',
-    is_active: false,
-    plan_type: 'basic',
-    price_per_order: 500,
-    orders_this_month: 45,
-    completed_orders: 32,
-    created_at: '2024-03-10'
-  }
-]
 
 // Computed properties
 const filteredCompanies = computed(() => {
