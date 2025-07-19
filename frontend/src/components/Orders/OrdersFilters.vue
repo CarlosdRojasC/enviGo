@@ -43,40 +43,40 @@
 
         <!-- Commune Filter -->
                <div class="filter-group">
-          <label class="filter-label">Comuna(s)</label>
-          <div class="multiselect-container" @click="focusInput">
-            <div class="multiselect-tags">
-              <span v-for="commune in localFilters.shipping_commune" :key="commune" class="tag">
-                {{ commune }}
-                <button @click.stop="removeCommune(commune)" class="tag-remove">×</button>
-              </span>
-              <input
-                ref="communeInput"
-                type="text"
-                v-model="communeSearch"
-                @focus="showCommuneDropdown = true"
-                @blur="closeDropdown"
-                placeholder="Seleccionar comunas..."
-                class="multiselect-input"
-              />
-            </div>
-            <transition name="slide-down">
-              <div v-if="showCommuneDropdown" class="multiselect-dropdown">
-                <div
-                  v-for="commune in filteredCommunes"
-                  :key="commune"
-                  @mousedown.prevent="addCommune(commune)"
-                  class="dropdown-item"
-                >
-                  {{ commune }}
-                </div>
-                <div v-if="filteredCommunes.length === 0 && communeSearch" class="dropdown-empty">
-                  No se encontraron coincidencias.
-                </div>
-              </div>
-            </transition>
+        <label class="filter-label">Comuna(s)</label>
+        <div class="multiselect-container" @click="focusCommuneInput">
+          <div class="multiselect-tags">
+            <span v-for="commune in filters.shipping_commune" :key="commune" class="tag">
+              {{ commune }}
+              <button @click.stop="removeCommune(commune)" class="tag-remove">×</button>
+            </span>
+            <input
+              ref="communeInput"
+              type="text"
+              v-model="communeSearch"
+              @focus="showCommuneDropdown = true"
+              @blur="closeCommuneDropdown"
+              placeholder="Seleccionar comunas..."
+              class="multiselect-input"
+            />
           </div>
+          <transition name="slide-down">
+            <div v-if="showCommuneDropdown" class="multiselect-dropdown">
+              <div
+                v-for="commune in filteredCommunes"
+                :key="commune"
+                @mousedown.prevent="addCommune(commune)"
+                class="dropdown-item"
+              >
+                {{ commune }}
+              </div>
+              <div v-if="filteredCommunes.length === 0 && communeSearch" class="dropdown-empty">
+                No se encontraron coincidencias.
+              </div>
+            </div>
+          </transition>
         </div>
+      </div>
 
         <!-- Date Range -->
         <div class="filter-group date-range">
@@ -357,15 +357,19 @@ watch(() => props.advancedFilters, (newFilters) => {
 
 function addCommune(commune) {
   if (!localFilters.value.shipping_commune.includes(commune)) {
-    localFilters.value.shipping_commune.push(commune);
-    emitChange(); // Actualiza al instante
+    const newSelection = [...localFilters.value.shipping_commune, commune];
+    // Emitir el cambio específico para que el composable lo maneje
+    emit('filter-change', 'shipping_commune', newSelection);
   }
   communeSearch.value = '';
+  // Ya no cerramos el menú aquí, dejamos que el usuario lo haga.
 }
 
+
 function removeCommune(communeToRemove) {
-  localFilters.value.shipping_commune = localFilters.value.shipping_commune.filter(c => c !== communeToRemove);
-  emitChange(); // Actualiza al instante
+  const newSelection = localFilters.value.shipping_commune.filter(c => c !== communeToRemove);
+  // Emitir el cambio específico
+  emit('filter-change', 'shipping_commune', newSelection);
 }
 
 function focusInput() {
