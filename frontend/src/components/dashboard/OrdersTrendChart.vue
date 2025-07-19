@@ -1,19 +1,5 @@
 <template>
   <div class="trend-chart-container">
-    <div class="chart-header" v-if="showHeader">
-      <div class="chart-title-section">
-        <h3 class="chart-title">{{ title }}</h3>
-        <p class="chart-subtitle" v-if="subtitle">{{ subtitle }}</p>
-      </div>
-      <div class="chart-controls" v-if="showControls">
-        <select v-model="selectedPeriod" @change="handlePeriodChange" class="period-selector">
-          <option value="7d">7 días</option>
-          <option value="30d">30 días</option>
-          <option value="90d">3 meses</option>
-        </select>
-      </div>
-    </div>
-    
     <div class="chart-content">
       <div v-if="loading" class="chart-loading">
         <div class="loading-spinner"></div>
@@ -61,18 +47,10 @@
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 
-// Importación más simple de Chart.js
+// Importación más básica de Chart.js
 import Chart from 'chart.js/auto'
 
 const props = defineProps({
-  title: {
-    type: String,
-    default: 'Tendencia de Pedidos'
-  },
-  subtitle: {
-    type: String,
-    default: ''
-  },
   data: {
     type: Array,
     default: () => []
@@ -84,26 +62,11 @@ const props = defineProps({
   height: {
     type: Number,
     default: 300
-  },
-  showControls: {
-    type: Boolean,
-    default: true
-  },
-  showHeader: {
-    type: Boolean,
-    default: true
-  },
-  initialPeriod: {
-    type: String,
-    default: '30d'
   }
 })
 
-const emit = defineEmits(['period-change'])
-
 const chartCanvas = ref(null)
 const chartInstance = ref(null)
-const selectedPeriod = ref(props.initialPeriod)
 
 const hasData = computed(() => {
   return props.data && props.data.length > 0
@@ -174,23 +137,23 @@ const chartStats = computed(() => {
 
 function createChart() {
   if (!chartCanvas.value) {
-    console.log('⚠️ Canvas no disponible para crear gráfico')
+    console.log('⚠️ Canvas no disponible')
     return
   }
   
   if (!hasData.value) {
-    console.log('⚠️ No hay datos para crear gráfico')
+    console.log('⚠️ No hay datos')
     return
   }
   
-  console.log('📊 Creando gráfico con datos procesados:', processedData.value)
+  console.log('📊 Creando gráfico básico')
   
-  // Destruir gráfico existente de forma segura
+  // Destruir gráfico existente
   if (chartInstance.value) {
     try {
       chartInstance.value.destroy()
     } catch (error) {
-      console.warn('⚠️ Error destruyendo gráfico anterior:', error)
+      console.warn('⚠️ Error destruyendo gráfico:', error)
     }
     chartInstance.value = null
   }
@@ -198,16 +161,16 @@ function createChart() {
   const ctx = chartCanvas.value.getContext('2d')
   
   if (!ctx) {
-    console.error('❌ No se pudo obtener contexto del canvas')
+    console.error('❌ No se pudo obtener contexto')
     return
   }
   
-  const labels = processedData.value.map(item => {
-    // Formatear etiquetas según el período
-    if (selectedPeriod.value === '7d') {
+  const labels = processedData.value.map((item, index) => {
+    // Etiquetas simples
+    if (processedData.value.length <= 7) {
       return item.date.toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric' })
-    } else if (selectedPeriod.value === '30d') {
-      return item.date.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })
+    } else if (processedData.value.length <= 31) {
+      return item.date.getDate().toString()
     } else {
       return item.date.toLocaleDateString('es-ES', { month: 'short' })
     }
@@ -215,13 +178,8 @@ function createChart() {
   
   const data = processedData.value.map(item => item.count)
   
-  console.log('📊 Labels:', labels)
-  console.log('📊 Data:', data)
-  
-  if (labels.length === 0 || data.length === 0) {
-    console.warn('⚠️ Labels o datos están vacíos')
-    return
-  }
+  console.log('📊 Labels:', labels.length)
+  console.log('📊 Data points:', data.length)
   
   try {
     chartInstance.value = new Chart(ctx, {
@@ -233,47 +191,31 @@ function createChart() {
           data: data,
           borderColor: '#3b82f6',
           backgroundColor: 'rgba(59, 130, 246, 0.1)',
-          borderWidth: 3,
+          borderWidth: 2,
           fill: true,
-          tension: 0.4,
+          tension: 0.3,
           pointBackgroundColor: '#3b82f6',
           pointBorderColor: '#ffffff',
-          pointBorderWidth: 2,
-          pointRadius: 4,
-          pointHoverRadius: 6,
-          pointHoverBackgroundColor: '#1d4ed8',
-          pointHoverBorderColor: '#ffffff',
-          pointHoverBorderWidth: 3
+          pointBorderWidth: 1,
+          pointRadius: 3
         }]
       },
       options: {
         responsive: true,
         maintainAspectRatio: false,
-        interaction: {
-          intersect: false,
-          mode: 'index'
-        },
         plugins: {
           legend: {
             display: false
           },
           tooltip: {
+            enabled: true,
+            mode: 'index',
+            intersect: false,
             backgroundColor: 'rgba(0, 0, 0, 0.8)',
             titleColor: '#ffffff',
             bodyColor: '#ffffff',
-            borderColor: '#3b82f6',
-            borderWidth: 1,
-            cornerRadius: 8,
-            displayColors: false,
-            callbacks: {
-              title: function(context) {
-                const index = context[0].dataIndex
-                return processedData.value[index]?.dateString || ''
-              },
-              label: function(context) {
-                return `${context.parsed.y} pedidos`
-              }
-            }
+            cornerRadius: 6,
+            displayColors: false
           }
         },
         scales: {
@@ -281,62 +223,46 @@ function createChart() {
             beginAtZero: true,
             ticks: {
               stepSize: 1,
-              color: '#6b7280',
-              font: {
-                size: 12
-              },
-              callback: function(value) {
-                return Math.floor(value)
-              }
+              color: '#6b7280'
             },
             grid: {
-              color: 'rgba(107, 114, 128, 0.1)',
-              drawBorder: false
+              color: 'rgba(107, 114, 128, 0.1)'
             }
           },
           x: {
             ticks: {
               color: '#6b7280',
-              font: {
-                size: 12
-              },
-              maxTicksLimit: 8
+              maxTicksLimit: 10
             },
             grid: {
               display: false
             }
           }
         },
-        elements: {
-          point: {
-            hoverRadius: 8
-          }
+        interaction: {
+          intersect: false,
+          mode: 'index'
         },
         animation: {
-          duration: 800,
-          easing: 'easeInOutQuart'
+          duration: 600
         }
       }
     })
     
-    console.log('✅ Gráfico creado exitosamente')
+    console.log('✅ Gráfico básico creado')
   } catch (error) {
     console.error('❌ Error creando gráfico:', error)
     
-    // Intentar limpiar en caso de error
+    // Limpiar en caso de error
     if (chartInstance.value) {
       try {
         chartInstance.value.destroy()
       } catch (destroyError) {
-        console.warn('⚠️ Error limpiando gráfico después de fallo:', destroyError)
+        console.warn('⚠️ Error limpiando:', destroyError)
       }
       chartInstance.value = null
     }
   }
-}
-
-function handlePeriodChange() {
-  emit('period-change', selectedPeriod.value)
 }
 
 function getTrendIcon(direction) {
@@ -348,14 +274,10 @@ function getTrendIcon(direction) {
   }
 }
 
-// Watchers
-watch(() => props.data, async (newData, oldData) => {
-  console.log('📊 Datos del gráfico cambiaron:', { 
-    nuevos: newData?.length || 0, 
-    anteriores: oldData?.length || 0 
-  })
+// Watchers simplificados
+watch(() => props.data, async (newData) => {
+  console.log('📊 Datos cambiaron, recreando gráfico')
   
-  // Destruir gráfico anterior antes de crear uno nuevo
   if (chartInstance.value) {
     chartInstance.value.destroy()
     chartInstance.value = null
@@ -363,41 +285,33 @@ watch(() => props.data, async (newData, oldData) => {
   
   if (hasData.value) {
     await nextTick()
-    createChart()
+    setTimeout(createChart, 100) // Pequeño delay para asegurar que el DOM esté listo
   }
 }, { deep: true })
 
-watch(() => props.loading, (newLoading, oldLoading) => {
-  console.log('📊 Estado de carga cambió:', { nuevo: newLoading, anterior: oldLoading })
-  
-  if (newLoading) {
-    // Si está cargando, destruir gráfico actual
-    if (chartInstance.value) {
-      chartInstance.value.destroy()
-      chartInstance.value = null
-    }
-  } else if (hasData.value) {
-    // Si terminó de cargar y hay datos, crear gráfico
-    nextTick(() => createChart())
+watch(() => props.loading, (isLoading) => {
+  if (isLoading && chartInstance.value) {
+    console.log('📊 Iniciando carga, destruyendo gráfico')
+    chartInstance.value.destroy()
+    chartInstance.value = null
   }
-})
-
-watch(() => props.initialPeriod, (newPeriod) => {
-  console.log('📊 Período inicial cambió:', newPeriod)
-  selectedPeriod.value = newPeriod
 })
 
 // Lifecycle
 onMounted(() => {
-  console.log('📊 Componente montado con datos:', props.data)
-  if (hasData.value) {
+  console.log('📊 Componente montado')
+  if (hasData.value && !props.loading) {
     nextTick(() => createChart())
   }
 })
 
 onUnmounted(() => {
   if (chartInstance.value) {
-    chartInstance.value.destroy()
+    try {
+      chartInstance.value.destroy()
+    } catch (error) {
+      console.warn('⚠️ Error en cleanup:', error)
+    }
   }
 })
 </script>
@@ -407,56 +321,6 @@ onUnmounted(() => {
   background: white;
   border-radius: 12px;
   overflow: hidden;
-}
-
-.chart-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  padding: 24px 24px 0 24px;
-  margin-bottom: 20px;
-}
-
-.chart-title-section {
-  flex: 1;
-}
-
-.chart-title {
-  font-size: 18px;
-  font-weight: 600;
-  color: #1f2937;
-  margin: 0 0 4px 0;
-}
-
-.chart-subtitle {
-  font-size: 14px;
-  color: #6b7280;
-  margin: 0;
-}
-
-.chart-controls {
-  flex-shrink: 0;
-}
-
-.period-selector {
-  padding: 8px 12px;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
-  background: white;
-  font-size: 14px;
-  color: #374151;
-  cursor: pointer;
-  transition: border-color 0.2s ease;
-}
-
-.period-selector:hover {
-  border-color: #3b82f6;
-}
-
-.period-selector:focus {
-  outline: none;
-  border-color: #3b82f6;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
 }
 
 .chart-content {
@@ -563,12 +427,6 @@ onUnmounted(() => {
 
 /* Responsive */
 @media (max-width: 768px) {
-  .chart-header {
-    flex-direction: column;
-    gap: 16px;
-    align-items: stretch;
-  }
-  
   .chart-summary {
     grid-template-columns: repeat(2, 1fr);
     gap: 12px;

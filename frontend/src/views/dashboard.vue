@@ -132,8 +132,6 @@
             :data="chartData" 
             :loading="loadingChart" 
             :height="320"
-            :show-header="false"
-            @period-change="handlePeriodChange"
           />
         </div>
       </section>
