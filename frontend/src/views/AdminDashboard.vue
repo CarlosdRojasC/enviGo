@@ -128,7 +128,12 @@
       <section class="content-section">
         <div class="section-header">
           <h2 class="section-title">Gestión de Empresas</h2>
-          <router-link to="/admin/companies" class="section-link">Ver todas</router-link>
+          <div class="header-actions">
+            <router-link to="/admin/companies" class="section-link">Ver todas</router-link>
+            <button @click="console.log('🏢 Debug empresas:', topCompanies)" class="debug-btn" v-if="topCompanies.length > 0">
+              🐛 Debug
+            </button>
+          </div>
         </div>
         
         <div v-if="loadingCompanies" class="loading-state">
@@ -136,18 +141,25 @@
           <span>Cargando empresas...</span>
         </div>
         
+        <div v-else-if="topCompanies.length === 0" class="empty-state">
+          <div class="empty-icon">🏢</div>
+          <h3>No hay empresas registradas</h3>
+          <p>Crea la primera empresa para comenzar a usar el sistema</p>
+          <router-link to="/admin/companies" class="btn btn-primary">Agregar Empresa</router-link>
+        </div>
+        
         <div v-else class="companies-preview">
           <div v-for="company in topCompanies" :key="company._id" class="company-item">
             <div class="company-main">
               <div class="company-icon">🏢</div>
               <div class="company-info">
-                <div class="company-name">{{ company.company_name }}</div>
-                <div class="company-email">{{ company.contact_email }}</div>
+                <div class="company-name">{{ company.name || 'Empresa Sin Nombre' }}</div>
+                <div class="company-email">{{ company.email || company.contact_email || 'Sin email' }}</div>
               </div>
             </div>
             <div class="company-stats">
               <div class="stat-item">
-                <span class="stat-value">{{ company.total_orders || 0 }}</span>
+                <span class="stat-value">{{ company.orders_count || 0 }}</span>
                 <span class="stat-label">Pedidos</span>
               </div>
               <div class="stat-item">
@@ -422,9 +434,19 @@ async function fetchTopCompanies() {
   try {
     console.log('🏢 Admin: Obteniendo empresas destacadas...')
     const response = await apiService.companies.getAll()
+    const companiesData = response.data || []
+    
+    console.log('🏢 Admin: Datos de empresas recibidos:', companiesData.map(c => ({
+      id: c._id,
+      name: c.name,
+      email: c.email || c.contact_email,
+      orders: c.orders_count,
+      users: c.users_count
+    })))
+    
     // Tomar las primeras 5 empresas como preview
-    topCompanies.value = (response.data || []).slice(0, 5)
-    console.log('🏢 Admin: Empresas obtenidas:', topCompanies.value.length)
+    topCompanies.value = companiesData.slice(0, 5)
+    console.log('🏢 Admin: Empresas para mostrar:', topCompanies.value.length)
   } catch (error) {
     console.error('❌ Admin: Error fetching companies:', error)
     topCompanies.value = []
@@ -617,6 +639,22 @@ onUnmounted(() => {
   justify-content: space-between;
   align-items: flex-start;
   margin-bottom: 24px;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.debug-btn {
+  background: #ef4444;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 12px;
+  cursor: pointer;
 }
 
 .section-title {
@@ -1060,6 +1098,29 @@ onUnmounted(() => {
   padding: 20px;
   color: #6b7280;
   justify-content: center;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 40px 20px;
+}
+
+.empty-state .empty-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+  opacity: 0.5;
+}
+
+.empty-state h3 {
+  font-size: 18px;
+  font-weight: 600;
+  color: #1f2937;
+  margin-bottom: 8px;
+}
+
+.empty-state p {
+  color: #6b7280;
+  margin-bottom: 24px;
 }
 
 @keyframes spin {
