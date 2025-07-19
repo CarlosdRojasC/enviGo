@@ -1,734 +1,681 @@
 <template>
   <div class="page-container">
-    <div class="dashboard-header">
-      <h1 class="page-title">Dashboard del Administrador</h1>
-      <div class="header-actions">
-        <button @click="refreshData" class="refresh-btn" :disabled="loading">
-          🔄 {{ loading ? 'Actualizando...' : 'Actualizar' }}
-        </button>
+    <!-- Header mejorado -->
+    <div class="page-header">
+      <div class="header-content">
+        <div class="header-left">
+          <h1 class="page-title">Panel de Administración 🎯</h1>
+          <p class="page-subtitle">Gestiona todo el sistema desde aquí</p>
+        </div>
+        <div class="header-right">
+          <div class="header-info">
+            <div class="current-time">{{ currentTime }}</div>
+            <div class="current-date">{{ currentDate }}</div>
+          </div>
+          <button @click="refreshAllData" class="btn btn-secondary" :disabled="loading">
+            <span class="btn-icon">{{ loading ? '⏳' : '🔄' }}</span>
+            {{ loading ? 'Actualizando...' : 'Actualizar' }}
+          </button>
+        </div>
       </div>
     </div>
 
-    <div v-if="loading" class="initial-loading">
+    <!-- Loading inicial -->
+    <div v-if="loading && !hasInitialData" class="initial-loading">
       <div class="loading-spinner"></div>
       <p>Cargando estadísticas del sistema...</p>
     </div>
 
-    <div v-else class="dashboard-content">
-      <!-- KPIs Section -->
-      <div class="kpis-grid">
-        <div class="kpi-card">
-          <div class="kpi-icon">🏢</div>
-          <div class="kpi-content">
-            <div class="kpi-value">{{ stats.companies || 0 }}</div>
-            <div class="kpi-label">Empresas Activas</div>
-          </div>
+    <!-- Contenido principal -->
+    <div v-else class="dashboard-grid">
+      <!-- KPIs principales -->
+      <section class="content-section full-width">
+        <div class="section-header">
+          <h2 class="section-title">Métricas del Sistema</h2>
+          <p class="section-subtitle">Vista global de toda la plataforma</p>
         </div>
-        <div class="kpi-card">
-          <div class="kpi-icon">📦</div>
-          <div class="kpi-content">
-            <div class="kpi-value">{{ stats.orders?.total_orders || 0 }}</div>
-            <div class="kpi-label">Total Pedidos</div>
-          </div>
-        </div>
-        <div class="kpi-card">
-          <div class="kpi-icon">✅</div>
-          <div class="kpi-content">
-            <div class="kpi-value">{{ stats.orders?.delivered || 0 }}</div>
-            <div class="kpi-label">Pedidos Entregados</div>
-          </div>
-        </div>
-        <div class="kpi-card revenue">
-          <div class="kpi-icon">💰</div>
-          <div class="kpi-content">
-            <div class="kpi-value">${{ formatCurrency(stats.monthly_revenue || 0) }}</div>
-            <div class="kpi-label">Costos de Envío Totales</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Quick Actions Section -->
-      <div class="quick-actions">
-        <h2 class="section-title">Acciones Rápidas</h2>
-        <div class="actions-grid">
-          <router-link to="/admin/companies" class="action-card">
-            <div class="action-icon">🏢</div>
-            <div class="action-content">
-              <div class="action-title">Gestionar Empresas</div>
-              <div class="action-description">Ver y administrar empresas</div>
+        <div class="kpis-grid">
+          <div class="kpi-card companies">
+            <div class="kpi-icon">🏢</div>
+            <div class="kpi-content">
+              <div class="kpi-value">{{ stats.companies || 0 }}</div>
+              <div class="kpi-label">Empresas Activas</div>
+              <div class="kpi-trend" v-if="trends.companies">
+                <span class="trend-icon" :class="trends.companies.direction">
+                  {{ getTrendIcon(trends.companies.direction) }}
+                </span>
+                <span class="trend-text">{{ trends.companies.percentage }}% {{ trends.companies.label }}</span>
+              </div>
             </div>
+          </div>
+
+          <div class="kpi-card orders">
+            <div class="kpi-icon">📦</div>
+            <div class="kpi-content">
+              <div class="kpi-value">{{ totalOrders }}</div>
+              <div class="kpi-label">Total Pedidos</div>
+              <div class="kpi-detail">{{ ordersToday }} hoy</div>
+              <div class="kpi-trend" v-if="trends.orders_today">
+                <span class="trend-icon" :class="trends.orders_today.direction">
+                  {{ getTrendIcon(trends.orders_today.direction) }}
+                </span>
+                <span class="trend-text">{{ trends.orders_today.percentage }}% {{ trends.orders_today.label }}</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="kpi-card success">
+            <div class="kpi-icon">✅</div>
+            <div class="kpi-content">
+              <div class="kpi-value">{{ deliveredOrders }}</div>
+              <div class="kpi-label">Pedidos Entregados</div>
+              <div class="kpi-detail">{{ deliveryRate }}% de éxito global</div>
+              <div class="kpi-trend" v-if="trends.delivered">
+                <span class="trend-icon" :class="trends.delivered.direction">
+                  {{ getTrendIcon(trends.delivered.direction) }}
+                </span>
+                <span class="trend-text">{{ trends.delivered.percentage }}% {{ trends.delivered.label }}</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="kpi-card revenue">
+            <div class="kpi-icon">💰</div>
+            <div class="kpi-content">
+              <div class="kpi-value">${{ formatCurrency(monthlyRevenue) }}</div>
+              <div class="kpi-label">Ingresos del Mes</div>
+              <div class="kpi-detail">Costos de envío totales</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Gráfico de tendencias -->
+      <section class="content-section chart-section">
+        <div class="section-header">
+          <div class="header-left">
+            <h2 class="section-title">Tendencia Global de Pedidos</h2>
+            <p class="section-subtitle">Actividad de todas las empresas</p>
+          </div>
+          <div class="header-right">
+            <select v-model="chartPeriod" @change="fetchChartData" class="form-select">
+              <option value="7d">7 días</option>
+              <option value="30d">30 días</option>
+              <option value="90d">3 meses</option>
+            </select>
+          </div>
+        </div>
+        <div class="chart-container">
+          <div v-if="loadingChart" class="chart-loading">
+            <div class="loading-spinner small"></div>
+            <span>Cargando gráfico...</span>
+          </div>
+          <div v-else-if="chartData.length === 0" class="chart-empty">
+            <div class="empty-icon">📊</div>
+            <p>No hay datos suficientes para mostrar el gráfico</p>
+          </div>
+          <OrdersTrendChart v-else :data="chartData" :loading="loadingChart" height="320" />
+        </div>
+      </section>
+
+      <!-- Gestión de empresas -->
+      <section class="content-section">
+        <div class="section-header">
+          <h2 class="section-title">Gestión de Empresas</h2>
+          <router-link to="/admin/companies" class="section-link">Ver todas</router-link>
+        </div>
+        
+        <div v-if="loadingCompanies" class="loading-state">
+          <div class="loading-spinner small"></div>
+          <span>Cargando empresas...</span>
+        </div>
+        
+        <div v-else class="companies-preview">
+          <div v-for="company in topCompanies" :key="company._id" class="company-item">
+            <div class="company-main">
+              <div class="company-icon">🏢</div>
+              <div class="company-info">
+                <div class="company-name">{{ company.company_name }}</div>
+                <div class="company-email">{{ company.contact_email }}</div>
+              </div>
+            </div>
+            <div class="company-stats">
+              <div class="stat-item">
+                <span class="stat-value">{{ company.total_orders || 0 }}</span>
+                <span class="stat-label">Pedidos</span>
+              </div>
+              <div class="stat-item">
+                <span class="stat-value">{{ company.users_count || 0 }}</span>
+                <span class="stat-label">Usuarios</span>
+              </div>
+            </div>
+            <div class="company-status">
+              <div class="status-indicator" :class="company.is_active ? 'active' : 'inactive'"></div>
+              <span class="status-text">{{ company.is_active ? 'Activa' : 'Inactiva' }}</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Acciones de administración -->
+      <section class="content-section">
+        <div class="section-header">
+          <h2 class="section-title">Herramientas de Administración</h2>
+          <p class="section-subtitle">Gestión del sistema</p>
+        </div>
+        <div class="admin-actions-grid">
+          <router-link 
+            v-for="action in adminActions" 
+            :key="action.id" 
+            :to="action.route" 
+            class="admin-action-card"
+            :class="action.variant"
+          >
+            <div class="action-icon">{{ action.icon }}</div>
+            <div class="action-content">
+              <div class="action-title">{{ action.title }}</div>
+              <div class="action-description">{{ action.description }}</div>
+              <div class="action-badge" v-if="action.badge">{{ action.badge }}</div>
+            </div>
+            <div class="action-arrow">→</div>
           </router-link>
-          <router-link to="/admin/orders" class="action-card">
-            <div class="action-icon">📦</div>
-            <div class="action-content">
-              <div class="action-title">Gestionar Pedidos</div>
-              <div class="action-description">Ver todos los pedidos</div>
-            </div>
-          </router-link>
-          <router-link to="/admin/billing" class="action-card">
-            <div class="action-icon">💳</div>
-            <div class="action-content">
-              <div class="action-title">Facturación</div>
-              <div class="action-description">Gestionar facturas</div>
-            </div>
-          </router-link>
-          <button @click="exportOrders" class="action-card clickable" :disabled="isExporting">
-            <div class="action-icon">📊</div>
-            <div class="action-content">
-              <div class="action-title">{{ isExporting ? 'Exportando...' : 'Exportar Pedidos' }}</div>
-              <div class="action-description">Descargar para OptiRoute</div>
-            </div>
-          </button>
         </div>
-      </div>
+      </section>
 
-      <!-- Charts Section -->
-      <div class="charts-section">
-        <div class="charts-grid">
-          <!-- Trend Chart -->
-          <div class="chart-container">
-            <div class="chart-header">
-              <h3 class="chart-title">Tendencia de Pedidos</h3>
-              <div class="chart-controls">
-                <select v-model="trendPeriod" @change="fetchTrendData" class="period-select">
-                  <option value="7d">Últimos 7 días</option>
-                  <option value="30d">Últimos 30 días</option>
-                  <option value="90d">Últimos 90 días</option>
-                </select>
-              </div>
-            </div>
-            <div class="chart-content">
-              <div v-if="loadingTrend" class="chart-loading">
-                <div class="loading-spinner-small"></div>
-                <span>Cargando tendencia...</span>
-              </div>
-              <div v-else-if="trendError" class="chart-error">
-                <span>❌ Error cargando datos de tendencia</span>
-                <button @click="fetchTrendData" class="retry-btn">Reintentar</button>
-              </div>
-              <canvas v-show="!loadingTrend && !trendError" ref="trendChartCanvas" :key="trendChartKey"></canvas>
+      <!-- Estado del sistema -->
+      <section class="content-section">
+        <div class="section-header">
+          <h2 class="section-title">Estado del Sistema</h2>
+          <p class="section-subtitle">Monitoreo y salud</p>
+        </div>
+        
+        <div class="system-status">
+          <div class="status-item">
+            <div class="status-icon">🟢</div>
+            <div class="status-info">
+              <div class="status-title">API Backend</div>
+              <div class="status-description">Funcionando correctamente</div>
             </div>
           </div>
-
-          <!-- Status Chart -->
-          <div class="chart-container">
-            <div class="chart-header">
-              <h3 class="chart-title">Distribución por Estado</h3>
+          
+          <div class="status-item">
+            <div class="status-icon">🟢</div>
+            <div class="status-info">
+              <div class="status-title">Base de Datos</div>
+              <div class="status-description">{{ stats.totalOrders || 0 }} pedidos registrados</div>
             </div>
-            <div class="chart-content">
-              <div v-if="hasNoOrderData" class="no-data-message">
-                <span>📊 No hay datos de pedidos para mostrar</span>
-              </div>
-              <canvas v-show="!hasNoOrderData" ref="statusChartCanvas" :key="statusChartKey"></canvas>
+          </div>
+          
+          <div class="status-item">
+            <div class="status-icon">🟢</div>
+            <div class="status-info">
+              <div class="status-title">Integración Shipday</div>
+              <div class="status-description">Conectado y funcionando</div>
+            </div>
+          </div>
+          
+          <div class="status-item">
+            <div class="status-icon">{{ channels > 0 ? '🟢' : '🟡' }}</div>
+            <div class="status-info">
+              <div class="status-title">Canales de Venta</div>
+              <div class="status-description">{{ channels }} canales activos</div>
             </div>
           </div>
         </div>
-
-        <!-- Revenue Chart -->
-        <div class="chart-container full-width">
-          <div class="chart-header">
-            <h3 class="chart-title">Costos de Envío por Mes (Últimos 6 meses)</h3>
-          </div>
-          <div class="chart-content">
-            <div v-if="loadingRevenue" class="chart-loading">
-              <div class="loading-spinner-small"></div>
-              <span>Cargando datos de costos...</span>
-            </div>
-            <div v-else-if="revenueError" class="chart-error">
-              <span>❌ Error cargando datos de costos</span>
-              <button @click="fetchRevenueData" class="retry-btn">Reintentar</button>
-            </div>
-            <canvas v-show="!loadingRevenue && !revenueError" ref="revenueChartCanvas" :key="revenueChartKey"></canvas>
-          </div>
-        </div>
-      </div>
+      </section>
     </div>
 
-    <!-- Error Toast -->
-    <div v-if="showErrorToast" class="error-toast" @click="showErrorToast = false">
-      <span>❌ {{ errorMessage }}</span>
-      <button class="close-toast">×</button>
+    <!-- Notificaciones de error -->
+    <div v-if="showErrorToast" class="error-toast">
+      <div class="toast-content">
+        <span class="toast-icon">❌</span>
+        <span class="toast-message">{{ errorMessage }}</span>
+        <button @click="showErrorToast = false" class="toast-close">×</button>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, onBeforeUnmount, nextTick, computed, watch } from 'vue';
-import { apiService } from '../services/api';
-import { Chart, registerables } from 'chart.js';
+import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { useRouter } from 'vue-router'
+import { useAuthStore } from '../store/auth'
+import { apiService } from '../services/api'
+import OrdersTrendChart from '../components/dashboard/OrdersTrendChart.vue'
 
-// Registrar todos los componentes de Chart.js
-Chart.register(...registerables);
+const router = useRouter()
+const auth = useAuthStore()
+const loading = ref(true)
+const loadingChart = ref(false)
+const loadingCompanies = ref(false)
+const stats = ref({})
+const chartData = ref([])
+const topCompanies = ref([])
+const chartPeriod = ref('30d')
+const currentTime = ref('')
+const currentDate = ref('')
+const timeInterval = ref(null)
+const showErrorToast = ref(false)
+const errorMessage = ref('')
 
-// Estado básico
-const loading = ref(true);
-const stats = ref({});
-const isExporting = ref(false);
+// Trends inicializados como null
+const trends = ref({
+  companies: null,
+  orders_today: null,
+  delivered: null
+})
 
-// Estado para charts
-const loadingTrend = ref(true);
-const loadingRevenue = ref(true);
-const trendPeriod = ref('7d');
+// Computed values
+const hasInitialData = computed(() => Object.keys(stats.value).length > 0)
 
-// Estados de error
-const trendError = ref(false);
-const revenueError = ref(false);
-const showErrorToast = ref(false);
-const errorMessage = ref('');
+// Admin metrics
+const totalOrders = computed(() => stats.value.totalOrders || stats.value.orders || 0)
+const ordersToday = computed(() => stats.value.ordersToday || 0)
+const deliveredOrders = computed(() => {
+  const byStatus = stats.value.ordersByStatus || {}
+  return byStatus.delivered || 0
+})
+const deliveryRate = computed(() => {
+  const total = totalOrders.value
+  const delivered = deliveredOrders.value
+  return total > 0 ? Math.round((delivered / total) * 100) : 0
+})
+const monthlyRevenue = computed(() => stats.value.monthlyRevenue || stats.value.estimatedMonthlyCost || 0)
+const channels = computed(() => stats.value.channels || 0)
 
-// Keys para forzar re-render de canvas
-const trendChartKey = ref(0);
-const statusChartKey = ref(0);
-const revenueChartKey = ref(0);
-
-// Referencias para los canvas
-const trendChartCanvas = ref(null);
-const statusChartCanvas = ref(null);
-const revenueChartCanvas = ref(null);
-
-// Instancias de Chart.js
-let trendChartInstance = null;
-let statusChartInstance = null;
-let revenueChartInstance = null;
-
-// Computed para verificar si hay datos de órdenes
-const hasNoOrderData = computed(() => {
-  if (!stats.value.orders) return true;
-  const orders = stats.value.orders;
-  const total = (orders.pending || 0) + (orders.processing || 0) + 
-                (orders.shipped || 0) + (orders.delivered || 0) + 
-                (orders.cancelled || 0);
-  return total === 0;
-});
-
-// --- FUNCIONES DE UTILIDAD ---
-const showError = (message) => {
-  errorMessage.value = message;
-  showErrorToast.value = true;
-  setTimeout(() => {
-    showErrorToast.value = false;
-  }, 5000);
-};
-
-const destroyChart = (chartInstance) => {
-  if (chartInstance) {
-    chartInstance.destroy();
-    return null;
+const adminActions = computed(() => [
+  { 
+    id: 'companies', 
+    title: 'Gestionar Empresas', 
+    description: 'Ver, crear y administrar empresas cliente', 
+    icon: '🏢', 
+    route: '/admin/companies',
+    variant: 'primary',
+    badge: stats.value.companies || 0
+  },
+  { 
+    id: 'orders', 
+    title: 'Pedidos Globales', 
+    description: 'Ver todos los pedidos del sistema', 
+    icon: '📦', 
+    route: '/admin/orders',
+    variant: 'secondary',
+    badge: totalOrders.value
+  },
+  { 
+    id: 'billing', 
+    title: 'Facturación', 
+    description: 'Gestionar facturas y pagos', 
+    icon: '💳', 
+    route: '/admin/billing',
+    variant: 'success'
+  },
+  { 
+    id: 'drivers', 
+    title: 'Conductores', 
+    description: 'Gestión de conductores del sistema', 
+    icon: '🚚', 
+    route: '/admin/drivers',
+    variant: 'info'
+  },
+  { 
+    id: 'channels', 
+    title: 'Canales de Venta', 
+    description: 'Supervisar integraciones activas', 
+    icon: '📡', 
+    route: '/admin/channels',
+    variant: 'warning'
+  },
+  { 
+    id: 'communes', 
+    title: 'Comunas', 
+    description: 'Configurar zonas de entrega', 
+    icon: '🏘️', 
+    route: '/admin/communes',
+    variant: 'neutral'
   }
-};
+])
 
-const formatCurrency = (amount) => {
-  return new Intl.NumberFormat('es-CL').format(amount || 0);
-};
+function updateTime() {
+  const now = new Date()
+  currentTime.value = now.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
+  currentDate.value = now.toLocaleDateString('es-ES', { 
+    weekday: 'long', 
+    day: 'numeric', 
+    month: 'long' 
+  })
+}
 
-// --- FUNCIONES DE OBTENCIÓN DE DATOS ---
-
-const fetchAllData = async () => {
-  loading.value = true;
+async function fetchAllData() {
+  loading.value = true
   try {
-    console.log('🔍 FRONTEND: Solicitando stats del dashboard admin...');
+    console.log('🔄 Admin: Iniciando carga de datos...')
     
-    // Llamada real a la API
-    const response = await apiService.dashboard.getStats();
-    stats.value = response.data;
-    
-    console.log('✅ FRONTEND: Stats recibidas:', stats.value);
-    
-    // Cargar datos de gráficos en paralelo
     await Promise.all([
-      fetchTrendData(),
-      fetchRevenueData()
-    ]);
-
-    // Crear gráficos después de que el DOM esté listo
-    await nextTick();
-    setTimeout(() => {
-      createAllCharts();
-    }, 100);
-
+      fetchStats(),
+      fetchChartData(),
+      fetchTopCompanies()
+    ])
+    
+    console.log('✅ Admin: Todos los datos cargados')
   } catch (error) {
-    console.error("❌ FRONTEND: Error cargando datos del admin dashboard:", error);
-    showError('Error cargando las estadísticas del dashboard');
+    console.error("❌ Admin: Error loading dashboard data", error)
+    showError('Error cargando las estadísticas del dashboard')
   } finally {
-    loading.value = false;
+    loading.value = false
   }
-};
+}
 
-const fetchTrendData = async () => {
-  loadingTrend.value = true;
-  trendError.value = false;
-  
+async function fetchStats() {
   try {
-    console.log('🔍 FRONTEND: Solicitando datos de tendencia...', { period: trendPeriod.value });
+    console.log('📊 Admin: Obteniendo estadísticas...')
+    const response = await apiService.dashboard.getStats()
     
-    const response = await apiService.orders.getTrend({ 
-      period: trendPeriod.value 
-    });
+    console.log('📊 Admin: Stats recibidas:', response.data)
+    stats.value = response.data
     
-    console.log('✅ FRONTEND: Datos de tendencia recibidos:', response.data);
-    
-    await nextTick();
-    setTimeout(() => {
-      createOrUpdateTrendChart(response.data);
-    }, 100);
+    // Intentar obtener trends
+    try {
+      const trendsResponse = await apiService.dashboard.getTrends()
+      trends.value = trendsResponse.data
+      console.log('📈 Admin: Trends obtenidos:', trends.value)
+    } catch (trendsError) {
+      console.log('⚠️ Admin: Trends no disponibles')
+    }
     
   } catch (error) {
-    console.error('❌ FRONTEND: Error fetching trend data:', error);
-    trendError.value = true;
-    showError('Error cargando datos de tendencia de pedidos');
-  } finally {
-    loadingTrend.value = false;
+    console.error('❌ Admin: Error fetching stats:', error)
+    showError('Error obteniendo estadísticas del sistema')
   }
-};
+}
 
-const fetchRevenueData = async () => {
-  loadingRevenue.value = true;
-  revenueError.value = false;
-  
+async function fetchChartData() {
+  loadingChart.value = true
   try {
-    console.log('🔍 FRONTEND: Solicitando datos de costos mensuales...');
-    
-    const response = await apiService.billing.getFinancialSummary();
-    
-    console.log('✅ FRONTEND: Datos de costos mensuales recibidos:', response.data);
-    
-    await nextTick();
-    setTimeout(() => {
-      createOrUpdateRevenueChart(response.data);
-    }, 100);
-    
+    console.log('📈 Admin: Obteniendo datos del gráfico...')
+    const response = await apiService.orders.getTrend({ period: chartPeriod.value })
+    chartData.value = response.data || []
+    console.log('📈 Admin: Datos del gráfico:', chartData.value.length, 'puntos')
   } catch (error) {
-    console.error('❌ FRONTEND: Error fetching revenue data:', error);
-    revenueError.value = true;
-    showError('Error cargando datos de costos mensuales');
+    console.error('❌ Admin: Error fetching chart data:', error)
+    chartData.value = []
   } finally {
-    loadingRevenue.value = false;
+    loadingChart.value = false
   }
-};
+}
 
-// --- FUNCIONES DE CREACIÓN DE GRÁFICOS ---
-
-const createAllCharts = () => {
-  createOrUpdateStatusChart();
-};
-
-const createOrUpdateTrendChart = (data) => {
-  if (!trendChartCanvas.value || !data || data.length === 0) {
-    console.warn('❌ No se puede crear gráfico de tendencia: canvas o datos faltantes');
-    return;
-  }
-  
-  // Destruir gráfico existente
-  trendChartInstance = destroyChart(trendChartInstance);
-  
-  const ctx = trendChartCanvas.value.getContext('2d');
-  
-  const chartData = {
-    labels: data.map(item => {
-      const date = new Date(item.date);
-      return date.toLocaleDateString('es-ES', { 
-        month: 'short', 
-        day: 'numeric' 
-      });
-    }),
-    datasets: [{
-      label: 'Pedidos',
-      data: data.map(item => item.count || item.orders || 0),
-      borderColor: '#3b82f6',
-      backgroundColor: 'rgba(59, 130, 246, 0.1)',
-      borderWidth: 2,
-      fill: true,
-      tension: 0.3,
-      pointBackgroundColor: '#3b82f6',
-      pointBorderColor: '#ffffff',
-      pointBorderWidth: 2,
-      pointRadius: 4,
-      pointHoverRadius: 6
-    }]
-  };
-
-  trendChartInstance = new Chart(ctx, {
-    type: 'line',
-    data: chartData,
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: { 
-        legend: { display: false },
-        tooltip: {
-          backgroundColor: 'rgba(0, 0, 0, 0.8)',
-          titleColor: '#ffffff',
-          bodyColor: '#ffffff',
-          borderColor: '#3b82f6',
-          borderWidth: 1,
-          callbacks: {
-            title: function(context) {
-              return `Fecha: ${context[0].label}`;
-            },
-            label: function(context) {
-              return `Pedidos: ${context.parsed.y}`;
-            }
-          }
-        }
-      },
-      scales: { 
-        y: { 
-          beginAtZero: true, 
-          ticks: { 
-            stepSize: 1,
-            color: '#6b7280',
-            callback: function(value) {
-              return Math.floor(value);
-            }
-          },
-          grid: {
-            color: 'rgba(107, 114, 128, 0.1)'
-          }
-        },
-        x: {
-          ticks: {
-            color: '#6b7280',
-            maxTicksLimit: 10
-          },
-          grid: {
-            color: 'rgba(107, 114, 128, 0.1)'
-          }
-        }
-      }
-    }
-  });
-  
-  console.log('✅ Gráfico de tendencia creado exitosamente');
-};
-
-const createOrUpdateStatusChart = () => {
-  if (!statusChartCanvas.value || hasNoOrderData.value) {
-    console.warn('❌ No se puede crear gráfico de estado: canvas faltante o sin datos');
-    return;
-  }
-  
-  // Destruir gráfico existente
-  statusChartInstance = destroyChart(statusChartInstance);
-  
-  const ctx = statusChartCanvas.value.getContext('2d');
-  const orders = stats.value.orders;
-
-  const dataValues = [
-    orders.pending || 0,
-    orders.processing || 0,
-    orders.shipped || 0,
-    orders.delivered || 0,
-    orders.cancelled || 0
-  ];
-
-  const labels = ['Pendientes', 'Procesando', 'Enviados', 'Entregados', 'Cancelados'];
-  const colors = ['#f59e0b', '#3b82f6', '#8b5cf6', '#10b981', '#ef4444'];
-
-  statusChartInstance = new Chart(ctx, {
-    type: 'doughnut',
-    data: {
-      labels: labels,
-      datasets: [{
-        data: dataValues,
-        backgroundColor: colors,
-        borderWidth: 3,
-        borderColor: '#ffffff',
-        hoverBorderWidth: 4,
-        hoverBorderColor: '#ffffff'
-      }]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: {
-          position: 'bottom',
-          labels: { 
-            padding: 15, 
-            usePointStyle: true,
-            font: {
-              size: 11
-            },
-            color: '#374151'
-          }
-        },
-        tooltip: {
-          backgroundColor: 'rgba(0, 0, 0, 0.8)',
-          titleColor: '#ffffff',
-          bodyColor: '#ffffff',
-          callbacks: {
-            label: function(context) {
-              const total = dataValues.reduce((a, b) => a + b, 0);
-              const percentage = total > 0 ? ((context.parsed / total) * 100).toFixed(1) : 0;
-              return `${context.label}: ${context.parsed} (${percentage}%)`;
-            }
-          }
-        }
-      }
-    }
-  });
-  
-  console.log('✅ Gráfico de estado creado exitosamente');
-};
-
-const createOrUpdateRevenueChart = (data) => {
-  if (!revenueChartCanvas.value || !data || data.length === 0) {
-    console.warn('❌ No se puede crear gráfico de costos: canvas o datos faltantes');
-    return;
-  }
-  
-  // Destruir gráfico existente
-  revenueChartInstance = destroyChart(revenueChartInstance);
-  
-  const ctx = revenueChartCanvas.value.getContext('2d');
-
-  const chartData = {
-    labels: data.map(item => item.month_year || item.month),
-    datasets: [{
-      label: 'Costos de Envío',
-      data: data.map(item => item.total_shipping_cost || item.revenue || 0),
-      backgroundColor: 'rgba(16, 185, 129, 0.8)',
-      borderColor: '#10b981',
-      borderWidth: 1,
-      borderRadius: 4,
-      borderSkipped: false,
-    }]
-  };
-
-  revenueChartInstance = new Chart(ctx, {
-    type: 'bar',
-    data: chartData,
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: { 
-        legend: { display: false },
-        tooltip: {
-          backgroundColor: 'rgba(0, 0, 0, 0.8)',
-          titleColor: '#ffffff',
-          bodyColor: '#ffffff',
-          callbacks: {
-            label: function(context) {
-              return `Costos: $${formatCurrency(context.parsed.y)}`;
-            }
-          }
-        }
-      },
-      scales: {
-        y: {
-          beginAtZero: true,
-          ticks: {
-            callback: (value) => '$' + formatCurrency(value),
-            color: '#6b7280'
-          },
-          grid: {
-            color: 'rgba(107, 114, 128, 0.1)'
-          }
-        },
-        x: {
-          ticks: {
-            color: '#6b7280'
-          },
-          grid: {
-            color: 'rgba(107, 114, 128, 0.1)'
-          }
-        }
-      }
-    }
-  });
-  
-  console.log('✅ Gráfico de costos creado exitosamente');
-};
-
-// --- WATCHERS ---
-
-// Watcher para recrear el gráfico de estado cuando cambien los datos
-watch(() => stats.value.orders, () => {
-  if (!hasNoOrderData.value) {
-    nextTick(() => {
-      setTimeout(() => {
-        statusChartKey.value++;
-        nextTick(() => {
-          setTimeout(() => {
-            createOrUpdateStatusChart();
-          }, 100);
-        });
-      }, 50);
-    });
-  }
-}, { deep: true });
-
-// --- FUNCIONES DE ACCIONES ---
-
-const refreshData = () => {
-  console.log('🔄 Refrescando todos los datos...');
-  
-  // Incrementar keys para forzar re-render de todos los canvas
-  trendChartKey.value++;
-  statusChartKey.value++;
-  revenueChartKey.value++;
-  
-  // Destruir gráficos existentes
-  trendChartInstance = destroyChart(trendChartInstance);
-  statusChartInstance = destroyChart(statusChartInstance);
-  revenueChartInstance = destroyChart(revenueChartInstance);
-  
-  // Resetear estados de error
-  trendError.value = false;
-  revenueError.value = false;
-  
-  fetchAllData();
-};
-
-const exportOrders = async () => {
-  isExporting.value = true;
+async function fetchTopCompanies() {
+  loadingCompanies.value = true
   try {
-    console.log('📤 Iniciando exportación de pedidos...');
-    
-    const response = await apiService.orders.exportForOptiRoute();
-    
-    // Crear y descargar el archivo
-    const blob = new Blob([response.data], { 
-      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
-    });
-    const url = window.URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', `pedidos_optiroute_${new Date().toISOString().split('T')[0]}.xlsx`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    window.URL.revokeObjectURL(url);
-    
-    console.log('✅ Exportación completada exitosamente');
-    showError('Exportación completada exitosamente'); // Usar como notificación exitosa
-    
+    console.log('🏢 Admin: Obteniendo empresas destacadas...')
+    const response = await apiService.companies.getAll()
+    // Tomar las primeras 5 empresas como preview
+    topCompanies.value = (response.data || []).slice(0, 5)
+    console.log('🏢 Admin: Empresas obtenidas:', topCompanies.value.length)
   } catch (error) {
-    console.error('❌ Error exportando pedidos:', error);
-    showError('Error al exportar pedidos. Verifica que haya pedidos disponibles.');
+    console.error('❌ Admin: Error fetching companies:', error)
+    topCompanies.value = []
   } finally {
-    isExporting.value = false;
+    loadingCompanies.value = false
   }
-};
+}
 
-// --- CICLO DE VIDA ---
+function refreshAllData() {
+  console.log('🔄 Admin: Refrescando datos...')
+  fetchAllData()
+}
+
+function formatCurrency(amount) {
+  return new Intl.NumberFormat('es-CL').format(amount || 0)
+}
+
+function getTrendIcon(direction) {
+  switch(direction) {
+    case 'up': return '↗'
+    case 'down': return '↘'
+    case 'neutral': return '→'
+    default: return '→'
+  }
+}
+
+function showError(message) {
+  errorMessage.value = message
+  showErrorToast.value = true
+  setTimeout(() => {
+    showErrorToast.value = false
+  }, 5000)
+}
 
 onMounted(() => {
-  console.log('🚀 Dashboard montado, iniciando carga de datos...');
-  fetchAllData();
-});
+  console.log('🚀 AdminDashboard montado')
+  updateTime()
+  timeInterval.value = setInterval(updateTime, 1000 * 60)
+  fetchAllData()
+})
 
-onBeforeUnmount(() => {
-  console.log('🧹 Limpiando instancias de gráficos...');
-  trendChartInstance = destroyChart(trendChartInstance);
-  statusChartInstance = destroyChart(statusChartInstance);
-  revenueChartInstance = destroyChart(revenueChartInstance);
-});
+onUnmounted(() => {
+  if (timeInterval.value) {
+    clearInterval(timeInterval.value)
+  }
+})
 </script>
 
 <style scoped>
+/* ==================== VARIABLES Y BASE ==================== */
 .page-container {
-  max-width: 1200px;
+  max-width: 1400px;
   margin: 0 auto;
-  padding: 20px;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  padding: 24px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+  background-color: #f8fafc;
+  min-height: 100vh;
 }
 
-.dashboard-header {
+/* ==================== HEADER ==================== */
+.page-header {
+  margin-bottom: 32px;
+}
+
+.header-content {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  margin-bottom: 30px;
+  align-items: flex-start;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 32px;
+  border-radius: 16px;
+  box-shadow: 0 4px 20px rgba(102, 126, 234, 0.3);
+}
+
+.header-left {
+  flex: 1;
 }
 
 .page-title {
-  font-size: 28px;
+  font-size: 32px;
   font-weight: 700;
+  margin: 0 0 8px 0;
+  line-height: 1.1;
+}
+
+.page-subtitle {
+  font-size: 16px;
+  opacity: 0.9;
+  margin: 0;
+  line-height: 1.4;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+.header-info {
+  text-align: right;
+}
+
+.current-time {
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.current-date {
+  font-size: 14px;
+  opacity: 0.8;
+  margin-top: 4px;
+  text-transform: capitalize;
+}
+
+/* ==================== BOTONES ==================== */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 20px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-secondary {
+  background-color: rgba(255, 255, 255, 0.2);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background-color: rgba(255, 255, 255, 0.3);
+  transform: translateY(-1px);
+}
+
+.btn-secondary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.btn-icon {
+  font-size: 16px;
+}
+
+/* ==================== LAYOUT GRID ==================== */
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: 24px;
+}
+
+.content-section {
+  background: white;
+  border-radius: 16px;
+  padding: 32px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border: 1px solid #e5e7eb;
+}
+
+.full-width {
+  grid-column: 1 / -1;
+}
+
+.chart-section {
+  grid-column: 1 / 9;
+}
+
+.content-section:not(.full-width):not(.chart-section) {
+  grid-column: span 4;
+}
+
+/* ==================== SECCIONES ==================== */
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 24px;
+}
+
+.section-title {
+  font-size: 20px;
+  font-weight: 600;
   color: #1f2937;
   margin: 0;
 }
 
-.refresh-btn {
-  background: #f3f4f6;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
-  padding: 8px 16px;
-  cursor: pointer;
+.section-subtitle {
   font-size: 14px;
-  font-weight: 500;
-  color: #374151;
-  transition: all 0.2s ease;
-}
-
-.refresh-btn:hover:not(:disabled) {
-  background: #e5e7eb;
-}
-
-.refresh-btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.initial-loading {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  min-height: 400px;
   color: #6b7280;
+  margin: 4px 0 0 0;
 }
 
-.loading-spinner {
-  width: 32px;
-  height: 32px;
-  border: 3px solid #e5e7eb;
-  border-top: 3px solid #3b82f6;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-  margin-bottom: 16px;
+.section-link {
+  font-size: 14px;
+  color: #667eea;
+  text-decoration: none;
+  font-weight: 500;
 }
 
-@keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+.section-link:hover {
+  color: #5a67d8;
 }
 
-.dashboard-content {
-  display: flex;
-  flex-direction: column;
-  gap: 30px;
-}
-
-/* KPIs */
+/* ==================== KPIs ==================== */
 .kpis-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 20px;
+  gap: 24px;
 }
 
 .kpi-card {
-  background: white;
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  border: 1px solid #e5e7eb;
   border-radius: 12px;
   padding: 24px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-  border: 1px solid #e5e7eb;
   display: flex;
   align-items: center;
-  gap: 20px;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  gap: 16px;
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.kpi-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, #667eea, #764ba2);
 }
 
 .kpi-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  transform: translateY(-4px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
 }
 
-.kpi-card.revenue {
-  border-left: 4px solid #10b981;
+.kpi-card.companies::before {
+  background: linear-gradient(90deg, #667eea, #764ba2);
+}
+
+.kpi-card.orders::before {
+  background: linear-gradient(90deg, #3b82f6, #1d4ed8);
+}
+
+.kpi-card.success::before {
+  background: linear-gradient(90deg, #10b981, #047857);
+}
+
+.kpi-card.revenue::before {
+  background: linear-gradient(90deg, #f59e0b, #d97706);
 }
 
 .kpi-icon {
-  font-size: 40px;
+  font-size: 28px;
   opacity: 0.8;
 }
 
@@ -737,84 +684,251 @@ onBeforeUnmount(() => {
 }
 
 .kpi-value {
-  font-size: 32px;
+  font-size: 28px;
   font-weight: 700;
   color: #1f2937;
   line-height: 1;
-  margin-bottom: 4px;
 }
 
 .kpi-label {
   font-size: 14px;
   color: #6b7280;
-  font-weight: 500;
-  margin-bottom: 2px;
+  margin-top: 4px;
 }
 
-.kpi-subtitle {
+.kpi-detail {
   font-size: 12px;
   color: #9ca3af;
-  font-style: italic;
+  margin-top: 4px;
 }
 
-/* Secciones */
-.section-title {
-  font-size: 20px;
+.kpi-trend {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 8px;
+  font-size: 12px;
+}
+
+.trend-icon {
+  font-size: 14px;
   font-weight: 600;
-  color: #1f2937;
-  margin: 0 0 20px 0;
 }
 
-/* Acciones rápidas */
-.quick-actions {
+.trend-icon.up {
+  color: #10b981;
+}
+
+.trend-icon.down {
+  color: #ef4444;
+}
+
+.trend-icon.neutral {
+  color: #6b7280;
+}
+
+.trend-text {
+  color: #6b7280;
+}
+
+/* ==================== FORMULARIOS ==================== */
+.form-select {
+  padding: 8px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 14px;
   background: white;
-  border-radius: 12px;
-  padding: 24px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-  border: 1px solid #e5e7eb;
+  color: #374151;
 }
 
-.actions-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+/* ==================== GRÁFICOS ==================== */
+.chart-container {
+  height: 320px;
+  position: relative;
+}
+
+.chart-loading, .chart-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: #6b7280;
+}
+
+.chart-empty .empty-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+  opacity: 0.5;
+}
+
+/* ==================== EMPRESAS PREVIEW ==================== */
+.companies-preview {
+  display: flex;
+  flex-direction: column;
   gap: 16px;
 }
 
-.action-card {
+.company-item {
   display: flex;
   align-items: center;
   gap: 16px;
-  padding: 20px;
-  background: #f9fafb;
+  padding: 16px;
   border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  text-decoration: none;
-  color: inherit;
+  border-radius: 12px;
+  background: #f8fafc;
   transition: all 0.2s ease;
 }
 
-.action-card:hover {
-  background: #f0f9ff;
-  border-color: #3b82f6;
-  transform: translateY(-1px);
+.company-item:hover {
+  border-color: #667eea;
+  background: #f0f4ff;
 }
 
-.action-card.clickable {
-  cursor: pointer;
-  border: none;
-  width: 100%;
-  text-align: left;
+.company-main {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
 }
 
-.action-card:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-  transform: none;
+.company-icon {
+  font-size: 20px;
+}
+
+.company-info {
+  flex: 1;
+}
+
+.company-name {
+  font-weight: 600;
+  color: #1f2937;
+  margin-bottom: 2px;
+}
+
+.company-email {
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.company-stats {
+  display: flex;
+  gap: 16px;
+}
+
+.stat-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.stat-value {
+  font-weight: 600;
+  color: #1f2937;
+  font-size: 16px;
+}
+
+.stat-label {
+  font-size: 11px;
+  color: #6b7280;
+}
+
+.company-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.status-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.status-indicator.active {
+  background-color: #10b981;
+}
+
+.status-indicator.inactive {
+  background-color: #ef4444;
+}
+
+.status-text {
+  font-size: 12px;
+  color: #6b7280;
+  font-weight: 500;
+}
+
+/* ==================== ACCIONES ADMIN ==================== */
+.admin-actions-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 20px;
+}
+
+.admin-action-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 24px;
+  border: 2px solid #e5e7eb;
+  border-radius: 12px;
+  text-decoration: none;
+  color: inherit;
+  transition: all 0.3s ease;
+  background: white;
+  position: relative;
+  overflow: hidden;
+}
+
+.admin-action-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  transform: scaleX(0);
+  transition: transform 0.3s ease;
+}
+
+.admin-action-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+}
+
+.admin-action-card:hover::before {
+  transform: scaleX(1);
+}
+
+.admin-action-card.primary::before {
+  background: linear-gradient(90deg, #667eea, #764ba2);
+}
+
+.admin-action-card.secondary::before {
+  background: linear-gradient(90deg, #3b82f6, #1d4ed8);
+}
+
+.admin-action-card.success::before {
+  background: linear-gradient(90deg, #10b981, #047857);
+}
+
+.admin-action-card.info::before {
+  background: linear-gradient(90deg, #06b6d4, #0891b2);
+}
+
+.admin-action-card.warning::before {
+  background: linear-gradient(90deg, #f59e0b, #d97706);
+}
+
+.admin-action-card.neutral::before {
+  background: linear-gradient(90deg, #6b7280, #4b5563);
 }
 
 .action-icon {
   font-size: 32px;
-  flex-shrink: 0;
+  opacity: 0.9;
 }
 
 .action-content {
@@ -822,7 +936,7 @@ onBeforeUnmount(() => {
 }
 
 .action-title {
-  font-size: 16px;
+  font-size: 18px;
   font-weight: 600;
   color: #1f2937;
   margin-bottom: 4px;
@@ -831,97 +945,177 @@ onBeforeUnmount(() => {
 .action-description {
   font-size: 14px;
   color: #6b7280;
+  margin-bottom: 8px;
 }
 
-/* Charts */
-.charts-section {
-  background: white;
+.action-badge {
+  font-size: 12px;
+  font-weight: 600;
+  background: #f3f4f6;
+  color: #4b5563;
+  padding: 4px 8px;
   border-radius: 12px;
-  padding: 24px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-  border: 1px solid #e5e7eb;
+  display: inline-block;
 }
 
-.charts-grid {
+.action-arrow {
+  color: #9ca3af;
+  font-size: 24px;
+  transition: all 0.3s ease;
+}
+
+.admin-action-card:hover .action-arrow {
+  color: #667eea;
+  transform: translateX(4px);
+}
+
+/* ==================== ESTADO DEL SISTEMA ==================== */
+.system-status {
   display: grid;
-  grid-template-columns: 2fr 1fr;
-  gap: 20px;
-  margin-bottom: 20px;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 16px;
 }
 
-.chart-container {
-  background: #f9fafb;
-  border-radius: 8px;
-  border: 1px solid #e5e7eb;
-  overflow: hidden;
-}
-
-.chart-container.full-width {
-  grid-column: 1 / -1;
-}
-
-.chart-header {
-  padding: 16px 20px;
-  background: white;
-  border-bottom: 1px solid #e5e7eb;
+.status-item {
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  gap: 12px;
+  padding: 16px;
+  background: #f8fafc;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
 }
 
-.chart-title {
-  font-size: 16px;
+.status-icon {
+  font-size: 20px;
+}
+
+.status-info {
+  flex: 1;
+}
+
+.status-title {
   font-weight: 600;
   color: #1f2937;
-  margin: 0;
+  margin-bottom: 2px;
 }
 
-.chart-controls {
-  display: flex;
-  gap: 8px;
-}
-
-.period-select {
-  padding: 4px 8px;
-  border: 1px solid #d1d5db;
-  border-radius: 4px;
+.status-description {
   font-size: 12px;
-  background: white;
-}
-
-.chart-content {
-  padding: 20px;
-  height: 300px;
-  position: relative;
-}
-
-.chart-loading {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
   color: #6b7280;
-  font-style: italic;
 }
 
-.no-data-message {
+/* ==================== ESTADOS ==================== */
+.initial-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 20px;
+  color: #6b7280;
+}
+
+.loading-spinner {
+  width: 48px;
+  height: 48px;
+  border: 4px solid #e5e7eb;
+  border-top-color: #667eea;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-bottom: 16px;
+}
+
+.loading-spinner.small {
+  width: 20px;
+  height: 20px;
+  border-width: 2px;
+  margin-bottom: 0;
+}
+
+.loading-state {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 20px;
+  color: #6b7280;
+  justify-content: center;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* ==================== NOTIFICACIONES ==================== */
+.error-toast {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 1000;
+  background: white;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  overflow: hidden;
+  animation: slideIn 0.3s ease;
+}
+
+.toast-content {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  background: #fef2f2;
+}
+
+.toast-icon {
+  color: #dc2626;
+}
+
+.toast-message {
+  flex: 1;
+  color: #7f1d1d;
+  font-size: 14px;
+}
+
+.toast-close {
+  background: none;
+  border: none;
+  color: #7f1d1d;
+  font-size: 18px;
+  cursor: pointer;
+  padding: 0;
+  width: 24px;
+  height: 24px;
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 100%;
-  color: #9ca3af;
-  font-style: italic;
 }
 
-.no-data-message p {
-  margin: 0;
-  font-size: 16px;
+@keyframes slideIn {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
 }
 
-/* Responsive */
-@media (max-width: 1024px) {
-  .charts-grid {
+/* ==================== RESPONSIVE ==================== */
+@media (max-width: 1200px) {
+  .dashboard-grid {
     grid-template-columns: 1fr;
+  }
+  
+  .content-section,
+  .chart-section {
+    grid-column: 1 / -1;
+  }
+  
+  .admin-actions-grid {
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
   }
 }
 
@@ -929,16 +1123,60 @@ onBeforeUnmount(() => {
   .page-container {
     padding: 16px;
   }
-  .dashboard-header {
+  
+  .header-content {
     flex-direction: column;
-    gap: 16px;
-    align-items: stretch;
+    align-items: flex-start;
+    gap: 20px;
+    padding: 24px;
   }
-  .kpis-grid, .actions-grid {
+  
+  .header-right {
+    align-self: stretch;
+    justify-content: space-between;
+  }
+  
+  .content-section {
+    padding: 24px;
+  }
+  
+  .kpis-grid {
     grid-template-columns: 1fr;
   }
-  .chart-content {
-    height: 250px;
+  
+  .admin-actions-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .system-status {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 480px) {
+  .page-title {
+    font-size: 24px;
+  }
+  
+  .header-right {
+    flex-direction: column;
+    gap: 16px;
+  }
+  
+  .kpi-card {
+    padding: 20px;
+  }
+  
+  .kpi-value {
+    font-size: 24px;
+  }
+  
+  .admin-action-card {
+    padding: 20px;
+  }
+  
+  .action-title {
+    font-size: 16px;
   }
 }
 </style>
