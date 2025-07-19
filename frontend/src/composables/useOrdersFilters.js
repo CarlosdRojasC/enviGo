@@ -150,18 +150,19 @@ export function useOrdersFilters(orders, fetchOrders) {
    * Handle filter changes with debouncing for search - ÚNICA VERSIÓN
    */
 function handleFilterChange(filterKey, value) {
-  console.log('🔍 Filter changing:', { filterKey, value });
+  console.log('🔍 Filter changing:', { filterKey, value, isArray: Array.isArray(value) });
 
   filters.value[filterKey] = value;
 
-  // Mantenemos el retraso SOLO para la búsqueda de texto
-  if (filterKey === 'search') {
+  // Si el filtro es de búsqueda O de comuna, aplica un retraso
+  // para permitir que el usuario siga escribiendo o seleccionando.
+  if (filterKey === 'search' || filterKey === 'shipping_commune') {
     clearTimeout(searchTimeout);
     searchTimeout = setTimeout(() => {
       applyFilters();
-    }, 500);
+    }, 5000); // 500ms de espera
   } else {
-    // Todos los demás filtros (incluyendo comunas) se aplican al instante
+    // Los otros filtros (como estado o fecha) se aplican al instante.
     applyFilters();
   }
 }
