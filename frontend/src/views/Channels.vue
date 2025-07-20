@@ -461,7 +461,7 @@ if (!companyId) {
 
 console.log('🔍 Obteniendo canales para empresa:', companyId)
 const response = await apiService.channels.getByCompany(companyId)
-      channels.value = response.data || []
+channels.value = response.data?.data || response.data || []
     }
     
   } catch (error) {

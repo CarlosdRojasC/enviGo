@@ -471,6 +471,7 @@ async syncOrders(req, res) {
         delivered_orders: deliveredOrders,
         total_revenue: totalRevenue,
         last_order_date: lastOrder ? lastOrder.order_date : null,
+        last_sync_at: channel.last_sync || channel.last_sync_at || null
       };
     }));
 
