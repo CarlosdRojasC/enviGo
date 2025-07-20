@@ -365,7 +365,7 @@
     </div>
 
     <!-- Modales -->
-    <Modal v-model:open="showGenerateModal" title="Generar Nueva Factura" width="800px">
+    <Modal v-model="showGenerateModal" title="Generar Nueva Factura" width="800px">
       <GenerateInvoiceForm 
         :companies="companies"
         @close="showGenerateModal = false"
@@ -373,7 +373,7 @@
       />
     </Modal>
     
-    <Modal v-model:open="showBulkGenerateModal" title="Generar Facturas Masivas" width="900px">
+    <Modal v-model="showBulkGenerateModal" title="Generar Facturas Masivas" width="900px">
       <BulkGenerateForm 
         :companies="companies"
         @close="showBulkGenerateModal = false"
@@ -381,7 +381,7 @@
       />
     </Modal>
     
-    <Modal v-model:open="showInvoiceModal" title="Detalles de Factura" width="700px">
+    <Modal v-model="showInvoiceModal" title="Detalles de Factura" width="700px">
       <InvoiceDetails 
         :invoice="selectedInvoice"
         @close="showInvoiceModal = false"
