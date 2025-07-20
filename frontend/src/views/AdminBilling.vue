@@ -579,21 +579,68 @@ async function fetchInitialData() {
 
 async function fetchFinancialSummary() {
   try {
-    const { data } = await apiService.billing.getFinancialSummary()
-    metrics.value = { ...metrics.value, ...data }
-    createRevenueChart(data.monthlyRevenueData || [])
+    console.log('📊 Cargando resumen financiero...');
+    
+    const { data } = await apiService.billing.getFinancialSummary();
+    
+    console.log('✅ Datos recibidos:', data);
+    
+    // Actualizar métricas con datos reales
+    metrics.value = {
+      totalRevenue: data.totalRevenue || 0,
+      revenueGrowth: data.revenueGrowth || 0,
+      currentMonthRevenue: data.currentMonthRevenue || 0,
+      pendingAmount: data.pendingAmount || 0,
+      totalInvoices: data.totalInvoices || 0,
+      pendingInvoices: data.pendingInvoices || 0,
+      overdueInvoices: data.overdueInvoices || 0,
+      newInvoicesThisMonth: data.newInvoicesThisMonth || 0,
+      unfactoredOrders: data.unfactoredOrders || 0,
+      averageInvoiceAmount: data.averageInvoiceAmount || 0
+    };
+    
+    // Crear gráfico con datos reales
+    createRevenueChart(data.monthlyRevenueData || []);
+    
   } catch (error) {
-    console.error('Error fetching financial summary:', error)
+    console.error('❌ Error fetching financial summary:', error);
+    toast.error('Error cargando resumen financiero');
+    
+    // Valores por defecto en caso de error
+    metrics.value = {
+      totalRevenue: 0,
+      revenueGrowth: 0,
+      currentMonthRevenue: 0,
+      pendingAmount: 0,
+      totalInvoices: 0,
+      pendingInvoices: 0,
+      overdueInvoices: 0,
+      newInvoicesThisMonth: 0,
+      unfactoredOrders: 0,
+      averageInvoiceAmount: 0
+    };
   }
 }
 
 async function fetchInvoices() {
   try {
-    const { data } = await apiService.billing.getInvoices()
-    invoices.value = data.invoices || []
+    console.log('📄 Cargando facturas...');
+    
+    const { data } = await apiService.billing.getInvoices();
+    
+    console.log('✅ Facturas recibidas:', data);
+    
+    invoices.value = data.invoices || [];
+    
+    if (invoices.value.length === 0) {
+      console.log('ℹ️ No se encontraron facturas');
+      toast.info('No hay facturas disponibles. Genera la primera factura.');
+    }
+    
   } catch (error) {
-    console.error('Error fetching invoices:', error)
-    toast.error('Error cargando facturas')
+    console.error('❌ Error fetching invoices:', error);
+    toast.error('Error cargando facturas');
+    invoices.value = [];
   }
 }
 

@@ -1005,73 +1005,315 @@ async deleteAllInvoices(req, res) {
 
 async getFinancialSummary(req, res) {
   try {
-    // 1. Verificar que sea un administrador
     if (req.user.role !== 'admin') {
       return res.status(403).json({ error: ERRORS.FORBIDDEN });
     }
 
-    // 2. Calcular la fecha de hace 6 meses
+    const currentDate = new Date();
+    const startOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+    const startOfLastMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1);
+    const endOfLastMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 0);
+
+    // 1. MÉTRICAS PRINCIPALES CON DATOS REALES
+    const [
+      totalInvoices,
+      totalRevenue,
+      currentMonthRevenue,
+      lastMonthRevenue,
+      pendingInvoices,
+      overdueInvoices,
+      newInvoicesThisMonth,
+      unfactoredOrders
+    ] = await Promise.all([
+      // Total de facturas
+      Invoice.countDocuments({}),
+      
+      // Ingresos totales de facturas pagadas
+      Invoice.aggregate([
+        { $match: { status: 'paid' } },
+        { $group: { _id: null, total: { $sum: '$total_amount' } } }
+      ]).then(result => result[0]?.total || 0),
+      
+      // Ingresos del mes actual
+      Invoice.aggregate([
+        { 
+          $match: { 
+            status: 'paid',
+            paid_date: { $gte: startOfMonth }
+          }
+        },
+        { $group: { _id: null, total: { $sum: '$total_amount' } } }
+      ]).then(result => result[0]?.total || 0),
+      
+      // Ingresos del mes pasado para calcular growth
+      Invoice.aggregate([
+        { 
+          $match: { 
+            status: 'paid',
+            paid_date: { $gte: startOfLastMonth, $lte: endOfLastMonth }
+          }
+        },
+        { $group: { _id: null, total: { $sum: '$total_amount' } } }
+      ]).then(result => result[0]?.total || 0),
+      
+      // Facturas pendientes
+      Invoice.aggregate([
+        { $match: { status: { $in: ['sent', 'draft'] } } },
+        { 
+          $group: { 
+            _id: null, 
+            count: { $sum: 1 },
+            amount: { $sum: '$total_amount' }
+          }
+        }
+      ]).then(result => result[0] || { count: 0, amount: 0 }),
+      
+      // Facturas vencidas
+      Invoice.countDocuments({
+        status: 'sent',
+        due_date: { $lt: currentDate }
+      }),
+      
+      // Nuevas facturas este mes
+      Invoice.countDocuments({
+        created_at: { $gte: startOfMonth }
+      }),
+      
+      // Pedidos sin facturar
+      Order.countDocuments({
+        status: 'delivered',
+        billed: { $ne: true }
+      })
+    ]);
+
+    // 2. CALCULAR MÉTRICAS DERIVADAS
+    const revenueGrowth = lastMonthRevenue > 0 
+      ? ((currentMonthRevenue - lastMonthRevenue) / lastMonthRevenue) * 100 
+      : 0;
+
+    const averageInvoiceAmount = totalInvoices > 0 
+      ? Math.round(totalRevenue / totalInvoices) 
+      : 0;
+
+    // 3. DATOS PARA EL GRÁFICO DE INGRESOS (últimos 6 meses)
     const sixMonthsAgo = new Date();
     sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
-    sixMonthsAgo.setHours(0, 0, 0, 0);
 
-    // 3. Usar una agregación de MongoDB para agrupar por mes
-    const monthlyRevenueData = await Order.aggregate([
+    const monthlyRevenueData = await Invoice.aggregate([
       {
-        // Filtrar solo pedidos entregados en los últimos 6 meses
         $match: {
-          status: 'delivered',
-          delivery_date: { $gte: sixMonthsAgo }
+          status: 'paid',
+          paid_date: { $gte: sixMonthsAgo }
         }
       },
       {
-        // Agrupar por año y mes
         $group: {
           _id: {
-            year: { $year: "$delivery_date" },
-            month: { $month: "$delivery_date" }
+            year: { $year: '$paid_date' },
+            month: { $month: '$paid_date' }
           },
-          // Sumar el costo de envío de cada pedido en el grupo
-          totalRevenue: { $sum: "$shipping_cost" }
+          revenue: { $sum: '$total_amount' }
         }
       },
       {
-        // Ordenar los resultados por fecha para que el gráfico se vea bien
-        $sort: {
-          "_id.year": 1,
-          "_id.month": 1
-        }
+        $sort: { '_id.year': 1, '_id.month': 1 }
       },
       {
-        // Formatear la salida para que coincida con lo que el frontend espera
         $project: {
-          _id: 0, // No incluir el campo _id
+          _id: 0,
           month: {
-            // Formatear la fecha como "ene 2025", "feb 2025", etc.
             $let: {
               vars: {
-                monthsInSpanish: ['', 'ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
+                monthNames: ['', 'Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
               },
               in: {
                 $concat: [
-                  { $arrayElemAt: ['$$monthsInSpanish', '$_id.month'] },
+                  { $arrayElemAt: ['$$monthNames', '$_id.month'] },
                   ' ',
                   { $toString: '$_id.year' }
                 ]
               }
             }
           },
-          revenue: "$totalRevenue" // Renombrar el campo a "revenue"
+          revenue: '$revenue'
         }
       }
     ]);
 
-    // 4. Enviar el arreglo de datos al frontend
-    res.json(monthlyRevenueData);
+    // 4. RESPUESTA CON DATOS REALES
+    res.json({
+      // Métricas principales
+      totalRevenue,
+      currentMonthRevenue,
+      revenueGrowth,
+      pendingAmount: pendingInvoices.amount,
+      totalInvoices,
+      pendingInvoices: pendingInvoices.count,
+      overdueInvoices,
+      newInvoicesThisMonth,
+      unfactoredOrders,
+      averageInvoiceAmount,
+      
+      // Datos para gráficos
+      monthlyRevenueData: monthlyRevenueData.length > 0 ? monthlyRevenueData : [
+        { month: 'Datos no disponibles', revenue: 0 }
+      ]
+    });
 
   } catch (error) {
-    console.error('Error en getFinancialSummary:', error);
-    res.status(500).json({ error: 'Error al obtener el resumen financiero' });
+    console.error('❌ Error en getFinancialSummary:', error);
+    res.status(500).json({ error: ERRORS.SERVER_ERROR });
+  }
+}
+
+
+async getInvoiceDetails(req, res) {
+  try {
+    const { id } = req.params;
+    
+    const invoice = await Invoice.findById(id)
+      .populate('company_id', 'name email rut address phone')
+      .lean();
+    
+    if (!invoice) {
+      return res.status(404).json({ error: 'Factura no encontrada' });
+    }
+    
+    // Verificar permisos
+    if (req.user.role !== 'admin' && req.user.company_id.toString() !== invoice.company_id._id.toString()) {
+      return res.status(403).json({ error: ERRORS.FORBIDDEN });
+    }
+    
+    res.json(invoice);
+    
+  } catch (error) {
+    console.error('Error obteniendo detalles de factura:', error);
+    res.status(500).json({ error: ERRORS.SERVER_ERROR });
+  }
+}
+
+async getInvoiceOrders(req, res) {
+  try {
+    const { id } = req.params;
+    
+    const invoice = await Invoice.findById(id);
+    if (!invoice) {
+      return res.status(404).json({ error: 'Factura no encontrada' });
+    }
+    
+    // Verificar permisos
+    if (req.user.role !== 'admin' && req.user.company_id.toString() !== invoice.company_id.toString()) {
+      return res.status(403).json({ error: ERRORS.FORBIDDEN });
+    }
+    
+    const orders = await Order.find({ invoice_id: id })
+      .select('order_number customer_name customer_phone shipping_address status created_at shipping_cost')
+      .lean();
+    
+    res.json(orders);
+    
+  } catch (error) {
+    console.error('Error obteniendo pedidos de factura:', error);
+    res.status(500).json({ error: ERRORS.SERVER_ERROR });
+  }
+}
+
+async updateInvoiceNotes(req, res) {
+  try {
+    const { id } = req.params;
+    const { notes } = req.body;
+    
+    const invoice = await Invoice.findById(id);
+    if (!invoice) {
+      return res.status(404).json({ error: 'Factura no encontrada' });
+    }
+    
+    // Solo admin puede actualizar notas
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ error: ERRORS.FORBIDDEN });
+    }
+    
+    invoice.notes = notes;
+    await invoice.save();
+    
+    res.json({ message: 'Notas actualizadas', notes });
+    
+  } catch (error) {
+    console.error('Error actualizando notas:', error);
+    res.status(500).json({ error: ERRORS.SERVER_ERROR });
+  }
+}
+
+async duplicateInvoice(req, res) {
+  try {
+    const { id } = req.params;
+    
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ error: ERRORS.FORBIDDEN });
+    }
+    
+    const originalInvoice = await Invoice.findById(id);
+    if (!originalInvoice) {
+      return res.status(404).json({ error: 'Factura no encontrada' });
+    }
+    
+    const invoiceCount = await Invoice.countDocuments({}) + 1;
+    const now = new Date();
+    const invoice_number = `INV-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}-${String(invoiceCount).padStart(4, '0')}`;
+    
+    const duplicateInvoice = new Invoice({
+      ...originalInvoice.toObject(),
+      _id: undefined,
+      invoice_number,
+      created_at: new Date(),
+      status: 'draft',
+      sent_at: null,
+      paid_date: null
+    });
+    
+    await duplicateInvoice.save();
+    
+    res.json({ 
+      message: 'Factura duplicada exitosamente',
+      invoice_number 
+    });
+    
+  } catch (error) {
+    console.error('Error duplicando factura:', error);
+    res.status(500).json({ error: ERRORS.SERVER_ERROR });
+  }
+}
+
+async bulkMarkAsPaid(req, res) {
+  try {
+    const { invoice_ids } = req.body;
+    
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ error: ERRORS.FORBIDDEN });
+    }
+    
+    if (!invoice_ids || !Array.isArray(invoice_ids)) {
+      return res.status(400).json({ error: 'Se requiere un array de IDs de facturas' });
+    }
+    
+    const result = await Invoice.updateMany(
+      { _id: { $in: invoice_ids } },
+      { 
+        $set: { 
+          status: 'paid',
+          paid_date: new Date()
+        }
+      }
+    );
+    
+    res.json({ 
+      message: `${result.modifiedCount} facturas marcadas como pagadas`,
+      modified_count: result.modifiedCount
+    });
+    
+  } catch (error) {
+    console.error('Error en operación masiva:', error);
+    res.status(500).json({ error: ERRORS.SERVER_ERROR });
   }
 }
 }

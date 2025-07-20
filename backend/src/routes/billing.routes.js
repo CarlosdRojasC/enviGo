@@ -12,15 +12,21 @@ router.get('/invoices', authenticateToken, billingController.getInvoices);
 router.get('/stats', authenticateToken, billingController.getBillingStats);
 router.get('/next-estimate', authenticateToken, billingController.getNextInvoiceEstimate);
 router.get('/financial-summary', authenticateToken, isAdmin, billingController.getFinancialSummary);
+router.get('/invoices/:id/details', authenticateToken, billingController.getInvoiceDetails);
+router.get('/invoices/:id/orders', authenticateToken, billingController.getInvoiceOrders);
+router.patch('/invoices/:id/notes', authenticateToken, billingController.updateInvoiceNotes);
+router.post('/invoices/:id/duplicate', authenticateToken, isAdmin, billingController.duplicateInvoice);
 
 // Generar facturas (solo admin)
 router.post('/invoices/generate', authenticateToken, isAdmin, billingController.generateInvoice);
 router.post('/invoices/generate-bulk', authenticateToken, isAdmin, billingController.generateBulkInvoices);
 router.get('/invoices/bulk-preview', authenticateToken, isAdmin, billingController.previewBulkGeneration);
 router.post('/invoices/:id/send', authenticateToken, isAdmin, validateMongoId('id'), billingController.sendInvoice);
+
 // Descargar y modificar facturas
 router.get('/invoices/:id/download', authenticateToken, validateMongoId('id'), billingController.downloadInvoice);
 router.post('/invoices/:id/mark-as-paid', authenticateToken, isAdmin, validateMongoId('id'), billingController.markAsPaid);
+
 
 // Borrar facturas (solo admin)
 router.delete('/invoices/:id', authenticateToken, isAdmin, validateMongoId('id'), billingController.deleteInvoice);

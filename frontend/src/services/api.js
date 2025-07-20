@@ -365,187 +365,68 @@ getAllForAdmin: () => api.get('/channels/admin/all'),
 
 // Servicios de facturación
 const billing = {
-  // Obtener facturas con mejor manejo de errores
-  getInvoices: async (params = {}) => {
-    try {
-      console.log('🔍 API: Solicitando facturas con parámetros:', params)
-      const response = await api.get('/billing/invoices', { params })
-      console.log('✅ API: Facturas recibidas:', response.data)
-      return response
-    } catch (error) {
-      console.error('❌ API: Error en getInvoices:', {
-        status: error.response?.status,
-        statusText: error.response?.statusText,
-        data: error.response?.data,
-        url: error.config?.url
-      })
-      throw error
-    }
-  },
+  // Obtener resumen financiero para admin dashboard
+  getFinancialSummary: () => api.get('/billing/financial-summary'),
   
-  // Obtener estadísticas de facturación
-  getBillingStats: async (params = {}) => {
-    try {
-      console.log('🔍 API: Solicitando estadísticas de facturación:', params)
-      const response = await api.get('/billing/stats', { params })
-      console.log('✅ API: Estadísticas recibidas:', response.data)
-      return response
-    } catch (error) {
-      console.error('❌ API: Error en getBillingStats:', error.response || error)
-      throw error
-    }
-  },
-  
-  // Obtener estimación de próxima factura
-  getNextInvoiceEstimate: async (params = {}) => {
-    try {
-      console.log('🔍 API: Solicitando estimación de próxima factura:', params)
-      const response = await api.get('/billing/next-estimate', { params })
-      console.log('✅ API: Estimación recibida:', response.data)
-      return response
-    } catch (error) {
-      console.error('❌ API: Error en getNextInvoiceEstimate:', error.response || error)
-      throw error
-    }
-  },
-  
-  // Descargar factura en PDF
-  downloadInvoice: async (invoiceId) => {
-    try {
-      console.log('📥 API: Descargando factura:', invoiceId)
-      const response = await api.get(`/billing/invoices/${invoiceId}/download`, {
-        responseType: 'blob'
-      })
-      console.log('✅ API: Factura descargada exitosamente')
-      return response
-    } catch (error) {
-      console.error('❌ API: Error descargando factura:', error.response || error)
-      throw error
-    }
-  },
-  
-  // Marcar factura como pagada (admin)
-  markAsPaid: async (invoiceId) => {
-    try {
-      console.log('💳 API: Marcando factura como pagada:', invoiceId)
-      const response = await api.post(`/billing/invoices/${invoiceId}/mark-as-paid`)
-      console.log('✅ API: Factura marcada como pagada')
-      return response
-    } catch (error) {
-      console.error('❌ API: Error marcando como pagada:', error.response || error)
-      throw error
-    }
+  // Obtener facturas
+  getInvoices: (params = {}) => {
+    const queryParams = new URLSearchParams(params).toString();
+    return api.get(`/billing/invoices${queryParams ? '?' + queryParams : ''}`);
   },
   
   // Generar factura individual
-  generateInvoice: async (data) => {
-    try {
-      console.log('🔨 API: Generando factura individual:', data)
-      const response = await api.post('/billing/invoices/generate', data)
-      console.log('✅ API: Factura generada:', response.data)
-      return response
-    } catch (error) {
-      console.error('❌ API: Error generando factura:', error.response || error)
-      throw error
-    }
-  },
-  
-  // Vista previa de generación masiva
-  previewBulkGeneration: async (params) => {
-    try {
-      console.log('🔍 API: Vista previa generación masiva:', params)
-      const response = await api.get('/billing/invoices/bulk-preview', { params })
-      console.log('✅ API: Vista previa recibida:', response.data)
-      return response
-    } catch (error) {
-      console.error('❌ API: Error en vista previa:', error.response || error)
-      throw error
-    }
-  },
+  generateInvoice: (data) => api.post('/billing/invoices/generate', data),
   
   // Generar facturas masivas
-  generateBulkInvoices: async (data) => {
-    try {
-      console.log('🔨 API: Generando facturas masivas:', data)
-      const response = await api.post('/billing/invoices/generate-bulk', data)
-      console.log('✅ API: Facturas masivas generadas:', response.data)
-      return response
-    } catch (error) {
-      console.error('❌ API: Error generando facturas masivas:', error.response || error)
-      throw error
-    }
+  generateBulkInvoices: (data) => api.post('/billing/invoices/generate-bulk', data),
+  
+  // Preview de generación masiva
+  getBulkGenerationPreview: (params) => {
+    const queryParams = new URLSearchParams(params).toString();
+    return api.get(`/billing/invoices/bulk-preview?${queryParams}`);
   },
   
-  // Generar facturas mensuales automáticas
-  generateMonthlyInvoices: () => api.post('/billing/generate'),
-
-  // Para empresas - Solicitar nueva factura
-  requestInvoice: (data) => api.post('/billing/request-invoice', data),
+  // Obtener pedidos disponibles para facturar
+  getAvailableOrders: (params) => {
+    const queryParams = new URLSearchParams(params).toString();
+    return api.get(`/orders?${queryParams}&status=delivered&billed=false`);
+  },
   
-  // Para empresas - Reportar pago de factura
-  reportPayment: (data) => api.post('/billing/report-payment', data),
+  // Marcar como pagada
+  markAsPaid: (invoiceId) => api.post(`/billing/invoices/${invoiceId}/mark-as-paid`),
+  
+  // Enviar factura
   sendInvoice: (invoiceId) => api.post(`/billing/invoices/${invoiceId}/send`),
-  // Borrar una factura individual
-  deleteInvoice: async (invoiceId) => {
-    try {
-      console.log('🗑️ API: Borrando factura:', invoiceId)
-      const response = await api.delete(`/billing/invoices/${invoiceId}`)
-      console.log('✅ API: Factura borrada exitosamente')
-      return response
-    } catch (error) {
-      console.error('❌ API: Error borrando factura:', error.response || error)
-      throw error
-    }
+  
+  // Descargar factura
+  downloadInvoice: (invoiceId) => api.get(`/billing/invoices/${invoiceId}/download`, {
+    responseType: 'blob'
+  }),
+  
+  // Eliminar facturas
+  deleteInvoice: (invoiceId) => api.delete(`/billing/invoices/${invoiceId}`),
+  bulkDelete: (invoiceIds) => api.delete('/billing/invoices', { data: { invoice_ids: invoiceIds } }),
+  
+  // Operaciones masivas
+  bulkMarkAsPaid: (invoiceIds) => api.post('/billing/invoices/bulk-mark-paid', { invoice_ids: invoiceIds }),
+  
+  // Detalles de factura
+  getInvoiceDetails: (invoiceId) => api.get(`/billing/invoices/${invoiceId}/details`),
+  getInvoiceOrders: (invoiceId) => api.get(`/billing/invoices/${invoiceId}/orders`),
+  updateInvoiceNotes: (invoiceId, data) => api.patch(`/billing/invoices/${invoiceId}/notes`, data),
+  duplicateInvoice: (invoiceId) => api.post(`/billing/invoices/${invoiceId}/duplicate`),
+  
+  // Estadísticas para empresas
+  getBillingStats: (companyId) => {
+    const params = companyId ? `?company_id=${companyId}` : '';
+    return api.get(`/billing/stats${params}`);
   },
-
-  // Borrar múltiples facturas
-  deleteBulkInvoices: async (invoiceIds) => {
-    try {
-      console.log('🗑️ API: Borrando facturas en lote:', invoiceIds.length)
-      const response = await api.delete('/billing/invoices', {
-        data: { invoice_ids: invoiceIds }
-      })
-      console.log('✅ API: Facturas borradas exitosamente')
-      return response
-    } catch (error) {
-      console.error('❌ API: Error borrando facturas en lote:', error.response || error)
-      throw error
-    }
-  },
-
-  // Borrar todas las facturas (solo desarrollo)
-  deleteAllInvoices: async () => {
-    try {
-      console.log('🧹 API: Borrando TODAS las facturas')
-      const response = await api.delete('/billing/invoices/all/development')
-      console.log('✅ API: Todas las facturas borradas')
-      return response
-    } catch (error) {
-      console.error('❌ API: Error borrando todas las facturas:', error.response || error)
-      throw error
-    }
-  },
-
-  // Obtener resumen financiero para admin
-  getFinancialSummary: async () => {
-    try {
-      console.log('🔍 API: Solicitando resumen financiero')
-      const response = await api.get('/billing/financial-summary')
-      console.log('✅ API: Resumen financiero recibido:', response.data)
-      return response
-    } catch (error) {
-      console.error('❌ API: Error en getFinancialSummary:', error.response || error)
-      throw error
-    }
-  },
-
-  // Exportar facturas a CSV/Excel
-  exportInvoices: (params = {}) => 
-    api.get('/billing/export', { 
-      params,
-      responseType: 'blob' 
-    })
-}
+  
+  getNextInvoiceEstimate: (companyId) => {
+    const params = companyId ? `?company_id=${companyId}` : '';
+    return api.get(`/billing/next-estimate${params}`);
+  }
+};
 
 // Servicios de dashboard
 const dashboard = {
