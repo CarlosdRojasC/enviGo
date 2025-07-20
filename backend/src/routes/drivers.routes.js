@@ -7,7 +7,7 @@ const { validateMongoId } = require('../middlewares/validators/generic.validator
 // ==================== RUTAS DE CONDUCTORES ====================
 
 // Obtener todos los conductores (solo admin)
-router.get('/', authenticateToken, isAdmin, driverController.getAllDrivers);
+router.get('/', authenticateToken, isAdmin, driverController.getAll);
 
 // Crear nuevo conductor (solo admin)
 router.post('/', authenticateToken, isAdmin, driverController.createDriver);
