@@ -494,7 +494,21 @@ const billingRate = computed(() => {
 });
 
 // --- MÉTODOS ---
+async function sendInvoice(invoiceId) {
+  if (!confirm('¿Estás seguro de que quieres enviar esta factura al cliente? Esta acción no se puede deshacer.')) return;
 
+  try {
+    // Llama al nuevo endpoint que crearemos en el backend
+    await apiService.billing.sendInvoice(invoiceId);
+    toast.success('Factura enviada exitosamente.');
+    
+    // Vuelve a cargar los datos para que veas el cambio de estado de "Borrador" a "Enviada"
+    await fetchInitialData(); 
+  } catch (error) {
+    console.error('Error sending invoice:', error);
+    toast.error(error.message || 'No se pudo enviar la factura.');
+  }
+}
 async function confirmPayment(invoiceId) {
   try {
     // Asumiendo que tienes un endpoint en tu apiService
