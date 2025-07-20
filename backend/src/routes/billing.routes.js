@@ -31,8 +31,8 @@ router.put(
 // RUTA PARA EL ADMIN: Confirmar que el pago ha sido recibido
 router.put(
   '/invoices/:id/confirm-payment', 
-  authMiddleware, // Protegida
-  adminMiddleware, // Y solo para administradores
+  authenticateToken, // Protegida
+  isAdmin, // Y solo para administradores
   billingController.confirmPayment
 );
 
