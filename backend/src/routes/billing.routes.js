@@ -24,7 +24,7 @@ router.get('/invoices/bulk-preview', authenticateToken, isAdmin, billingControll
 router.post('/invoices/:id/send', authenticateToken, isAdmin, validateMongoId('id'), billingController.sendInvoice);
 router.put(
   '/invoices/:id/request-confirmation', 
-  authMiddleware, // Protegida para usuarios logueados
+  authenticateToken, // Protegida para usuarios logueados
   billingController.requestPaymentConfirmation
 );
 
