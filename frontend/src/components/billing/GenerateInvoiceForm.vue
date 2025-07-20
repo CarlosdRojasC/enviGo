@@ -99,7 +99,7 @@
 <script setup>
 import { ref, computed } from 'vue';
 import { useToast } from 'vue-toastification';
-import { apiService } from '../services/api';
+import { apiService } from '../../services/api';
 
 const props = defineProps({
   companies: {
