@@ -10,99 +10,136 @@ const mongoose = require('mongoose');
 
 class BillingController {
   
-  async generateInvoice(req, res) {
-    try {
-      const {
-        company_id,
-        period_start,
-        period_end,
-        order_ids,
-        type = 'invoice'
-      } = req.body;
+async generateInvoice(req, res) {
+  try {
+    const {
+      company_id,
+      period_start,
+      period_end,
+      order_ids,
+      type = 'invoice'
+    } = req.body;
 
-      if (req.user.role !== 'admin') {
-        return res.status(403).json({ error: ERRORS.FORBIDDEN });
-      }
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ error: ERRORS.FORBIDDEN });
+    }
 
-      if (!company_id || !period_start || !period_end) {
-        return res.status(400).json({ 
-          error: 'Se requieren company_id, period_start y period_end' 
-        });
-      }
+    if (!company_id || !period_start || !period_end || !order_ids || order_ids.length === 0) {
+      return res.status(400).json({ 
+        error: 'Se requieren company_id, period_start, period_end y al menos un order_id' 
+      });
+    }
 
-      const company = await Company.findById(company_id);
-      if (!company) {
-        return res.status(404).json({ error: 'Empresa no encontrada' });
-      }
+    const company = await Company.findById(company_id);
+    if (!company) {
+      return res.status(404).json({ error: 'Empresa no encontrada' });
+    }
 
-      let orderFilter = {
-        company_id: new mongoose.Types.ObjectId(company_id),
-        status: 'delivered',
-        order_date: {
-          $gte: new Date(period_start),
-          $lte: new Date(period_end)
-        }
-      };
+    const month = new Date(period_end).getMonth() + 1;
+    const year = new Date(period_end).getFullYear();
 
-      if (order_ids && order_ids.length > 0) {
-        orderFilter._id = { $in: order_ids.map(id => new mongoose.Types.ObjectId(id)) };
-      }
+    // 1. BUSCA UNA FACTURA EXISTENTE EN BORRADOR
+    let existingInvoice = await Invoice.findOne({
+      company_id: company_id,
+      month: month,
+      year: year,
+      status: 'draft'
+    });
 
-      const orders = await Order.find(orderFilter);
+    const newOrders = await Order.find({ 
+        _id: { $in: order_ids.map(id => new mongoose.Types.ObjectId(id)) },
+        company_id: new mongoose.Types.ObjectId(company_id)
+    });
 
-      if (orders.length === 0) {
-        return res.status(400).json({ 
-          error: 'No se encontraron pedidos para el período especificado' 
-        });
-      }
+    if (newOrders.length === 0) {
+        return res.status(400).json({ error: 'Los pedidos seleccionados no son válidos o no pertenecen a la empresa.' });
+    }
 
-      // Sumar el costo de envío de cada pedido para el subtotal
-      const subtotal = orders.reduce((acc, order) => acc + (order.shipping_cost || 0), 0);
-      const total_orders = orders.length;
-      const price_per_order = company.price_per_order || 0; // Se guarda como referencia
+    if (existingInvoice) {
+      // 2. SI EXISTE, LA ACTUALIZA
+      console.log(`🧾 Actualizando factura existente: ${existingInvoice.invoice_number}`);
+      
+      const existingOrderIds = await Order.find({ invoice_id: existingInvoice._id }).select('_id');
+      const allOrderIds = [...new Set([...existingOrderIds.map(o => o._id.toString()), ...order_ids])];
+      const allOrders = await Order.find({ _id: { $in: allOrderIds.map(id => new mongoose.Types.ObjectId(id)) } });
+
+      const subtotal = allOrders.reduce((acc, order) => acc + (order.shipping_cost || 0), 0);
       const tax_amount = Math.round(subtotal * 0.19);
       const total_amount = subtotal + tax_amount;
 
+      existingInvoice.total_orders = allOrders.length;
+      existingInvoice.subtotal = subtotal;
+      existingInvoice.tax_amount = tax_amount;
+      existingInvoice.total_amount = total_amount;
+      existingInvoice.amount_due = subtotal; // O total_amount según tu lógica de negocio
+      
+      await existingInvoice.save();
+
+      await Order.updateMany(
+        { _id: { $in: allOrders.map(o => o._id) } },
+        { $set: { billed: true, invoice_id: existingInvoice._id } }
+      );
+      
+      const invoiceWithCompany = await Invoice.findById(existingInvoice._id).populate('company_id', 'name email');
+
+      return res.status(200).json({
+        message: 'Factura actualizada exitosamente con nuevos pedidos',
+        invoice: invoiceWithCompany
+      });
+
+    } else {
+      // 3. SI NO EXISTE, CREA UNA NUEVA
+      console.log(`✨ Creando nueva factura para ${company.name} - ${month}/${year}`);
+      
+      const subtotal = newOrders.reduce((acc, order) => acc + (order.shipping_cost || 0), 0);
+      const tax_amount = Math.round(subtotal * 0.19);
+      const total_amount = subtotal + tax_amount;
+      
       const invoiceCount = await Invoice.countDocuments({}) + 1;
       const now = new Date();
       const invoice_number = `INV-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}-${String(invoiceCount).padStart(4, '0')}`;
 
-      const invoice = new Invoice({
+      const newInvoice = new Invoice({
         company_id,
         invoice_number,
-        month: new Date(period_end).getMonth() + 1,
-        year: new Date(period_end).getFullYear(),
-        total_orders,
-        price_per_order,
-        amount_due: subtotal,
+        month,
+        year,
+        total_orders: newOrders.length,
+        price_per_order: company.price_per_order, // Referencial
         subtotal,
         tax_amount,
         total_amount,
+        amount_due: subtotal, // O total_amount
         period_start: new Date(period_start),
         period_end: new Date(period_end),
         due_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
         status: 'draft'
       });
 
-      await invoice.save();
-
+      await newInvoice.save();
+      
       await Order.updateMany(
-        { _id: { $in: orders.map(o => o._id) } },
-        { $set: { status: 'facturado', invoice_id: invoice._id, billed: true, updated_at: new Date() } }
+        { _id: { $in: newOrders.map(o => o._id) } },
+        { $set: { billed: true, invoice_id: newInvoice._id } }
       );
 
-      const invoiceWithCompany = await Invoice.findById(invoice._id).populate('company_id', 'name email');
+      const invoiceWithCompany = await Invoice.findById(newInvoice._id).populate('company_id', 'name email');
 
-      res.status(201).json({
+      return res.status(201).json({
         message: 'Factura generada exitosamente',
         invoice: invoiceWithCompany
       });
-
-    } catch (error) {
-      console.error('❌ Error generando factura:', error);
-      res.status(500).json({ error: ERRORS.SERVER_ERROR });
     }
+
+  } catch (error) {
+    console.error('❌ Error generando factura:', error);
+    // Captura específica del error de duplicado para un mensaje más claro
+    if (error.code === 11000) {
+      return res.status(409).json({ error: 'Conflicto: Ya existe una factura para esta empresa en este período que no está en borrador.' });
+    }
+    res.status(500).json({ error: 'Error interno del servidor al generar la factura' });
   }
+}
 
   async generateBulkInvoices(req, res) {
     try {
