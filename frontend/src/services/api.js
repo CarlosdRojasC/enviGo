@@ -350,7 +350,7 @@ markAsDelivered: async (orderId, proofData = {}) => {
 const channels = {
   getByCompany: (companyId) => api.get(`/companies/${companyId}/channels`),
   getAll: () => api.get('/channels/admin/all'), // Para admin ver todos
-  getAllForAdmin: () => api.get('/channels/admin/all'), // Alias
+getAllForAdmin: () => api.get('/channels/admin/all'),
   getById: (id) => api.get(`/channels/${id}`),
   create: (companyId, channelData) => api.post(`/companies/${companyId}/channels`, channelData),
   update: (id, channelData) => api.put(`/channels/${id}`, channelData),

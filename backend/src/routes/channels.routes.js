@@ -11,7 +11,7 @@ router.use(authenticateToken);
 // ==================== RUTAS PARA ADMINISTRADORES ====================
 
 // Obtener TODOS los canales (solo admin) - NUEVA RUTA
-router.get('/admin/all', isAdmin, ChannelController.getAllChannelsForAdmin);
+router.get('/admin/all', ChannelController.getAllForAdmin);
 
 // Obtener canales de una empresa específica (admin o usuarios de la empresa)
 router.get('/company/:companyId', ChannelController.getByCompany);
