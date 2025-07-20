@@ -439,7 +439,7 @@ async function fetchChannels() {
         endpoint = `companies/${selectedCompanyId.value}/channels`
         const response = await apiService.companies.getChannels?.(selectedCompanyId.value) || 
                          await apiService.channels.getByCompany(selectedCompanyId.value)
-        channels.value = response.data || []
+channels.value = response.data?.data || response.data || []
       } else {
         // Usar el nuevo endpoint para obtener todos los canales (admin)
         const response = await apiService.channels.getAllForAdmin?.() || 

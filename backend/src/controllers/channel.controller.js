@@ -8,35 +8,46 @@ const MercadoLibreService = require('../services/mercadolibre.service');
 
 class ChannelController {
   // Obtener canales de una empresa con total_orders y last_order_date
-  async getByCompany(req, res) {
-    try {
-      const { companyId } = req.params;
+async getByCompany(req, res) {
+  try {
+    const { companyId } = req.params;
 
-      if (req.user.role !== 'admin' && req.user.company_id.toString() !== companyId) {
-        return res.status(403).json({ error: ERRORS.FORBIDDEN });
-      }
-
-      // Buscar canales activos de la empresa
-      const channels = await Channel.find({ company_id: companyId, is_active: true });
-
-      // Para cada canal, calcular total_orders y last_order_date
-      const channelsWithStats = await Promise.all(channels.map(async (channel) => {
-        const totalOrders = await Order.countDocuments({ channel_id: channel._id });
-        const lastOrder = await Order.findOne({ channel_id: channel._id }).sort({ order_date: -1 });
-
-        return {
-          ...channel.toObject(),
-          total_orders: totalOrders,
-          last_order_date: lastOrder ? lastOrder.order_date : null,
-        };
-      }));
-
-      res.json(channelsWithStats);
-    } catch (error) {
-      console.error('Error obteniendo canales:', error);
-      res.status(500).json({ error: ERRORS.SERVER_ERROR });
+    if (req.user.role !== 'admin' && req.user.company_id.toString() !== companyId) {
+      return res.status(403).json({ error: ERRORS.FORBIDDEN });
     }
+
+    // Buscar canales activos de la empresa
+    const channels = await Channel.find({ company_id: companyId, is_active: true });
+
+    // Para cada canal, calcular estadísticas completas
+    const channelsWithStats = await Promise.all(channels.map(async (channel) => {
+      const totalOrders = await Order.countDocuments({ channel_id: channel._id });
+      const lastOrder = await Order.findOne({ channel_id: channel._id }).sort({ order_date: -1 });
+      
+      // 🆕 AGREGAR: Calcular revenue total
+      const totalRevenueAgg = await Order.aggregate([
+        { $match: { channel_id: channel._id } },
+        { $group: { _id: null, total: { $sum: '$total_amount' } } }
+      ]);
+      const totalRevenue = totalRevenueAgg.length > 0 ? totalRevenueAgg[0].total : 0;
+
+      return {
+        ...channel.toObject(),
+        total_orders: totalOrders,
+        total_revenue: totalRevenue,
+        last_order_date: lastOrder ? lastOrder.order_date : null,
+        // 🔧 CORREGIR: Asegurar que last_sync_at existe
+        last_sync_at: channel.last_sync || channel.last_sync_at || null
+      };
+    }));
+
+    // 🔧 CORREGIR: Envolver en data object
+    res.json({ data: channelsWithStats });
+  } catch (error) {
+    console.error('Error obteniendo canales:', error);
+    res.status(500).json({ error: ERRORS.SERVER_ERROR });
   }
+}
 
   // Obtener un canal específico con estadísticas
   async getById(req, res) {
