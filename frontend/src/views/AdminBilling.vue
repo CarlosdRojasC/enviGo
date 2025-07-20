@@ -392,29 +392,29 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
-import { useToast } from 'vue-toastification'
-import { useAuthStore } from '../store/auth'
-import { apiService } from '../services/api'
-import { Chart, registerables } from 'chart.js'
-import Modal from '../components/Modal.vue'
-import GenerateInvoiceForm from '../components/billing/GenerateInvoiceForm.vue'
-import BulkGenerateForm from '../components/billing/BulkGenerateForm.vue'
-import InvoiceDetails from '../components/billing/InvoiceDetails.vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
+import { useToast } from 'vue-toastification';
+import { useAuthStore } from '../store/auth';
+import { apiService } from '../services/api';
+import { Chart, registerables } from 'chart.js';
+import Modal from '../components/Modal.vue';
+import GenerateInvoiceForm from '../components/billing/GenerateInvoiceForm.vue';
+import BulkGenerateForm from '../components/billing/BulkGenerateForm.vue';
+import InvoiceDetails from '../components/billing/InvoiceDetails.vue';
 
-Chart.register(...registerables)
+Chart.register(...registerables);
 
-// Estado
-const auth = useAuthStore()
-const toast = useToast()
-const loading = ref(true)
+// --- ESTADO ---
+const auth = useAuthStore();
+const toast = useToast();
+const loading = ref(true);
 
-// Datos
-const invoices = ref([])
-const companies = ref([])
-const selectedInvoices = ref([])
+// --- DATOS ---
+const invoices = ref([]);
+const companies = ref([]);
+const selectedInvoices = ref([]);
 
-// Métricas
+// --- MÉTRICAS ---
 const metrics = ref({
   totalRevenue: 0,
   revenueGrowth: 0,
@@ -425,248 +425,160 @@ const metrics = ref({
   overdueInvoices: 0,
   newInvoicesThisMonth: 0,
   unfactoredOrders: 0,
-  averageInvoiceAmount: 0
-})
+  averageInvoiceAmount: 0,
+  billedOrders: 0
+});
 
-// Filtros
-const filters = ref({
-  search: '',
-  company: '',
-  status: '',
-  period: ''
-})
+// --- FILTROS Y PAGINACIÓN ---
+const filters = ref({ search: '', company: '', status: '', period: '' });
+const sortBy = ref('created_at');
+const sortOrder = ref('desc');
+const currentPage = ref(1);
+const itemsPerPage = ref(10);
 
-// Ordenamiento y paginación
-const sortBy = ref('created_at')
-const sortOrder = ref('desc')
-const currentPage = ref(1)
-const itemsPerPage = ref(25)
+// --- ESTADO DE LA UI ---
+const showGenerateModal = ref(false);
+const showBulkGenerateModal = ref(false);
+const showInvoiceModal = ref(false);
+const selectedInvoice = ref(null);
 
-// UI Estado
-const showGenerateModal = ref(false)
-const showBulkGenerateModal = ref(false)
-const showInvoiceModal = ref(false)
-const selectedInvoice = ref(null)
+// --- REFERENCIAS ---
+const revenueChartCanvas = ref(null);
+let revenueChart = null;
 
-// Referencias
-const revenueChartCanvas = ref(null)
-let revenueChart = null
-
-// Computed
+// --- COMPUTED PROPERTIES ---
 const filteredInvoices = computed(() => {
-  let filtered = invoices.value
+  let filtered = invoices.value;
 
   if (filters.value.search) {
-    const search = filters.value.search.toLowerCase()
+    const search = filters.value.search.toLowerCase();
     filtered = filtered.filter(invoice =>
       invoice.invoice_number?.toLowerCase().includes(search) ||
       invoice.company_id?.name?.toLowerCase().includes(search)
-    )
+    );
   }
-
   if (filters.value.company) {
-    filtered = filtered.filter(invoice => 
-      invoice.company_id?._id === filters.value.company
-    )
+    filtered = filtered.filter(invoice => invoice.company_id?._id === filters.value.company);
   }
-
   if (filters.value.status) {
-    filtered = filtered.filter(invoice => 
-      invoice.status === filters.value.status
-    )
+    filtered = filtered.filter(invoice => invoice.status === filters.value.status);
   }
+  // Añadir más lógica de filtrado si es necesario...
+  
+  return filtered;
+});
 
-  if (filters.value.period) {
-    const now = new Date()
-    let startDate, endDate
-
-    switch (filters.value.period) {
-      case 'this_month':
-        startDate = new Date(now.getFullYear(), now.getMonth(), 1)
-        endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0)
-        break
-      case 'last_month':
-        startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1)
-        endDate = new Date(now.getFullYear(), now.getMonth(), 0)
-        break
-      // Agregar más períodos según necesites
-    }
-
-    if (startDate && endDate) {
-      filtered = filtered.filter(invoice => {
-        const invoiceDate = new Date(invoice.created_at)
-        return invoiceDate >= startDate && invoiceDate <= endDate
-      })
-    }
-  }
-
-  // Ordenar
-  filtered.sort((a, b) => {
-    let aValue = a[sortBy.value]
-    let bValue = b[sortBy.value]
-
-    if (sortBy.value === 'company_name') {
-      aValue = a.company_id?.name || ''
-      bValue = b.company_id?.name || ''
-    }
-
-    if (typeof aValue === 'string') {
-      aValue = aValue.toLowerCase()
-      bValue = bValue.toLowerCase()
-    }
-
-    if (sortOrder.value === 'desc') {
-      return aValue < bValue ? 1 : aValue > bValue ? -1 : 0
-    } else {
-      return aValue > bValue ? 1 : aValue < bValue ? -1 : 0
-    }
-  })
-
-  return filtered
-})
+const sortedInvoices = computed(() => {
+    const sorted = [...filteredInvoices.value];
+    sorted.sort((a, b) => {
+        let aValue = a[sortBy.value];
+        let bValue = b[sortBy.value];
+        if (sortBy.value === 'company_name') {
+            aValue = a.company_id?.name || '';
+            bValue = b.company_id?.name || '';
+        }
+        if (typeof aValue === 'string') {
+            aValue = aValue.toLowerCase();
+            bValue = bValue.toLowerCase();
+        }
+        if (sortOrder.value === 'desc') {
+            return aValue < bValue ? 1 : aValue > bValue ? -1 : 0;
+        } else {
+            return aValue > bValue ? 1 : aValue < bValue ? -1 : 0;
+        }
+    });
+    return sorted;
+});
 
 const paginatedInvoices = computed(() => {
-  const start = (currentPage.value - 1) * itemsPerPage.value
-  return filteredInvoices.value.slice(start, start + itemsPerPage.value)
-})
+  const start = (currentPage.value - 1) * itemsPerPage.value;
+  return sortedInvoices.value.slice(start, start + itemsPerPage.value);
+});
 
-const totalPages = computed(() => 
-  Math.ceil(filteredInvoices.value.length / itemsPerPage.value)
-)
+const totalPages = computed(() => Math.ceil(filteredInvoices.value.length / itemsPerPage.value));
 
 const visiblePages = computed(() => {
-  const pages = []
-  const start = Math.max(1, currentPage.value - 2)
-  const end = Math.min(totalPages.value, start + 4)
-  
+  const pages = [];
+  const start = Math.max(1, currentPage.value - 2);
+  const end = Math.min(totalPages.value, start + 4);
   for (let i = start; i <= end; i++) {
-    pages.push(i)
+    pages.push(i);
   }
-  return pages
-})
+  return pages;
+});
 
-const allSelected = computed(() => 
-  paginatedInvoices.value.length > 0 && 
-  paginatedInvoices.value.every(invoice => selectedInvoices.value.includes(invoice._id))
-)
 
-const someSelected = computed(() => 
-  selectedInvoices.value.length > 0 && !allSelected.value
-)
+const allSelected = computed(() => paginatedInvoices.value.length > 0 && paginatedInvoices.value.every(invoice => selectedInvoices.value.includes(invoice._id)));
+const someSelected = computed(() => selectedInvoices.value.length > 0 && !allSelected.value);
 
 const billingRate = computed(() => {
-  if (metrics.value.unfactoredOrders === 0) return 100
-  const totalOrders = metrics.value.unfactoredOrders + (metrics.value.billedOrders || 0)
-  return Math.round(((metrics.value.billedOrders || 0) / totalOrders) * 100)
-})
+    const totalFacturable = metrics.value.unfactoredOrders + metrics.value.billedOrders;
+    if (totalFacturable === 0) return 0;
+    return Math.round((metrics.value.billedOrders / totalFacturable) * 100);
+});
 
-// Métodos
+// --- MÉTODOS ---
+
 async function fetchInitialData() {
-  loading.value = true
+  loading.value = true;
   try {
     await Promise.all([
       fetchFinancialSummary(),
       fetchInvoices(),
       fetchCompanies()
-    ])
+    ]);
   } catch (error) {
-    console.error('Error loading dashboard:', error)
-    toast.error('Error cargando el dashboard')
+    toast.error("Error fatal al cargar los datos del dashboard.");
   } finally {
-    loading.value = false
+    loading.value = false;
   }
 }
 
 async function fetchFinancialSummary() {
   try {
-    console.log('📊 Cargando resumen financiero...');
-    
     const { data } = await apiService.billing.getFinancialSummary();
-    
-    console.log('✅ Datos recibidos:', data);
-    
-    // Actualizar métricas con datos reales
-    metrics.value = {
-      totalRevenue: data.totalRevenue || 0,
-      revenueGrowth: data.revenueGrowth || 0,
-      currentMonthRevenue: data.currentMonthRevenue || 0,
-      pendingAmount: data.pendingAmount || 0,
-      totalInvoices: data.totalInvoices || 0,
-      pendingInvoices: data.pendingInvoices || 0,
-      overdueInvoices: data.overdueInvoices || 0,
-      newInvoicesThisMonth: data.newInvoicesThisMonth || 0,
-      unfactoredOrders: data.unfactoredOrders || 0,
-      averageInvoiceAmount: data.averageInvoiceAmount || 0
-    };
-    
-    // Crear gráfico con datos reales
+    metrics.value = data; // Asigna directamente los datos del backend
     createRevenueChart(data.monthlyRevenueData || []);
-    
   } catch (error) {
-    console.error('❌ Error fetching financial summary:', error);
-    toast.error('Error cargando resumen financiero');
-    
-    // Valores por defecto en caso de error
-    metrics.value = {
-      totalRevenue: 0,
-      revenueGrowth: 0,
-      currentMonthRevenue: 0,
-      pendingAmount: 0,
-      totalInvoices: 0,
-      pendingInvoices: 0,
-      overdueInvoices: 0,
-      newInvoicesThisMonth: 0,
-      unfactoredOrders: 0,
-      averageInvoiceAmount: 0
-    };
+    console.error('Error fetching financial summary:', error);
+    toast.error('No se pudo cargar el resumen financiero.');
   }
 }
 
 async function fetchInvoices() {
   try {
-    console.log('📄 Cargando facturas...');
-    
-    const { data } = await apiService.billing.getInvoices();
-    
-    console.log('✅ Facturas recibidas:', data);
-    
+    const { data } = await apiService.billing.getInvoices({
+        page: currentPage.value,
+        limit: itemsPerPage.value,
+        ...filters.value // Envía los filtros al backend
+    });
     invoices.value = data.invoices || [];
-    
-    if (invoices.value.length === 0) {
-      console.log('ℹ️ No se encontraron facturas');
-      toast.info('No hay facturas disponibles. Genera la primera factura.');
-    }
-    
   } catch (error) {
-    console.error('❌ Error fetching invoices:', error);
-    toast.error('Error cargando facturas');
-    invoices.value = [];
+    console.error('Error fetching invoices:', error);
+    toast.error('No se pudieron cargar las facturas.');
   }
 }
 
 async function fetchCompanies() {
   try {
-    const { data } = await apiService.companies.getAll()
-    companies.value = data
+    const { data } = await apiService.companies.getAll();
+    companies.value = data;
   } catch (error) {
-    console.error('Error fetching companies:', error)
+    console.error('Error fetching companies:', error);
   }
 }
 
 function createRevenueChart(data) {
-  if (revenueChart) {
-    revenueChart.destroy()
-  }
+  if (revenueChart) revenueChart.destroy();
+  if (!revenueChartCanvas.value || !data) return;
 
-  if (!revenueChartCanvas.value || !data.length) return
-
-  const ctx = revenueChartCanvas.value.getContext('2d')
+  const ctx = revenueChartCanvas.value.getContext('2d');
   revenueChart = new Chart(ctx, {
     type: 'line',
     data: {
       labels: data.map(item => item.month),
       datasets: [{
-        label: 'Ingresos',
+        label: 'Ingresos por Envío',
         data: data.map(item => item.revenue),
         backgroundColor: 'rgba(59, 130, 246, 0.1)',
         borderColor: '#3b82f6',
@@ -678,241 +590,181 @@ function createRevenueChart(data) {
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      plugins: {
-        legend: { display: false }
-      },
-      scales: {
-        y: {
-          beginAtZero: true,
-          ticks: {
-            callback: value => '$' + formatCurrency(value)
-          }
-        }
-      }
+      plugins: { legend: { display: false } },
+      scales: { y: { beginAtZero: true } }
     }
-  })
+  });
 }
 
-// Métodos de acción
-async function refreshData() {
-  await fetchInitialData()
-  toast.success('Datos actualizados')
+// --- ACCIONES DE BOTONES Y EVENTOS ---
+
+function refreshData() {
+  fetchInitialData();
+  toast.success('Datos actualizados');
 }
 
 function openGenerateModal() {
-  showGenerateModal.value = true
+  showGenerateModal.value = true;
 }
 
 function openBulkGenerateModal() {
-  showBulkGenerateModal.value = true
+  showBulkGenerateModal.value = true;
 }
 
 function viewInvoice(invoice) {
-  selectedInvoice.value = invoice
-  showInvoiceModal.value = true
-}
-
-async function sendInvoice(invoiceId) {
-  try {
-    await apiService.billing.sendInvoice(invoiceId)
-    toast.success('Factura enviada')
-    await fetchInvoices()
-  } catch (error) {
-    toast.error('Error enviando factura')
-  }
-}
-
-async function markAsPaid(invoiceId) {
-  try {
-    await apiService.billing.markAsPaid(invoiceId)
-    toast.success('Factura marcada como pagada')
-    await fetchInvoices()
-  } catch (error) {
-    toast.error('Error marcando factura como pagada')
-  }
+  selectedInvoice.value = invoice;
+  showInvoiceModal.value = true;
 }
 
 async function downloadInvoice(invoiceId) {
   try {
-    const response = await apiService.billing.downloadInvoice(invoiceId)
-    // Lógica para descargar el PDF
-    toast.success('Descarga iniciada')
+    const response = await apiService.billing.downloadInvoice(invoiceId);
+    const url = window.URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }));
+    const link = document.createElement('a');
+    link.href = url;
+    const invoice = invoices.value.find(inv => inv._id === invoiceId);
+    link.setAttribute('download', `factura-${invoice?.invoice_number || invoiceId}.pdf`);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    toast.success('Descarga iniciada.');
   } catch (error) {
-    toast.error('Error descargando factura')
+    console.error('Error downloading invoice:', error);
+    toast.error('No se pudo descargar la factura.');
   }
 }
 
 async function deleteInvoice(invoiceId) {
-  if (!confirm('¿Estás seguro de eliminar esta factura?')) return
-  
-  try {
-    await apiService.billing.deleteInvoice(invoiceId)
-    toast.success('Factura eliminada')
-    await fetchInvoices()
-  } catch (error) {
-    toast.error('Error eliminando factura')
-  }
+    if (!confirm('¿Estás seguro de que quieres eliminar esta factura? Los pedidos asociados se desmarcarán como facturados.')) return;
+    try {
+        await apiService.billing.deleteInvoice(invoiceId);
+        toast.success('Factura eliminada correctamente.');
+        await fetchInitialData(); // Refresca todos los datos
+    } catch (error) {
+        console.error('Error deleting invoice:', error);
+        toast.error(error.message || 'No se pudo eliminar la factura.');
+    }
 }
 
-// Métodos de selección masiva
-function toggleSelectAll() {
-  if (allSelected.value) {
-    selectedInvoices.value = []
-  } else {
-    selectedInvoices.value = paginatedInvoices.value.map(invoice => invoice._id)
-  }
+// --- MANEJO DE MODALES ---
+
+function handleInvoiceGenerated() {
+  showGenerateModal.value = false;
+  toast.success('Factura generada exitosamente.');
+  fetchInitialData();
 }
 
-async function bulkMarkAsPaid() {
-  if (selectedInvoices.value.length === 0) return
-  
-  try {
-    await apiService.billing.bulkMarkAsPaid(selectedInvoices.value)
-    toast.success(`${selectedInvoices.value.length} facturas marcadas como pagadas`)
-    selectedInvoices.value = []
-    await fetchInvoices()
-  } catch (error) {
-    toast.error('Error en operación masiva')
-  }
+function handleBulkGenerated() {
+  showBulkGenerateModal.value = false;
+  toast.success('Facturas masivas generadas.');
+  fetchInitialData();
 }
 
-async function bulkDownload() {
-  // Implementar descarga masiva
-  toast.info('Preparando descarga masiva...')
+function handleInvoiceUpdated() {
+  showInvoiceModal.value = false;
+  toast.success('Factura actualizada.');
+  fetchInvoices(); // Solo refresca las facturas
 }
 
-async function bulkDelete() {
-  if (!confirm(`¿Eliminar ${selectedInvoices.value.length} facturas seleccionadas?`)) return
-  
-  try {
-    await apiService.billing.bulkDelete(selectedInvoices.value)
-    toast.success('Facturas eliminadas')
-    selectedInvoices.value = []
-    await fetchInvoices()
-  } catch (error) {
-    toast.error('Error eliminando facturas')
-  }
-}
+// --- UTILIDADES DE FORMATO Y LÓGICA ---
 
-// Métodos de utilidad
 function formatCurrency(amount) {
-  return new Intl.NumberFormat('es-CL').format(amount || 0)
+  return new Intl.NumberFormat('es-CL').format(amount || 0);
 }
 
 function formatDate(dateStr) {
-  if (!dateStr) return 'N/A'
-  return new Date(dateStr).toLocaleDateString('es-CL')
+  if (!dateStr) return 'N/A';
+  return new Date(dateStr).toLocaleDateString('es-CL');
 }
 
 function formatPeriod(start, end) {
-  if (!start || !end) return 'N/A'
-  const startDate = new Date(start).toLocaleDateString('es-CL', { day: '2-digit', month: 'short' })
-  const endDate = new Date(end).toLocaleDateString('es-CL', { day: '2-digit', month: 'short' })
-  return `${startDate} - ${endDate}`
+  if (!start || !end) return 'N/A';
+  const startDate = new Date(start).toLocaleDateString('es-CL', { day: '2-digit', month: 'short' });
+  const endDate = new Date(end).toLocaleDateString('es-CL', { day: '2-digit', month: 'short' });
+  return `${startDate} - ${endDate}`;
 }
 
 function getPeriodDuration(invoice) {
-  if (!invoice.period_start || !invoice.period_end) return 0
-  const start = new Date(invoice.period_start)
-  const end = new Date(invoice.period_end)
-  return Math.ceil((end - start) / (1000 * 60 * 60 * 24))
+    if (!invoice.period_start || !invoice.period_end) return 0;
+    const start = new Date(invoice.period_start);
+    const end = new Date(invoice.period_end);
+    return Math.ceil((end - start) / (1000 * 60 * 60 * 24));
 }
 
 function getStatusText(status) {
-  const texts = {
-    draft: 'Borrador',
-    sent: 'Enviada',
-    paid: 'Pagada',
-    overdue: 'Vencida'
-  }
-  return texts[status] || status
+  const texts = { draft: 'Borrador', sent: 'Enviada', paid: 'Pagada', overdue: 'Vencida' };
+  return texts[status] || status;
 }
 
 function getStatusIcon(status) {
-  const icons = {
-    draft: '⚪',
-    sent: '🟨',
-    paid: '🟩',
-    overdue: '🟧'
-  }
-  return icons[status] || '❓'
+    const icons = { draft: '⚪', sent: '🟡', paid: '🟢', overdue: '🔴' };
+    return icons[status] || '❓';
 }
 
 function isUrgentInvoice(invoice) {
-  if (invoice.status === 'overdue') return true
-  if (invoice.status === 'sent' && invoice.due_date) {
-    const daysUntilDue = Math.ceil((new Date(invoice.due_date) - new Date()) / (1000 * 60 * 60 * 24))
-    return daysUntilDue <= 3
-  }
-  return false
+    if (invoice.status === 'overdue') return true;
+    if (invoice.status === 'sent' && invoice.due_date) {
+        const daysUntilDue = Math.ceil((new Date(invoice.due_date) - new Date()) / (1000 * 60 * 60 * 24));
+        return daysUntilDue <= 3;
+    }
+    return false;
 }
 
+// --- LÓGICA DE TABLA Y FILTROS ---
 function setSortBy(field) {
   if (sortBy.value === field) {
-    sortOrder.value = sortOrder.value === 'desc' ? 'asc' : 'desc'
+    sortOrder.value = sortOrder.value === 'desc' ? 'asc' : 'desc';
   } else {
-    sortBy.value = field
-    sortOrder.value = 'desc'
+    sortBy.value = field;
+    sortOrder.value = 'desc';
   }
 }
 
 function goToPage(page) {
   if (page >= 1 && page <= totalPages.value) {
-    currentPage.value = page
+    currentPage.value = page;
   }
+}
+
+function toggleSelectAll() {
+    if (allSelected.value) {
+        selectedInvoices.value = [];
+    } else {
+        selectedInvoices.value = paginatedInvoices.value.map(invoice => invoice._id);
+    }
 }
 
 function clearFilters() {
-  filters.value = {
-    search: '',
-    company: '',
-    status: '',
-    period: ''
-  }
-  currentPage.value = 1
+    filters.value = { search: '', company: '', status: '', period: '' };
 }
 
-// Búsqueda con debounce
-let searchTimeout
+let searchTimeout;
 function debouncedSearch() {
-  clearTimeout(searchTimeout)
-  searchTimeout = setTimeout(() => {
-    currentPage.value = 1
-  }, 300)
+    clearTimeout(searchTimeout);
+    searchTimeout = setTimeout(() => {
+        currentPage.value = 1;
+        fetchInvoices();
+    }, 500);
 }
 
-// Event handlers
-function handleInvoiceGenerated() {
-  showGenerateModal.value = false
-  fetchInvoices()
-  toast.success('Factura generada exitosamente')
-}
-
-function handleBulkGenerated(count) {
-  showBulkGenerateModal.value = false
-  fetchInvoices()
-  toast.success(`${count} facturas generadas exitosamente`)
-}
-
-function handleInvoiceUpdated() {
-  showInvoiceModal.value = false
-  fetchInvoices()
-  toast.success('Factura actualizada')
-}
-
-// Watchers
-watch(filters, () => {
-  currentPage.value = 1
-}, { deep: true })
-
-// Lifecycle
+// --- CICLO DE VIDA ---
 onMounted(() => {
-  if (!auth.isAdmin) {
-    toast.error('No tienes permisos de administrador')
-    return
+  if (auth.isAdmin) {
+    fetchInitialData();
+  } else {
+    toast.error('Acceso denegado. Se requieren permisos de administrador.');
+    // Idealmente, aquí redirigirías al usuario a otra página
   }
-  fetchInitialData()
-})
+});
+
+onUnmounted(() => {
+    if (revenueChart) {
+        revenueChart.destroy();
+    }
+});
+
+// Watcher para recargar facturas cuando cambian los filtros
+watch(filters, debouncedSearch, { deep: true });
 </script>
 
 <style scoped>
