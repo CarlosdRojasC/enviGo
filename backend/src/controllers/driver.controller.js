@@ -41,20 +41,47 @@ class DriverController {
   /**
    * Obtiene la lista de todos los conductores. Solo para administradores.
    */
-  async getAllDrivers(req, res) {
-    if (req.user.role !== 'admin') {
-      return res.status(403).json({ error: ERRORS.FORBIDDEN });
-    }
-    
-    try {
-      const drivers = await User.find({ role: 'driver' })
-        .select('full_name email phone shipday_driver_id is_active');
-      res.status(200).json(drivers);
-    } catch (error) {
-      console.error('Error obteniendo todos los conductores:', error);
-      res.status(500).json({ error: ERRORS.SERVER_ERROR });
-    }
+ async getAll(req, res) {
+  try {
+    const drivers = await Driver.find().lean(); // .lean() para que sea más rápido
+
+    // Para cada conductor, calculamos sus estadísticas en paralelo
+    const driversWithStats = await Promise.all(drivers.map(async (driver) => {
+      const now = new Date();
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+      // Contar pedidos entregados este mes
+      const deliveredThisMonth = await Order.countDocuments({
+        driver_id: driver._id,
+        status: 'delivered',
+        delivery_date: { $gte: startOfMonth }
+      });
+
+      // Contar todos los pedidos asignados
+      const totalAssigned = await Order.countDocuments({ driver_id: driver._id });
+      
+      // Contar pedidos con problemas (ej. cancelados después de asignar)
+      const issuesCount = await Order.countDocuments({
+        driver_id: driver._id,
+        status: 'cancelled' // O cualquier otro estado que consideres un problema
+      });
+
+      return {
+        ...driver,
+        stats: {
+          deliveredThisMonth,
+          totalAssigned,
+          issuesCount
+        }
+      };
+    }));
+
+    res.json(driversWithStats);
+  } catch (error) {
+    console.error('Error getting drivers with stats:', error);
+    res.status(500).json({ error: 'Error interno del servidor' });
   }
+}
   async deleteDriver(req, res) {
     if (req.user.role !== 'admin') {
       return res.status(403).json({ error: ERRORS.FORBIDDEN });
