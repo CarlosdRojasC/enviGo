@@ -426,12 +426,8 @@ const billing = {
     const params = companyId ? `?company_id=${companyId}` : '';
     return api.get(`/billing/next-estimate${params}`);
   },
-  requestConfirmation(invoiceId) {
-      return apiClient.put(`/billing/invoices/${invoiceId}/request-confirmation`);
-    },
-  confirmPayment(invoiceId) {
-      return apiClient.put(`/billing/invoices/${invoiceId}/confirm-payment`);
-    }
+  requestConfirmation: (invoiceId) => api.put(`/billing/invoices/${invoiceId}/request-confirmation`),
+  confirmPayment: (invoiceId) => api.put(`/billing/invoices/${invoiceId}/confirm-payment`),
 };
 
 // Servicios de dashboard
