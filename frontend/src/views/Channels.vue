@@ -420,10 +420,12 @@ const filteredChannels = computed(() => {
 })
 
 const totalOrders = computed(() => {
+  if (!Array.isArray(channels.value)) return 0
   return channels.value.reduce((sum, channel) => sum + (channel.total_orders || 0), 0)
 })
 
 const totalRevenue = computed(() => {
+  if (!Array.isArray(channels.value)) return 0
   return channels.value.reduce((sum, channel) => sum + (channel.total_revenue || 0), 0)
 })
 
@@ -441,14 +443,32 @@ async function fetchChannels() {
                          await apiService.channels.getByCompany(selectedCompanyId.value)
 channels.value = response.data?.data || response.data || []
       } else {
-        // Usar el nuevo endpoint para obtener todos los canales (admin)
-        const response = await apiService.channels.getAllForAdmin?.() || 
-                         await apiService.channels.getAll?.() ||
-                         await fetch('/api/channels/admin/all', {
-                           headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-                         }).then(r => r.json())
-        channels.value = response.data || response || []
+         try {
+    const response = await apiService.channels.getAllForAdmin()
+    channels.value = response.data?.data || response.data || []
+    console.log('✅ Admin: canales de todas las empresas cargados:', channels.value.length)
+  } catch (error) {
+    console.error('❌ Error obteniendo todos los canales:', error)
+    // Si falla, intenta con fetch directo
+    try {
+      const response = await fetch('/api/channels/admin/all', {
+        headers: { 
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Content-Type': 'application/json'
+        }
+      })
+      if (response.ok) {
+        const data = await response.json()
+        channels.value = data.data || data || []
+      } else {
+        channels.value = []
       }
+    } catch (fetchError) {
+      console.error('❌ Error con fetch directo:', fetchError)
+      channels.value = []
+    }
+  }
+}
     } else {
       // Usuario normal: solo sus canales
       const companyId = getCompanyId.value
