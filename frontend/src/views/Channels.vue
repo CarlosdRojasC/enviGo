@@ -641,33 +641,35 @@ function showChannelDetails(channel) {
 }
 
 async function syncChannel(channelId) {
+  // 1. Evita dobles clics y muestra "Sincronizando..." en el botón
   if (syncingChannels.value.includes(channelId)) return;
-
   syncingChannels.value.push(channelId);
   
   try {
-    // 1. Llamar al backend para iniciar la sincronización
-    const { data } = await channelsService.sync(channelId, {
+    // 2. Llama al backend para iniciar la sincronización
+    const { data } = await apiService.channels.syncOrders(channelId, {
       date_from: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
       date_to: new Date().toISOString()
     });
 
-    // 2. Buscar el índice del canal que acabamos de sincronizar
+    // 3. (LA PARTE MÁGICA) Busca el canal en tu lista local
     const index = channels.value.findIndex(c => c._id === channelId);
 
-    // 3. Si se encuentra, actualizarlo directamente con la nueva información del backend
-    if (index !== -1) {
+    // 4. Si lo encuentra y el backend envió el canal actualizado, lo reemplaza
+    if (index !== -1 && data.channel) {
+      // Vue se encargará de actualizar la tarjeta automáticamente
       channels.value[index] = { ...channels.value[index], ...data.channel };
     }
 
-    toast.success(data.message || 'Sincronización completada. Los nuevos pedidos han sido importados.');
+    // 5. Muestra una notificación de éxito
+    toast.success(data.message || 'Sincronización completada exitosamente.');
     
   } catch (error) {
     console.error('Error en la sincronización:', error);
     toast.error(error.message || 'Ocurrió un error durante la sincronización.');
   
   } finally {
-    // 4. Quitar el canal de la lista de "sincronizando" para reactivar el botón
+    // 6. Vuelve a habilitar el botón
     syncingChannels.value = syncingChannels.value.filter(id => id !== channelId);
   }
 }

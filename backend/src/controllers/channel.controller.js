@@ -273,7 +273,8 @@ async syncOrders(req, res) {
         orders_rejected: syncLog.orders_rejected || 0,
         orders_total_processed: syncLog.orders_total_processed || ordersImported,
         sync_id: syncLog._id,
-        last_sync: now
+        last_sync: now,
+        channel: channel.toObject()
       });
 
     } catch (syncError) {
