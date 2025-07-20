@@ -484,7 +484,7 @@ const billing = {
   
   // Para empresas - Reportar pago de factura
   reportPayment: (data) => api.post('/billing/report-payment', data),
-  
+  sendInvoice: (invoiceId) => api.post(`/billing/invoices/${invoiceId}/send`),
   // Borrar una factura individual
   deleteInvoice: async (invoiceId) => {
     try {

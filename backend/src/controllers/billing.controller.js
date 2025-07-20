@@ -602,7 +602,7 @@ class BillingController {
       invoices.forEach(invoice => {
         totalOrders += invoice.total_orders || 0;
         
-        if (['pending', 'sent', 'overdue'].includes(invoice.status)) {
+        if (['sent', 'overdue'].includes(invoice.status)) {
           pendingAmount += invoice.total_amount || 0;
           pendingCount++;
         }
@@ -809,6 +809,39 @@ class BillingController {
       billingCycle: company.billing_cycle || 'monthly'
     };
   }
+  async sendInvoice(req, res) {
+  try {
+    const { id } = req.params;
+    
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ error: ERRORS.FORBIDDEN });
+    }
+    
+    const invoice = await Invoice.findById(id).populate('company_id', 'name email');
+    if (!invoice) {
+      return res.status(404).json({ error: 'Factura no encontrada' });
+    }
+    
+    if (invoice.status !== 'draft') {
+      return res.status(400).json({ error: 'Solo se pueden enviar facturas en borrador' });
+    }
+    
+    // Cambiar estado a 'sent'
+    invoice.status = 'sent';
+    invoice.sent_at = new Date();
+    await invoice.save();
+    
+    console.log(`📤 Factura ${invoice.invoice_number} enviada a ${invoice.company_id.name}`);
+    
+    res.json({ 
+      message: 'Factura enviada exitosamente',
+      invoice 
+    });
+  } catch (error) {
+    console.error('Error enviando factura:', error);
+    res.status(500).json({ error: ERRORS.SERVER_ERROR });
+  }
+}
   // Borrar una factura individual
 async deleteInvoice(req, res) {
   try {

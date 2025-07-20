@@ -170,14 +170,11 @@
                   <button @click="downloadInvoice(invoice)" class="btn-action download" title="Descargar PDF">
                     📥
                   </button>
-                  <button 
-                    v-if="invoice.status === 'draft'" 
-                    @click="sendInvoice(invoice)" 
-                    class="btn-action send" 
-                    title="Enviar Factura"
-                  >
-                    📧
-                  </button>
+                   <button v-if="invoice.status === 'draft'" 
+          @click="sendInvoice(invoice._id)" 
+          class="btn btn-primary">
+    📤 Enviar a Cliente
+  </button>
                   <button 
                     v-if="invoice.status !== 'paid' && invoice.status !== 'cancelled'"
                     @click="markAsPaid(invoice)" 
@@ -1156,15 +1153,13 @@ async function downloadInvoice(invoice) {
   }
 }
 
-async function sendInvoice(invoice) {
-  const confirmation = confirm(`¿Enviar la factura ${invoice.invoice_number} por email?`)
-  if (!confirmation) return
-  
+async function sendInvoice(invoiceId) {
   try {
-    invoice.status = 'sent'
-    toast.success('Factura enviada por email exitosamente')
+    await apiService.billing.sendInvoice(invoiceId);
+    toast.success('Factura enviada al cliente exitosamente');
+    await fetchInvoices(); // Recargar tabla
   } catch (error) {
-    toast.error(`Error al enviar factura: ${error.message}`)
+    toast.error(`Error enviando factura: ${error.message}`);
   }
 }
 

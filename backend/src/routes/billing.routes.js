@@ -17,7 +17,7 @@ router.get('/financial-summary', authenticateToken, isAdmin, billingController.g
 router.post('/invoices/generate', authenticateToken, isAdmin, billingController.generateInvoice);
 router.post('/invoices/generate-bulk', authenticateToken, isAdmin, billingController.generateBulkInvoices);
 router.get('/invoices/bulk-preview', authenticateToken, isAdmin, billingController.previewBulkGeneration);
-
+router.post('/invoices/:id/send', authenticateToken, isAdmin, validateMongoId('id'), billingController.sendInvoice);
 // Descargar y modificar facturas
 router.get('/invoices/:id/download', authenticateToken, validateMongoId('id'), billingController.downloadInvoice);
 router.post('/invoices/:id/mark-as-paid', authenticateToken, isAdmin, validateMongoId('id'), billingController.markAsPaid);
