@@ -641,21 +641,34 @@ function showChannelDetails(channel) {
 }
 
 async function syncChannel(channelId) {
-  if (syncingChannels.value.includes(channelId)) return
+  if (syncingChannels.value.includes(channelId)) return;
+
+  syncingChannels.value.push(channelId);
   
-  syncingChannels.value.push(channelId)
   try {
-    await channelsService.sync(channelId, {
+    // 1. Llamar al backend para iniciar la sincronización
+    const { data } = await channelsService.sync(channelId, {
       date_from: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
       date_to: new Date().toISOString()
-    })
+    });
+
+    // 2. Buscar el índice del canal que acabamos de sincronizar
+    const index = channels.value.findIndex(c => c._id === channelId);
+
+    // 3. Si se encuentra, actualizarlo directamente con la nueva información del backend
+    if (index !== -1) {
+      channels.value[index] = { ...channels.value[index], ...data.channel };
+    }
+
+    toast.success(data.message || 'Sincronización completada. Los nuevos pedidos han sido importados.');
     
-    toast.success('Sincronización iniciada. Los pedidos aparecerán en unos momentos.')
-    await fetchChannels()
   } catch (error) {
-    toast.error(`Error en la sincronización: ${error.message}`)
+    console.error('Error en la sincronización:', error);
+    toast.error(error.message || 'Ocurrió un error durante la sincronización.');
+  
   } finally {
-    syncingChannels.value = syncingChannels.value.filter(id => id !== channelId)
+    // 4. Quitar el canal de la lista de "sincronizando" para reactivar el botón
+    syncingChannels.value = syncingChannels.value.filter(id => id !== channelId);
   }
 }
 
