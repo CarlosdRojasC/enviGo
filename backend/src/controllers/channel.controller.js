@@ -110,7 +110,10 @@ class ChannelController {
         return res.status(403).json({ error: ERRORS.FORBIDDEN });
       }
 
-      const totalOrders = await Order.countDocuments({ channel_id: channel._id });
+      const totalOrders = await Order.countDocuments({ 
+  channel_id: new mongoose.Types.ObjectId(channel._id) 
+});
+
       const deliveredOrders = await Order.countDocuments({ channel_id: channel._id, status: 'delivered' });
       const totalRevenueAgg = await Order.aggregate([
         { $match: { channel_id: channel._id } },
@@ -493,7 +496,10 @@ async syncOrders(req, res) {
 
     // Para cada canal, calcular estadísticas
     const channelsWithStats = await Promise.all(channels.map(async (channel) => {
-      const totalOrders = await Order.countDocuments({ channel_id: channel._id });
+      const totalOrders = await Order.countDocuments({ 
+  channel_id: new mongoose.Types.ObjectId(channel._id) 
+});
+
       const deliveredOrders = await Order.countDocuments({ 
         channel_id: channel._id, 
         status: 'delivered' 
