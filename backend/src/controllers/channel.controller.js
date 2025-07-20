@@ -20,6 +20,29 @@ class ChannelController {
       company_id: companyId, 
       is_active: true 
     }).lean();
+    
+    const channelsWithStats = await Promise.all(channels.map(async (channel) => {
+  console.log(`🔍 DEBUG - Procesando canal: ${channel.channel_name}`);
+  console.log(`🔍 DEBUG - Channel._id:`, channel._id, typeof channel._id);
+  
+  const totalOrders = await Order.countDocuments({ channel_id: channel._id });
+  console.log(`📊 DEBUG - Total orders encontrado: ${totalOrders}`);
+  
+  const lastOrder = await Order.findOne({ channel_id: channel._id }).sort({ order_date: -1 });
+  
+  const totalRevenueAgg = await Order.aggregate([
+    { $match: { channel_id: channel._id } },
+    { $group: { _id: null, total: { $sum: '$total_amount' } } }
+  ]);
+  const totalRevenue = totalRevenueAgg.length > 0 ? totalRevenueAgg[0].total : 0;
+
+  return {
+    ...channel,
+    total_orders: totalOrders,
+    total_revenue: totalRevenue,
+    last_order_date: lastOrder ? lastOrder.order_date : null
+  };
+}));
 
     // Enriquecer cada canal con información de estado
     const enrichedChannels = channels.map(channel => {
@@ -89,7 +112,7 @@ class ChannelController {
       };
     });
 
-    res.json(enrichedChannels);
+    res.json({ data: enrichedChannels });
   } catch (error) {
     console.error('Error obteniendo canales:', error);
     res.status(500).json({ error: ERRORS.SERVER_ERROR });
