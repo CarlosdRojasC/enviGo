@@ -105,14 +105,27 @@
                       {{ getStatusText(invoice.status) }}
                     </span>
                   </td>
-                  <td class="actions-cell">
-                    <button @click="downloadInvoice(invoice._id)" class="action-btn-table" title="Descargar PDF">
-                      📄
-                    </button>
-                    <button @click="viewInvoiceDetails(invoice)" class="action-btn-table" title="Ver Detalles">
-                      👁️
-                    </button>
-                  </td>
+<td class="actions-cell">
+  <button 
+    v-if="['sent', 'overdue'].includes(invoice.status)"
+    @click="requestConfirmation(invoice._id)" 
+    class="action-btn-table notify" 
+    title="Notificar Pago Realizado"
+  >
+    💸
+  </button>
+  
+  <span v-if="invoice.status === 'pending_confirmation'" class="pending-tag">
+    En Revisión
+  </span>
+
+  <button @click="downloadInvoice(invoice._id)" class="action-btn-table" title="Descargar PDF">
+    📄
+  </button>
+  <button @click="viewInvoiceDetails(invoice)" class="action-btn-table" title="Ver Detalles">
+    👁️
+  </button>
+</td>
                 </tr>
               </tbody>
             </table>
@@ -167,6 +180,20 @@ const selectedInvoice = ref(null);
 
 
 // --- MÉTODOS ---
+
+async function requestConfirmation(invoiceId) {
+  if (!confirm('¿Estás seguro de que quieres notificar que ya has pagado esta factura?')) return;
+  
+  try {
+    // Asumiendo que tienes un endpoint en tu apiService
+    await apiService.billing.requestConfirmation(invoiceId); 
+    toast.success('Notificación de pago enviada.');
+    fetchInitialData(); // Refrescar los datos para ver el cambio de estado
+  } catch (error) {
+    toast.error(error.message || 'No se pudo notificar el pago.');
+  }
+}
+
 
 async function fetchInitialData() {
   loading.value = true;
@@ -256,7 +283,13 @@ function formatPeriod(start, end) {
 }
 
 function getStatusText(status) {
-    const statuses = { draft: 'Borrador', sent: 'Enviada', paid: 'Pagada', overdue: 'Vencida' };
+    const statuses = { 
+        draft: 'Borrador', 
+        sent: 'Enviada', 
+        paid: 'Pagada', 
+        overdue: 'Vencida',
+        pending_confirmation: 'En Revisión' // <-- AÑADIR
+    };
     return statuses[status] || status;
 }
 
@@ -462,5 +495,26 @@ onMounted(() => {
   .billing-content {
     grid-template-columns: 1fr;
   }
+}
+/* AÑADE ESTOS ESTILOS */
+.action-btn-table.notify {
+  color: #10b981; /* Verde */
+}
+.action-btn-table.notify:hover {
+  color: #059669;
+}
+
+.pending-tag {
+  font-size: 12px;
+  font-weight: 500;
+  color: #2563eb; /* Azul */
+  background-color: #dbeafe;
+  padding: 4px 8px;
+  border-radius: 12px;
+}
+
+.status-badge.pending_confirmation { /* Para que el badge también tenga color */
+  background-color: #dbeafe;
+  color: #2563eb;
 }
 </style>

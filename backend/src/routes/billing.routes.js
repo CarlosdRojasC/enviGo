@@ -22,6 +22,20 @@ router.post('/invoices/generate', authenticateToken, isAdmin, billingController.
 router.post('/invoices/generate-bulk', authenticateToken, isAdmin, billingController.generateBulkInvoices);
 router.get('/invoices/bulk-preview', authenticateToken, isAdmin, billingController.previewBulkGeneration);
 router.post('/invoices/:id/send', authenticateToken, isAdmin, validateMongoId('id'), billingController.sendInvoice);
+router.put(
+  '/invoices/:id/request-confirmation', 
+  authMiddleware, // Protegida para usuarios logueados
+  billingController.requestPaymentConfirmation
+);
+
+// RUTA PARA EL ADMIN: Confirmar que el pago ha sido recibido
+router.put(
+  '/invoices/:id/confirm-payment', 
+  authMiddleware, // Protegida
+  adminMiddleware, // Y solo para administradores
+  billingController.confirmPayment
+);
+
 
 // Descargar y modificar facturas
 router.get('/invoices/:id/download', authenticateToken, validateMongoId('id'), billingController.downloadInvoice);

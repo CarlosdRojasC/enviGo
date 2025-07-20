@@ -287,46 +287,22 @@
                 </div>
               </td>
               <td class="actions-cell">
-                <div class="action-buttons">
-                  <button 
-                    v-if="invoice.status === 'draft'" 
-                    @click="sendInvoice(invoice._id)"
-                    class="action-btn send"
-                    title="Enviar"
-                  >
-                    📤
-                  </button>
-                  <button 
-                    v-if="['sent', 'overdue'].includes(invoice.status)" 
-                    @click="markAsPaid(invoice._id)"
-                    class="action-btn paid"
-                    title="Marcar como pagada"
-                  >
-                    ✅
-                  </button>
-                  <button 
-                    @click="downloadInvoice(invoice._id)"
-                    class="action-btn download"
-                    title="Descargar PDF"
-                  >
-                    📄
-                  </button>
-                  <button 
-                    @click="viewInvoice(invoice)"
-                    class="action-btn view"
-                    title="Ver detalles"
-                  >
-                    👁️
-                  </button>
-                  <button 
-                    @click="deleteInvoice(invoice._id)"
-                    class="action-btn delete"
-                    title="Eliminar"
-                  >
-                    🗑️
-                  </button>
-                </div>
-              </td>
+  <div class="action-buttons">
+    <button 
+      v-if="invoice.status === 'pending_confirmation'"
+      @click="confirmPayment(invoice._id)"
+      class="action-btn confirm"
+      title="Confirmar Pago Recibido"
+    >
+      ✅
+    </button>
+    
+    <button v-if="invoice.status === 'draft'" @click="sendInvoice(invoice._id)" class="action-btn send" title="Enviar">📤</button>
+    <button @click="downloadInvoice(invoice._id)" class="action-btn download" title="Descargar PDF">📄</button>
+    <button @click="viewInvoice(invoice)" class="action-btn view" title="Ver detalles">👁️</button>
+    <button @click="deleteInvoice(invoice._id)" class="action-btn delete" title="Eliminar">🗑️</button>
+  </div>
+</td>
             </tr>
           </tbody>
         </table>
@@ -519,6 +495,17 @@ const billingRate = computed(() => {
 
 // --- MÉTODOS ---
 
+async function confirmPayment(invoiceId) {
+  try {
+    // Asumiendo que tienes un endpoint en tu apiService
+    await apiService.billing.confirmPayment(invoiceId);
+    toast.success('Pago confirmado exitosamente.');
+    fetchInitialData(); // Refrescar los datos
+  } catch (error) {
+    toast.error(error.message || 'No se pudo confirmar el pago.');
+  }
+}
+
 async function fetchInitialData() {
   loading.value = true;
   try {
@@ -692,13 +679,25 @@ function getPeriodDuration(invoice) {
 }
 
 function getStatusText(status) {
-  const texts = { draft: 'Borrador', sent: 'Enviada', paid: 'Pagada', overdue: 'Vencida' };
+  const texts = {
+    draft: 'Borrador',
+    sent: 'Enviada',
+    paid: 'Pagada',
+    overdue: 'Vencida',
+    pending_confirmation: 'En Revisión' // <-- AÑADIR
+  };
   return texts[status] || status;
 }
 
 function getStatusIcon(status) {
-    const icons = { draft: '⚪', sent: '🟡', paid: '🟢', overdue: '🔴' };
-    return icons[status] || '❓';
+    const icons = {
+    draft: '⚪',
+    sent: '🟡',
+    paid: '🟢',
+    overdue: '🔴',
+    pending_confirmation: '🔵' // <-- AÑADIR
+  };
+  return icons[status] || '❓';
 }
 
 function isUrgentInvoice(invoice) {
@@ -1747,5 +1746,24 @@ watch(filters, debouncedSearch, { deep: true });
   .chart-wrapper {
     height: 200px;
   }
+}
+/* AÑADE ESTOS ESTILOS */
+.action-btn.confirm {
+  background: #2563eb; /* Azul */
+  color: white;
+  border-color: #2563eb;
+}
+.action-btn.confirm:hover {
+  background: #1d4ed8;
+}
+
+.status-badge.pending_confirmation {
+  background: #dbeafe; /* Azul claro */
+  color: #1e40af; /* Azul oscuro */
+}
+
+.invoice-row.pending_confirmation { /* Para resaltar toda la fila */
+    background: #eff6ff;
+    border-left: 4px solid #2563eb;
 }
 </style>

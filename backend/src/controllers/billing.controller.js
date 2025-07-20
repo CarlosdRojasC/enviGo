@@ -321,6 +321,60 @@ async generateInvoice(req, res) {
     res.status(400).json({ message: 'La generación automática ha sido desactivada. Utilice la generación manual por período.' });
   }
 
+  async requestPaymentConfirmation(req, res) {
+     try {
+    const { id } = req.params;
+    const invoice = await Invoice.findById(id);
+
+    if (!invoice) {
+      return res.status(404).json({ error: 'Factura no encontrada' });
+    }
+
+    // Lógica de seguridad: Asegurarse de que la factura pertenece a la empresa del usuario
+    if (req.user.company_id.toString() !== invoice.company_id.toString()) {
+      return res.status(403).json({ error: 'No tienes permiso para modificar esta factura' });
+    }
+
+    if (!['sent', 'overdue'].includes(invoice.status)) {
+        return res.status(400).json({ error: `No se puede notificar el pago de una factura en estado "${invoice.status}"` });
+    }
+
+    invoice.status = 'pending_confirmation';
+    invoice.payment_notification_date = new Date();
+    await invoice.save();
+
+    res.json({ message: 'Notificación de pago enviada. El administrador la revisará pronto.' });
+
+  } catch (error) {
+    console.error('Error en requestPaymentConfirmation:', error);
+    res.status(500).json({ error: 'Error interno del servidor' });
+  }
+  }
+  async confirmPayment(req, res) {
+     try {
+        const { id } = req.params;
+        const invoice = await Invoice.findById(id);
+
+        if (!invoice) {
+            return res.status(404).json({ error: 'Factura no encontrada' });
+        }
+
+        if (invoice.status !== 'pending_confirmation') {
+            return res.status(400).json({ error: 'Esta factura no está pendiente de confirmación.' });
+        }
+
+        invoice.status = 'paid';
+        invoice.paid_date = new Date();
+        await invoice.save();
+
+        res.json({ message: 'Pago confirmado exitosamente.', invoice });
+
+    } catch (error) {
+        console.error('Error en confirmPayment:', error);
+        res.status(500).json({ error: 'Error interno del servidor' });
+    }
+  }
+
   async getInvoices(req, res) {
     try {
       const { page = 1, limit = 15, status, company_id, period, search } = req.query;
