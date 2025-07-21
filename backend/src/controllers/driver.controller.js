@@ -6,82 +6,213 @@ const { ERRORS } = require('../config/constants');
 
 class DriverController {
   /**
-   * Crea un conductor global. Solo para administradores.
+   * Obtiene la lista de todos los conductores. Solo para administradores.
    */
- async createDriver(driverInfo) {
+  async getAllDrivers(req, res) {
     try {
-      const payload = {
-        name: driverInfo.name,
-        email: driverInfo.email,
-        phoneNumber: driverInfo.phone
-      };
-
-      console.log('Enviando payload a Shipday:', JSON.stringify(payload, null, 2));
-      const response = await this.api.post('/drivers', payload);
-
-      console.log('Conductor creado en Shipday:', response.data);
-      return response.data;
-
-    } catch (error) {
-      // --- BLOQUE DE ERROR MEJORADO ---
-      console.error('❌ Error detallado de la API de Shipday:', error.response?.data);
-      
-      let errorMessage = 'Error al crear conductor en Shipday.';
-      if (error.response?.data?.message) {
-        // Usar el mensaje específico de Shipday si existe
-        errorMessage = error.response.data.message;
-      } else if (error.response?.status === 401) {
-        errorMessage = "Error de autenticación. Verifica que tu API Key de Shipday sea correcta.";
+      if (req.user.role !== 'admin') {
+        return res.status(403).json({ error: ERRORS.FORBIDDEN });
       }
       
-      throw new Error(errorMessage);
+      console.log('🚗 Obteniendo conductores desde Shipday...');
+      
+      // Obtener conductores desde Shipday
+      const shipdayDrivers = await ShipdayService.getDrivers();
+      
+      // También obtener conductores locales si los tienes
+      const localDrivers = await User.find({ role: 'driver' })
+        .select('full_name email phone shipday_driver_id is_active');
+      
+      res.status(200).json({
+        success: true,
+        data: shipdayDrivers,
+        local_drivers: localDrivers,
+        total: shipdayDrivers?.length || 0,
+        timestamp: new Date().toISOString()
+      });
+      
+    } catch (error) {
+      console.error('❌ Error obteniendo conductores:', error);
+      res.status(500).json({ 
+        success: false,
+        error: error.message || ERRORS.SERVER_ERROR 
+      });
     }
   }
 
   /**
-   * Obtiene la lista de todos los conductores. Solo para administradores.
+   * Crear nuevo conductor
    */
-  async getAllDrivers(req, res) {
-    if (req.user.role !== 'admin') {
-      return res.status(403).json({ error: ERRORS.FORBIDDEN });
-    }
-    
+  async createDriver(req, res) {
     try {
-      const drivers = await User.find({ role: 'driver' })
-        .select('full_name email phone shipday_driver_id is_active');
-      res.status(200).json(drivers);
-    } catch (error) {
-      console.error('Error obteniendo todos los conductores:', error);
-      res.status(500).json({ error: ERRORS.SERVER_ERROR });
-    }
-  }
-  async deleteDriver(req, res) {
-    if (req.user.role !== 'admin') {
-      return res.status(403).json({ error: ERRORS.FORBIDDEN });
-    }
-    try {
-      const { driverId } = req.params;
-
-      // 1. Encontrar el usuario/conductor en tu base de datos
-      const driver = await User.findById(driverId);
-      if (!driver || driver.role !== 'driver') {
-        return res.status(404).json({ error: 'Conductor no encontrado.' });
+      if (req.user.role !== 'admin') {
+        return res.status(403).json({ error: ERRORS.FORBIDDEN });
       }
 
-      // 2. Llamar al servicio para eliminarlo de Shipday usando su email
-      // El servicio que me pasaste usa el email para borrar, así que lo usamos.
-      await ShipdayService.deleteDriver(driver.email);
-      
-      // 3. Si se elimina de Shipday, eliminarlo de tu base de datos
-      await User.findByIdAndDelete(driverId);
+      const driverData = req.body;
+      console.log('👨‍💼 Creando conductor:', driverData);
 
-      res.status(200).json({ message: 'Conductor eliminado exitosamente.' });
+      // Validaciones básicas
+      if (!driverData.name || !driverData.email || !driverData.phone) {
+        return res.status(400).json({
+          success: false,
+          error: 'Faltan campos obligatorios: name, email, phone'
+        });
+      }
+
+      // Crear en Shipday
+      const newDriver = await ShipdayService.createDriver(driverData);
+      
+      // Opcional: También crear en tu base de datos local
+      try {
+        const localDriver = new User({
+          full_name: driverData.name,
+          email: driverData.email,
+          phone: driverData.phone,
+          role: 'driver',
+          shipday_driver_id: newDriver.email, // Shipday usa email como ID
+          is_active: true
+        });
+        await localDriver.save();
+      } catch (localError) {
+        console.warn('⚠️ No se pudo crear conductor local:', localError.message);
+        // No fallar si el conductor local no se puede crear
+      }
+      
+      res.status(201).json({
+        success: true,
+        message: 'Conductor creado exitosamente',
+        data: newDriver,
+        timestamp: new Date().toISOString()
+      });
+      
     } catch (error) {
-      console.error('Error eliminando conductor:', error);
-      res.status(500).json({ error: error.message });
+      console.error('❌ Error creando conductor:', error);
+      res.status(500).json({ 
+        success: false, 
+        error: error.message || ERRORS.SERVER_ERROR
+      });
     }
   }
-  
+
+  /**
+   * Obtener conductor específico
+   */
+  async getDriver(req, res) {
+    try {
+      const { driverId } = req.params;
+      console.log('🔍 Obteniendo conductor:', driverId);
+
+      const driver = await ShipdayService.getDriver(driverId);
+      
+      if (!driver) {
+        return res.status(404).json({
+          success: false,
+          error: 'Conductor no encontrado'
+        });
+      }
+
+      res.json({
+        success: true,
+        data: driver,
+        timestamp: new Date().toISOString()
+      });
+      
+    } catch (error) {
+      console.error('❌ Error obteniendo conductor:', error);
+      res.status(500).json({ 
+        success: false, 
+        error: error.message 
+      });
+    }
+  }
+
+  /**
+   * Actualizar conductor
+   */
+  async updateDriver(req, res) {
+    try {
+      if (req.user.role !== 'admin') {
+        return res.status(403).json({ error: ERRORS.FORBIDDEN });
+      }
+
+      const { driverId } = req.params;
+      const updateData = req.body;
+      
+      console.log('🔄 Actualizando conductor:', driverId);
+
+      const updatedDriver = await ShipdayService.updateDriver(driverId, updateData);
+      
+      // Actualizar también en base de datos local si existe
+      try {
+        await User.findOneAndUpdate(
+          { shipday_driver_id: driverId },
+          {
+            full_name: updateData.name,
+            phone: updateData.phone,
+            is_active: updateData.isActive
+          }
+        );
+      } catch (localError) {
+        console.warn('⚠️ No se pudo actualizar conductor local:', localError.message);
+      }
+      
+      res.json({
+        success: true,
+        message: 'Conductor actualizado exitosamente',
+        data: updatedDriver,
+        timestamp: new Date().toISOString()
+      });
+      
+    } catch (error) {
+      console.error('❌ Error actualizando conductor:', error);
+      res.status(500).json({ 
+        success: false, 
+        error: error.message 
+      });
+    }
+  }
+
+  /**
+   * Eliminar conductor
+   */
+  async deleteDriver(req, res) {
+    try {
+      if (req.user.role !== 'admin') {
+        return res.status(403).json({ error: ERRORS.FORBIDDEN });
+      }
+
+      const { driverId } = req.params;
+      console.log('🗑️ Eliminando conductor:', driverId);
+
+      // Eliminar de Shipday
+      await ShipdayService.deleteDriver(driverId);
+      
+      // Eliminar también de base de datos local si existe
+      try {
+        const deletedDriver = await User.findOneAndDelete({ 
+          shipday_driver_id: driverId 
+        });
+        console.log('🗑️ Conductor local eliminado:', deletedDriver?.full_name || 'No encontrado');
+      } catch (localError) {
+        console.warn('⚠️ No se pudo eliminar conductor local:', localError.message);
+      }
+      
+      res.json({
+        success: true,
+        message: 'Conductor eliminado exitosamente',
+        timestamp: new Date().toISOString()
+      });
+      
+    } catch (error) {
+      console.error('❌ Error eliminando conductor:', error);
+      res.status(500).json({ 
+        success: false, 
+        error: error.message 
+      });
+    }
+  }
 }
 
+// Exportar instancia para usar como middleware
 module.exports = new DriverController();

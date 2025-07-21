@@ -16,7 +16,6 @@ router.post('/', authenticateToken, isAdmin, driverController.createDriver);
 router.get('/:driverId', 
   authenticateToken, 
   isAdmin, 
-  validateMongoId('driverId'),
   driverController.getDriver
 );
 
@@ -24,7 +23,6 @@ router.get('/:driverId',
 router.put('/:driverId', 
   authenticateToken, 
   isAdmin, 
-  validateMongoId('driverId'),
   driverController.updateDriver
 );
 
@@ -32,7 +30,6 @@ router.put('/:driverId',
 router.delete('/:driverId', 
   authenticateToken, 
   isAdmin, 
-  validateMongoId('driverId'),
   driverController.deleteDriver
 );
 
