@@ -48,7 +48,7 @@
       <div class="stat-card">
         <div class="stat-icon active">👥</div>
         <div>
-          <div class="stat-value">{{ stats.total }}</div>
+          <div class="stat-value">{{ driverStats.total }}</div>
           <div class="stat-label">Total Conductores</div>
         </div>
       </div>
@@ -56,7 +56,7 @@
       <div class="stat-card">
         <div class="stat-icon available">✅</div>
         <div>
-          <div class="stat-value">{{ stats.active }}</div>
+          <div class="stat-value">{{ driverStats.active }}</div>
           <div class="stat-label">Activos</div>
         </div>
       </div>
@@ -64,7 +64,7 @@
       <div class="stat-card">
         <div class="stat-icon working">🚗</div>
         <div>
-          <div class="stat-value">{{ stats.working }}</div>
+          <div class="stat-value">{{ driverStats.working }}</div>
           <div class="stat-label">En Servicio</div>
         </div>
       </div>
@@ -72,7 +72,7 @@
       <div class="stat-card">
         <div class="stat-icon inactive">😴</div>
         <div>
-          <div class="stat-value">{{ stats.inactive }}</div>
+          <div class="stat-value">{{ driverStats.inactive }}</div>
           <div class="stat-label">Inactivos</div>
         </div>
       </div>
@@ -85,15 +85,15 @@
     </div>
 
     <!-- Lista de conductores -->
-    <div v-else-if="filteredDrivers.length > 0" class="drivers-grid">
+    <div v-else-if="filteredDriversList.length > 0" class="drivers-grid">
       <div 
-        v-for="driver in filteredDrivers" 
-        :key="driver.email || driver.id || driver._id"
+        v-for="driver in filteredDriversList" 
+        :key="getDriverKey(driver)"
         class="driver-card"
       >
         <!-- Status Badge -->
-        <div class="status-badge" :class="getStatusClass(driver)">
-          {{ getStatusText(driver) }}
+        <div class="status-badge" :class="getDriverStatusClass(driver)">
+          {{ getDriverStatusText(driver) }}
         </div>
         
         <!-- Driver Info -->
@@ -102,27 +102,27 @@
             <img 
               v-if="driver.profilePicture || driver.avatar"
               :src="driver.profilePicture || driver.avatar"
-              :alt="getDriverName(driver)"
+              :alt="getDriverDisplayName(driver)"
               class="avatar-photo"
-              @error="handleImageError"
+              @error="onImageError"
             />
             <div class="avatar-initials">
-              {{ getInitials(getDriverName(driver)) }}
+              {{ getDriverInitials(getDriverDisplayName(driver)) }}
             </div>
           </div>
           
           <div class="driver-details">
-            <h3>{{ getDriverName(driver) }}</h3>
-            <p>{{ getDriverEmail(driver) }}</p>
-            <p>{{ getDriverPhone(driver) }}</p>
-            <div class="driver-code">ID: {{ driver.email || driver.id || 'Sin ID' }}</div>
+            <h3>{{ getDriverDisplayName(driver) }}</h3>
+            <p>{{ getDriverDisplayEmail(driver) }}</p>
+            <p>{{ getDriverDisplayPhone(driver) }}</p>
+            <div class="driver-code">ID: {{ getDriverKey(driver) }}</div>
           </div>
         </div>
 
         <!-- Driver Meta -->
         <div class="driver-meta">
           <span class="vehicle-badge">
-            {{ getVehicleIcon(driver.vehicleType) }} {{ driver.vehicleType || 'No especificado' }}
+            {{ getVehicleDisplayIcon(driver.vehicleType) }} {{ driver.vehicleType || 'No especificado' }}
           </span>
           
           <span v-if="driver.plateNumber" class="plate-badge">
@@ -130,15 +130,12 @@
           </span>
           
           <span 
-            v-if="hasLocation(driver)" 
+            v-if="driverHasLocation(driver)" 
             class="location-badge"
-            @click="showLocation(driver)"
+            @click="openDriverLocation(driver)"
             style="cursor: pointer;"
           >
-            📍 {{ formatCoordinates(
-              driver.carrrierLocationLat || driver.location?.lat,
-              driver.carrrierLocationLng || driver.location?.lng
-            ) }}
+            📍 {{ formatDriverCoordinates(driver) }}
           </span>
         </div>
 
@@ -162,30 +159,27 @@
         <div class="driver-actions">
           <!-- Toggle Status -->
           <button
-            @click="toggleDriverStatus(driver)"
-            :class="[
-              'btn-status',
-              driver.isActive ? 'btn-deactivate' : 'btn-activate'
-            ]"
-            :disabled="updatingStatus === getDriverId(driver)"
+            @click="toggleStatus(driver)"
+            :class="getToggleButtonClass(driver)"
+            :disabled="updatingStatus === getDriverKey(driver)"
           >
-            {{ updatingStatus === getDriverId(driver) ? '...' : (driver.isActive ? 'Desactivar' : 'Activar') }}
+            {{ getToggleButtonText(driver) }}
           </button>
           
           <!-- Edit -->
-          <button @click="editDriver(driver)" class="btn-edit">
+          <button @click="startEdit(driver)" class="btn-edit">
             ✏️
           </button>
           
           <!-- Delete -->
-          <button @click="confirmDelete(driver)" class="btn-delete">
+          <button @click="startDelete(driver)" class="btn-delete">
             🗑️
           </button>
           
-          <!-- Assign Order (solo si está disponible) -->
+          <!-- Assign Order -->
           <button
-            v-if="driver.isActive && !driver.isOnShift"
-            @click="assignOrder(driver)"
+            v-if="canAssignOrders(driver)"
+            @click="startAssign(driver)"
             class="btn-assign"
           >
             📦 Asignar
@@ -206,28 +200,28 @@
 
     <!-- Modals -->
     <!-- Create/Edit Driver Modal -->
-    <div v-if="showCreateForm || editingDriver" class="modal-overlay" @click="closeModals">
+    <div v-if="showCreateForm || editingDriver" class="modal-overlay" @click="closeAllModals">
       <div class="modal-content" @click.stop>
         <DriverForm
           :driver="editingDriver"
-          @success="handleDriverSuccess"
-          @cancel="closeModals"
+          @success="onDriverSuccess"
+          @cancel="closeAllModals"
         />
       </div>
     </div>
 
     <!-- Delete Confirmation Modal -->
-    <div v-if="driverToDelete" class="modal-overlay" @click="closeDeleteModal">
+    <div v-if="driverToDelete" class="modal-overlay" @click="cancelDelete">
       <div class="modal-content delete-modal" @click.stop>
         <div class="delete-icon">⚠️</div>
         <h3>¿Eliminar Conductor?</h3>
         <p>
-          ¿Estás seguro de que quieres eliminar a <strong>{{ getDriverName(driverToDelete) }}</strong>?
+          ¿Estás seguro de que quieres eliminar a <strong>{{ getDriverDisplayName(driverToDelete) }}</strong>?
           Esta acción no se puede deshacer.
         </p>
         <div class="delete-actions">
-          <button @click="closeDeleteModal" class="btn-cancel">Cancelar</button>
-          <button @click="deleteDriver" :disabled="deleting" class="btn-delete-confirm">
+          <button @click="cancelDelete" class="btn-cancel">Cancelar</button>
+          <button @click="confirmDelete" :disabled="deleting" class="btn-delete-confirm">
             {{ deleting ? 'Eliminando...' : 'Eliminar' }}
           </button>
         </div>
@@ -247,7 +241,7 @@ import { ref, computed, onMounted } from 'vue'
 import DriverForm from './DriverForm.vue'
 import { shipdayService } from '../services/shipday'
 
-// Estado
+// ===== ESTADO REACTIVO =====
 const drivers = ref([])
 const loading = ref(false)
 const searchQuery = ref('')
@@ -260,25 +254,31 @@ const deleting = ref(false)
 const updatingStatus = ref(null)
 const notification = ref(null)
 
-// Helper functions para manejar datos inconsistentes - DECLARADAS PRIMERO
-const getDriverName = (driver) => {
-  return driver?.name || driver?.full_name || driver?.firstName || 'Sin nombre'
+// ===== FUNCIONES HELPER (DECLARADAS ANTES DE SER USADAS) =====
+
+// Funciones para extraer datos seguros del driver
+function getDriverDisplayName(driver) {
+  if (!driver) return 'Sin nombre'
+  return driver.name || driver.full_name || driver.firstName || 'Sin nombre'
 }
 
-const getDriverEmail = (driver) => {
-  return driver?.email || 'Sin email'
+function getDriverDisplayEmail(driver) {
+  if (!driver) return 'Sin email'
+  return driver.email || 'Sin email'
 }
 
-const getDriverPhone = (driver) => {
-  return driver?.phone || driver?.phoneNumber || driver?.mobile || 'Sin teléfono'
+function getDriverDisplayPhone(driver) {
+  if (!driver) return 'Sin teléfono'
+  return driver.phone || driver.phoneNumber || driver.mobile || 'Sin teléfono'
 }
 
-const getDriverId = (driver) => {
-  return driver?.email || driver?.id || driver?._id || 'unknown'
+function getDriverKey(driver) {
+  if (!driver) return 'unknown'
+  return driver.email || driver.id || driver._id || 'unknown'
 }
 
-// Helper function mejorada para iniciales - DECLARADA ANTES DE SU USO
-const getInitials = (name) => {
+// Función para generar iniciales de forma segura
+function getDriverInitials(name) {
   if (!name || typeof name !== 'string') return '??'
   
   const cleanName = name.trim()
@@ -292,28 +292,31 @@ const getInitials = (name) => {
   return (words[0].charAt(0) + words[1].charAt(0)).toUpperCase()
 }
 
-// Función helper para calcular status - DECLARADA ANTES DE SU USO
-const calculateStatus = (driver) => {
+// Funciones de estado del driver
+function calculateDriverStatus(driver) {
   if (!driver) return 'inactive'
   if (!driver.isActive) return 'inactive'
   if (driver.isOnShift) return 'working'
   return 'available'
 }
 
-// Helper functions para UI - DECLARADAS ANTES DE SU USO
-const getStatusClass = (driver) => {
-  if (!driver.isActive) return 'status-inactive'
-  if (driver.isOnShift) return 'status-working'
-  return 'status-available'
+function getDriverStatusClass(driver) {
+  const status = calculateDriverStatus(driver)
+  return `status-${status}`
 }
 
-const getStatusText = (driver) => {
-  if (!driver.isActive) return 'Inactivo'
-  if (driver.isOnShift) return 'En Turno'
-  return 'Disponible'
+function getDriverStatusText(driver) {
+  const status = calculateDriverStatus(driver)
+  const statusTexts = {
+    'inactive': 'Inactivo',
+    'working': 'En Turno',
+    'available': 'Disponible'
+  }
+  return statusTexts[status] || 'Desconocido'
 }
 
-const getVehicleIcon = (type) => {
+// Funciones de vehículo
+function getVehicleDisplayIcon(type) {
   const icons = {
     car: '🚗',
     motorcycle: '🏍️',
@@ -324,33 +327,51 @@ const getVehicleIcon = (type) => {
   return icons[type] || '🚗'
 }
 
-const hasLocation = (driver) => {
+// Funciones de ubicación
+function driverHasLocation(driver) {
+  if (!driver) return false
   return (driver.carrrierLocationLat && driver.carrrierLocationLng) || 
          (driver.location?.lat && driver.location?.lng)
 }
 
-const formatCoordinates = (lat, lng) => {
+function formatDriverCoordinates(driver) {
+  if (!driver) return 'N/A'
+  
+  const lat = driver.carrrierLocationLat || driver.location?.lat
+  const lng = driver.carrrierLocationLng || driver.location?.lng
+  
   if (!lat || !lng) return 'N/A'
   return `${parseFloat(lat).toFixed(4)}, ${parseFloat(lng).toFixed(4)}`
 }
 
-const handleImageError = (event) => {
-  // Si la imagen falla al cargar, ocultar la imagen y mostrar iniciales
-  event.target.style.display = 'none'
-  event.target.nextElementSibling.style.display = 'flex'
+// Funciones de UI
+function getToggleButtonClass(driver) {
+  const baseClass = 'btn-status'
+  const statusClass = driver?.isActive ? 'btn-deactivate' : 'btn-activate'
+  return `${baseClass} ${statusClass}`
 }
 
-// Computed - DECLARADOS DESPUÉS DE LAS FUNCIONES HELPER
-const filteredDrivers = computed(() => {
-  let filtered = drivers.value
+function getToggleButtonText(driver) {
+  const driverKey = getDriverKey(driver)
+  if (updatingStatus.value === driverKey) return '...'
+  return driver?.isActive ? 'Desactivar' : 'Activar'
+}
+
+function canAssignOrders(driver) {
+  return driver?.isActive && !driver?.isOnShift
+}
+
+// ===== COMPUTED PROPERTIES =====
+const filteredDriversList = computed(() => {
+  let filtered = [...drivers.value]
 
   // Filtro de búsqueda
   if (searchQuery.value) {
     const query = searchQuery.value.toLowerCase()
     filtered = filtered.filter(driver => {
-      const name = getDriverName(driver).toLowerCase()
-      const email = getDriverEmail(driver).toLowerCase()
-      const phone = getDriverPhone(driver)
+      const name = getDriverDisplayName(driver).toLowerCase()
+      const email = getDriverDisplayEmail(driver).toLowerCase()
+      const phone = getDriverDisplayPhone(driver)
       
       return name.includes(query) ||
              email.includes(query) ||
@@ -361,15 +382,17 @@ const filteredDrivers = computed(() => {
   // Filtro de estado
   if (statusFilter.value) {
     filtered = filtered.filter(driver => {
+      const status = calculateDriverStatus(driver)
+      
       switch (statusFilter.value) {
         case 'active':
           return driver.isActive === true
         case 'inactive':
           return driver.isActive === false
         case 'working':
-          return driver.isActive === true && driver.isOnShift === true
+          return status === 'working'
         case 'available':
-          return driver.isActive === true && driver.isOnShift === false
+          return status === 'available'
         default:
           return true
       }
@@ -386,23 +409,24 @@ const filteredDrivers = computed(() => {
   return filtered
 })
 
-const stats = computed(() => {
+const driverStats = computed(() => {
   const total = drivers.value.length
   const active = drivers.value.filter(d => d.isActive === true).length
   const inactive = drivers.value.filter(d => d.isActive === false).length
-  const working = drivers.value.filter(d => d.isActive === true && d.isOnShift === true).length
-  const available = drivers.value.filter(d => d.isActive === true && d.isOnShift === false).length
+  const working = drivers.value.filter(d => {
+    const status = calculateDriverStatus(d)
+    return status === 'working'
+  }).length
+  const available = drivers.value.filter(d => {
+    const status = calculateDriverStatus(d)
+    return status === 'available'
+  }).length
 
   return { total, active, available, working, inactive }
 })
 
-// Lifecycle
-onMounted(() => {
-  loadDrivers()
-})
-
-// Métodos principales
-const loadDrivers = async () => {
+// ===== MÉTODOS PRINCIPALES =====
+async function loadDrivers() {
   loading.value = true
   try {
     console.log('🔄 Cargando conductores...')
@@ -414,7 +438,6 @@ const loadDrivers = async () => {
     // Procesar y normalizar datos
     drivers.value = (Array.isArray(rawData) ? rawData : []).map(driver => ({
       ...driver,
-      status: calculateStatus(driver),
       isActive: Boolean(driver.isActive),
       isOnShift: Boolean(driver.isOnShift)
     }))
@@ -423,84 +446,84 @@ const loadDrivers = async () => {
     
   } catch (error) {
     console.error('❌ Error cargando conductores:', error)
-    drivers.value = [] // Asegurar que siempre sea un array
-    showNotification('Error al cargar conductores: ' + error.message, 'error')
+    drivers.value = []
+    showNotificationMessage('Error al cargar conductores: ' + error.message, 'error')
   } finally {
     loading.value = false
   }
 }
 
-const editDriver = (driver) => {
+// Métodos de UI
+function startEdit(driver) {
   editingDriver.value = { ...driver }
 }
 
-const confirmDelete = (driver) => {
+function startDelete(driver) {
   driverToDelete.value = driver
 }
 
-const deleteDriver = async () => {
-  if (!driverToDelete.value) return
-
-  deleting.value = true
-  try {
-    const driverId = getDriverId(driverToDelete.value)
-    await shipdayService.deleteDriver(driverId)
-    
-    // Remover de la lista local
-    drivers.value = drivers.value.filter(d => 
-      getDriverId(d) !== getDriverId(driverToDelete.value)
-    )
-    
-    showNotification('Conductor eliminado exitosamente', 'success')
-    closeDeleteModal()
-  } catch (error) {
-    console.error('❌ Error eliminando conductor:', error)
-    showNotification('Error al eliminar conductor: ' + error.message, 'error')
-  } finally {
-    deleting.value = false
-  }
+function startAssign(driver) {
+  console.log('Asignar orden a:', driver)
+  showNotificationMessage('Función de asignación en desarrollo', 'info')
 }
 
-const toggleDriverStatus = async (driver) => {
-  const driverId = getDriverId(driver)
-  updatingStatus.value = driverId
+async function toggleStatus(driver) {
+  const driverKey = getDriverKey(driver)
+  updatingStatus.value = driverKey
   
   try {
     const newStatus = !driver.isActive
-    await shipdayService.updateDriver(driverId, {
+    await shipdayService.updateDriver(driverKey, {
       ...driver,
       isActive: newStatus
     })
     
     // Actualizar en la lista local
-    const index = drivers.value.findIndex(d => getDriverId(d) === driverId)
+    const index = drivers.value.findIndex(d => getDriverKey(d) === driverKey)
     if (index !== -1) {
       drivers.value[index].isActive = newStatus
-      drivers.value[index].status = newStatus ? 'available' : 'inactive'
     }
     
-    showNotification(
+    showNotificationMessage(
       `Conductor ${newStatus ? 'activado' : 'desactivado'} exitosamente`,
       'success'
     )
   } catch (error) {
     console.error('❌ Error actualizando estado:', error)
-    showNotification('Error al actualizar estado del conductor: ' + error.message, 'error')
+    showNotificationMessage('Error al actualizar estado del conductor: ' + error.message, 'error')
   } finally {
     updatingStatus.value = null
   }
 }
 
-const assignOrder = (driver) => {
-  console.log('Asignar orden a:', driver)
-  showNotification('Función de asignación en desarrollo', 'info')
+async function confirmDelete() {
+  if (!driverToDelete.value) return
+
+  deleting.value = true
+  try {
+    const driverKey = getDriverKey(driverToDelete.value)
+    await shipdayService.deleteDriver(driverKey)
+    
+    // Remover de la lista local
+    drivers.value = drivers.value.filter(d => 
+      getDriverKey(d) !== getDriverKey(driverToDelete.value)
+    )
+    
+    showNotificationMessage('Conductor eliminado exitosamente', 'success')
+    cancelDelete()
+  } catch (error) {
+    console.error('❌ Error eliminando conductor:', error)
+    showNotificationMessage('Error al eliminar conductor: ' + error.message, 'error')
+  } finally {
+    deleting.value = false
+  }
 }
 
-const handleDriverSuccess = (event) => {
+function onDriverSuccess(event) {
   if (editingDriver.value) {
     // Actualizar conductor existente
     const index = drivers.value.findIndex(d => 
-      getDriverId(d) === getDriverId(editingDriver.value)
+      getDriverKey(d) === getDriverKey(editingDriver.value)
     )
     if (index !== -1) {
       drivers.value[index] = { ...event.driver }
@@ -510,27 +533,30 @@ const handleDriverSuccess = (event) => {
     drivers.value.push(event.driver)
   }
   
-  showNotification(event.message, 'success')
-  closeModals()
+  showNotificationMessage(event.message, 'success')
+  closeAllModals()
 }
 
-const closeModals = () => {
+// Métodos de control de modales
+function closeAllModals() {
   showCreateForm.value = false
   editingDriver.value = null
 }
 
-const closeDeleteModal = () => {
+function cancelDelete() {
   driverToDelete.value = null
 }
 
-const showNotification = (message, type = 'info') => {
+// Métodos de notificaciones
+function showNotificationMessage(message, type = 'info') {
   notification.value = { message, type }
   setTimeout(() => {
     notification.value = null
   }, 5000)
 }
 
-const showLocation = (driver) => {
+// Métodos de eventos
+function openDriverLocation(driver) {
   const lat = driver.carrrierLocationLat || driver.location?.lat
   const lng = driver.carrrierLocationLng || driver.location?.lng
   
@@ -538,9 +564,20 @@ const showLocation = (driver) => {
     const googleMapsUrl = `https://www.google.com/maps?q=${lat},${lng}&zoom=15`
     window.open(googleMapsUrl, '_blank')
   } else {
-    showNotification('Ubicación no disponible', 'info')
+    showNotificationMessage('Ubicación no disponible', 'info')
   }
 }
+
+function onImageError(event) {
+  // Si la imagen falla al cargar, ocultar la imagen y mostrar iniciales
+  event.target.style.display = 'none'
+  event.target.nextElementSibling.style.display = 'flex'
+}
+
+// ===== LIFECYCLE =====
+onMounted(() => {
+  loadDrivers()
+})
 </script>
 
 <style scoped>
@@ -970,6 +1007,7 @@ const showLocation = (driver) => {
   padding: 10px 20px;
   border-radius: 6px;
   cursor: pointer;
+  transition: background 0.2s;
 }
 
 /* Toast notifications */
