@@ -244,7 +244,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import DriverForm from '../components/DriverForm.vue'
+import DriverForm from '../DriverForm.vue'
 import { shipdayService } from '../services/shipday'
 
 // Estado
