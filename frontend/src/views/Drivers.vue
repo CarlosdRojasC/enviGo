@@ -260,7 +260,7 @@ const deleting = ref(false)
 const updatingStatus = ref(null)
 const notification = ref(null)
 
-// Helper functions para manejar datos inconsistentes
+// Helper functions para manejar datos inconsistentes - DECLARADAS PRIMERO
 const getDriverName = (driver) => {
   return driver?.name || driver?.full_name || driver?.firstName || 'Sin nombre'
 }
@@ -277,7 +277,70 @@ const getDriverId = (driver) => {
   return driver?.email || driver?.id || driver?._id || 'unknown'
 }
 
-// Computed
+// Helper function mejorada para iniciales - DECLARADA ANTES DE SU USO
+const getInitials = (name) => {
+  if (!name || typeof name !== 'string') return '??'
+  
+  const cleanName = name.trim()
+  if (cleanName.length === 0) return '??'
+  
+  const words = cleanName.split(' ').filter(word => word.length > 0)
+  
+  if (words.length === 0) return '??'
+  if (words.length === 1) return words[0].charAt(0).toUpperCase()
+  
+  return (words[0].charAt(0) + words[1].charAt(0)).toUpperCase()
+}
+
+// Función helper para calcular status - DECLARADA ANTES DE SU USO
+const calculateStatus = (driver) => {
+  if (!driver) return 'inactive'
+  if (!driver.isActive) return 'inactive'
+  if (driver.isOnShift) return 'working'
+  return 'available'
+}
+
+// Helper functions para UI - DECLARADAS ANTES DE SU USO
+const getStatusClass = (driver) => {
+  if (!driver.isActive) return 'status-inactive'
+  if (driver.isOnShift) return 'status-working'
+  return 'status-available'
+}
+
+const getStatusText = (driver) => {
+  if (!driver.isActive) return 'Inactivo'
+  if (driver.isOnShift) return 'En Turno'
+  return 'Disponible'
+}
+
+const getVehicleIcon = (type) => {
+  const icons = {
+    car: '🚗',
+    motorcycle: '🏍️',
+    bicycle: '🚲',
+    truck: '🚚',
+    van: '🚐'
+  }
+  return icons[type] || '🚗'
+}
+
+const hasLocation = (driver) => {
+  return (driver.carrrierLocationLat && driver.carrrierLocationLng) || 
+         (driver.location?.lat && driver.location?.lng)
+}
+
+const formatCoordinates = (lat, lng) => {
+  if (!lat || !lng) return 'N/A'
+  return `${parseFloat(lat).toFixed(4)}, ${parseFloat(lng).toFixed(4)}`
+}
+
+const handleImageError = (event) => {
+  // Si la imagen falla al cargar, ocultar la imagen y mostrar iniciales
+  event.target.style.display = 'none'
+  event.target.nextElementSibling.style.display = 'flex'
+}
+
+// Computed - DECLARADOS DESPUÉS DE LAS FUNCIONES HELPER
 const filteredDrivers = computed(() => {
   let filtered = drivers.value
 
@@ -338,7 +401,7 @@ onMounted(() => {
   loadDrivers()
 })
 
-// Métodos
+// Métodos principales
 const loadDrivers = async () => {
   loading.value = true
   try {
@@ -365,14 +428,6 @@ const loadDrivers = async () => {
   } finally {
     loading.value = false
   }
-}
-
-// Función helper para calcular status
-const calculateStatus = (driver) => {
-  if (!driver) return 'inactive'
-  if (!driver.isActive) return 'inactive'
-  if (driver.isOnShift) return 'working'
-  return 'available'
 }
 
 const editDriver = (driver) => {
@@ -485,61 +540,6 @@ const showLocation = (driver) => {
   } else {
     showNotification('Ubicación no disponible', 'info')
   }
-}
-
-const hasLocation = (driver) => {
-  return (driver.carrrierLocationLat && driver.carrrierLocationLng) || 
-         (driver.location?.lat && driver.location?.lng)
-}
-
-const formatCoordinates = (lat, lng) => {
-  if (!lat || !lng) return 'N/A'
-  return `${parseFloat(lat).toFixed(4)}, ${parseFloat(lng).toFixed(4)}`
-}
-
-const handleImageError = (event) => {
-  // Si la imagen falla al cargar, ocultar la imagen y mostrar iniciales
-  event.target.style.display = 'none'
-  event.target.nextElementSibling.style.display = 'flex'
-}
-
-// Helper functions para UI
-const getStatusClass = (driver) => {
-  if (!driver.isActive) return 'status-inactive'
-  if (driver.isOnShift) return 'status-working'
-  return 'status-available'
-}
-
-const getStatusText = (driver) => {
-  if (!driver.isActive) return 'Inactivo'
-  if (driver.isOnShift) return 'En Turno'
-  return 'Disponible'
-}
-
-// Helper function mejorada para iniciales
-const getInitials = (name) => {
-  if (!name || typeof name !== 'string') return '??'
-  
-  const cleanName = name.trim()
-  if (cleanName.length === 0) return '??'
-  
-  const words = cleanName.split(' ').filter(word => word.length > 0)
-  
-  if (words.length === 0) return '??'
-  if (words.length === 1) return words[0].charAt(0).toUpperCase()
-  
-  return (words[0].charAt(0) + words[1].charAt(0)).toUpperCase()
-}
-
-const getVehicleIcon = (type) => {
-  const icons = {
-    car: '🚗',
-    motorcycle: '🏍️',
-    bicycle: '🚲',
-    truck: '🚚',
-    van: '🚐'
-  }
-  return icons[type] || '🚗'
 }
 </script>
 
