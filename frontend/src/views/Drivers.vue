@@ -328,14 +328,24 @@ const driverStats = computed(() => {
 async function loadDrivers() {
   loading.value = true;
   try {
-    console.log('🔄 Cargando conductores desde TU API...');
-    // CAMBIO CLAVE: Llamamos a tu backend, que ya calcula las estadísticas
-    const { data } = await apiService.drivers.getAll();
-    drivers.value = data;
-    console.log('✅ Conductores con estadísticas cargados:', drivers.value.length);
+    console.log('🔄 Cargando conductores desde tu API...');
+    // Llama a tu backend
+    const response = await apiService.drivers.getAll();
+    
+    // CAMBIO CLAVE: Asegúrate de que estás asignando el array.
+    // La respuesta de la API a menudo es un objeto { data: [...] }, 
+    // y los datos reales están dentro de .data.
+    const driversArray = response.data || [];
+    
+    // Nos aseguramos de que lo que guardamos es SIEMPRE un array.
+    drivers.value = Array.isArray(driversArray) ? driversArray : [];
+    
+    console.log('✅ Conductores cargados:', drivers.value.length);
+    
   } catch (error) {
     console.error('❌ Error cargando conductores:', error);
-    toast.error('Error al cargar conductores.');
+    drivers.value = []; // En caso de error, asegura que sea un array vacío.
+    showNotificationMessage('Error al cargar conductores: ' + error.message, 'error');
   } finally {
     loading.value = false;
   }
