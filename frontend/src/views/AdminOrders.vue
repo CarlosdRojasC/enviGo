@@ -45,7 +45,6 @@
       :selected-orders="selectedOrders"
       :select-all-checked="selectAllChecked"
       :select-all-indeterminate="selectAllIndeterminate"
-      :get-status-buttons="getStatusButtons"
       @select-order="toggleOrderSelection"
       @select-all="toggleSelectAll"
       @view-details="openOrderDetailsModal"
@@ -342,44 +341,6 @@ watch(orders, () => {
 
 // ==================== METHODS ====================
 
-
-function getStatusButtons(order) {
-  const buttons = [];
-  
-  switch (order.status) {
-    case 'ready_for_pickup':
-      buttons.push({
-        label: '📦 Recepcionado',
-        action: async () => {
-          try {
-            await markAsWarehouseReceived(order);
-          } catch (error) {
-            console.error('Error:', error);
-          }
-        },
-        class: 'btn btn-primary btn-sm me-1',
-        tooltip: 'Marcar como recepcionado en bodega'
-      });
-      break;
-      
-    case 'warehouse_received':
-      buttons.push({
-        label: '🚚 Enviar',
-        action: async () => {
-          try {
-            await markAsShipped(order);
-          } catch (error) {
-            console.error('Error:', error);
-          }
-        },
-        class: 'btn btn-success btn-sm me-1',
-        tooltip: 'Marcar como enviado para entrega'
-      });
-      break;
-  }
-  
-  return buttons;
-}
 /**
  * Handle quick actions from header
  */

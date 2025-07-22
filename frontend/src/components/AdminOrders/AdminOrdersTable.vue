@@ -202,18 +202,6 @@
             <!-- ACTIONS -->
             <td class="col-actions">
               <div class="action-buttons">
-                 <div v-if="getStatusButtons && getStatusButtons(order).length > 0" class="status-actions">
-      <button 
-        v-for="statusButton in getStatusButtons(order)" 
-        :key="statusButton.label"
-        @click="statusButton.action"
-        :class="statusButton.class"
-        :title="statusButton.tooltip"
-        :disabled="loading"
-      >
-        {{ statusButton.label }}
-      </button>
-    </div>
                 <button 
                   @click="$emit('view-details', order)" 
                   class="btn-action view"
@@ -235,8 +223,8 @@
                 <button 
                   @click="$emit('assign-driver', order)" 
                   class="btn-action assign"
-                 :disabled="order.status !== 'pending' && order.status !== 'ready_for_pickup'"
-                 :title="['pending', 'ready_for_pickup'].includes(order.status) ? 'Asignar conductor' : 'No se puede asignar en este estado'"
+                 :disabled="order.status !== 'pending' && order.status !== 'ready_for_pickup' && order.status !== 'warehouse_received'"
+                 :title="['pending', 'ready_for_pickup', 'warehouse_received'].includes(order.status) ? 'Asignar conductor' : 'No se puede asignar en este estado'"
                 >
                   <span class="action-icon">🚚</span>
                   <span class="action-text">Asignar</span>
@@ -385,11 +373,6 @@ const props = defineProps({
   selectAllIndeterminate: {
     type: Boolean,
     default: false
-  },
-  getStatusButtons: {
-    type: Function,
-    required: false,
-    default: () => []
   }
 })
 
