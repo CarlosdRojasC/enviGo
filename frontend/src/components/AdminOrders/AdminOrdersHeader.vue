@@ -72,6 +72,21 @@
             <div class="stat-label">Procesando</div>
           </div>
         </div>
+            <div class="stat-card assigned" v-if="stats.assigned > 0">
+      <div class="stat-icon">👨‍💼</div>
+      <div class="stat-content">
+        <div class="stat-number">{{ stats.assigned || 0 }}</div>
+        <div class="stat-label">Asignados</div>
+      </div>
+    </div>
+        <div class="stat-card out-for-delivery" v-if="stats.out_for_delivery > 0">
+      <div class="stat-icon">🚚</div>
+      <div class="stat-content">
+        <div class="stat-number">{{ stats.out_for_delivery || 0 }}</div>
+        <div class="stat-label">En Ruta</div>
+      </div>
+    </div>
+
 
         <div class="stat-card ready">
           <div class="stat-icon">📦</div>
@@ -80,6 +95,13 @@
             <div class="stat-label">Listos</div>
           </div>
         </div>
+        <div class="stat-card warehouse" v-if="stats.warehouse_received > 0">
+      <div class="stat-icon">🏭</div>
+      <div class="stat-content">
+        <div class="stat-number">{{ stats.warehouse_received || 0 }}</div>
+        <div class="stat-label">En Bodega</div>
+      </div>
+    </div>
 
         <div class="stat-card shipped">
           <div class="stat-icon">🚚</div>

@@ -824,5 +824,75 @@ router.patch('/:id/deliver', authenticateToken, validateMongoId('id'), async (re
     res.status(500).json({ error: 'Error interno del servidor' });
   }
 });
+router.patch('/:id/warehouse-received', authenticateToken, async (req, res) => {
+  try {
+    const order = await Order.findById(req.params.id);
+    if (!order) return res.status(404).json({ error: 'Pedido no encontrado' });
+
+    order.status = 'warehouse_received';
+    await order.save();
+
+    res.json({ 
+      message: 'Pedido recepcionado en bodega', 
+      order: {
+        _id: order._id,
+        order_number: order.order_number,
+        status: order.status,
+        updated_at: order.updated_at
+      }
+    });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error actualizando el pedido' });
+  }
+});
+
+// 👨‍💼 Marcar como asignado
+router.patch('/:id/assigned', authenticateToken, async (req, res) => {
+  try {
+    const order = await Order.findById(req.params.id);
+    if (!order) return res.status(404).json({ error: 'Pedido no encontrado' });
+
+    order.status = 'assigned';
+    await order.save();
+
+    res.json({ 
+      message: 'Conductor asignado', 
+      order: {
+        _id: order._id,
+        order_number: order.order_number,
+        status: order.status,
+        updated_at: order.updated_at
+      }
+    });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error actualizando el pedido' });
+  }
+});
+
+// 🚚 Marcar como en ruta
+router.patch('/:id/out-for-delivery', authenticateToken, async (req, res) => {
+  try {
+    const order = await Order.findById(req.params.id);
+    if (!order) return res.status(404).json({ error: 'Pedido no encontrado' });
+
+    order.status = 'out_for_delivery';
+    await order.save();
+
+    res.json({ 
+      message: 'Pedido en ruta de entrega', 
+      order: {
+        _id: order._id,
+        order_number: order.order_number,
+        status: order.status,
+        updated_at: order.updated_at
+      }
+    });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error actualizando el pedido' });
+  }
+});
 
 module.exports = router;

@@ -45,6 +45,7 @@
       :selected-orders="selectedOrders"
       :select-all-checked="selectAllChecked"
       :select-all-indeterminate="selectAllIndeterminate"
+      :get-status-buttons="getStatusButtons"
       @select-order="toggleOrderSelection"
       @select-all="toggleSelectAll"
       @view-details="openOrderDetailsModal"
@@ -147,7 +148,10 @@ const {
   getOrdersStats,
   refreshOrders,
   updateOrderLocally,
-  getCompanyName
+  getCompanyName,
+  markAsWarehouseReceived,
+  markAsAssigned,
+  markAsOutForDelivery
 } = useOrdersData()
 
 // Filtros
@@ -339,6 +343,85 @@ watch(orders, () => {
 
 // ==================== METHODS ====================
 
+
+function getStatusButtons(order) {
+  const buttons = [];
+  
+  switch (order.status) {
+    case 'ready_for_pickup':
+      // Puede pasar a recepcionado en bodega
+      buttons.push({
+        label: '📦 Recibido',
+        action: async () => {
+          try {
+            await markAsWarehouseReceived(order);
+            toast.success(`✅ Pedido #${order.order_number} recepcionado en bodega`);
+          } catch (error) {
+            toast.error('❌ Error al recepcionar pedido');
+          }
+        },
+        class: 'btn btn-primary btn-sm me-1',
+        tooltip: 'Marcar como recepcionado en bodega'
+      });
+      break;
+      
+    case 'warehouse_received':
+      // Puede pasar a procesando
+      buttons.push({
+        label: '⚙️ Procesar',
+        action: async () => {
+          try {
+            await handleStatusUpdate({ 
+              orderId: order._id, 
+              newStatus: 'processing' 
+            });
+            toast.success(`✅ Pedido #${order.order_number} en procesamiento`);
+          } catch (error) {
+            toast.error('❌ Error al procesar pedido');
+          }
+        },
+        class: 'btn btn-warning btn-sm me-1',
+        tooltip: 'Iniciar procesamiento'
+      });
+      break;
+      
+    case 'processing':
+      // Puede asignar conductor
+      buttons.push({
+        label: '👨‍💼 Asignar',
+        action: async () => {
+          try {
+            await markAsAssigned(order);
+            toast.success(`✅ Conductor asignado a #${order.order_number}`);
+          } catch (error) {
+            toast.error('❌ Error al asignar conductor');
+          }
+        },
+        class: 'btn btn-info btn-sm me-1',
+        tooltip: 'Asignar conductor'
+      });
+      break;
+      
+    case 'assigned':
+      // Conductor puede salir a entregar
+      buttons.push({
+        label: '🚚 En Ruta',
+        action: async () => {
+          try {
+            await markAsOutForDelivery(order);
+            toast.success(`✅ Pedido #${order.order_number} en ruta de entrega`);
+          } catch (error) {
+            toast.error('❌ Error al marcar en ruta');
+          }
+        },
+        class: 'btn btn-success btn-sm me-1',
+        tooltip: 'Marcar como en ruta de entrega'
+      });
+      break;
+  }
+  
+  return buttons;
+}
 /**
  * Handle quick actions from header
  */

@@ -202,6 +202,18 @@
             <!-- ACTIONS -->
             <td class="col-actions">
               <div class="action-buttons">
+                 <div v-if="getStatusButtons && getStatusButtons(order).length > 0" class="status-actions">
+      <button 
+        v-for="statusButton in getStatusButtons(order)" 
+        :key="statusButton.label"
+        @click="statusButton.action"
+        :class="statusButton.class"
+        :title="statusButton.tooltip"
+        :disabled="loading"
+      >
+        {{ statusButton.label }}
+      </button>
+    </div>
                 <button 
                   @click="$emit('view-details', order)" 
                   class="btn-action view"
@@ -373,6 +385,11 @@ const props = defineProps({
   selectAllIndeterminate: {
     type: Boolean,
     default: false
+  },
+  getStatusButtons: {
+    type: Function,
+    required: false,
+    default: () => []
   }
 })
 
@@ -1098,5 +1115,30 @@ function deleteOrder(order) {
     font-size: 10px;
     padding: 4px 6px;
   }
+}
+.status-actions {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+.status-actions button {
+  border: none;
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.status-actions button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.status-actions button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 </style>

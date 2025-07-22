@@ -19,15 +19,17 @@ module.exports = {
      
   // Estados de pedidos (expandido)
   ORDER_STATUS: {
-    PENDING: 'pending',
-    PROCESSING: 'processing',
-    SHIPPED: 'shipped',
-    IN_TRANSIT: 'in_transit', // ← AGREGADO
-    DELIVERED: 'delivered',
-    CANCELLED: 'cancelled',
-    FAILED: 'failed', // ← AGREGADO
-    INVOICED: 'facturado',
-    READY_FOR_PICKUP: 'Listo para Retiro'
+PENDING: 'pending',
+  READY_FOR_PICKUP: 'ready_for_pickup', 
+  WAREHOUSE_RECEIVED: 'warehouse_received',  // 🆕 CRÍTICO
+  PROCESSING: 'processing',
+  ASSIGNED: 'assigned',                      // 🆕 CRÍTICO
+  OUT_FOR_DELIVERY: 'out_for_delivery',     // 🆕 CRÍTICO
+  SHIPPED: 'shipped',                        // MANTENER
+  DELIVERED: 'delivered',
+  CANCELLED: 'cancelled',
+  INVOICED: 'invoiced',                      // MANTENER
+  IN_TRANSIT: 'in_transit'                    // 🆕 CRÍTICO
   },
      
   // Estados de facturas

@@ -252,6 +252,9 @@ function updateOrderLocally(updatedOrder) {
     const delivered = orders.value.filter(o => o.status === 'delivered').length
     const cancelled = orders.value.filter(o => o.status === 'cancelled').length
     const ready_for_pickup = orders.value.filter(o => o.status === 'ready_for_pickup').length
+    const warehouse_received = orders.value.filter(o => o.status === 'warehouse_received').length
+    const assigned = orders.value.filter(o => o.status === 'assigned').length
+    const out_for_delivery = orders.value.filter(o => o.status === 'out_for_delivery').length
     
     return {
       total,
@@ -260,7 +263,10 @@ function updateOrderLocally(updatedOrder) {
       shipped,
       delivered,
       cancelled,
-      ready_for_pickup
+      ready_for_pickup,
+      warehouse_received,
+      assigned,
+      out_for_delivery
     }
   }
 
@@ -376,6 +382,69 @@ async function markOrderAsReady(order) {
     throw error;
   }
 }
+// 📦 Marcar como recepcionado en bodega
+const markAsWarehouseReceived = async (order) => {
+  try {
+    loadingOrders.value = true;
+    
+    const response = await api.patch(`/orders/${order._id}/warehouse-received`);
+    
+    // Actualizar orden localmente usando tu función existente
+    updateOrderLocally(order._id, {
+      status: 'warehouse_received',
+      updated_at: new Date().toISOString()
+    });
+    
+    return response.data;
+  } catch (error) {
+    console.error('Error marcando como recepcionado:', error);
+    throw error;
+  } finally {
+    loadingOrders.value = false;
+  }
+};
+
+// 👨‍💼 Marcar como asignado
+const markAsAssigned = async (order) => {
+  try {
+    loadingOrders.value = true;
+    
+    const response = await api.patch(`/orders/${order._id}/assigned`);
+    
+    updateOrderLocally(order._id, {
+      status: 'assigned',
+      updated_at: new Date().toISOString()
+    });
+    
+    return response.data;
+  } catch (error) {
+    console.error('Error marcando como asignado:', error);
+    throw error;
+  } finally {
+    loadingOrders.value = false;
+  }
+};
+
+// 🚚 Marcar como en ruta de entrega
+const markAsOutForDelivery = async (order) => {
+  try {
+    loadingOrders.value = true;
+    
+    const response = await api.patch(`/orders/${order._id}/out-for-delivery`);
+    
+    updateOrderLocally(order._id, {
+      status: 'out_for_delivery',
+      updated_at: new Date().toISOString()
+    });
+    
+    return response.data;
+  } catch (error) {
+    console.error('Error marcando como en ruta:', error);
+    throw error;
+  } finally {
+    loadingOrders.value = false;
+  }
+};
   // ==================== RETURN ====================
   return {
     // State
@@ -410,6 +479,9 @@ async function markOrderAsReady(order) {
     getOrdersTrend,
     calculateAdditionalStats,
     markMultipleAsReady,
-    markOrderAsReady
+    markOrderAsReady,
+    markAsWarehouseReceived,
+    markAsAssigned,
+    markAsOutForDelivery
   }
 }

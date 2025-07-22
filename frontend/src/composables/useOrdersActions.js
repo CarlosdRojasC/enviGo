@@ -286,7 +286,7 @@ export function useOrdersActions(newOrder, isCreatingOrder, fetchOrders) {
   /**
    * Reset new order form
    */
-  function resetNewOrderForm() {
+  async function resetNewOrderForm() {
     Object.assign(newOrder.value, {
       company_id: '',
       customer_name: '',
@@ -314,7 +314,7 @@ export function useOrdersActions(newOrder, isCreatingOrder, fetchOrders) {
   /**
    * Format currency for display
    */
-  function formatCurrency(amount) {
+  async function formatCurrency(amount) {
     if (amount === undefined || amount === null) return '$0'
     return new Intl.NumberFormat('es-CL', {
       style: 'currency',
@@ -326,7 +326,7 @@ export function useOrdersActions(newOrder, isCreatingOrder, fetchOrders) {
   /**
    * Format date for display
    */
-  function formatDate(dateStr, withTime = false) {
+  async function formatDate(dateStr, withTime = false) {
     if (!dateStr) return 'N/A'
     
     const options = {
@@ -347,14 +347,17 @@ export function useOrdersActions(newOrder, isCreatingOrder, fetchOrders) {
   /**
    * Get status display name
    */
-  function getStatusName(status) {
+  async function getStatusName(status) {
     const statusMap = {
-      pending: 'Pendiente',
-      processing: 'Procesando',
-      shipped: 'Enviado',
-      delivered: 'Entregado',
-      cancelled: 'Cancelado',
-      ready_for_pickup: 'Listo para recoger'
+    pending: 'Pendiente',
+    ready_for_pickup: 'Listo para Retiro',
+    warehouse_received: '📦 En Bodega',         // 🆕 SIMPLE
+    processing: 'Procesando',
+    assigned: '👨‍💼 Asignado',                   // 🆕 SIMPLE  
+    out_for_delivery: '🚚 En Ruta',            // 🆕 SIMPLE
+    shipped: 'En Tránsito',
+    delivered: '✅ Entregado',
+    cancelled: '❌ Cancelado'
     }
     return statusMap[status] || status
   }
@@ -362,7 +365,7 @@ export function useOrdersActions(newOrder, isCreatingOrder, fetchOrders) {
   /**
    * Get commune display class
    */
-  function getCommuneClass(commune) {
+  async function getCommuneClass(commune) {
     if (!commune || commune === 'Sin comuna') return 'commune-empty'
     
     const importantCommunes = [
@@ -384,7 +387,7 @@ export function useOrdersActions(newOrder, isCreatingOrder, fetchOrders) {
   /**
    * Debug order information
    */
-  function debugOrder(order) {
+  async function debugOrder(order) {
     console.group('🐛 Order Debug Info')
     console.log('Order ID:', order._id)
     console.log('Order Number:', order.order_number)
@@ -397,6 +400,7 @@ export function useOrdersActions(newOrder, isCreatingOrder, fetchOrders) {
     
     toast.info(`Debug info logged for order ${order.order_number}`)
   }
+  
 
   // ==================== RETURN ====================
   return {
