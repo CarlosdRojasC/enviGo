@@ -44,13 +44,6 @@
       </div>
     </div>
 
-    <!-- Debug Info (temporal) -->
-    <div v-if="drivers.length > 0" class="debug-info">
-      <details>
-        <summary>🔍 Debug Info (clic para ver datos)</summary>
-        <pre>{{ JSON.stringify(drivers[0], null, 2) }}</pre>
-      </details>
-    </div>
     <!-- Stats Cards -->
     <div class="stats-grid">
       <div class="stat-card">
