@@ -524,7 +524,8 @@ function getStatusName(status) {
     shipped: 'Enviado',
     delivered: 'Entregado',
     cancelled: 'Cancelado',
-    ready_for_pickup: 'Listo para recoger'
+    ready_for_pickup: 'Listo para recoger',
+    warehouse_received: 'Recibido en bodega',
   }
   return statusMap[status] || status
 }
@@ -798,6 +799,12 @@ function deleteOrder(order) {
 .status-delivered { background: #d1fae5; color: #065f46; }
 .status-cancelled { background: #fee2e2; color: #991b1b; }
 .status-ready_for_pickup { background: #ddd6fe; color: #5b21b6; }
+.status-warehouse_received { 
+  background: linear-gradient(135deg, #6f42c1, #8e44ad); 
+  color: white; 
+  font-weight: 600; 
+  text-transform: uppercase; 
+  letter-spacing: 0.5px;}
 
 /* Priority Badge */
 .priority-badge {
