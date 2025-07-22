@@ -422,7 +422,7 @@ async function fetchChannels() {
     if (companyId) {
       console.log('📡 Obteniendo canales para empresa:', companyId)
       const response = await channelsService.getByCompany(companyId)
-      channels.value = response.data || []
+      channels.value = response.data.data || []
       console.log('📡 Canales obtenidos:', channels.value.length)
     } else {
       console.log('⚠️ No se encontró company_id')
