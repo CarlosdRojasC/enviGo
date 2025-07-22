@@ -18,12 +18,18 @@
 
       <div class="form-group">
         <label for="channel-select">2. Selecciona un Canal:</label>
-        <select id="channel-select" v-model="selectedChannelId" @change="loadChannelData" class="channel-select" :disabled="!selectedCompanyId || loading.channels">
-          <option value="">-- Elige un canal --</option>
-          <option v-for="channel in channels" :key="channel._id" :value="channel._id">
-            {{ channel.channel_name }}
-          </option>
-        </select>
+        <select 
+  id="channel-select" 
+  v-model="selectedChannelId" 
+  @change="loadChannelData" 
+  class="channel-select" 
+  :disabled="!selectedCompanyId || loading.channels"
+>
+  <option value="">-- Elige un canal --</option>
+  <option v-for="channel in channels" :key="channel._id" :value="channel._id">
+    {{ channel.channel_name }}
+  </option>
+</select>
       </div>
     </div>
 
