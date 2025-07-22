@@ -743,6 +743,52 @@
         </div>
       </div>
     </div>
+    <!-- Modal Agregar Usuario -->
+<div v-if="showAddUserModal" class="modal-overlay" @click="closeModal('addUser')">
+  <div class="modal-container" @click.stop>
+    <div class="modal-header">
+      <h3>Agregar Usuario - {{ selectedCompany?.name }}</h3>
+      <button @click="closeModal('addUser')" class="modal-close">✕</button>
+    </div>
+    
+    <div class="modal-content">
+      <form @submit.prevent="createUser">
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Nombre Completo *</label>
+            <input v-model="newUserForm.full_name" type="text" required placeholder="Juan Pérez">
+          </div>
+          <div class="form-group">
+            <label>Email *</label>
+            <input v-model="newUserForm.email" type="email" required placeholder="juan@empresa.com">
+          </div>
+          <div class="form-group">
+            <label>Teléfono</label>
+            <input v-model="newUserForm.phone" type="tel" placeholder="+56 9 1234 5678">
+          </div>
+          <div class="form-group">
+            <label>Rol</label>
+            <select v-model="newUserForm.role">
+              <option value="company_employee">Empleado</option>
+              <option value="company_owner">Administrador</option>
+            </select>
+          </div>
+          <div class="form-group full-width">
+            <label>Contraseña Temporal *</label>
+            <input v-model="newUserForm.password" type="password" required minlength="8" placeholder="Mínimo 8 caracteres">
+          </div>
+        </div>
+      </form>
+    </div>
+    
+    <div class="modal-footer">
+      <button @click="closeModal('addUser')" class="btn-cancel">Cancelar</button>
+      <button @click="createUser" :disabled="isCreatingUser" class="btn-primary">
+        {{ isCreatingUser ? 'Creando...' : 'Crear Usuario' }}
+      </button>
+    </div>
+  </div>
+</div>
   </div>
 </template>
 
