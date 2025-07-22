@@ -736,6 +736,9 @@
         </div>
         
         <div class="modal-footer">
+          <button @click="openAddUserModal(selectedCompany)" class="btn-secondary">
+    ➕ Agregar Usuario
+  </button>
           <button @click="closeModal('users')" class="btn-primary">Cerrar</button>
         </div>
       </div>
