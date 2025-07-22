@@ -125,18 +125,53 @@ async function fetchInitialData() {
 }
 
 async function loadChannelsForCompany() {
+  console.log('🏢 loadChannelsForCompany ejecutado con empresa:', selectedCompanyId.value)
+  
+  // Limpiar selección previa
   selectedChannelId.value = '';
   selectedCommunes.value = [];
+  
   if (!selectedCompanyId.value) {
     channels.value = [];
     return;
   }
+  
   loading.value.channels = true;
   try {
-    const { data } = await apiService.channels.getByCompany(selectedCompanyId.value);
-    channels.value = data || [];
+    console.log('📡 Obteniendo canales para empresa:', selectedCompanyId.value)
+    const response = await apiService.channels.getByCompany(selectedCompanyId.value);
+    
+    console.log('✅ Respuesta completa de canales:', response)
+    
+    // 🔧 FIX PRINCIPAL: Manejo correcto de la respuesta
+    if (response.data && response.data.data) {
+      // Formato: { data: { data: [canales] } }
+      channels.value = response.data.data || [];
+    } else if (response.data) {
+      // Formato: { data: [canales] }
+      channels.value = response.data || [];
+    } else {
+      // Fallback
+      channels.value = [];
+    }
+    
+    console.log('📋 Canales procesados:', channels.value)
+    console.log('📊 Total de canales encontrados:', channels.value.length)
+    
+    // 🆕 DEBUGGING: Mostrar estructura de cada canal
+    if (channels.value.length > 0) {
+      console.log('🔍 Estructura del primer canal:', {
+        _id: channels.value[0]._id,
+        channel_name: channels.value[0].channel_name,
+        channel_type: channels.value[0].channel_type,
+        accepted_communes: channels.value[0].accepted_communes?.length || 0
+      })
+    }
+    
   } catch (error) {
-    console.error(`Error cargando canales para la empresa ${selectedCompanyId.value}:`, error);
+    console.error(`❌ Error cargando canales para empresa ${selectedCompanyId.value}:`, error);
+    toast.error('Error al cargar canales de la empresa')
+    channels.value = [];
   } finally {
     loading.value.channels = false;
   }
