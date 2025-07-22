@@ -418,7 +418,6 @@ function getPriorityIcon(priority) {
 function getStatusIcon(status) {
   const icons = {
     pending: '⏳',
-    processing: '⚙️',
     ready_for_pickup: '📦',
     shipped: '🚚',
     delivered: '✅',

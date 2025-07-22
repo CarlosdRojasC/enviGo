@@ -14,7 +14,6 @@
           >
             <option value="">📋 Todos los estados</option>
             <option value="pending">⏳ Pendientes</option>
-            <option value="processing">⚙️ Procesando</option>
             <option value="ready_for_pickup">📦 Listos para Retiro</option>
             <option value="shipped">🚚 En Tránsito</option>
             <option value="delivered">✅ Entregados</option>

@@ -71,17 +71,6 @@
         </div>
       </div>
 
-      <div class="stat-card" :class="getStatusClass('processing')">
-        <div class="stat-header">
-          <span class="stat-icon">⚙️</span>
-          <span class="stat-label">Procesando</span>
-        </div>
-        <div class="stat-content">
-          <span class="stat-number">{{ formatNumber(stats.processing) }}</span>
-          <span class="stat-percentage">{{ getPercentage(stats.processing, stats.total) }}%</span>
-        </div>
-      </div>
-
       <div class="stat-card" :class="getStatusClass('shipped')">
         <div class="stat-header">
           <span class="stat-icon">🚚</span>
@@ -92,6 +81,7 @@
           <span class="stat-percentage">{{ getPercentage(stats.shipped, stats.total) }}%</span>
         </div>
       </div>
+      
 
       <div class="stat-card" :class="getStatusClass('delivered')">
         <div class="stat-header">

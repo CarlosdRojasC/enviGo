@@ -65,13 +65,6 @@
           </div>
         </div>
 
-        <div class="stat-card processing">
-          <div class="stat-icon">⚙️</div>
-          <div class="stat-content">
-            <div class="stat-number">{{ stats.processing || 0 }}</div>
-            <div class="stat-label">Procesando</div>
-          </div>
-        </div>
             <div class="stat-card assigned" v-if="stats.assigned > 0">
       <div class="stat-icon">👨‍💼</div>
       <div class="stat-content">
