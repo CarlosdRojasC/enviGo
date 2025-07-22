@@ -392,14 +392,25 @@ async function calculateTrendsManually() {
 async function fetchChartData() {
   loadingChart.value = true
   try {
-    console.log('📈 Obteniendo datos del gráfico...')
+    console.log('📈 Obteniendo datos del gráfico para período:', chartPeriod.value)
     const response = await apiService.orders.getTrend({ period: chartPeriod.value })
-    chartData.value = response.data || []
-    console.log('📈 Datos del gráfico:', chartData.value.length, 'puntos')
+    const newData = response.data
+    
+    // ✅ VALIDACIÓN: Verificar que sea array antes de asignar
+    if (Array.isArray(newData)) {
+      setTimeout(() => {
+        chartData.value = newData
+        loadingChart.value = false
+      }, 200)
+    } else {
+      console.warn('⚠️ Response.data no es array:', newData)
+      chartData.value = []
+      loadingChart.value = false
+    }
+    
   } catch (error) {
     console.error('❌ Error fetching chart data:', error)
     chartData.value = []
-  } finally {
     loadingChart.value = false
   }
 }
