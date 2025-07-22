@@ -154,19 +154,32 @@ async function loadChannelData() {
     console.log('📡 Obteniendo datos del canal...')
     const response = await apiService.channels.getById(selectedChannelId.value);
     console.log('✅ Respuesta completa:', response)
-    console.log('✅ Datos del canal:', response.data)
     
-    // 🆕 CAMBIO: El backend devuelve el canal directamente en response.data
-    const channelData = response.data;
-    selectedCommunes.value = channelData.accepted_communes || [];
+    // 🆕 CAMBIO: Manejar si viene como array
+    let channelData;
+    if (Array.isArray(response.data)) {
+      // Si es un array, buscar el canal específico
+      channelData = response.data.find(channel => channel._id === selectedChannelId.value);
+    } else {
+      // Si es un objeto directo
+      channelData = response.data;
+    }
     
-    console.log('📍 Comunas seleccionadas:', selectedCommunes.value)
+    console.log('🎯 Canal encontrado:', channelData)
+    
+    if (channelData) {
+      selectedCommunes.value = channelData.accepted_communes || [];
+      console.log('📍 Comunas seleccionadas:', selectedCommunes.value)
+    } else {
+      console.error('❌ Canal no encontrado en la respuesta')
+      selectedCommunes.value = [];
+    }
+    
   } catch (error) {
     console.error(`❌ Error cargando datos del canal ${selectedChannelId.value}:`, error);
     toast.error('Error al cargar configuración del canal')
   }
 }
-
 function toggleCommune(commune) {
   const index = selectedCommunes.value.indexOf(commune);
   if (index > -1) {
