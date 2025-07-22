@@ -73,37 +73,38 @@ const hasData = computed(() => {
 })
 
 const processedData = computed(() => {
-  if (!hasData.value) return []
+  if (!Array.isArray(props.data) || props.data.length === 0) {
+    return []
+  }
   
-  console.log('📊 Procesando datos para el gráfico:', props.data)
-  
-  // Procesar datos para Chart.js
-  return props.data.map(item => {
-    // Manejar diferentes formatos de datos
-    let date, count
-    
-    if (item._id) {
-      // Formato de agregación de MongoDB
-      if (item._id.year && item._id.month && item._id.day) {
-        date = new Date(item._id.year, item._id.month - 1, item._id.day)
-      } else if (item._id.year && item._id.month) {
-        date = new Date(item._id.year, item._id.month - 1, 1)
+  try {
+    return props.data.map(item => {
+      let date, count
+      
+      if (item._id) {
+        if (item._id.year && item._id.month && item._id.day) {
+          date = new Date(item._id.year, item._id.month - 1, item._id.day)
+        } else if (item._id.year && item._id.month) {
+          date = new Date(item._id.year, item._id.month - 1, 1)
+        } else {
+          date = new Date()
+        }
+        count = item.count || 0
       } else {
-        date = new Date()
+        date = new Date(item.date || item.order_date || Date.now())
+        count = item.orders || item.count || 0
       }
-      count = item.count || 0
-    } else {
-      // Formato simple
-      date = new Date(item.date || item.order_date)
-      count = item.orders || item.count || 0
-    }
-    
-    return {
-      date: date,
-      dateString: date.toLocaleDateString('es-ES'),
-      count: count
-    }
-  }).sort((a, b) => a.date - b.date)
+      
+      return {
+        date: date,
+        dateString: date.toLocaleDateString('es-ES'),
+        count: count
+      }
+    }).sort((a, b) => a.date - b.date)
+  } catch (error) {
+    console.error('Error procesando datos del gráfico:', error)
+    return []
+  }
 })
 
 const chartStats = computed(() => {
