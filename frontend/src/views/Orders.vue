@@ -225,13 +225,14 @@ const orderUpdateQueue = ref([]) // Cola de notificaciones para mostrar
  * Estadísticas para el header
  */
 const orderStats = computed(() => ({
-  total: orders.value.length,
+ total: orders.value.length,
   pending: orders.value.filter(o => o.status === 'pending').length,
+  ready_for_pickup: orders.value.filter(o => o.status === 'ready_for_pickup').length,
+  warehouse_received: orders.value.filter(o => o.status === 'warehouse_received').length, // 🆕
   processing: orders.value.filter(o => o.status === 'processing').length,
   shipped: orders.value.filter(o => o.status === 'shipped').length,
   delivered: orders.value.filter(o => o.status === 'delivered').length,
-  cancelled: orders.value.filter(o => o.status === 'cancelled').length,
-  ready_for_pickup: orders.value.filter(o => o.status === 'ready_for_pickup').length
+  cancelled: orders.value.filter(o => o.status === 'cancelled').length
 }))
 
 // ==================== MÉTODOS DEL HEADER ====================
@@ -562,12 +563,13 @@ function callSupport(order) {
 
 function getStatusName(status) {
   const names = {
-    pending: 'Pendiente',
-    processing: 'Procesando',
+   pending: 'Pendiente',
     ready_for_pickup: 'Listo para Retiro',
-    shipped: 'En Tránsito',
-    delivered: 'Entregado',
-    cancelled: 'Cancelado'
+    warehouse_received: '📦 En Bodega',      // 🆕 AGREGAR
+    processing: 'Procesando',
+    shipped: '🚚 En Ruta',                  // 🔧 MEJORAR con emoji
+    delivered: '✅ Entregado',
+    cancelled: '❌ Cancelado'
   }
   return names[status] || status
 }

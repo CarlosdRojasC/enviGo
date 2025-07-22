@@ -70,7 +70,16 @@
           <span class="stat-percentage">{{ getPercentage(stats.pending, stats.total) }}%</span>
         </div>
       </div>
-
+      <div class="stat-card" :class="getStatusClass('warehouse_received')">
+        <div class="stat-header">
+          <span class="stat-icon">🏭</span>
+          <span class="stat-label">En Bodega</span>
+        </div>
+        <div class="stat-content">
+          <span class="stat-number">{{ formatNumber(stats.warehose_received) }}</span>
+          <span class="stat-percentage">{{ getPercentage(stats.warehose_received, stats.total) }}%</span>
+        </div>
+      </div>
       <div class="stat-card" :class="getStatusClass('shipped')">
         <div class="stat-header">
           <span class="stat-icon">🚚</span>
@@ -81,7 +90,7 @@
           <span class="stat-percentage">{{ getPercentage(stats.shipped, stats.total) }}%</span>
         </div>
       </div>
-      
+
 
       <div class="stat-card" :class="getStatusClass('delivered')">
         <div class="stat-header">
@@ -135,7 +144,7 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, warn } from 'vue'
 
 const props = defineProps({
   title: {
@@ -217,7 +226,8 @@ function getStatusClass(status) {
     pending: 'warning',
     processing: 'info', 
     shipped: 'purple',
-    delivered: 'success'
+    delivered: 'success',
+    warehouse_received: 'purple',
   }
   return classes[status] || 'default'
 }
@@ -609,6 +619,34 @@ function formatLastUpdate(timestamp) {
   
   .action-btn {
     width: 100%;
+  }
+}
+.bg-gradient-primary {
+  background: linear-gradient(135deg, #6f42c1, #8e44ad) !important;
+}
+
+.icon-shape {
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.25rem;
+}
+
+/* Animación de entrada para la nueva tarjeta */
+.card:has(.bg-gradient-primary) {
+  animation: slideInFromRight 0.6s ease-out;
+}
+
+@keyframes slideInFromRight {
+  from {
+    opacity: 0;
+    transform: translateX(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
   }
 }
 </style>

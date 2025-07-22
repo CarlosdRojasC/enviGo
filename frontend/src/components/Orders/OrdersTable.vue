@@ -867,4 +867,73 @@ function isOrderSelectable(order) {
     color: #000 !important;
   }
 }
+.status-badge.status-warehouse_received {
+  background: linear-gradient(135deg, #6f42c1, #8e44ad);
+  color: white;
+  border: none;
+  font-weight: 600;
+  padding: 6px 14px;
+  border-radius: 16px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  box-shadow: 0 2px 4px rgba(111, 66, 193, 0.3);
+}
+
+/* Badge para En Ruta mejorado */
+.status-badge.status-shipped {
+  background: linear-gradient(135deg, #28a745, #20c997);
+  color: white;
+  border: none;
+  font-weight: 600;
+  padding: 6px 14px;
+  border-radius: 16px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  box-shadow: 0 2px 4px rgba(40, 167, 69, 0.3);
+}
+
+/* Animación sutil para estados activos */
+.status-badge.status-warehouse_received,
+.status-badge.status-shipped {
+  animation: gentlePulse 4s infinite;
+}
+
+@keyframes gentlePulse {
+  0%, 100% { 
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% { 
+    opacity: 0.9;
+    transform: scale(1.02);
+  }
+}
+
+/* Filas con indicador visual sutil */
+.order-row:has(.status-warehouse_received) {
+  background: linear-gradient(90deg, rgba(111, 66, 193, 0.04), transparent);
+  border-left: 3px solid #6f42c1;
+}
+
+.order-row:has(.status-shipped) {
+  background: linear-gradient(90deg, rgba(40, 167, 69, 0.04), transparent);
+  border-left: 3px solid #28a745;
+}
+
+/* Hover effect mejorado */
+.order-row:hover .status-badge {
+  transform: scale(1.05);
+  transition: transform 0.2s ease;
+}
+
+/* Badge responsive */
+@media (max-width: 768px) {
+  .status-badge.status-warehouse_received,
+  .status-badge.status-shipped {
+    font-size: 10px;
+    padding: 4px 10px;
+  }
+}
 </style>
