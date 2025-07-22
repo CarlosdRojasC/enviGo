@@ -387,10 +387,12 @@ const markAsWarehouseReceived = async (order) => {
   try {
     loadingOrders.value = true;
     
-    const response = await api.patch(`/orders/${order._id}/warehouse-received`);
+    // 🔧 CAMBIAR: api.patch por apiService (usando axios directo)
+    const response = await apiService.orders.updateStatus(order._id, 'warehouse_received');
     
     // Actualizar orden localmente usando tu función existente
-    updateOrderLocally(order._id, {
+    updateOrderLocally({
+      _id: order._id,
       status: 'warehouse_received',
       updated_at: new Date().toISOString()
     });
@@ -403,15 +405,16 @@ const markAsWarehouseReceived = async (order) => {
     loadingOrders.value = false;
   }
 };
-
 // 👨‍💼 Marcar como asignado
 const markAsAssigned = async (order) => {
   try {
     loadingOrders.value = true;
     
-    const response = await api.patch(`/orders/${order._id}/assigned`);
+    // 🔧 CAMBIAR: api.patch por apiService
+    const response = await apiService.orders.updateStatus(order._id, 'assigned');
     
-    updateOrderLocally(order._id, {
+    updateOrderLocally({
+      _id: order._id,
       status: 'assigned',
       updated_at: new Date().toISOString()
     });
@@ -425,14 +428,17 @@ const markAsAssigned = async (order) => {
   }
 };
 
+
 // 🚚 Marcar como en ruta de entrega
 const markAsOutForDelivery = async (order) => {
   try {
     loadingOrders.value = true;
     
-    const response = await api.patch(`/orders/${order._id}/out-for-delivery`);
+    // 🔧 CAMBIAR: api.patch por apiService
+    const response = await apiService.orders.updateStatus(order._id, 'out_for_delivery');
     
-    updateOrderLocally(order._id, {
+    updateOrderLocally({
+      _id: order._id,
       status: 'out_for_delivery',
       updated_at: new Date().toISOString()
     });

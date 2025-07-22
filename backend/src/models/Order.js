@@ -50,7 +50,7 @@ const orderSchema = new mongoose.Schema({
   shipping_cost: { type: Number, default: 0 },
   tax_amount: { type: Number, default: 0 },
   discount_amount: { type: Number, default: 0 },
-  payment_method: { type: String, default: 'CASH' },
+  payment_method: { type: String, default: 'credit_card' },
   
   // Campos de OptiRoute
   priority: { type: String, default: 'Normal' },
