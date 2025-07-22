@@ -69,118 +69,69 @@ const chartCanvas = ref(null)
 const chartInstance = ref(null)
 
 const hasData = computed(() => {
-  return Array.isArray(props.data) && props.data.length > 0
+  return props.data && props.data.length > 0
 })
 
 const processedData = computed(() => {
-  // Validar que tengamos datos válidos
-  if (!Array.isArray(props.data) || props.data.length === 0) {
-    return []
-  }
+  if (!hasData.value) return []
   
   console.log('📊 Procesando datos para el gráfico:', props.data)
   
-  try {
-    // Procesar datos para Chart.js
-    return props.data.map(item => {
-      // Manejar diferentes formatos de datos
-      let date, count
-      
-      if (item._id) {
-        // Formato de agregación de MongoDB
-        if (item._id.year && item._id.month && item._id.day) {
-          date = new Date(item._id.year, item._id.month - 1, item._id.day)
-        } else if (item._id.year && item._id.month) {
-          date = new Date(item._id.year, item._id.month - 1, 1)
-        } else {
-          date = new Date()
-        }
-        count = item.count || 0
+  // Procesar datos para Chart.js
+  return props.data.map(item => {
+    // Manejar diferentes formatos de datos
+    let date, count
+    
+    if (item._id) {
+      // Formato de agregación de MongoDB
+      if (item._id.year && item._id.month && item._id.day) {
+        date = new Date(item._id.year, item._id.month - 1, item._id.day)
+      } else if (item._id.year && item._id.month) {
+        date = new Date(item._id.year, item._id.month - 1, 1)
       } else {
-        // Formato simple
-        date = new Date(item.date || item.order_date || Date.now())
-        count = item.orders || item.count || 0
+        date = new Date()
       }
-      
-      return {
-        date: date,
-        dateString: date.toLocaleDateString('es-ES'),
-        count: count
-      }
-    }).sort((a, b) => a.date - b.date)
-  } catch (error) {
-    console.error('❌ Error procesando datos del gráfico:', error)
-    return []
-  }
+      count = item.count || 0
+    } else {
+      // Formato simple
+      date = new Date(item.date || item.order_date)
+      count = item.orders || item.count || 0
+    }
+    
+    return {
+      date: date,
+      dateString: date.toLocaleDateString('es-ES'),
+      count: count
+    }
+  }).sort((a, b) => a.date - b.date)
 })
 
 const chartStats = computed(() => {
-  // Validación inicial
-  if (!hasData.value || !Array.isArray(processedData.value) || processedData.value.length === 0) {
-    return null
-  }
+  if (!hasData.value) return null
   
-  try {
-    // 🔧 FIX: Validar que processedData sea un array antes de mapear
-    const counts = processedData.value.map(item => item.count || 0).filter(count => typeof count === 'number')
-    
-    if (counts.length === 0) {
-      return null
+  const counts = processedData.value.map(item => item.count)
+  const total = counts.reduce((sum, count) => sum + count, 0)
+  const average = Math.round(total / counts.length)
+  const max = Math.max(...counts)
+  
+  // Calcular tendencia comparando primera y segunda mitad
+  const midPoint = Math.floor(counts.length / 2)
+  const firstHalf = counts.slice(0, midPoint)
+  const secondHalf = counts.slice(midPoint)
+  
+  const firstAvg = firstHalf.reduce((sum, val) => sum + val, 0) / firstHalf.length
+  const secondAvg = secondHalf.reduce((sum, val) => sum + val, 0) / secondHalf.length
+  
+  const trendPercentage = firstAvg > 0 ? Math.round(((secondAvg - firstAvg) / firstAvg) * 100) : 0
+  
+  return {
+    total,
+    average,
+    max,
+    trend: {
+      direction: trendPercentage > 0 ? 'up' : trendPercentage < 0 ? 'down' : 'neutral',
+      percentage: Math.abs(trendPercentage)
     }
-    
-    const total = counts.reduce((sum, count) => sum + count, 0)
-    const average = Math.round(total / counts.length)
-    const max = Math.max(...counts)
-    
-    // 🔧 FIX: Validar que counts sea array antes de usar slice
-    if (counts.length < 2) {
-      return {
-        total,
-        average,
-        max,
-        trend: {
-          direction: 'neutral',
-          percentage: 0
-        }
-      }
-    }
-    
-    // Calcular tendencia comparando primera y segunda mitad
-    const midPoint = Math.floor(counts.length / 2)
-    
-    // 🔧 AQUÍ ESTABA EL ERROR - Validar antes de slice
-    const firstHalf = Array.isArray(counts) ? counts.slice(0, midPoint) : []
-    const secondHalf = Array.isArray(counts) ? counts.slice(midPoint) : []
-    
-    if (firstHalf.length === 0 || secondHalf.length === 0) {
-      return {
-        total,
-        average,
-        max,
-        trend: {
-          direction: 'neutral',
-          percentage: 0
-        }
-      }
-    }
-    
-    const firstAvg = firstHalf.reduce((sum, val) => sum + val, 0) / firstHalf.length
-    const secondAvg = secondHalf.reduce((sum, val) => sum + val, 0) / secondHalf.length
-    
-    const trendPercentage = firstAvg > 0 ? Math.round(((secondAvg - firstAvg) / firstAvg) * 100) : 0
-    
-    return {
-      total,
-      average,
-      max,
-      trend: {
-        direction: trendPercentage > 0 ? 'up' : trendPercentage < 0 ? 'down' : 'neutral',
-        percentage: Math.abs(trendPercentage)
-      }
-    }
-  } catch (error) {
-    console.error('❌ Error calculando estadísticas del gráfico:', error)
-    return null
   }
 })
 
@@ -190,13 +141,12 @@ function createChart() {
     return
   }
   
-  // 🔧 FIX: Validación más robusta
-  if (!hasData.value || !Array.isArray(processedData.value) || processedData.value.length === 0) {
-    console.log('⚠️ No hay datos válidos para el gráfico')
+  if (!hasData.value) {
+    console.log('⚠️ No hay datos')
     return
   }
   
-  console.log('📊 Creando gráfico con datos válidos')
+  console.log('📊 Creando gráfico básico')
   
   // Destruir gráfico existente
   if (chartInstance.value) {
@@ -215,27 +165,23 @@ function createChart() {
     return
   }
   
+  const labels = processedData.value.map((item, index) => {
+    // Etiquetas simples
+    if (processedData.value.length <= 7) {
+      return item.date.toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric' })
+    } else if (processedData.value.length <= 31) {
+      return item.date.getDate().toString()
+    } else {
+      return item.date.toLocaleDateString('es-ES', { month: 'short' })
+    }
+  })
+  
+  const data = processedData.value.map(item => item.count)
+  
+  console.log('📊 Labels:', labels.length)
+  console.log('📊 Data points:', data.length)
+  
   try {
-    const labels = processedData.value.map((item, index) => {
-      // Etiquetas simples con validación
-      if (!item.date || !(item.date instanceof Date)) {
-        return `Punto ${index + 1}`
-      }
-      
-      if (processedData.value.length <= 7) {
-        return item.date.toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric' })
-      } else if (processedData.value.length <= 31) {
-        return item.date.getDate().toString()
-      } else {
-        return item.date.toLocaleDateString('es-ES', { month: 'short' })
-      }
-    })
-    
-    const data = processedData.value.map(item => item.count || 0)
-    
-    console.log('📊 Labels:', labels.length)
-    console.log('📊 Data points:', data.length)
-    
     chartInstance.value = new Chart(ctx, {
       type: 'line',
       data: {
@@ -249,9 +195,9 @@ function createChart() {
           fill: true,
           tension: 0.3,
           pointBackgroundColor: '#3b82f6',
-          pointBorderColor: '#3b82f6',
-          pointRadius: 4,
-          pointHoverRadius: 6
+          pointBorderColor: '#ffffff',
+          pointBorderWidth: 1,
+          pointRadius: 3
         }]
       },
       options: {
@@ -260,29 +206,62 @@ function createChart() {
         plugins: {
           legend: {
             display: false
+          },
+          tooltip: {
+            enabled: true,
+            mode: 'index',
+            intersect: false,
+            backgroundColor: 'rgba(0, 0, 0, 0.8)',
+            titleColor: '#ffffff',
+            bodyColor: '#ffffff',
+            cornerRadius: 6,
+            displayColors: false
           }
         },
         scales: {
-          x: {
-            display: true,
+          y: {
+            beginAtZero: true,
+            ticks: {
+              stepSize: 1,
+              color: '#6b7280'
+            },
             grid: {
-              color: 'rgba(0, 0, 0, 0.1)'
+              color: 'rgba(107, 114, 128, 0.1)'
             }
           },
-          y: {
-            display: true,
-            beginAtZero: true,
+          x: {
+            ticks: {
+              color: '#6b7280',
+              maxTicksLimit: 10
+            },
             grid: {
-              color: 'rgba(0, 0, 0, 0.1)'
+              display: false
             }
           }
+        },
+        interaction: {
+          intersect: false,
+          mode: 'index'
+        },
+        animation: {
+          duration: 600
         }
       }
     })
     
-    console.log('✅ Gráfico creado exitosamente')
+    console.log('✅ Gráfico básico creado')
   } catch (error) {
     console.error('❌ Error creando gráfico:', error)
+    
+    // Limpiar en caso de error
+    if (chartInstance.value) {
+      try {
+        chartInstance.value.destroy()
+      } catch (destroyError) {
+        console.warn('⚠️ Error limpiando:', destroyError)
+      }
+      chartInstance.value = null
+    }
   }
 }
 

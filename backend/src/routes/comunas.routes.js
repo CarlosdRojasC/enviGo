@@ -293,23 +293,18 @@ router.get('/available', authenticateToken, async (req, res) => {
 // NUEVO: Obtener estadísticas por comuna
 router.get('/stats', authenticateToken, async (req, res) => {
   try {
-    const { company_id, date_from, date_to, limit = 50 } = req.query;
+    const { company_id, date_from, date_to } = req.query;
     
     const filters = {};
     
-    // Filtro de empresa (mejorado)
+    // Filtro de empresa
     if (req.user.role === 'admin') {
       if (company_id) {
         filters.company_id = new mongoose.Types.ObjectId(company_id);
       }
     } else {
-      // Para usuarios de empresa, solo mostrar sus datos
       if (req.user.company_id) {
         filters.company_id = new mongoose.Types.ObjectId(req.user.company_id);
-      } else {
-        return res.status(403).json({ 
-          error: 'Usuario sin empresa asignada no puede ver estadísticas' 
-        });
       }
     }
     
@@ -325,14 +320,12 @@ router.get('/stats', authenticateToken, async (req, res) => {
     const stats = await Order.aggregate([
       { $match: filters },
       {
-        // Filtrar solo órdenes con comuna válida
         $match: {
           shipping_commune: { 
             $exists: true, 
             $ne: null, 
             $ne: '', 
-            $ne: 'null',
-            $ne: 'undefined'
+            $ne: 'null'
           }
         }
       },
@@ -368,13 +361,7 @@ router.get('/stats', authenticateToken, async (req, res) => {
           cancelled_orders: 1,
           delivery_rate: {
             $multiply: [
-              { 
-                $cond: [
-                  { $eq: ['$total_orders', 0] },
-                  0,
-                  { $divide: ['$delivered_orders', '$total_orders'] }
-                ]
-              },
+              { $divide: ['$delivered_orders', '$total_orders'] },
               100
             ]
           },
@@ -385,44 +372,48 @@ router.get('/stats', authenticateToken, async (req, res) => {
           _id: 0
         }
       },
-      { $sort: { total_orders: -1 } },
-      { $limit: parseInt(limit) }
+      { $sort: { total_orders: -1 } }
     ]);
     
-    // Calcular totales globales
+    // Clasificar comunas por si son de enviGo o no
+    const normalizedEnvigoCommunes = ENVIGO_COMMUNES.map(c => normalizeCommune(c));
+    const envigoStats = [];
+    const otherStats = [];
+    
+    stats.forEach(stat => {
+      const normalizedCommune = normalizeCommune(stat.commune);
+      if (normalizedEnvigoCommunes.includes(normalizedCommune)) {
+        envigoStats.push({ ...stat, is_envigo_commune: true });
+      } else {
+        otherStats.push({ ...stat, is_envigo_commune: false });
+      }
+    });
+    
+    // Calcular totales
     const totalStats = stats.reduce((acc, stat) => ({
       total_orders: acc.total_orders + stat.total_orders,
       total_revenue: acc.total_revenue + stat.total_revenue,
       delivered_orders: acc.delivered_orders + stat.delivered_orders
     }), { total_orders: 0, total_revenue: 0, delivered_orders: 0 });
     
-    // Agregar porcentaje relativo a cada comuna
-    const statsWithPercentage = stats.map(stat => ({
-      ...stat,
-      percentage_of_total: totalStats.total_orders > 0 
-        ? Math.round((stat.total_orders / totalStats.total_orders) * 100)
-        : 0
-    }));
-    
     res.json({
       success: true,
       total_communes: stats.length,
+      envigo_communes: envigoStats.length,
+      other_communes: otherStats.length,
       summary: {
         ...totalStats,
-        overall_delivery_rate: totalStats.total_orders > 0 
-          ? Math.round((totalStats.delivered_orders / totalStats.total_orders) * 100)
-          : 0
+        overall_delivery_rate: totalStats.total_orders > 0 ? 
+          Math.round((totalStats.delivered_orders / totalStats.total_orders) * 100) : 0
       },
-      filters_applied: filters,
-      communes: statsWithPercentage
+      envigo_stats: envigoStats,
+      other_stats: otherStats,
+      all_stats: stats
     });
     
   } catch (error) {
     console.error('❌ Error obteniendo estadísticas por comuna:', error);
-    res.status(500).json({ 
-      error: 'Error obteniendo estadísticas por comuna',
-      details: process.env.NODE_ENV === 'development' ? error.message : undefined
-    });
+    res.status(500).json({ error: 'Error obteniendo estadísticas por comuna' });
   }
 });
 
