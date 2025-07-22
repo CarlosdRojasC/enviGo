@@ -451,6 +451,17 @@ const dashboard = {
       throw error;
     }
   },
+  getCommunesStats: async () => {
+  try {
+    console.log('🏘️ API: Solicitando estadísticas de comunas...')
+    const response = await api.get('/communes/stats')
+    console.log('✅ API: Stats de comunas recibidas:', response.data)
+    return { data: response.data }
+  } catch (error) {
+    console.error('❌ API: Error obteniendo stats de comunas:', error)
+    throw error
+  }
+},
   
   getTrends: async () => {
     try {

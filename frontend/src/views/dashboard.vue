@@ -200,6 +200,55 @@
           </div>
         </div>
       </section>
+      <!-- Top Comunas -->
+<section class="content-section">
+  <div class="section-header">
+    <h2 class="section-title">Comunas más Entregadas</h2>
+    <router-link to="/orders" class="section-link">Ver pedidos</router-link>
+  </div>
+  
+  <div v-if="loadingCommunes" class="loading-state">
+    <div class="loading-spinner small"></div>
+    <span>Cargando comunas...</span>
+  </div>
+  
+  <div v-else-if="communesStats.length === 0" class="empty-state">
+    <div class="empty-icon">🏘️</div>
+    <h3>No hay datos de entregas</h3>
+    <p>Aún no tienes entregas registradas por comuna</p>
+  </div>
+  
+  <div v-else class="communes-list">
+    <div 
+      v-for="(commune, index) in communesStats" 
+      :key="commune.commune" 
+      class="commune-item"
+    >
+      <div class="commune-rank">{{ index + 1 }}</div>
+      <div class="commune-main">
+        <div class="commune-name">{{ commune.commune }}</div>
+        <div class="commune-details">
+          {{ commune.delivered_orders }} entregas exitosas
+        </div>
+      </div>
+      <div class="commune-stats">
+        <div class="stat-item">
+          <span class="stat-value">{{ commune.total_orders }}</span>
+          <span class="stat-label">Total</span>
+        </div>
+      </div>
+      <div class="commune-success-rate">
+        <div class="success-rate-bar">
+          <div 
+            class="success-rate-fill" 
+            :style="{ width: commune.delivery_rate + '%' }"
+          ></div>
+        </div>
+        <span class="success-rate-text">{{ Math.round(commune.delivery_rate) }}%</span>
+      </div>
+    </div>
+  </div>
+</section>
     </div>
 
     <!-- Botón debug -->
@@ -230,6 +279,9 @@ const currentTime = ref('')
 const currentDate = ref('')
 const timeInterval = ref(null)
 const showDebug = ref(false)
+
+const loadingCommunes = ref(false)
+const communesStats = ref([])
 
 // Trends inicializados como null
 const trends = ref({
@@ -319,7 +371,8 @@ async function fetchAllData() {
     await Promise.all([
       fetchStats(),
       fetchChartData(),
-      fetchChannels()
+      fetchChannels(),
+      fetchCommunesStats()
     ])
     
     console.log('✅ Todos los datos cargados')
@@ -433,6 +486,27 @@ async function fetchChannels() {
     channels.value = []
   } finally {
     loadingChannels.value = false
+  }
+}
+
+async function fetchCommunesStats() {
+  loadingCommunes.value = true
+  try {
+    console.log('🏘️ Obteniendo estadísticas de comunas...')
+    const response = await apiService.dashboard.getCommunesStats()
+    
+    // Tomar las top 5 comunas con más entregas
+    const stats = response.data?.envigo_communes || response.data?.all_communes || []
+    communesStats.value = stats
+      .sort((a, b) => b.delivered_orders - a.delivered_orders)
+      .slice(0, 5)
+    
+    console.log('🏘️ Top comunas obtenidas:', communesStats.value.length)
+  } catch (error) {
+    console.error('❌ Error fetching communes stats:', error)
+    communesStats.value = []
+  } finally {
+    loadingCommunes.value = false
   }
 }
 
@@ -1130,5 +1204,91 @@ onUnmounted(() => {
   .kpi-value {
     font-size: 24px;
   }
+}
+/* ==================== COMUNAS ==================== */
+.communes-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.commune-item {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #f8fafc;
+  transition: all 0.2s ease;
+}
+
+.commune-item:hover {
+  background: #f0f9ff;
+  border-color: #3b82f6;
+}
+
+.commune-rank {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #3b82f6;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.commune-main {
+  flex: 1;
+}
+
+.commune-name {
+  font-weight: 600;
+  color: #1f2937;
+  margin-bottom: 2px;
+}
+
+.commune-details {
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.commune-stats {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.commune-success-rate {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  min-width: 60px;
+}
+
+.success-rate-bar {
+  width: 50px;
+  height: 6px;
+  background: #e5e7eb;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.success-rate-fill {
+  height: 100%;
+  background: #10b981;
+  transition: width 0.3s ease;
+}
+
+.success-rate-text {
+  font-size: 11px;
+  color: #6b7280;
+  font-weight: 500;
 }
 </style>
