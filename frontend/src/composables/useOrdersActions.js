@@ -351,11 +351,8 @@ export function useOrdersActions(newOrder, isCreatingOrder, fetchOrders) {
     const statusMap = {
     pending: 'Pendiente',
     ready_for_pickup: 'Listo para Retiro',
-    warehouse_received: '📦 En Bodega',         // 🆕 SIMPLE
-    processing: 'Procesando',
-    assigned: '👨‍💼 Asignado',                   // 🆕 SIMPLE  
-    out_for_delivery: '🚚 En Ruta',            // 🆕 SIMPLE
-    shipped: 'En Tránsito',
+    warehouse_received: '📦 En Bodega',
+    shipped: '🚚 En Ruta',
     delivered: '✅ Entregado',
     cancelled: '❌ Cancelado'
     }

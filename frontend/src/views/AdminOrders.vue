@@ -151,7 +151,6 @@ const {
   getCompanyName,
   markAsWarehouseReceived,
   markAsAssigned,
-  markAsOutForDelivery
 } = useOrdersData()
 
 // Filtros
@@ -349,15 +348,13 @@ function getStatusButtons(order) {
   
   switch (order.status) {
     case 'ready_for_pickup':
-      // Puede pasar a recepcionado en bodega
       buttons.push({
-        label: '📦 Recibido',
+        label: '📦 Recepcionado',
         action: async () => {
           try {
             await markAsWarehouseReceived(order);
-            toast.success(`✅ Pedido #${order.order_number} recepcionado en bodega`);
           } catch (error) {
-            toast.error('❌ Error al recepcionar pedido');
+            console.error('Error:', error);
           }
         },
         class: 'btn btn-primary btn-sm me-1',
@@ -366,56 +363,17 @@ function getStatusButtons(order) {
       break;
       
     case 'warehouse_received':
-      // Puede pasar a procesando
       buttons.push({
-        label: '⚙️ Procesar',
+        label: '🚚 Enviar',
         action: async () => {
           try {
-            await handleStatusUpdate({ 
-              orderId: order._id, 
-              newStatus: 'processing' 
-            });
-            toast.success(`✅ Pedido #${order.order_number} en procesamiento`);
+            await markAsShipped(order);
           } catch (error) {
-            toast.error('❌ Error al procesar pedido');
-          }
-        },
-        class: 'btn btn-warning btn-sm me-1',
-        tooltip: 'Iniciar procesamiento'
-      });
-      break;
-      
-    case 'processing':
-      // Puede asignar conductor
-      buttons.push({
-        label: '👨‍💼 Asignar',
-        action: async () => {
-          try {
-            await markAsAssigned(order);
-            toast.success(`✅ Conductor asignado a #${order.order_number}`);
-          } catch (error) {
-            toast.error('❌ Error al asignar conductor');
-          }
-        },
-        class: 'btn btn-info btn-sm me-1',
-        tooltip: 'Asignar conductor'
-      });
-      break;
-      
-    case 'assigned':
-      // Conductor puede salir a entregar
-      buttons.push({
-        label: '🚚 En Ruta',
-        action: async () => {
-          try {
-            await markAsOutForDelivery(order);
-            toast.success(`✅ Pedido #${order.order_number} en ruta de entrega`);
-          } catch (error) {
-            toast.error('❌ Error al marcar en ruta');
+            console.error('Error:', error);
           }
         },
         class: 'btn btn-success btn-sm me-1',
-        tooltip: 'Marcar como en ruta de entrega'
+        tooltip: 'Marcar como enviado para entrega'
       });
       break;
   }

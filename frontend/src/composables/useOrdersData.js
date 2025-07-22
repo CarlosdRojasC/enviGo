@@ -246,27 +246,21 @@ function updateOrderLocally(updatedOrder) {
    */
   function getOrdersStats() {
     const total = orders.value.length
-    const pending = orders.value.filter(o => o.status === 'pending').length
-    const processing = orders.value.filter(o => o.status === 'processing').length
-    const shipped = orders.value.filter(o => o.status === 'shipped').length
-    const delivered = orders.value.filter(o => o.status === 'delivered').length
-    const cancelled = orders.value.filter(o => o.status === 'cancelled').length
-    const ready_for_pickup = orders.value.filter(o => o.status === 'ready_for_pickup').length
-    const warehouse_received = orders.value.filter(o => o.status === 'warehouse_received').length
-    const assigned = orders.value.filter(o => o.status === 'assigned').length
-    const out_for_delivery = orders.value.filter(o => o.status === 'out_for_delivery').length
+  const pending = orders.value.filter(o => o.status === 'pending').length
+  const ready_for_pickup = orders.value.filter(o => o.status === 'ready_for_pickup').length
+  const warehouse_received = orders.value.filter(o => o.status === 'warehouse_received').length
+  const shipped = orders.value.filter(o => o.status === 'shipped').length
+  const delivered = orders.value.filter(o => o.status === 'delivered').length
+  const cancelled = orders.value.filter(o => o.status === 'cancelled').length
     
     return {
-      total,
-      pending,
-      processing,
-      shipped,
-      delivered,
-      cancelled,
-      ready_for_pickup,
-      warehouse_received,
-      assigned,
-      out_for_delivery
+       total,
+    pending,
+    ready_for_pickup,
+    warehouse_received,
+    shipped,
+    delivered,
+    cancelled
     }
   }
 
@@ -387,65 +381,43 @@ const markAsWarehouseReceived = async (order) => {
   try {
     loadingOrders.value = true;
     
-    // 🔧 CAMBIAR: api.patch por apiService (usando axios directo)
     const response = await apiService.orders.updateStatus(order._id, 'warehouse_received');
     
-    // Actualizar orden localmente usando tu función existente
     updateOrderLocally({
       _id: order._id,
       status: 'warehouse_received',
       updated_at: new Date().toISOString()
     });
     
+    toast.success(`📦 Pedido #${order.order_number} recepcionado en bodega`);
     return response.data;
   } catch (error) {
     console.error('Error marcando como recepcionado:', error);
-    throw error;
-  } finally {
-    loadingOrders.value = false;
-  }
-};
-// 👨‍💼 Marcar como asignado
-const markAsAssigned = async (order) => {
-  try {
-    loadingOrders.value = true;
-    
-    // 🔧 CAMBIAR: api.patch por apiService
-    const response = await apiService.orders.updateStatus(order._id, 'assigned');
-    
-    updateOrderLocally({
-      _id: order._id,
-      status: 'assigned',
-      updated_at: new Date().toISOString()
-    });
-    
-    return response.data;
-  } catch (error) {
-    console.error('Error marcando como asignado:', error);
+    toast.error('❌ Error al recepcionar pedido');
     throw error;
   } finally {
     loadingOrders.value = false;
   }
 };
 
-
-// 🚚 Marcar como en ruta de entrega
-const markAsOutForDelivery = async (order) => {
+// 🚚 Marcar como enviado
+const markAsShipped = async (order) => {
   try {
     loadingOrders.value = true;
     
-    // 🔧 CAMBIAR: api.patch por apiService
-    const response = await apiService.orders.updateStatus(order._id, 'out_for_delivery');
+    const response = await apiService.orders.updateStatus(order._id, 'shipped');
     
     updateOrderLocally({
       _id: order._id,
-      status: 'out_for_delivery',
+      status: 'shipped',
       updated_at: new Date().toISOString()
     });
     
+    toast.success(`🚚 Pedido #${order.order_number} salió para entrega`);
     return response.data;
   } catch (error) {
-    console.error('Error marcando como en ruta:', error);
+    console.error('Error marcando como enviado:', error);
+    toast.error('❌ Error al enviar pedido');
     throw error;
   } finally {
     loadingOrders.value = false;
@@ -487,7 +459,6 @@ const markAsOutForDelivery = async (order) => {
     markMultipleAsReady,
     markOrderAsReady,
     markAsWarehouseReceived,
-    markAsAssigned,
-    markAsOutForDelivery
+    markAsShipped
   }
 }

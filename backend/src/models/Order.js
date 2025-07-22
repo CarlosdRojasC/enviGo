@@ -100,16 +100,12 @@ const orderSchema = new mongoose.Schema({
   // Estados y fechas
   status: { 
     type: String, 
-    enum: ['pending', 
+    enum: ['pending',
     'ready_for_pickup', 
-    'warehouse_received',  // 🆕
-    'processing', 
-    'assigned',            // 🆕
-    'out_for_delivery',    // 🆕
-    'shipped',             // MANTENER para compatibilidad
-    'delivered', 
+    'warehouse_received',
+    'shipped',
     'cancelled',
-    'invoiced'],            // MANTENER],
+    'facturado'  ],
     default: 'pending' 
   },
   order_date: { type: Date, required: true },

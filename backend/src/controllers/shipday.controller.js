@@ -483,77 +483,36 @@ async handleWebhook(req, res) {
 
     // --- LÓGICA DE EVENTOS ESPECÍFICOS ---
 
-    switch (eventType.toLowerCase()) {
-      case 'order_assigned':
-      case 'driver_assigned':
-        console.log('👨‍💼 Evento: Conductor Asignado.');
-          if (order.status === 'pending' || order.status === 'processing') {
-            order.status = 'assigned';  // 🆕 NUEVO ESTADO MÁS ESPECÍFICO
-              notificationEventType = 'driver_assigned';
-                orderUpdated = true;
-              }
-        break;
+ switch (eventType.toLowerCase()) {
+  case 'order_assigned':
+  case 'driver_assigned':
+    console.log('👨‍💼 Evento: Conductor Asignado.');
+    if (order.status === 'warehouse_received') {
+      order.status = 'shipped';  // 🔧 DIRECTO A SHIPPED
+      notificationEventType = 'driver_assigned';
+      orderUpdated = true;
+    }
+    break;
 
-      case 'order_picked_up':
+  case 'order_picked_up':
   case 'picked_up':
     console.log('📦 Evento: Pedido Recogido.');
-    order.status = 'out_for_delivery';  // 🆕 NUEVO ESTADO MÁS CLARO
+    order.status = 'shipped';  // 🔧 DIRECTO A SHIPPED
     notificationEventType = 'picked_up';
     orderUpdated = true;
     break;
 
-      // --- INICIO DE LA CORRECCIÓN CLAVE ---
-     case 'order_pod_upload':
-  case 'proof_uploaded':
-    console.log('📸 Evento: Prueba de Entrega (POD) detectado.');
-    
-    const photoUrls = webhookData.podUrls || webhookData.order?.podUrls || [];
-    const signatureUrl = webhookData.signatureUrl || webhookData.order?.signatureUrl;
-
-    if (photoUrls.length > 0 || signatureUrl) {
-      order.proof_of_delivery = {
-        photo_url: photoUrls[0] || null,
-        signature_url: signatureUrl || null,
-        notes: webhookData.delivery_note || webhookData.order?.delivery_note || '',
-        location: webhookData.location ? {
-          type: 'Point',
-          coordinates: [webhookData.location.lng, webhookData.location.lat]
-        } : order.proof_of_delivery?.location,
-      };
-
-      order.podUrls = photoUrls;
-      order.signatureUrl = signatureUrl;
-      
-      console.log('📝 Prueba de entrega mapeada correctamente.');
-      notificationEventType = 'proof_uploaded';
-      orderUpdated = true;
-    }
+  case 'order_delivered':
+  case 'order_completed':
+    console.log('✅ Evento: Pedido Entregado.');
+    order.status = 'delivered';
+    order.delivery_date = webhookData.order?.delivery_time ? new Date(webhookData.order.delivery_time) : new Date();
+    notificationEventType = 'delivered';
+    orderUpdated = true;
     break;
-      // --- FIN DE LA CORRECCIÓN CLAVE ---
 
-      case 'order_delivered':
-      case 'order_completed':
-        console.log('✅ Evento: Pedido Entregado.');
-        order.status = 'delivered';
-        order.delivery_date = webhookData.order?.delivery_time ? new Date(webhookData.order.delivery_time) : new Date();
-        notificationEventType = 'delivered';
-        break;
-      case 'driver_en_route':
-      case 'order_en_route': 
-      case 'order_out_for_delivery':
-        console.log('🚗 Evento: Repartidor en camino al domicilio');
-        
-        // Actualizar estado local
-        order.status = 'shipped'; // Usar estado existente
-        notificationEventType = 'en_route';
-        
-        // 🎯 NOTIFICAR A SHOPIFY
-        await this.notifyShopifyEnRoute(order);
-        break;
-      default:
-        console.log(`ℹ️ Evento "${eventType}" no mapeado para cambio de estado.`);
-        break;
-    }
+  // ELIMINAR casos de assigned y out_for_delivery
+}
     
     // Si cualquier evento resultó en una notificación, significa que hubo una actualización.
     if (notificationEventType) {

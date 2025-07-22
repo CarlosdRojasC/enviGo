@@ -1141,4 +1141,113 @@ function deleteOrder(order) {
   opacity: 0.6;
   cursor: not-allowed;
 }
+.status-badge.status-warehouse_received {
+  background: linear-gradient(135deg, #6f42c1, #8e44ad) !important;
+  color: white !important;
+  border: none;
+  box-shadow: 0 2px 4px rgba(111, 66, 193, 0.3);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Badge shipped mejorado */
+.status-badge.status-shipped {
+  background: linear-gradient(135deg, #28a745, #20c997) !important;
+  color: white !important;
+  border: none;
+  box-shadow: 0 2px 4px rgba(40, 167, 69, 0.3);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Animaciones sutiles */
+.status-badge.status-warehouse_received {
+  animation: pulseWarehouse 3s infinite;
+}
+
+.status-badge.status-shipped {
+  animation: pulseShipped 3s infinite;
+}
+
+@keyframes pulseWarehouse {
+  0%, 100% { 
+    box-shadow: 0 2px 4px rgba(111, 66, 193, 0.3);
+    transform: scale(1);
+  }
+  50% { 
+    box-shadow: 0 4px 8px rgba(111, 66, 193, 0.5);
+    transform: scale(1.02);
+  }
+}
+
+@keyframes pulseShipped {
+  0%, 100% { 
+    box-shadow: 0 2px 4px rgba(40, 167, 69, 0.3);
+    transform: scale(1);
+  }
+  50% { 
+    box-shadow: 0 4px 8px rgba(40, 167, 69, 0.5);
+    transform: scale(1.02);
+  }
+}
+
+/* Botones de estado mejorados */
+.status-actions {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+.status-actions button {
+  border: none !important;
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.status-actions .btn-primary {
+  background: linear-gradient(135deg, #6f42c1, #8e44ad) !important;
+  color: white !important;
+}
+
+.status-actions .btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(111, 66, 193, 0.4);
+}
+
+.status-actions .btn-success {
+  background: linear-gradient(135deg, #28a745, #20c997) !important;
+  color: white !important;
+}
+
+.status-actions .btn-success:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(40, 167, 69, 0.4);
+}
+
+/* Filas especiales para nuevos estados */
+.order-row:has(.status-warehouse_received) {
+  background: linear-gradient(90deg, rgba(111, 66, 193, 0.05), transparent);
+  border-left: 4px solid #6f42c1;
+}
+
+.order-row:has(.status-shipped) {
+  background: linear-gradient(90deg, rgba(40, 167, 69, 0.05), transparent);
+  border-left: 4px solid #28a745;
+}
+
+/* Hover effects */
+.order-row:hover .status-badge {
+  transform: scale(1.05);
+  transition: transform 0.2s ease;
+}
 </style>
