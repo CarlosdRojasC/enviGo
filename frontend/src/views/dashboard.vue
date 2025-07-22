@@ -496,11 +496,10 @@ async function fetchCommunesStats() {
     // 'response' ya es el objeto de datos que necesitas
     const response = await apiService.dashboard.getCommunesStats()
     
-    // CORRECCIÓN: Usamos 'response.all_communes' directamente.
-    // Como fallback, convertimos el objeto 'summary' en un arreglo.
-    const communesArray = response.all_communes || Object.values(response.summary || {});
+    // ✅ CORRECCIÓN FINAL: El arreglo se llama 'all_stats'.
+    const communesArray = response.all_stats || []
     
-    // Usamos el nuevo arreglo para ordenar y cortar los resultados
+    // Esta parte ya está bien, ordenará el arreglo correctamente
     communesStats.value = communesArray
       .sort((a, b) => (b.delivered_orders || 0) - (a.delivered_orders || 0))
       .slice(0, 5)
