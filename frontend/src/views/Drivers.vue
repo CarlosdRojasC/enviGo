@@ -1,43 +1,261 @@
 <template>
-  <div class="drivers-page">
+  <div class="drivers-management">
+    <!-- Header -->
     <div class="page-header">
-      <h1 class="page-title">Gestión de Conductores</h1>
-      <button @click="showAddDriverModal = true" class="btn-primary">+ Agregar Conductor</button>
+      <div class="header-content">
+        <h1 class="page-title">Gestión de Conductores</h1>
+        <p class="page-subtitle">Administra tu flota de conductores y su disponibilidad</p>
+      </div>
+      <button @click="showCreateForm = true" class="btn-primary">
+        <i class="icon-plus"></i>
+        Nuevo Conductor
+      </button>
     </div>
 
-    <div v-if="loading" class="loading-container">Cargando conductores...</div>
-    
-    <div v-else class="drivers-grid">
-      <div v-for="driver in drivers" :key="driver._id" class="driver-card">
-        <div class="driver-header">
-          <div class="driver-avatar">{{ driver.full_name.charAt(0) }}</div>
-          <div class="driver-info">
-            <h3 class="driver-name">{{ driver.full_name }}</h3>
-            <p class="driver-phone">{{ driver.phone }}</p>
-          </div>
+    <!-- Filtros y Búsqueda -->
+    <div class="filters-section">
+      <div class="search-box">
+        <i class="icon-search"></i>
+        <input
+          v-model="searchQuery"
+          type="text"
+          placeholder="Buscar por nombre, email o teléfono..."
+          class="search-input"
+        />
+      </div>
+      
+      <div class="filters">
+        <select v-model="statusFilter" class="filter-select">
+          <option value="">Todos los estados</option>
+          <option value="active">Activos</option>
+          <option value="inactive">Inactivos</option>
+          <option value="working">En Turno</option>
+          <option value="available">Disponibles</option>
+        </select>
+        
+        <select v-model="vehicleFilter" class="filter-select">
+          <option value="">Todos los vehículos</option>
+          <option value="car">🚗 Auto</option>
+          <option value="motorcycle">🏍️ Moto</option>
+          <option value="bicycle">🚲 Bicicleta</option>
+          <option value="truck">🚚 Camión</option>
+          <option value="van">🚐 Furgoneta</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Debug Info (temporal) -->
+    <div v-if="drivers.length > 0" class="debug-info">
+      <details>
+        <summary>🔍 Debug Info (clic para ver datos)</summary>
+        <pre>{{ JSON.stringify(drivers[0], null, 2) }}</pre>
+      </details>
+    </div>
+    <!-- Stats Cards -->
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-icon active">👥</div>
+        <div class="stat-content">
+          <div class="stat-number">{{ stats.total }}</div>
+          <div class="stat-label">Total Conductores</div>
         </div>
-        <div class="driver-stats">
-          <div class="stat-item">
-            <span class="stat-value">{{ driver.stats.deliveredThisMonth }}</span>
-            <span class="stat-label">Entregas (Mes)</span>
-          </div>
-          <div class="stat-item">
-            <span class="stat-value">{{ driver.stats.totalAssigned }}</span>
-            <span class="stat-label">Asignados (Total)</span>
-          </div>
-          <div class="stat-item">
-            <span class="stat-value">{{ driver.stats.issuesCount }}</span>
-            <span class="stat-label">Incidencias</span>
-          </div>
+      </div>
+      
+      <div class="stat-card">
+        <div class="stat-icon available">✅</div>
+        <div class="stat-content">
+          <div class="stat-number">{{ stats.available }}</div>
+          <div class="stat-label">Disponibles</div>
         </div>
-        <div class="driver-actions">
-          <button @click="editDriver(driver)" class="action-btn">Editar</button>
-          <button @click="deleteDriver(driver._id)" class="action-btn-danger">Eliminar</button>
+      </div>
+      
+      <div class="stat-card">
+        <div class="stat-icon working">🚚</div>
+        <div class="stat-content">
+          <div class="stat-number">{{ stats.working }}</div>
+          <div class="stat-label">En Turno</div>
+        </div>
+      </div>
+      
+      <div class="stat-card">
+        <div class="stat-icon inactive">⏸️</div>
+        <div class="stat-content">
+          <div class="stat-number">{{ stats.inactive }}</div>
+          <div class="stat-label">Inactivos</div>
         </div>
       </div>
     </div>
-    
+
+    <!-- Loading State -->
+    <div v-if="loading" class="loading-state">
+      <div class="spinner"></div>
+      <p>Cargando conductores...</p>
     </div>
+
+    <!-- Empty State -->
+    <div v-else-if="!loading && drivers.length === 0" class="empty-state">
+      <div class="empty-icon">🚗</div>
+      <h3>No hay conductores registrados</h3>
+      <p>Comienza agregando tu primer conductor a la flota</p>
+      <button @click="showCreateForm = true" class="btn-primary">
+        Agregar Primer Conductor
+      </button>
+    </div>
+
+    <!-- Drivers Grid -->
+    <div v-else class="drivers-grid">
+      <div
+        v-for="driver in filteredDrivers"
+        :key="driver.email"
+        class="driver-card"
+        :class="{ 
+          'driver-available': driver.status === 'available',
+          'driver-working': driver.status === 'working',
+          'driver-inactive': driver.status === 'inactive'
+        }"
+      >
+        <!-- Status Indicator con info de ShipDay -->
+        <div class="status-indicator">
+          <div class="status-dot" :class="getStatusClass(driver)"></div>
+          <span class="status-text">{{ getStatusText(driver) }}</span>
+          <span v-if="hasLocation(driver)" class="location-indicator" title="Ubicación GPS disponible">📍</span>
+        </div>
+
+        <!-- Driver Info -->
+        <div class="driver-info">
+          <div class="driver-avatar">
+            <img 
+              v-if="driver.carrierPhoto" 
+              :src="driver.carrierPhoto" 
+              :alt="driver.name"
+              class="avatar-photo"
+              @error="handleImageError"
+            />
+            <span v-else class="avatar-initials">
+              {{ getInitials(driver.name) }}
+            </span>
+          </div>
+          
+          <div class="driver-details">
+            <h3 class="driver-name">{{ driver.name }}</h3>
+            <p class="driver-email">{{ driver.email }}</p>
+            <p class="driver-phone">{{ driver.phoneNumber || driver.phone }}</p>
+            
+            <!-- Código del conductor si existe -->
+            <p v-if="driver.codeName" class="driver-code">
+              🏷️ {{ driver.codeName }}
+            </p>
+            
+            <div class="driver-meta">
+              <span v-if="driver.vehicleType || driver.vehicle_type" class="vehicle-badge">
+                {{ getVehicleIcon(driver.vehicleType || driver.vehicle_type) }} {{ driver.vehicleType || driver.vehicle_type }}
+              </span>
+              <span v-if="driver.vehicle_plate" class="plate-badge">
+                🏷️ {{ driver.vehicle_plate }}
+              </span>
+              <!-- Indicador de ubicación GPS -->
+              <span v-if="hasLocation(driver)" class="location-badge" title="Ubicación GPS disponible">
+                📍 GPS
+              </span>
+            </div>
+          </div>
+        </div>
+
+          <!-- Driver Stats -->
+          <div class="driver-stats">
+            <div class="stat-item">
+              <span class="stat-value">{{ driver.id || driver.carrierId || 'N/A' }}</span>
+              <span class="stat-label">ID ShipDay</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-value">{{ driver.companyId || 'N/A' }}</span>
+              <span class="stat-label">Empresa</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-value">{{ driver.isOnShift ? 'Sí' : 'No' }}</span>
+              <span class="stat-label">En Turno</span>
+            </div>
+            <!-- Mostrar coordenadas si están disponibles -->
+            <div v-if="hasLocation(driver)" class="stat-item location-coords">
+              <span class="stat-value">
+                {{ formatCoordinates(driver.carrrierLocationLat, driver.carrrierLocationLng) }}
+              </span>
+              <span class="stat-label">Coordenadas</span>
+            </div>
+          </div>
+
+        <!-- Actions -->
+        <div class="driver-actions">
+          <!-- Toggle Status usando isActive de ShipDay -->
+          <button
+            @click="toggleDriverStatus(driver)"
+            :class="[
+              'btn-status',
+              driver.isActive ? 'btn-deactivate' : 'btn-activate'
+            ]"
+            :disabled="updatingStatus === driver.email"
+          >
+            {{ updatingStatus === driver.email ? '...' : (driver.isActive ? 'Desactivar' : 'Activar') }}
+          </button>
+          
+          <!-- Edit -->
+          <button @click="editDriver(driver)" class="btn-edit">
+            ✏️
+          </button>
+          
+          <!-- Delete -->
+          <button @click="confirmDelete(driver)" class="btn-delete">
+            🗑️
+          </button>
+          
+          <!-- Assign Order (solo si está disponible según ShipDay) -->
+          <button
+            v-if="driver.isActive && !driver.isOnShift"
+            @click="assignOrder(driver)"
+            class="btn-assign"
+          >
+            📦 Asignar
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modals -->
+    <!-- Create/Edit Driver Modal -->
+    <div v-if="showCreateForm || editingDriver" class="modal-overlay" @click="closeModals">
+      <div class="modal-content" @click.stop>
+        <DriverForm
+          :driver="editingDriver"
+          @success="handleDriverSuccess"
+          @cancel="closeModals"
+        />
+      </div>
+    </div>
+
+    <!-- Delete Confirmation Modal -->
+    <div v-if="driverToDelete" class="modal-overlay" @click="closeDeleteModal">
+      <div class="modal-content delete-modal" @click.stop>
+        <div class="delete-icon">⚠️</div>
+        <h3>¿Eliminar Conductor?</h3>
+        <p>
+          ¿Estás seguro de que quieres eliminar a <strong>{{ driverToDelete.name }}</strong>?
+          Esta acción no se puede deshacer.
+        </p>
+        <div class="delete-actions">
+          <button @click="closeDeleteModal" class="btn-cancel">Cancelar</button>
+          <button @click="deleteDriver" :disabled="deleting" class="btn-delete-confirm">
+            {{ deleting ? 'Eliminando...' : 'Eliminar' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Toast Notifications -->
+    <div v-if="notification" class="toast" :class="notification.type">
+      <span>{{ notification.message }}</span>
+      <button @click="notification = null" class="toast-close">×</button>
+    </div>
+  </div>
 </template>
 
 <script setup>
@@ -851,5 +1069,4 @@ const getVehicleIcon = (type) => {
     justify-content: center;
   }
 }
-
 </style>
