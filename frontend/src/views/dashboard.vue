@@ -195,12 +195,12 @@
               Crear Primer Pedido
             </router-link>
           </div>
-          <div v-else v-for="order in recentOrders" :key="order._id" class="order-item">
+          <div v-else v-for="order in recentOrders" :key="order._id || order.id" class="order-item">
             <div class="order-main">
-              <div class="order-id">#{{ order.order_number || order._id.slice(-6) }}</div>
+              <div class="order-id">#{{ getOrderId(order) }}</div>
               <div class="order-info">
-                <div class="order-customer">{{ order.customer_name }}</div>
-                <div class="order-address">{{ order.delivery_address }}</div>
+                <div class="order-customer">{{ order.customer_name || 'Cliente no especificado' }}</div>
+                <div class="order-address">{{ order.delivery_address || 'Dirección no especificada' }}</div>
               </div>
             </div>
             <div class="order-status">
@@ -209,7 +209,7 @@
               </span>
             </div>
             <div class="order-date">
-              {{ formatDate(order.order_date) }}
+              {{ formatDate(order.order_date || order.created_at) }}
             </div>
           </div>
         </div>
@@ -368,15 +368,34 @@ async function fetchStats() {
     console.log('📊 Empresa: Obteniendo estadísticas...')
     const response = await apiService.dashboard.getStats()
     
-    const rawData = response.data
+    const rawData = response.data || {}
     console.log('📊 Empresa: Respuesta raw del backend:', rawData)
     
-    stats.value = rawData
+    // Validar y asignar datos con valores por defecto
+    stats.value = {
+      orders: rawData.orders || 0,
+      channels: rawData.channels || 0,
+      ordersByStatus: rawData.ordersByStatus || {},
+      monthlyOrders: rawData.monthlyOrders || 0,
+      ordersToday: rawData.ordersToday || 0,
+      deliveredTotal: rawData.deliveredTotal || 0,
+      estimatedMonthlyCost: rawData.estimatedMonthlyCost || 0,
+      pricePerOrder: rawData.pricePerOrder || 1500,
+      ...rawData // Incluir otros campos que puedan venir del backend
+    }
     
     // Intentar obtener trends
     try {
       const trendsResponse = await apiService.dashboard.getTrends()
-      trends.value = trendsResponse.data
+      const trendsData = trendsResponse.data || {}
+      
+      // Validar estructura de trends
+      trends.value = {
+        orders_today: trendsData.orders_today || { direction: 'neutral', percentage: 0, label: 'sin datos' },
+        orders_month: trendsData.orders_month || { direction: 'neutral', percentage: 0, label: 'sin datos' },
+        delivered: trendsData.delivered || { direction: 'neutral', percentage: 0, label: 'sin datos' }
+      }
+      
       console.log('📈 Empresa: Trends obtenidos:', trends.value)
     } catch (trendsError) {
       console.log('⚠️ Empresa: Endpoint de trends no disponible, usando cálculo manual')
@@ -385,14 +404,16 @@ async function fetchStats() {
     
   } catch (error) {
     console.error('❌ Empresa: Error fetching stats:', error)
-    // Datos por defecto en caso de error
+    // Datos por defecto seguros en caso de error
     stats.value = {
       orders: 0,
       channels: 0,
       ordersByStatus: {},
       monthlyOrders: 0,
       ordersToday: 0,
-      deliveredTotal: 0
+      deliveredTotal: 0,
+      estimatedMonthlyCost: 0,
+      pricePerOrder: 1500
     }
   }
 }
@@ -443,12 +464,22 @@ async function fetchChannels() {
     const companyId = auth.user?.company_id
     if (!companyId) {
       console.warn('⚠️ No se encontró company_id en el usuario')
+      channels.value = []
       return
     }
     
     const response = await apiService.channels.getByCompany(companyId)
-    // Manejar respuesta anidada
-    channels.value = response.data?.data || response.data || []
+    
+    // Manejar respuesta anidada y verificar estructura
+    let channelsData = response.data?.data || response.data || []
+    
+    // Asegurar que channelsData es un array
+    if (!Array.isArray(channelsData)) {
+      console.warn('⚠️ Los canales recibidos no son un array:', channelsData)
+      channelsData = []
+    }
+    
+    channels.value = channelsData
     console.log('✅ Empresa: Canales obtenidos:', channels.value.length)
   } catch (error) {
     console.error('❌ Empresa: Error fetching channels:', error)
@@ -465,7 +496,22 @@ async function fetchRecentOrders() {
       limit: 5,
       sort: '-order_date'
     })
-    recentOrders.value = response.data?.data || response.data || []
+    
+    // Manejar respuesta anidada y verificar estructura
+    let orders = response.data?.data || response.data || []
+    
+    // Asegurar que orders es un array
+    if (!Array.isArray(orders)) {
+      console.warn('⚠️ Los pedidos recibidos no son un array:', orders)
+      orders = []
+    }
+    
+    // Validar cada pedido para evitar errores
+    recentOrders.value = orders.filter(order => {
+      return order && (order._id || order.id)
+    }).slice(0, 5) // Limitar a 5 por seguridad
+    
+    console.log('✅ Pedidos recientes procesados:', recentOrders.value.length)
   } catch (error) {
     console.error('❌ Empresa: Error fetching recent orders:', error)
     recentOrders.value = []
@@ -500,13 +546,26 @@ function getChannelLabel(type) {
 }
 
 function formatLastSync(dateString) {
-  const date = new Date(dateString)
-  const now = new Date()
-  const diffHours = Math.floor((now - date) / (1000 * 60 * 60))
+  if (!dateString) return 'N/A'
   
-  if (diffHours < 1) return 'Ahora'
-  if (diffHours < 24) return `${diffHours}h`
-  return `${Math.floor(diffHours / 24)}d`
+  try {
+    const date = new Date(dateString)
+    const now = new Date()
+    
+    // Verificar que la fecha es válida
+    if (isNaN(date.getTime())) {
+      return 'N/A'
+    }
+    
+    const diffHours = Math.floor((now - date) / (1000 * 60 * 60))
+    
+    if (diffHours < 1) return 'Ahora'
+    if (diffHours < 24) return `${diffHours}h`
+    return `${Math.floor(diffHours / 24)}d`
+  } catch (error) {
+    console.warn('Error formateando last sync:', dateString)
+    return 'N/A'
+  }
 }
 
 function getStatusClass(status) {
@@ -530,11 +589,32 @@ function getStatusLabel(status) {
   }
 }
 
+function getOrderId(order) {
+  // Manejar diferentes formatos de ID de manera segura
+  if (order.order_number) {
+    return order.order_number
+  }
+  
+  const id = order._id || order.id
+  if (typeof id === 'string' && id.length >= 6) {
+    return id.slice(-6)
+  }
+  
+  return id || 'SIN-ID'
+}
+
 function formatDate(dateString) {
-  return new Date(dateString).toLocaleDateString('es-ES', {
-    day: 'numeric',
-    month: 'short'
-  })
+  if (!dateString) return 'Sin fecha'
+  
+  try {
+    return new Date(dateString).toLocaleDateString('es-ES', {
+      day: 'numeric',
+      month: 'short'
+    })
+  } catch (error) {
+    console.warn('Error formateando fecha:', dateString)
+    return 'Fecha inválida'
+  }
 }
 
 // Lifecycle
