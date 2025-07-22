@@ -58,7 +58,10 @@ const auth = {
 
 const communes = {
   // Llama a la ruta /api/communes/envigo que creaste
-  getEnvigoCommunes: () => api.get('/communes/envigo') 
+  getEnvigoCommunes: () => api.get('/communes/envigo'),
+  getStats: (params = {}) => api.get('/communes/stats', { params }),
+  getAvailable: (params = {}) => api.get('/communes/available', { params }),
+  getTopByCompany: (companyId) => api.get(`/communes/stats?company_id=${companyId}&limit=10`)
 };
 // --- FIN DEL NUEVO OBJETO ---
 // Servicios de empresas
@@ -439,9 +442,7 @@ const dashboard = {
       console.log('📊 API: Solicitando estadísticas del dashboard...');
       const response = await api.get('/dashboard');
       
-      // Manejar tanto respuesta nueva como antigua
       const data = response.data?.data || response.data;
-      
       console.log('✅ API: Estadísticas recibidas:', data);
       return { data };
     } catch (error) {
@@ -458,9 +459,7 @@ const dashboard = {
       console.log('📈 API: Solicitando trends del dashboard...');
       const response = await api.get('/dashboard/trends');
       
-      // Manejar tanto respuesta nueva como antigua
       const data = response.data?.data || response.data;
-      
       console.log('✅ API: Trends recibidos:', data);
       return { data };
     } catch (error) {
@@ -468,6 +467,19 @@ const dashboard = {
         status: error.response?.status,
         message: error.response?.data?.error || error.message
       });
+      throw error;
+    }
+  },
+  getChartData: async (params = {}) => {
+    try {
+      console.log('📈 API: Solicitando datos de gráfico...');
+      const response = await api.get('/dashboard/chart-data', { params });
+      
+      const data = response.data?.data || response.data;
+      console.log('✅ API: Chart data recibido:', data);
+      return { data };
+    } catch (error) {
+      console.error('❌ API: Error obteniendo chart data:', error);
       throw error;
     }
   },

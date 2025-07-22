@@ -106,7 +106,57 @@
         </div>
       </section>
 
-      <!-- Acciones rápidas -->
+      <!-- NUEVA SECCIÓN: Comunas más populares -->
+      <section class="content-section">
+        <div class="section-header">
+          <h2 class="section-title">Comunas de Entrega</h2>
+          <p class="section-subtitle">Zonas con más pedidos</p>
+        </div>
+        
+        <div v-if="loadingCommunes" class="loading-state">
+          <div class="loading-spinner small"></div>
+          <span>Cargando comunas...</span>
+        </div>
+        
+        <div v-else-if="topCommunes.length === 0" class="empty-state">
+          <div class="empty-icon">🏘️</div>
+          <div class="empty-title">Sin datos de comunas</div>
+          <div class="empty-description">No hay entregas registradas aún</div>
+        </div>
+        
+        <div v-else class="communes-list">
+          <div 
+            v-for="(commune, index) in topCommunes" 
+            :key="commune.commune" 
+            class="commune-item"
+          >
+            <div class="commune-rank">{{ index + 1 }}</div>
+            <div class="commune-info">
+              <div class="commune-name">{{ commune.commune }}</div>
+              <div class="commune-progress">
+                <div 
+                  class="progress-bar" 
+                  :style="{ width: `${commune.percentage}%` }"
+                ></div>
+              </div>
+            </div>
+            <div class="commune-stats">
+              <div class="stat-value">{{ commune.total_orders }}</div>
+              <div class="stat-label">pedidos</div>
+            </div>
+            <div class="commune-delivery-rate">
+              <span 
+                class="delivery-rate-badge" 
+                :class="getDeliveryRateClass(commune.delivery_rate)"
+              >
+                {{ Math.round(commune.delivery_rate) }}%
+              </span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Acciones rápidas (MEJORADAS sin crear pedido) -->
       <section class="content-section">
         <div class="section-header">
           <h2 class="section-title">Acciones Rápidas</h2>
@@ -129,7 +179,7 @@
         </div>
       </section>
 
-      <!-- Estado de canales -->
+      <!-- Estado de canales MEJORADO -->
       <section class="content-section">
         <div class="section-header">
           <h2 class="section-title">Estado de Canales</h2>
@@ -144,11 +194,10 @@
         <div v-else-if="channels.length === 0" class="empty-state">
           <div class="empty-icon">📡</div>
           <div class="empty-title">No hay canales configurados</div>
-          <div class="empty-description">Conecta tus tiendas para sincronizar pedidos automáticamente</div>
-          <router-link to="/channels" class="btn btn-primary">
-            <span class="btn-icon">➕</span>
-            Agregar Canal
-          </router-link>
+          <div class="empty-description">Contacta al administrador para conectar tus tiendas</div>
+          <div class="info-badge">
+            Solo los administradores pueden agregar canales de venta
+          </div>
         </div>
         
         <div v-else class="channels-list">
@@ -191,9 +240,7 @@
           <div v-if="recentOrders.length === 0" class="empty-state small">
             <div class="empty-icon">📦</div>
             <div class="empty-title">No hay pedidos recientes</div>
-            <router-link to="/orders?action=create" class="btn btn-primary btn-sm">
-              Crear Primer Pedido
-            </router-link>
+            <div class="empty-description">Los pedidos aparecerán aquí automáticamente</div>
           </div>
           <div v-else v-for="order in recentOrders" :key="order._id || order.id" class="order-item">
             <div class="order-main">
@@ -220,7 +267,13 @@
     <div v-if="showDebug" class="debug-panel">
       <h3>Debug Info</h3>
       <div class="debug-content">
-        <pre>{{ JSON.stringify({ stats, trends, channels: channels.length }, null, 2) }}</pre>
+        <pre>{{ JSON.stringify({ 
+          stats, 
+          trends, 
+          channels: channels.length,
+          communes: topCommunes.length,
+          user: auth.user 
+        }, null, 2) }}</pre>
       </div>
       <button @click="showDebug = false" class="btn btn-secondary btn-sm">Cerrar</button>
     </div>
@@ -247,10 +300,12 @@ const toast = useToast()
 const loading = ref(true)
 const loadingChart = ref(false)
 const loadingChannels = ref(false)
+const loadingCommunes = ref(false)  // NUEVO
 const stats = ref({})
 const chartData = ref([])
 const channels = ref([])
 const recentOrders = ref([])
+const topCommunes = ref([])  // NUEVO
 const chartPeriod = ref('30d')
 const currentTime = ref('')
 const currentDate = ref('')
@@ -288,14 +343,8 @@ const estimatedMonthlyCost = computed(() => {
 const pricePerOrder = computed(() => stats.value.pricePerOrder || 1500)
 const channelsConnected = computed(() => channels.value.filter(c => c.is_active).length)
 
+// MEJORADO: Acciones sin crear pedido
 const quickActions = computed(() => [
-  { 
-    id: 'new-order', 
-    title: 'Crear Pedido', 
-    description: 'Agregar un nuevo pedido manual', 
-    icon: '➕', 
-    route: '/orders?action=create' 
-  },
   { 
     id: 'view-orders', 
     title: 'Ver Mis Pedidos', 
@@ -316,6 +365,13 @@ const quickActions = computed(() => [
     description: 'Revisar costos y facturas', 
     icon: '💳', 
     route: '/billing' 
+  },
+  { 
+    id: 'delivery-zones', 
+    title: 'Zonas de Entrega', 
+    description: 'Ver estadísticas por comuna', 
+    icon: '🗺️', 
+    route: '/orders?group_by=commune' 
   }
 ])
 
@@ -351,7 +407,8 @@ async function fetchAllData() {
       fetchStats(),
       fetchChartData(),
       fetchChannels(),
-      fetchRecentOrders()
+      fetchRecentOrders(),
+      fetchTopCommunes()  // NUEVO
     ])
     
     console.log('✅ Empresa: Todos los datos cargados')
@@ -381,7 +438,7 @@ async function fetchStats() {
       deliveredTotal: rawData.deliveredTotal || 0,
       estimatedMonthlyCost: rawData.estimatedMonthlyCost || 0,
       pricePerOrder: rawData.pricePerOrder || 1500,
-      ...rawData // Incluir otros campos que puedan venir del backend
+      ...rawData
     }
     
     // Intentar obtener trends
@@ -389,7 +446,6 @@ async function fetchStats() {
       const trendsResponse = await apiService.dashboard.getTrends()
       const trendsData = trendsResponse.data || {}
       
-      // Validar estructura de trends
       trends.value = {
         orders_today: trendsData.orders_today || { direction: 'neutral', percentage: 0, label: 'sin datos' },
         orders_month: trendsData.orders_month || { direction: 'neutral', percentage: 0, label: 'sin datos' },
@@ -404,7 +460,6 @@ async function fetchStats() {
     
   } catch (error) {
     console.error('❌ Empresa: Error fetching stats:', error)
-    // Datos por defecto seguros en caso de error
     stats.value = {
       orders: 0,
       channels: 0,
@@ -444,17 +499,43 @@ async function fetchChartData() {
   loadingChart.value = true
   try {
     console.log('📈 Empresa: Obteniendo datos del gráfico...')
-    const response = await apiService.orders.getChartData({
+    
+    // MEJORADO: Endpoint específico para chart data
+    const response = await apiService.orders.getAll({
       period: chartPeriod.value,
-      company_id: auth.user?.company_id
+      company_id: auth.user?.company_id,
+      chart_data: true,
+      limit: 50
     })
-    chartData.value = response.data || []
+    
+    // Procesar datos para el gráfico
+    const orders = response.data?.data || response.data || []
+    chartData.value = processOrdersForChart(orders)
+    
   } catch (error) {
     console.error('❌ Empresa: Error fetching chart data:', error)
     chartData.value = []
   } finally {
     loadingChart.value = false
   }
+}
+
+// NUEVA FUNCIÓN: Procesar datos para gráfico
+function processOrdersForChart(orders) {
+  const dailyData = {}
+  
+  orders.forEach(order => {
+    const date = new Date(order.order_date || order.created_at).toISOString().split('T')[0]
+    if (!dailyData[date]) {
+      dailyData[date] = { date, orders: 0, delivered: 0 }
+    }
+    dailyData[date].orders++
+    if (order.status === 'delivered') {
+      dailyData[date].delivered++
+    }
+  })
+  
+  return Object.values(dailyData).sort((a, b) => new Date(a.date) - new Date(b.date))
 }
 
 async function fetchChannels() {
@@ -470,10 +551,8 @@ async function fetchChannels() {
     
     const response = await apiService.channels.getByCompany(companyId)
     
-    // Manejar respuesta anidada y verificar estructura
     let channelsData = response.data?.data || response.data || []
     
-    // Asegurar que channelsData es un array
     if (!Array.isArray(channelsData)) {
       console.warn('⚠️ Los canales recibidos no son un array:', channelsData)
       channelsData = []
@@ -497,24 +576,54 @@ async function fetchRecentOrders() {
       sort: '-order_date'
     })
     
-    // Manejar respuesta anidada y verificar estructura
     let orders = response.data?.data || response.data || []
     
-    // Asegurar que orders es un array
     if (!Array.isArray(orders)) {
       console.warn('⚠️ Los pedidos recibidos no son un array:', orders)
       orders = []
     }
     
-    // Validar cada pedido para evitar errores
     recentOrders.value = orders.filter(order => {
       return order && (order._id || order.id)
-    }).slice(0, 5) // Limitar a 5 por seguridad
+    }).slice(0, 5)
     
     console.log('✅ Pedidos recientes procesados:', recentOrders.value.length)
   } catch (error) {
     console.error('❌ Empresa: Error fetching recent orders:', error)
     recentOrders.value = []
+  }
+}
+
+// NUEVA FUNCIÓN: Obtener comunas más populares
+async function fetchTopCommunes() {
+  loadingCommunes.value = true
+  try {
+    console.log('🏘️ Empresa: Obteniendo estadísticas de comunas...')
+    
+    const params = {
+      company_id: auth.user?.company_id
+    }
+    
+    const response = await apiService.get('/communes/stats', { params })
+    const communesData = response.data || []
+    
+    // Procesar y limitar a top 10
+    const processedCommunes = communesData
+      .filter(c => c.commune && c.total_orders > 0)
+      .slice(0, 10)
+      .map((commune, index) => ({
+        ...commune,
+        percentage: Math.round((commune.total_orders / communesData[0]?.total_orders * 100) || 0)
+      }))
+    
+    topCommunes.value = processedCommunes
+    console.log('✅ Top comunas obtenidas:', topCommunes.value.length)
+    
+  } catch (error) {
+    console.error('❌ Empresa: Error fetching communes stats:', error)
+    topCommunes.value = []
+  } finally {
+    loadingCommunes.value = false
   }
 }
 
@@ -545,6 +654,14 @@ function getChannelLabel(type) {
   }
 }
 
+// NUEVA FUNCIÓN: Clasificar delivery rate
+function getDeliveryRateClass(rate) {
+  if (rate >= 80) return 'excellent'
+  if (rate >= 60) return 'good'
+  if (rate >= 40) return 'average'
+  return 'poor'
+}
+
 function formatLastSync(dateString) {
   if (!dateString) return 'N/A'
   
@@ -552,7 +669,6 @@ function formatLastSync(dateString) {
     const date = new Date(dateString)
     const now = new Date()
     
-    // Verificar que la fecha es válida
     if (isNaN(date.getTime())) {
       return 'N/A'
     }
@@ -590,7 +706,6 @@ function getStatusLabel(status) {
 }
 
 function getOrderId(order) {
-  // Manejar diferentes formatos de ID de manera segura
   if (order.order_number) {
     return order.order_number
   }
@@ -1031,7 +1146,118 @@ onUnmounted(() => {
   color: #9ca3af;
 }
 
-/* ==================== CANALES ==================== */
+/* ==================== NUEVA SECCIÓN: COMUNAS ==================== */
+.communes-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.commune-item {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  background: #f8fafc;
+  transition: all 0.2s ease;
+}
+
+.commune-item:hover {
+  border-color: #4f46e5;
+  background: #f0f4ff;
+}
+
+.commune-rank {
+  width: 32px;
+  height: 32px;
+  background: #4f46e5;
+  color: white;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.commune-info {
+  flex: 1;
+}
+
+.commune-name {
+  font-weight: 600;
+  color: #1f2937;
+  margin-bottom: 6px;
+}
+
+.commune-progress {
+  width: 100%;
+  height: 6px;
+  background: #e5e7eb;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, #4f46e5, #7c3aed);
+  transition: width 0.3s ease;
+}
+
+.commune-stats {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  min-width: 60px;
+}
+
+.stat-value {
+  font-weight: 600;
+  color: #1f2937;
+  font-size: 16px;
+}
+
+.stat-label {
+  font-size: 11px;
+  color: #6b7280;
+}
+
+.commune-delivery-rate {
+  display: flex;
+  align-items: center;
+}
+
+.delivery-rate-badge {
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.delivery-rate-badge.excellent {
+  background-color: #d1fae5;
+  color: #065f46;
+}
+
+.delivery-rate-badge.good {
+  background-color: #dbeafe;
+  color: #1e40af;
+}
+
+.delivery-rate-badge.average {
+  background-color: #fef3c7;
+  color: #92400e;
+}
+
+.delivery-rate-badge.poor {
+  background-color: #fee2e2;
+  color: #991b1b;
+}
+
+/* ==================== CANALES MEJORADOS ==================== */
 .channels-list {
   display: flex;
   flex-direction: column;
@@ -1100,17 +1326,6 @@ onUnmounted(() => {
   text-align: center;
 }
 
-.stat-value {
-  font-weight: 600;
-  color: #1f2937;
-  font-size: 14px;
-}
-
-.stat-label {
-  font-size: 11px;
-  color: #6b7280;
-}
-
 .channel-status {
   display: flex;
   align-items: center;
@@ -1135,6 +1350,19 @@ onUnmounted(() => {
   font-size: 12px;
   color: #6b7280;
   font-weight: 500;
+}
+
+/* ==================== INFO BADGE NUEVO ==================== */
+.info-badge {
+  display: inline-block;
+  background: #eff6ff;
+  color: #1e40af;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  margin-top: 12px;
+  border: 1px solid #bfdbfe;
 }
 
 /* ==================== ÚLTIMOS PEDIDOS ==================== */
@@ -1358,6 +1586,28 @@ onUnmounted(() => {
   .chart-container-wrapper {
     height: 250px;
   }
+  
+  .commune-item {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  
+  .commune-info {
+    order: 1;
+    flex: 1 1 100%;
+  }
+  
+  .commune-rank {
+    order: 0;
+  }
+  
+  .commune-stats {
+    order: 2;
+  }
+  
+  .commune-delivery-rate {
+    order: 3;
+  }
 }
 
 @media (max-width: 480px) {
@@ -1384,6 +1634,15 @@ onUnmounted(() => {
     width: calc(100vw - 40px);
     right: 20px;
     left: 20px;
+  }
+  
+  .commune-item {
+    flex-direction: column;
+    text-align: center;
+  }
+  
+  .commune-rank {
+    align-self: center;
   }
 }
 </style>

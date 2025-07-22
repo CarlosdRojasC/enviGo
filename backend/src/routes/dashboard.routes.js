@@ -14,173 +14,25 @@ const User = require('../models/User');
 // Estadísticas generales del dashboard
 router.get('/dashboard', authenticateToken, async (req, res) => {
   try {
-    console.log('📊 BACKEND: Solicitando stats del dashboard...');
-    console.log('📊 BACKEND: Usuario:', {
-      id: req.user.id,
-      role: req.user.role,
-      company_id: req.user.company_id
+    console.log('📊 BACKEND: Generando estadísticas del dashboard...');
+    console.log('👤 Usuario:', { 
+      id: req.user.id, 
+      role: req.user.role, 
+      company_id: req.user.company_id 
     });
 
     let stats = {};
     const isAdmin = req.user.role === 'admin';
+    const companyId = isAdmin ? null : req.user.company_id;
 
     if (isAdmin) {
-      // Dashboard para administrador
-      console.log('👑 BACKEND: Generando stats para admin...');
-      
-      const [companies, totalOrders, channels, users] = await Promise.all([
-        Company.countDocuments({ is_active: true }),
-        Order.countDocuments({}),
-        Channel.countDocuments({ is_active: true }),
-        User.countDocuments({ is_active: true })
-      ]);
-
-      // Estadísticas de órdenes por estado
-      const ordersByStatus = await Order.aggregate([
-        {
-          $group: {
-            _id: '$status',
-            count: { $sum: 1 }
-          }
-        }
-      ]);
-
-      // Estadísticas de tiempo para admin
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      
-      const thisMonthStart = new Date(today.getFullYear(), today.getMonth(), 1);
-      
-      const [ordersToday, ordersThisMonth, deliveredTotal] = await Promise.all([
-        Order.countDocuments({ order_date: { $gte: today } }),
-        Order.countDocuments({ order_date: { $gte: thisMonthStart } }),
-        Order.countDocuments({ status: 'delivered' })
-      ]);
-
-      // Costos estimados para admin
-      const estimatedMonthlyCost = ordersThisMonth * 1500;
-
-      stats = {
-        // Métricas principales
-        companies,
-        totalOrders,
-        channels,
-        users,
-        
-        // Estructura compatible con frontend
-        orders: totalOrders,
-        ordersToday,
-        monthlyOrders: ordersThisMonth,
-        ordersByStatus: ordersByStatus.reduce((acc, item) => {
-          acc[item._id] = item.count;
-          return acc;
-        }, {}),
-        
-        // Costos
-        estimatedMonthlyCost,
-        pricePerOrder: 1500,
-        
-        // Meta información
-        role: 'admin',
-        calculatedAt: new Date()
-      };
-
-      console.log('✅ BACKEND: Stats admin generadas:', {
-        companies,
-        totalOrders,
-        ordersToday,
-        monthlyOrders: ordersThisMonth
-      });
-
+      // Estadísticas para admin (código existente...)
+      stats = await generateAdminStats();
     } else {
-      // Dashboard para empresa
-      const companyId = req.user.company_id;
-      console.log('🏢 BACKEND: Generando stats para empresa:', companyId);
-
-      if (!companyId) {
-        console.error('❌ BACKEND: company_id no encontrado para usuario:', req.user.id);
-        return res.status(400).json({ 
-          success: false,
-          error: 'Usuario no tiene empresa asignada' 
-        });
-      }
-
-      const companyFilter = { company_id: new mongoose.Types.ObjectId(companyId) };
-
-      const [totalOrders, channels] = await Promise.all([
-        Order.countDocuments(companyFilter),
-        Channel.countDocuments({ ...companyFilter, is_active: true })
-      ]);
-
-      // Estadísticas de órdenes por estado para la empresa
-      const ordersByStatus = await Order.aggregate([
-        { $match: companyFilter },
-        {
-          $group: {
-            _id: '$status',
-            count: { $sum: 1 }
-          }
-        }
-      ]);
-
-      // Estadísticas de tiempo para empresa
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      
-      const thisMonthStart = new Date(today.getFullYear(), today.getMonth(), 1);
-      
-      const [ordersToday, ordersThisMonth, deliveredTotal] = await Promise.all([
-        Order.countDocuments({ 
-          ...companyFilter,
-          order_date: { $gte: today } 
-        }),
-        Order.countDocuments({ 
-          ...companyFilter,
-          order_date: { $gte: thisMonthStart } 
-        }),
-        Order.countDocuments({ 
-          ...companyFilter,
-          status: 'delivered' 
-        })
-      ]);
-
-      // Obtener configuración de precios de la empresa
-      const company = await Company.findById(companyId).select('price_per_order');
-      const pricePerOrder = company?.price_per_order || 1500;
-      const estimatedMonthlyCost = ordersThisMonth * pricePerOrder;
-
-      stats = {
-        // Métricas principales (estructura original)
-        orders: totalOrders,
-        channels,
-        ordersByStatus: ordersByStatus.reduce((acc, item) => {
-          acc[item._id] = item.count;
-          return acc;
-        }, {}),
-        monthlyOrders: ordersThisMonth,
-        
-        // Métricas adicionales para frontend mejorado
-        ordersToday,
-        deliveredTotal,
-        estimatedMonthlyCost,
-        pricePerOrder,
-        
-        // Meta información
-        role: 'company',
-        company_id: companyId,
-        calculatedAt: new Date()
-      };
-
-      console.log('✅ BACKEND: Stats empresa generadas:', {
-        totalOrders,
-        ordersToday,
-        monthlyOrders: ordersThisMonth,
-        deliveredTotal,
-        channels
-      });
+      // MEJORADO: Estadísticas específicas para empresa
+      stats = await generateCompanyStats(companyId);
     }
 
-    // Respuesta unificada
     res.json({
       success: true,
       data: stats,
@@ -510,5 +362,251 @@ router.get('/revenue-by-company', authenticateToken, isAdmin, async (req, res) =
   }
 });
 
+router.get('/dashboard/chart-data', authenticateToken, async (req, res) => {
+  try {
+    console.log('📈 BACKEND: Generando datos de gráfico...');
+    
+    const { period = '30d', company_id } = req.query;
+    const isAdmin = req.user.role === 'admin';
+    const targetCompanyId = isAdmin && company_id ? company_id : req.user.company_id;
+
+    // Calcular fecha de inicio según período
+    const endDate = new Date();
+    const startDate = new Date();
+    
+    switch(period) {
+      case '7d':
+        startDate.setDate(endDate.getDate() - 7);
+        break;
+      case '30d':
+        startDate.setDate(endDate.getDate() - 30);
+        break;
+      case '90d':
+        startDate.setDate(endDate.getDate() - 90);
+        break;
+      default:
+        startDate.setDate(endDate.getDate() - 30);
+    }
+
+    // Filtros para la consulta
+    const matchFilters = {
+      order_date: { $gte: startDate, $lte: endDate }
+    };
+
+    if (!isAdmin && targetCompanyId) {
+      matchFilters.company_id = new mongoose.Types.ObjectId(targetCompanyId);
+    }
+
+    console.log('🔍 Filtros para chart data:', matchFilters);
+
+    // Agregación por días
+    const chartData = await Order.aggregate([
+      { $match: matchFilters },
+      {
+        $group: {
+          _id: {
+            year: { $year: '$order_date' },
+            month: { $month: '$order_date' },
+            day: { $dayOfMonth: '$order_date' }
+          },
+          total_orders: { $sum: 1 },
+          delivered_orders: {
+            $sum: { $cond: [{ $eq: ['$status', 'delivered'] }, 1, 0] }
+          },
+          pending_orders: {
+            $sum: { $cond: [{ $ne: ['$status', 'delivered'] }, 1, 0] }
+          },
+          total_revenue: { $sum: '$total_amount' }
+        }
+      },
+      {
+        $project: {
+          date: {
+            $dateFromParts: {
+              year: '$_id.year',
+              month: '$_id.month',
+              day: '$_id.day'
+            }
+          },
+          total_orders: 1,
+          delivered_orders: 1,
+          pending_orders: 1,
+          total_revenue: { $round: ['$total_revenue', 2] },
+          delivery_rate: {
+            $multiply: [
+              { $divide: ['$delivered_orders', '$total_orders'] },
+              100
+            ]
+          },
+          _id: 0
+        }
+      },
+      { $sort: { date: 1 } }
+    ]);
+
+    console.log('✅ Chart data generado:', chartData.length, 'puntos');
+
+    res.json({
+      success: true,
+      data: chartData,
+      metadata: {
+        period,
+        start_date: startDate,
+        end_date: endDate,
+        company_id: targetCompanyId,
+        points_count: chartData.length
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ BACKEND: Error generando chart data:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Error generando datos del gráfico',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+async function generateCompanyStats(companyId) {
+  if (!companyId) {
+    throw new Error('Company ID es requerido para estadísticas de empresa');
+  }
+
+  console.log('🏢 Generando stats para company:', companyId);
+
+  // Fechas para cálculos
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  
+  const thisMonthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+  
+  // Filtro base para la empresa
+  const companyFilter = { company_id: new mongoose.Types.ObjectId(companyId) };
+
+  // Consultas en paralelo
+  const [
+    totalOrders,
+    ordersToday,
+    ordersThisMonth,
+    deliveredTotal,
+    ordersByStatus,
+    channels,
+    company
+  ] = await Promise.all([
+    // Total de pedidos de la empresa
+    Order.countDocuments(companyFilter),
+    
+    // Pedidos de hoy
+    Order.countDocuments({ 
+      ...companyFilter,
+      order_date: { $gte: today } 
+    }),
+    
+    // Pedidos del mes actual
+    Order.countDocuments({ 
+      ...companyFilter,
+      order_date: { $gte: thisMonthStart } 
+    }),
+    
+    // Total entregados
+    Order.countDocuments({ 
+      ...companyFilter,
+      status: 'delivered' 
+    }),
+    
+    // Pedidos por estado
+    Order.aggregate([
+      { $match: companyFilter },
+      { $group: { _id: '$status', count: { $sum: 1 } } }
+    ]),
+    
+    // Canales de la empresa
+    Channel.countDocuments({ company_id: new mongoose.Types.ObjectId(companyId) }),
+    
+    // Información de la empresa
+    Company.findById(companyId).select('price_per_order name')
+  ]);
+
+  // Procesar datos
+  const pricePerOrder = company?.price_per_order || 1500;
+  const estimatedMonthlyCost = ordersThisMonth * pricePerOrder;
+
+  const stats = {
+    // Métricas principales
+    orders: totalOrders,
+    channels,
+    ordersByStatus: ordersByStatus.reduce((acc, item) => {
+      acc[item._id] = item.count;
+      return acc;
+    }, {}),
+    
+    // Métricas específicas
+    ordersToday,
+    monthlyOrders: ordersThisMonth,
+    deliveredTotal,
+    estimatedMonthlyCost,
+    pricePerOrder,
+    
+    // Tasas calculadas
+    deliveryRate: totalOrders > 0 ? Math.round((deliveredTotal / totalOrders) * 100) : 0,
+    monthlyGrowth: await calculateMonthlyGrowth(companyId, thisMonthStart),
+    
+    // Meta información
+    role: 'company',
+    company_id: companyId,
+    company_name: company?.name,
+    calculatedAt: new Date()
+  };
+
+  console.log('✅ BACKEND: Stats empresa generadas:', {
+    totalOrders,
+    ordersToday,
+    monthlyOrders: ordersThisMonth,
+    deliveredTotal,
+    channels
+  });
+
+  return stats;
+}
+
+// Nueva función para calcular crecimiento mensual
+async function calculateMonthlyGrowth(companyId, thisMonthStart) {
+  try {
+    const lastMonthStart = new Date(thisMonthStart);
+    lastMonthStart.setMonth(lastMonthStart.getMonth() - 1);
+    
+    const lastMonthEnd = new Date(thisMonthStart);
+    lastMonthEnd.setDate(lastMonthEnd.getDate() - 1);
+
+    const companyFilter = { company_id: new mongoose.Types.ObjectId(companyId) };
+
+    const [thisMonth, lastMonth] = await Promise.all([
+      Order.countDocuments({
+        ...companyFilter,
+        order_date: { $gte: thisMonthStart }
+      }),
+      Order.countDocuments({
+        ...companyFilter,
+        order_date: { $gte: lastMonthStart, $lte: lastMonthEnd }
+      })
+    ]);
+
+    if (lastMonth === 0) return { percentage: 0, direction: 'neutral' };
+    
+    const growth = ((thisMonth - lastMonth) / lastMonth) * 100;
+    
+    return {
+      percentage: Math.abs(Math.round(growth)),
+      direction: growth > 0 ? 'up' : growth < 0 ? 'down' : 'neutral',
+      this_month: thisMonth,
+      last_month: lastMonth
+    };
+    
+  } catch (error) {
+    console.error('Error calculando crecimiento mensual:', error);
+    return { percentage: 0, direction: 'neutral' };
+  }
+}
 
 module.exports = router;

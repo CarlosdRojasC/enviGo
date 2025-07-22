@@ -141,4 +141,10 @@ orderSchema.index({ shipday_tracking_url: 1 });
 orderSchema.index({ shipday_order_id: 1 });
 orderSchema.index({ 'driver_info.name': 1 });
 
+db.orders.createIndex({ company_id: 1, order_date: -1 })
+db.orders.createIndex({ company_id: 1, status: 1 })
+db.orders.createIndex({ company_id: 1, shipping_commune: 1 })
+db.orders.createIndex({ order_date: -1 })
+db.orders.createIndex({ status: 1, company_id: 1 })
+
 module.exports = mongoose.model('Order', orderSchema);
