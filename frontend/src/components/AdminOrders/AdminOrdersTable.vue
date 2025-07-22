@@ -458,12 +458,24 @@ function getCompanyName(companyId) {
  * Get channel name (placeholder - would need channels data)
  */
 function getChannelName(channelId) {
-  if (typeof channelId === 'object' && channelId.name) {
+  // Si channelId es un objeto poblado
+  if (typeof channelId === 'object' && channelId?.channel_name) {
+    return channelId.channel_name
+  }
+  
+  // Si channelId es un objeto poblado pero con 'name' (por si acaso)
+  if (typeof channelId === 'object' && channelId?.name) {
     return channelId.name
   }
+  
+  // Si solo tenemos el ID, buscar en la lista de canales
+  if (typeof channelId === 'string' && channels.value) {
+    const channel = channels.value.find(c => c._id === channelId)
+    return channel?.channel_name || 'Canal desconocido'
+  }
+  
   return 'Canal'
 }
-
 /**
  * Format currency
  */
