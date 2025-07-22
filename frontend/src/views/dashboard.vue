@@ -495,20 +495,15 @@ async function fetchCommunesStats() {
     console.log('🏘️ Obteniendo estadísticas de comunas...')
     const response = await apiService.dashboard.getCommunesStats()
     
-    // --- LÍNEA DE DEPURACIÓN ---
-    // Vamos a inspeccionar el objeto 'response' tal como lo ve el componente.
-    console.log('CONTENIDO DE "response" DENTRO DEL COMPONENTE:', response)
-    // --------------------------
-
-    // La lógica para extraer el arreglo. Basado en el log de la API, debería ser 'response.all_stats'.
-    const communesArray = response.all_stats || []
+    // ✅ CORRECCIÓN FINAL: El arreglo está dentro de response.data.all_stats
+    const communesArray = response.data.all_stats || []
     
+    // Esta parte ya está bien, ordenará el arreglo correctamente
     communesStats.value = communesArray
       .sort((a, b) => (b.delivered_orders || 0) - (a.delivered_orders || 0))
       .slice(0, 5)
     
     console.log('🏘️ Top comunas obtenidas:', communesStats.value.length)
-
   } catch (error) {
     console.error('❌ Error fetching communes stats:', error)
     communesStats.value = []
