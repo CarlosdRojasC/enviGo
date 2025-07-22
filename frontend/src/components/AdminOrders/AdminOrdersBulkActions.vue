@@ -524,6 +524,8 @@ function getCompanyName(companyId) {
 
 .action-dropdown:hover .dropdown-menu {
   display: block;
+  animation: dropdownIn 0.2s ease-out;
+  
 }
 
 @keyframes dropdownIn {

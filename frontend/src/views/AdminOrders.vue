@@ -396,8 +396,9 @@ async function handleBulkStatusChange(newStatus) {
     return
   }
 
+   const statusName = await getStatusName(newStatus)
   const confirmed = confirm(
-    `¿Cambiar estado de ${selectedOrders.value.length} pedidos a "${getStatusName(newStatus)}"?`
+    `¿Cambiar estado de ${selectedOrders.value.length} pedidos a "${statusName}"?`
   )
   
   if (!confirmed) return
