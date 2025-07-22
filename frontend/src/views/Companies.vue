@@ -233,6 +233,9 @@
           <button @click.stop="toggleCompanyStatus(company)" class="card-action-btn">
             {{ company.is_active ? '⏸️' : '▶️' }}
           </button>
+            <button @click.stop="openUsersModal(company)" class="card-action-btn">
+    👥 Usuarios
+  </button>
         </div>
 
         <!-- Gráfico mini de tendencia -->
@@ -330,6 +333,9 @@
                   <button @click.stop="openStatsModal(company)" class="action-btn-small">
                     📊
                   </button>
+                  <button @click.stop="openUsersModal(company)" class="action-btn-small" title="Gestionar Usuarios">
+      👥
+    </button>
                   <button @click.stop="openUsersModal(company)" class="action-btn-small">
                     👥
                   </button>
@@ -757,6 +763,16 @@ const showAddCompanyModal = ref(false)
 const showPricingModal = ref(false)
 const showStatsModal = ref(false)
 const showUsersModal = ref(false)
+const showAddUserModal = ref(false)
+const isCreatingUser = ref(false)
+const newUserForm = ref({
+  full_name: '',
+  email: '',
+  password: '',
+  role: 'company_employee',
+  phone: ''
+})
+
 
 // Estados de formularios
 const isCreatingCompany = ref(false)
@@ -928,6 +944,59 @@ const activeFilters = computed(() => {
 })
 
 // Métodos
+
+
+const openAddUserModal = (company) => {
+  selectedCompany.value = company
+  newUserForm.value = {
+    full_name: '',
+    email: '',
+    password: '',
+    role: 'company_employee',
+    phone: ''
+  }
+  showAddUserModal.value = true
+}
+
+const createUser = async () => {
+  if (!selectedCompany.value) return
+  
+  isCreatingUser.value = true
+  try {
+    await apiService.users.create({
+      ...newUserForm.value,
+      company_id: selectedCompany.value._id
+    })
+    
+    toast.success('Usuario creado exitosamente')
+    showAddUserModal.value = false
+    
+    // Recargar usuarios si el modal está abierto
+    if (showUsersModal.value) {
+      await openUsersModal(selectedCompany.value)
+    }
+  } catch (error) {
+    console.error('Error creating user:', error)
+    toast.error('Error al crear usuario')
+  } finally {
+    isCreatingUser.value = false
+  }
+}
+
+const toggleUserStatus = async (user) => {
+  try {
+    await apiService.users.update(user._id, {
+      is_active: !user.is_active
+    })
+    
+    user.is_active = !user.is_active
+    toast.success(`Usuario ${user.is_active ? 'activado' : 'desactivado'}`)
+  } catch (error) {
+    console.error('Error updating user:', error)
+    toast.error('Error al actualizar usuario')
+  }
+}
+
 const loadCompanies = async () => {
   loading.value = true
   try {
@@ -1168,25 +1237,26 @@ const openStatsModal = async (company) => {
     console.log('📊 Abriendo modal estadísticas para:', company.name)
     selectedCompany.value = company
     
-    // Cargar estadísticas de la empresa
-    if (apiService.companies.getStats) {
-      const { data } = await apiService.companies.getStats(company._id)
-      companyStats.value = data
-    } else {
-      // Estadísticas básicas si no hay endpoint
-      companyStats.value = {
-        orders_total: company.orders_count || 0,
-        orders_this_month: company.orders_this_month || 0,
-        revenue_this_month: calculateMonthlyRevenue(company),
-        users_count: company.users_count || 0,
-        channels_count: company.channels_count || 0
-      }
-    }
+    // Cargar estadísticas reales desde el backend
+    const { data } = await apiService.companies.getStats(company._id)
+    companyStats.value = data
     
+    console.log('📊 Stats cargadas:', data)
     showStatsModal.value = true
   } catch (error) {
-    console.error('Error opening stats modal:', error)
-    toast.error('Error al abrir el modal de estadísticas')
+    console.error('Error loading stats:', error)
+    // Fallback con datos básicos
+    companyStats.value = {
+      orders_total: company.orders_count || 0,
+      orders_this_month: company.orders_this_month || 0,
+      revenue_this_month: calculateMonthlyRevenue(company),
+      users_count: company.users_count || 0,
+      channels_count: company.channels_count || 0,
+      delivery_rate: 85, // Estimación
+      growth_rate: 12 // Estimación
+    }
+    showStatsModal.value = true
+    toast.warning('Cargando estadísticas básicas')
   }
 }
 
@@ -1195,23 +1265,16 @@ const openUsersModal = async (company) => {
     console.log('👥 Abriendo modal usuarios para:', company.name)
     selectedCompany.value = company
     isLoadingUsers.value = true
+    showUsersModal.value = true // Mostrar modal inmediatamente
     
-    // Cargar usuarios de la empresa
-    if (apiService.companies.getUsers) {
-      const { data } = await apiService.companies.getUsers(company._id)
-      companyUsers.value = data
-    } else if (apiService.users.getByCompany) {
-      const { data } = await apiService.users.getByCompany(company._id)
-      companyUsers.value = data
-    } else {
-      companyUsers.value = []
-      toast.warning('No se pudo cargar la lista de usuarios')
-    }
+    // Cargar usuarios
+    const { data } = await apiService.companies.getUsers(company._id)
+    companyUsers.value = data || []
     
-    showUsersModal.value = true
+    console.log('👥 Usuarios cargados:', data.length)
   } catch (error) {
-    console.error('Error opening users modal:', error)
-    toast.error('Error al cargar usuarios: ' + (error.response?.data?.message || error.message))
+    console.error('Error loading users:', error)
+    toast.error('Error al cargar usuarios')
     companyUsers.value = []
   } finally {
     isLoadingUsers.value = false

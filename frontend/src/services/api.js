@@ -73,9 +73,10 @@ const companies = {
 }
 
 const users = {
-  getByCompany: (companyId) => api.get(`/users/company/${companyId}`),
-  create: (userData) => api.post('/auth/register', userData),
-  updateUser: (id, userData) => api.patch(`/users/${id}`, userData)
+  getByCompany: (companyId) => api.get(`/companies/${companyId}/users`),
+  create: (userData) => api.post('/users', userData),
+  update: (id, userData) => api.put(`/users/${id}`, userData),
+  delete: (id) => api.delete(`/users/${id}`)
 }
 
 // Servicios de pedidos

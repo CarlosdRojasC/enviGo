@@ -219,70 +219,61 @@ if (!name || !finalEmail) {
   }
 
   // Estadísticas de la empresa
-  async getStats(req, res) {
-    try {
-      const { id } = req.params;
-      let { month, year } = req.query;
-
-      if (req.user.role !== 'admin' && req.user.company_id.toString() !== id) {
-        return res.status(403).json({ error: ERRORS.FORBIDDEN });
-      }
-
-      month = parseInt(month) || (new Date().getMonth() + 1);
-      year = parseInt(year) || new Date().getFullYear();
-
-      // Rango fechas para filtro
-      const startDate = new Date(year, month - 1, 1);
-      const endDate = new Date(year, month, 1);
-
-      // Agregamos el pipeline para obtener estadísticas agrupadas
-      const stats = await Order.aggregate([
-        {
-          $match: {
-            company_id: id,
-            order_date: { $gte: startDate, $lt: endDate }
-          }
-        },
-        {
-          $group: {
-            _id: null,
-            total_orders: { $sum: 1 },
-            pending_orders: { $sum: { $cond: [{ $eq: ['$status', 'pending'] }, 1, 0] } },
-            processing_orders: { $sum: { $cond: [{ $eq: ['$status', 'processing'] }, 1, 0] } },
-            shipped_orders: { $sum: { $cond: [{ $eq: ['$status', 'shipped'] }, 1, 0] } },
-            delivered_orders: { $sum: { $cond: [{ $eq: ['$status', 'delivered'] }, 1, 0] } },
-            cancelled_orders: { $sum: { $cond: [{ $eq: ['$status', 'cancelled'] }, 1, 0] } },
-            total_revenue: { $sum: '$total_amount' },
-            average_order_value: { $avg: '$total_amount' }
-          }
-        }
-      ]);
-
-      const company = await Company.findById(id);
-
-      const statsResult = stats[0] || {
-        total_orders: 0,
-        pending_orders: 0,
-        processing_orders: 0,
-        shipped_orders: 0,
-        delivered_orders: 0,
-        cancelled_orders: 0,
-        total_revenue: 0,
-        average_order_value: 0
-      };
-
-      res.json({
-        month,
-        year,
-        ...statsResult,
-        price_per_order: company.price_per_order,
-        estimated_invoice: statsResult.delivered_orders * company.price_per_order
-      });
-    } catch (error) {
-      console.error('Error obteniendo estadísticas:', error);
-      res.status(500).json({ error: ERRORS.SERVER_ERROR });
+async getStats(req, res) {
+  try {
+    const { id } = req.params;
+    
+    if (req.user.role !== 'admin' && req.user.company_id.toString() !== id) {
+      return res.status(403).json({ error: ERRORS.FORBIDDEN });
     }
+
+    const company = await Company.findById(id);
+    if (!company) return res.status(404).json({ error: 'Empresa no encontrada' });
+
+    // Calcular estadísticas
+    const now = new Date();
+    const thisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+
+    const [
+      ordersTotal,
+      ordersThisMonth,
+      ordersLastMonth,
+      deliveredOrders,
+      usersCount,
+      channelsCount
+    ] = await Promise.all([
+      Order.countDocuments({ company_id: id }),
+      Order.countDocuments({ company_id: id, order_date: { $gte: thisMonth } }),
+      Order.countDocuments({ company_id: id, order_date: { $gte: lastMonth, $lt: thisMonth } }),
+      Order.countDocuments({ company_id: id, status: 'delivered' }),
+      User.countDocuments({ company_id: id, is_active: true }),
+      Channel.countDocuments({ company_id: id, is_active: true })
+    ]);
+
+    // Calcular revenue
+    const revenueThisMonth = ordersThisMonth * (company.price_per_order || 0);
+    const revenueTotal = ordersTotal * (company.price_per_order || 0);
+
+    const stats = {
+      orders_total: ordersTotal,
+      orders_this_month: ordersThisMonth,
+      orders_last_month: ordersLastMonth,
+      delivered_orders: deliveredOrders,
+      revenue_this_month: Math.round(revenueThisMonth * 1.19), // Con IVA
+      revenue_total: Math.round(revenueTotal * 1.19),
+      users_count: usersCount,
+      channels_count: channelsCount,
+      delivery_rate: ordersTotal > 0 ? Math.round((deliveredOrders / ordersTotal) * 100) : 0,
+      growth_rate: ordersLastMonth > 0 ? Math.round(((ordersThisMonth - ordersLastMonth) / ordersLastMonth) * 100) : 0
+    };
+
+    res.json(stats);
+  } catch (error) {
+    console.error('Error obteniendo estadísticas:', error);
+    res.status(500).json({ error: ERRORS.SERVER_ERROR });
   }
+}
 }
 
 module.exports = new CompanyController();
