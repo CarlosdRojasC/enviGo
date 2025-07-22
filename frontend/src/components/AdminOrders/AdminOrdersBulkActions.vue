@@ -70,7 +70,13 @@
                 <span class="item-icon">📦</span>
                 <span class="item-text">Listo para Recoger</span>
               </button>
-              
+              <button 
+                @click="$emit('bulk-status-change', 'warehouse_received')"
+                class="dropdown-item"
+              >
+                <span class="item-icon">🏭</span>
+                <span class="item-text">Marcar como Recibido</span>
+              </button>
               <button 
                 @click="$emit('bulk-status-change', 'shipped')"
                 class="dropdown-item"
