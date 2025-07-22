@@ -8,7 +8,7 @@ const rateLimit = require('express-rate-limit');
 const routes = require('./routes');
 const connectDB = require('./config/database');
 const WebSocketService = require('./services/websocket.service'); // ← AGREGAR ESTA LÍNEA
-
+const SyncSchedulerService = require('./services/sync.service'); // ← AGREGAR ESTA LÍNEA
 const app = express();
 const server = http.createServer(app); // ← AGREGAR ESTA LÍNEA
 const PORT = process.env.PORT || 3001;
@@ -16,6 +16,7 @@ const PORT = process.env.PORT || 3001;
 // --- INICIALIZAR WEBSOCKET ---
 const wsService = new WebSocketService(server); // ← AGREGAR
 global.wsService = wsService; // ← AGREGAR
+let syncSchedulerInitialized = false;
 
 // --- AÑADE ESTA LÍNEA AQUÍ ---
 app.set('trust proxy', 1); // Confía en el primer proxy (el de Render)
@@ -49,6 +50,21 @@ const corsOptions = {
   credentials: true // Permite que el frontend envíe cookies o tokens de autorización
 };
 
+async function initializeSyncScheduler() {
+  if (syncSchedulerInitialized) return;
+  
+  try {
+    console.log('🚀 Inicializando Sync Scheduler...');
+    await SyncSchedulerService.initialize();
+    syncSchedulerInitialized = true;
+    console.log('✅ Sync Scheduler inicializado correctamente');
+  } catch (error) {
+    console.error('❌ Error inicializando Sync Scheduler:', error);
+    // Reintentar en 30 segundos
+    setTimeout(initializeSyncScheduler, 30000);
+  }
+}
+
 app.use(cors(corsOptions));
 
 app.set('trust proxy', 1); // Esto es para que express-rate-limit funcione correctamente en Render
@@ -77,13 +93,29 @@ if (process.env.NODE_ENV === 'development') {
 }
 
 // Health check
-app.get('/health', (req, res) => {
-  res.json({ 
-    status: 'OK', 
-    timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV,
-    version: '1.0.0'
-  });
+app.get('/health', async (req, res) => {
+  try {
+    const syncStats = SyncSchedulerService.getStats();
+    
+    res.json({ 
+      status: 'OK', 
+      timestamp: new Date().toISOString(),
+      services: {
+        database: 'connected',
+        websocket: global.wsService ? 'active' : 'inactive',
+        sync_scheduler: {
+          running: syncStats.isRunning,
+          uptime: syncStats.uptime
+        }
+      }
+    });
+  } catch (error) {
+    res.status(503).json({ 
+      status: 'ERROR', 
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
 });
 
 // ← AGREGAR ESTAS RUTAS WEBSOCKET
@@ -302,6 +334,102 @@ app.post('/api/test-multiple-orders', (req, res) => {
   }
 });
 
+app.get('/api/admin/sync/status', async (req, res) => {
+  try {
+    const stats = SyncSchedulerService.getStats();
+    const upcomingSyncs = await SyncSchedulerService.getUpcomingSyncs();
+    
+    res.json({
+      scheduler: stats,
+      upcoming_syncs: upcomingSyncs.slice(0, 10) // Solo los próximos 10
+    });
+  } catch (error) {
+    console.error('❌ Error obteniendo estado sync:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Endpoint para forzar sincronización de todos los canales
+app.post('/api/admin/sync/force-all', async (req, res) => {
+  try {
+    console.log('🚀 Forzando sincronización de todos los canales...');
+    
+    const results = await SyncSchedulerService.forceSyncAll();
+    
+    res.json({ 
+      success: true, 
+      message: 'Sincronización forzada iniciada',
+      results: results 
+    });
+  } catch (error) {
+    console.error('❌ Error en sincronización forzada:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: error.message 
+    });
+  }
+});
+
+// Endpoint para forzar sincronización de un canal específico
+app.post('/api/admin/sync/force/:channelId', async (req, res) => {
+  try {
+    const { channelId } = req.params;
+    console.log(`🚀 Forzando sincronización del canal ${channelId}...`);
+    
+    const result = await SyncSchedulerService.syncChannelById(channelId);
+    
+    res.json({ 
+      success: true, 
+      message: 'Sincronización del canal completada',
+      result: result 
+    });
+  } catch (error) {
+    console.error('❌ Error sincronizando canal:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: error.message 
+    });
+  }
+});
+
+// Endpoint para reiniciar el sync scheduler
+app.post('/api/admin/sync/restart', async (req, res) => {
+  try {
+    console.log('🔄 Reiniciando Sync Scheduler...');
+    
+    await SyncSchedulerService.restart();
+    
+    res.json({ 
+      success: true, 
+      message: 'Sync Scheduler reiniciado exitosamente' 
+    });
+  } catch (error) {
+    console.error('❌ Error reiniciando Sync Scheduler:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: error.message 
+    });
+  }
+});
+
+// Endpoint para obtener próximas sincronizaciones
+app.get('/api/admin/sync/upcoming', async (req, res) => {
+  try {
+    const upcomingSyncs = await SyncSchedulerService.getUpcomingSyncs();
+    
+    res.json({ 
+      success: true,
+      data: upcomingSyncs 
+    });
+  } catch (error) {
+    console.error('❌ Error obteniendo próximas sincronizaciones:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: error.message 
+    });
+  }
+});
+
 // Rutas API
 app.use('/api', routes);
 
@@ -329,20 +457,30 @@ const startServer = async () => {
   try {
     await connectDB();  // <-- conecta a MongoDB
     
-    // ← CAMBIAR app.listen por server.listen
+    // 🆕 AGREGAR: Inicializar sync scheduler después de DB
+    console.log('🔄 Inicializando sistema de sincronización automática...');
+    setTimeout(async () => {
+      try {
+        await SyncSchedulerService.initialize();
+        console.log('✅ Sistema de sincronización automática iniciado');
+      } catch (error) {
+        console.error('❌ Error inicializando sync scheduler:', error);
+      }
+    }, 3000); // Esperar 3 segundos después de conectar DB
+    
     server.listen(PORT, '0.0.0.0', () => {
       console.log(`🚀 Servidor corriendo en http://localhost:${PORT}`);
-      console.log(`🔗 WebSocket disponible en ws://localhost:${PORT}/ws`); // ← AGREGAR
+      console.log(`🔗 WebSocket disponible en ws://localhost:${PORT}/ws`);
       console.log(`📊 Ambiente: ${process.env.NODE_ENV}`);
       console.log(`🔐 JWT configurado: ${process.env.JWT_SECRET ? 'Sí' : 'No'}`);
-      console.log(`📊 WebSocket Stats: http://localhost:${PORT}/api/ws-stats`); // ← AGREGAR
+      console.log(`📊 WebSocket Stats: http://localhost:${PORT}/api/ws-stats`);
+      console.log(`🤖 Auto-sync habilitado: Sí`); // 🆕 AGREGAR ESTA LÍNEA
     });
   } catch (error) {
     console.error('❌ Error al iniciar:', error);
     process.exit(1);
   }
 };
-
 // Manejo de señales para cierre graceful
 process.on('SIGTERM', () => {
   console.log('SIGTERM recibido, cerrando servidor...');

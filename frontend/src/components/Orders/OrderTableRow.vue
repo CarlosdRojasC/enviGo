@@ -311,6 +311,7 @@ const rowClasses = computed(() => {
   if (props.order.status === 'delivered') classes.push('delivered-row')
   if (props.order.status === 'shipped') classes.push('shipped-row')
   if (props.order.shipday_tracking_url) classes.push('live-tracking-row')
+  if (props.order.status === 'warehouse_received') classes.push('warehouse-received-row')
   if (isUrgent.value) classes.push('urgent-row')
   
   return classes.join(' ')
@@ -421,7 +422,8 @@ function getStatusIcon(status) {
     ready_for_pickup: '📦',
     shipped: '🚚',
     delivered: '✅',
-    cancelled: '❌'
+    cancelled: '❌',
+    warehouse_received: '🏭'
   }
   return icons[status] || '📦'
 }
@@ -433,7 +435,8 @@ function getStatusName(status) {
     ready_for_pickup: 'Listo',
     shipped: 'En Tránsito',
     delivered: 'Entregado',
-    cancelled: 'Cancelado'
+    cancelled: 'Cancelado',
+    warehouse_received: 'Recibido en Bodega'
   }
   return names[status] || status
 }
@@ -486,6 +489,9 @@ function shareOrder() {
 
 .order-row.shipped-row {
   background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+}
+.order-row.warehouse-received-row {
+  background: linear-gradient(135deg, #f3e8ff 0%, #ede9fe 100%);
 }
 
 .order-row.live-tracking-row {
