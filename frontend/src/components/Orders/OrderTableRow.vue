@@ -665,7 +665,12 @@ function shareOrder() {
 .status-shipped { background: #e9d5ff; color: #6b21a8; }
 .status-delivered { background: #d1fae5; color: #065f46; }
 .status-cancelled { background: #fee2e2; color: #991b1b; }
-.status-w
+.status-warehouse_received { background: linear-gradient(135deg, #6f42c1, #8e44ad); 
+  color: white; 
+  font-weight: 600; 
+  text-transform: uppercase; 
+  letter-spacing: 0.5px;
+}
 .status-icon {
   font-size: 12px;
 }
