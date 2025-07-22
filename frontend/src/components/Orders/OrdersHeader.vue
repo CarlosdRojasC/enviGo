@@ -76,8 +76,8 @@
           <span class="stat-label">En Bodega</span>
         </div>
         <div class="stat-content">
-          <span class="stat-number">{{ formatNumber(stats.warehose_received) }}</span>
-          <span class="stat-percentage">{{ getPercentage(stats.warehose_received, stats.total) }}%</span>
+          <span class="stat-number">{{ formatNumber(stats.warehouse_received) }}</span>
+          <span class="stat-percentage">{{ getPercentage(stats.warehouse_received, stats.total) }}%</span>
         </div>
       </div>
       <div class="stat-card" :class="getStatusClass('shipped')">
