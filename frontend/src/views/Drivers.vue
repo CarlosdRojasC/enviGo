@@ -1,247 +1,51 @@
 <template>
-  <div class="drivers-management">
+  <div class="drivers-page">
     <div class="page-header">
-      <div class="header-content">
-        <h1>Gestión de Conductores</h1>
-        <p>Administra conductores de la plataforma</p>
-      </div>
-      <button @click="showCreateForm = true" class="btn-primary">
-        <i class="icon-plus"></i>
-        Agregar Conductor
-      </button>
+      <h1 class="page-title">Gestión de Conductores</h1>
+      <button @click="showAddDriverModal = true" class="btn-primary">+ Agregar Conductor</button>
     </div>
 
-    <!-- Filtros y búsqueda -->
-    <div class="filters-section">
-      <div class="search-box">
-        <i class="icon-search"></i>
-        <input
-          v-model="searchQuery"
-          type="text"
-          placeholder="Buscar por nombre, email o teléfono..."
-          class="search-input"
-        />
-      </div>
-      
-      <div class="filters">
-        <select v-model="statusFilter" class="filter-select">
-          <option value="">Todos los estados</option>
-          <option value="active">Activos</option>
-          <option value="inactive">Inactivos</option>
-          <option value="working">Trabajando</option>
-          <option value="available">Disponibles</option>
-        </select>
-        
-        <select v-model="vehicleFilter" class="filter-select">
-          <option value="">Todos los vehículos</option>
-          <option value="car">Auto</option>
-          <option value="motorcycle">Moto</option>
-          <option value="bicycle">Bicicleta</option>
-          <option value="truck">Camión</option>
-          <option value="van">Van</option>
-        </select>
-      </div>
-    </div>
-
-    <!-- Estadísticas -->
-    <div class="stats-grid">
-      <div class="stat-card">
-        <div class="stat-icon active">👥</div>
-        <div>
-          <div class="stat-value">{{ driverStats.total }}</div>
-          <div class="stat-label">Total Conductores</div>
-        </div>
-      </div>
-      
-      <div class="stat-card">
-        <div class="stat-icon available">✅</div>
-        <div>
-          <div class="stat-value">{{ driverStats.active }}</div>
-          <div class="stat-label">Activos</div>
-        </div>
-      </div>
-      
-      <div class="stat-card">
-        <div class="stat-icon working">🚗</div>
-        <div>
-          <div class="stat-value">{{ driverStats.working }}</div>
-          <div class="stat-label">En Servicio</div>
-        </div>
-      </div>
-      
-      <div class="stat-card">
-        <div class="stat-icon inactive">😴</div>
-        <div>
-          <div class="stat-value">{{ driverStats.inactive }}</div>
-          <div class="stat-label">Inactivos</div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Loading -->
-    <div v-if="loading" class="loading-container">
-      <div class="loading-spinner"></div>
-      <p>Cargando conductores...</p>
-    </div>
-
-    <!-- Lista de conductores -->
-    <div v-else-if="filteredDriversList.length > 0" class="drivers-grid">
-      <div 
-        v-for="driver in filteredDriversList" 
-        :key="getDriverKey(driver)"
-        class="driver-card"
-      >
-        <!-- Status Badge -->
-        <div class="status-badge" :class="getDriverStatusClass(driver)">
-          {{ getDriverStatusText(driver) }}
-        </div>
-        
-        <!-- Driver Info -->
-        <div class="driver-info">
-          <div class="driver-avatar">
-            <img 
-              v-if="driver.profilePicture || driver.avatar"
-              :src="driver.profilePicture || driver.avatar"
-              :alt="getDriverDisplayName(driver)"
-              class="avatar-photo"
-              @error="onImageError"
-            />
-            <div class="avatar-initials">
-              {{ getDriverInitials(getDriverDisplayName(driver)) }}
-            </div>
-          </div>
-          
-          <div class="driver-details">
-            <h3>{{ getDriverDisplayName(driver) }}</h3>
-            <p>{{ getDriverDisplayEmail(driver) }}</p>
-            <p>{{ getDriverDisplayPhone(driver) }}</p>
-            <div class="driver-code">ID: {{ getDriverKey(driver) }}</div>
+    <div v-if="loading" class="loading-container">Cargando conductores...</div>
+    
+    <div v-else class="drivers-grid">
+      <div v-for="driver in drivers" :key="driver._id" class="driver-card">
+        <div class="driver-header">
+          <div class="driver-avatar">{{ driver.full_name.charAt(0) }}</div>
+          <div class="driver-info">
+            <h3 class="driver-name">{{ driver.full_name }}</h3>
+            <p class="driver-phone">{{ driver.phone }}</p>
           </div>
         </div>
-
-        <!-- Driver Meta -->
-        <div class="driver-meta">
-          <span class="vehicle-badge">
-            {{ getVehicleDisplayIcon(driver.vehicleType) }} {{ driver.vehicleType || 'No especificado' }}
-          </span>
-          
-          <span v-if="driver.plateNumber" class="plate-badge">
-            🚗 {{ driver.plateNumber }}
-          </span>
-          
-          <span 
-            v-if="driverHasLocation(driver)" 
-            class="location-badge"
-            @click="openDriverLocation(driver)"
-            style="cursor: pointer;"
-          >
-            📍 {{ formatDriverCoordinates(driver) }}
-          </span>
-        </div>
-
-        <!-- Driver Stats -->
         <div class="driver-stats">
           <div class="stat-item">
-            <span class="stat-value">{{ driver.totalDeliveries || 0 }}</span>
-            <span class="stat-label">Entregas</span>
+            <span class="stat-value">{{ driver.stats.deliveredThisMonth }}</span>
+            <span class="stat-label">Entregas (Mes)</span>
           </div>
           <div class="stat-item">
-            <span class="stat-value">{{ driver.rating || 'N/A' }}</span>
-            <span class="stat-label">Rating</span>
+            <span class="stat-value">{{ driver.stats.totalAssigned }}</span>
+            <span class="stat-label">Asignados (Total)</span>
           </div>
           <div class="stat-item">
-            <span class="stat-value">{{ driver.ordersAssigned || 0 }}</span>
-            <span class="stat-label">Asignadas</span>
+            <span class="stat-value">{{ driver.stats.issuesCount }}</span>
+            <span class="stat-label">Incidencias</span>
           </div>
         </div>
-
-        <!-- Actions -->
         <div class="driver-actions">
-          <!-- Toggle Status -->
-          <button
-            @click="toggleStatus(driver)"
-            :class="getToggleButtonClass(driver)"
-            :disabled="updatingStatus === getDriverKey(driver)"
-          >
-            {{ getToggleButtonText(driver) }}
-          </button>
-          
-          <!-- Edit -->
-          <button @click="startEdit(driver)" class="btn-edit">
-            ✏️
-          </button>
-          
-          <!-- Delete -->
-          <button @click="startDelete(driver)" class="btn-delete">
-            🗑️
-          </button>
-          
-          <!-- Assign Order -->
-          <button
-            v-if="canAssignOrders(driver)"
-            @click="startAssign(driver)"
-            class="btn-assign"
-          >
-            📦 Asignar
-          </button>
+          <button @click="editDriver(driver)" class="action-btn">Editar</button>
+          <button @click="deleteDriver(driver._id)" class="action-btn-danger">Eliminar</button>
         </div>
       </div>
     </div>
-
-    <!-- Empty State -->
-    <div v-else class="empty-state">
-      <div class="empty-icon">👥</div>
-      <h3>No hay conductores</h3>
-      <p>No se encontraron conductores con los filtros aplicados.</p>
-      <button @click="showCreateForm = true" class="btn-primary">
-        Agregar Primer Conductor
-      </button>
+    
     </div>
-
-    <!-- Modals -->
-    <!-- Create/Edit Driver Modal -->
-    <div v-if="showCreateForm || editingDriver" class="modal-overlay" @click="closeAllModals">
-      <div class="modal-content" @click.stop>
-        <DriverForm
-          :driver="editingDriver"
-          @success="onDriverSuccess"
-          @cancel="closeAllModals"
-        />
-      </div>
-    </div>
-
-    <!-- Delete Confirmation Modal -->
-    <div v-if="driverToDelete" class="modal-overlay" @click="cancelDelete">
-      <div class="modal-content delete-modal" @click.stop>
-        <div class="delete-icon">⚠️</div>
-        <h3>¿Eliminar Conductor?</h3>
-        <p>
-          ¿Estás seguro de que quieres eliminar a <strong>{{ getDriverDisplayName(driverToDelete) }}</strong>?
-          Esta acción no se puede deshacer.
-        </p>
-        <div class="delete-actions">
-          <button @click="cancelDelete" class="btn-cancel">Cancelar</button>
-          <button @click="confirmDelete" :disabled="deleting" class="btn-delete-confirm">
-            {{ deleting ? 'Eliminando...' : 'Eliminar' }}
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Toast Notifications -->
-    <div v-if="notification" class="toast" :class="notification.type">
-      <span>{{ notification.message }}</span>
-      <button @click="notification = null" class="toast-close">×</button>
-    </div>
-  </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import DriverForm from './DriverForm.vue'
 import { shipdayService } from '../services/shipday'
 
-// ===== ESTADO REACTIVO =====
+// Estado
 const drivers = ref([])
 const loading = ref(false)
 const searchQuery = ref('')
@@ -254,69 +58,257 @@ const deleting = ref(false)
 const updatingStatus = ref(null)
 const notification = ref(null)
 
-// ===== FUNCIONES HELPER (DECLARADAS ANTES DE SER USADAS) =====
+// Computed
+const filteredDrivers = computed(() => {
+  let filtered = drivers.value
 
-// Funciones para extraer datos seguros del driver
-function getDriverDisplayName(driver) {
-  if (!driver) return 'Sin nombre'
-  return driver.name || driver.full_name || driver.firstName || 'Sin nombre'
-}
+  // Filtro de búsqueda
+  if (searchQuery.value) {
+    const query = searchQuery.value.toLowerCase()
+    filtered = filtered.filter(driver => 
+      driver.name?.toLowerCase().includes(query) ||
+      driver.email?.toLowerCase().includes(query) ||
+      driver.phone?.includes(query) ||
+      driver.phoneNumber?.includes(query)
+    )
+  }
 
-function getDriverDisplayEmail(driver) {
-  if (!driver) return 'Sin email'
-  return driver.email || 'Sin email'
-}
+  // Filtro de estado basado en campos reales de ShipDay
+  if (statusFilter.value) {
+    filtered = filtered.filter(driver => {
+      switch (statusFilter.value) {
+        case 'active':
+          return driver.isActive === true
+        case 'inactive':
+          return driver.isActive === false
+        case 'working':
+          return driver.isActive === true && driver.isOnShift === true
+        case 'available':
+          return driver.isActive === true && driver.isOnShift === false
+        default:
+          return true
+      }
+    })
+  }
 
-function getDriverDisplayPhone(driver) {
-  if (!driver) return 'Sin teléfono'
-  return driver.phone || driver.phoneNumber || driver.mobile || 'Sin teléfono'
-}
+  // Filtro de vehículo
+  if (vehicleFilter.value) {
+    filtered = filtered.filter(driver => driver.vehicle_type === vehicleFilter.value)
+  }
 
-function getDriverKey(driver) {
-  if (!driver) return 'unknown'
-  return driver.email || driver.id || driver._id || 'unknown'
-}
+  return filtered
+})
 
-// Función para generar iniciales de forma segura
-function getDriverInitials(name) {
-  if (!name || typeof name !== 'string') return '??'
+const stats = computed(() => {
+  const total = drivers.value.length
   
-  const cleanName = name.trim()
-  if (cleanName.length === 0) return '??'
-  
-  const words = cleanName.split(' ').filter(word => word.length > 0)
-  
-  if (words.length === 0) return '??'
-  if (words.length === 1) return words[0].charAt(0).toUpperCase()
-  
-  return (words[0].charAt(0) + words[1].charAt(0)).toUpperCase()
+  // Contar basándose en los campos directos de ShipDay
+  const active = drivers.value.filter(d => d.isActive === true).length
+  const inactive = drivers.value.filter(d => d.isActive === false).length
+  const working = drivers.value.filter(d => d.isActive === true && d.isOnShift === true).length
+  const available = drivers.value.filter(d => d.isActive === true && d.isOnShift === false).length
+
+  console.log('📊 Stats calculadas:', { 
+    total, 
+    active, 
+    inactive, 
+    working, 
+    available,
+    // Debug: mostrar algunos conductores para verificar
+    sampleDrivers: drivers.value.slice(0, 3).map(d => ({
+      name: d.name,
+      isActive: d.isActive,
+      isOnShift: d.isOnShift,
+      status: d.status
+    }))
+  });
+
+  return { total, active, available, working, inactive }
+})
+
+// Lifecycle
+onMounted(() => {
+  loadDrivers()
+})
+
+// Métodos
+const loadDrivers = async () => {
+  loading.value = true
+  try {
+    const response = await shipdayService.getDrivers()
+    const rawData = response.data?.data || response.data || response
+    
+    console.log('🔍 Datos raw de conductores:', rawData);
+    
+    // Asegurar que tenemos el status calculado correctamente
+    drivers.value = rawData.map(driver => ({
+      ...driver,
+      // Asegurar que tenemos los campos calculados
+      status: calculateStatus(driver),
+      // Asegurar campos booleanos
+      isActive: Boolean(driver.isActive),
+      isOnShift: Boolean(driver.isOnShift)
+    }));
+    
+    console.log('✅ Conductores procesados:', drivers.value.length);
+    console.log('📋 Primer conductor:', drivers.value[0]);
+    
+  } catch (error) {
+    console.error('❌ Error cargando conductores:', error)
+    showNotification('Error al cargar conductores', 'error')
+  } finally {
+    loading.value = false
+  }
 }
 
-// Funciones de estado del driver
-function calculateDriverStatus(driver) {
-  if (!driver) return 'inactive'
+// Función helper para calcular status
+const calculateStatus = (driver) => {
   if (!driver.isActive) return 'inactive'
   if (driver.isOnShift) return 'working'
   return 'available'
 }
 
-function getDriverStatusClass(driver) {
-  const status = calculateDriverStatus(driver)
-  return `status-${status}`
+const editDriver = (driver) => {
+  editingDriver.value = { ...driver }
 }
 
-function getDriverStatusText(driver) {
-  const status = calculateDriverStatus(driver)
-  const statusTexts = {
-    'inactive': 'Inactivo',
-    'working': 'En Turno',
-    'available': 'Disponible'
+const confirmDelete = (driver) => {
+  driverToDelete.value = driver
+}
+
+const deleteDriver = async () => {
+  if (!driverToDelete.value) return
+
+  deleting.value = true
+  try {
+    await shipdayService.deleteDriver(driverToDelete.value.email)
+    
+    // Remover de la lista local
+    drivers.value = drivers.value.filter(d => d.email !== driverToDelete.value.email)
+    
+    showNotification('Conductor eliminado exitosamente', 'success')
+    closeDeleteModal()
+  } catch (error) {
+    console.error('❌ Error eliminando conductor:', error)
+    showNotification('Error al eliminar conductor', 'error')
+  } finally {
+    deleting.value = false
   }
-  return statusTexts[status] || 'Desconocido'
 }
 
-// Funciones de vehículo
-function getVehicleDisplayIcon(type) {
+const toggleDriverStatus = async (driver) => {
+  updatingStatus.value = driver.email
+  try {
+    const newStatus = !driver.isActive
+    await shipdayService.updateDriver(driver.email, {
+      ...driver,
+      isActive: newStatus
+    })
+    
+    // Actualizar en la lista local
+    const index = drivers.value.findIndex(d => d.email === driver.email)
+    if (index !== -1) {
+      drivers.value[index].isActive = newStatus
+      drivers.value[index].status = newStatus ? 'available' : 'inactive'
+    }
+    
+    showNotification(
+      `Conductor ${newStatus ? 'activado' : 'desactivado'} exitosamente`,
+      'success'
+    )
+  } catch (error) {
+    console.error('❌ Error actualizando estado:', error)
+    showNotification('Error al actualizar estado del conductor', 'error')
+  } finally {
+    updatingStatus.value = null
+  }
+}
+
+const assignOrder = (driver) => {
+  // TODO: Implementar asignación de órdenes
+  console.log('Asignar orden a:', driver)
+  showNotification('Función de asignación en desarrollo', 'info')
+}
+
+const handleDriverSuccess = (event) => {
+  if (editingDriver.value) {
+    // Actualizar conductor existente
+    const index = drivers.value.findIndex(d => d.email === editingDriver.value.email)
+    if (index !== -1) {
+      drivers.value[index] = { ...event.driver }
+    }
+  } else {
+    // Agregar nuevo conductor
+    drivers.value.push(event.driver)
+  }
+  
+  showNotification(event.message, 'success')
+  closeModals()
+}
+
+const closeModals = () => {
+  showCreateForm.value = false
+  editingDriver.value = null
+}
+
+const closeDeleteModal = () => {
+  driverToDelete.value = null
+}
+
+const showNotification = (message, type = 'info') => {
+  notification.value = { message, type }
+  setTimeout(() => {
+    notification.value = null
+  }, 5000)
+}
+
+const showLocation = (driver) => {
+  const lat = driver.carrrierLocationLat || driver.location?.lat
+  const lng = driver.carrrierLocationLng || driver.location?.lng
+  
+  if (lat && lng) {
+    const googleMapsUrl = `https://www.google.com/maps?q=${lat},${lng}&zoom=15`
+    window.open(googleMapsUrl, '_blank')
+  } else {
+    showNotification('Ubicación no disponible', 'info')
+  }
+}
+
+const hasLocation = (driver) => {
+  return (driver.carrrierLocationLat && driver.carrrierLocationLng) || 
+         (driver.location?.lat && driver.location?.lng)
+}
+
+const formatCoordinates = (lat, lng) => {
+  if (!lat || !lng) return 'N/A'
+  return `${parseFloat(lat).toFixed(4)}, ${parseFloat(lng).toFixed(4)}`
+}
+
+const handleImageError = (event) => {
+  // Si la imagen falla al cargar, ocultar la imagen y mostrar iniciales
+  event.target.style.display = 'none'
+  event.target.nextElementSibling.style.display = 'flex'
+}
+
+// Helper functions actualizadas para ShipDay
+const getStatusClass = (driver) => {
+  if (!driver.isActive) return 'status-inactive'
+  if (driver.isOnShift) return 'status-working'
+  return 'status-available'
+}
+
+const getStatusText = (driver) => {
+  if (!driver.isActive) return 'Inactivo'
+  if (driver.isOnShift) return 'En Turno'
+  return 'Disponible'
+}
+
+// Helper functions
+const getInitials = (name) => {
+  return name?.split(' ').map(n => n[0]).join('').toUpperCase() || '??'
+}
+
+const getVehicleIcon = (type) => {
   const icons = {
     car: '🚗',
     motorcycle: '🏍️',
@@ -326,258 +318,6 @@ function getVehicleDisplayIcon(type) {
   }
   return icons[type] || '🚗'
 }
-
-// Funciones de ubicación
-function driverHasLocation(driver) {
-  if (!driver) return false
-  return (driver.carrrierLocationLat && driver.carrrierLocationLng) || 
-         (driver.location?.lat && driver.location?.lng)
-}
-
-function formatDriverCoordinates(driver) {
-  if (!driver) return 'N/A'
-  
-  const lat = driver.carrrierLocationLat || driver.location?.lat
-  const lng = driver.carrrierLocationLng || driver.location?.lng
-  
-  if (!lat || !lng) return 'N/A'
-  return `${parseFloat(lat).toFixed(4)}, ${parseFloat(lng).toFixed(4)}`
-}
-
-// Funciones de UI
-function getToggleButtonClass(driver) {
-  const baseClass = 'btn-status'
-  const statusClass = driver?.isActive ? 'btn-deactivate' : 'btn-activate'
-  return `${baseClass} ${statusClass}`
-}
-
-function getToggleButtonText(driver) {
-  const driverKey = getDriverKey(driver)
-  if (updatingStatus.value === driverKey) return '...'
-  return driver?.isActive ? 'Desactivar' : 'Activar'
-}
-
-function canAssignOrders(driver) {
-  return driver?.isActive && !driver?.isOnShift
-}
-
-// ===== COMPUTED PROPERTIES =====
-const filteredDriversList = computed(() => {
-  let filtered = [...drivers.value]
-
-  // Filtro de búsqueda
-  if (searchQuery.value) {
-    const query = searchQuery.value.toLowerCase()
-    filtered = filtered.filter(driver => {
-      const name = getDriverDisplayName(driver).toLowerCase()
-      const email = getDriverDisplayEmail(driver).toLowerCase()
-      const phone = getDriverDisplayPhone(driver)
-      
-      return name.includes(query) ||
-             email.includes(query) ||
-             phone.includes(query)
-    })
-  }
-
-  // Filtro de estado
-  if (statusFilter.value) {
-    filtered = filtered.filter(driver => {
-      const status = calculateDriverStatus(driver)
-      
-      switch (statusFilter.value) {
-        case 'active':
-          return driver.isActive === true
-        case 'inactive':
-          return driver.isActive === false
-        case 'working':
-          return status === 'working'
-        case 'available':
-          return status === 'available'
-        default:
-          return true
-      }
-    })
-  }
-
-  // Filtro de vehículo
-  if (vehicleFilter.value) {
-    filtered = filtered.filter(driver => 
-      driver.vehicleType === vehicleFilter.value
-    )
-  }
-
-  return filtered
-})
-
-const driverStats = computed(() => {
-  const total = drivers.value.length
-  const active = drivers.value.filter(d => d.isActive === true).length
-  const inactive = drivers.value.filter(d => d.isActive === false).length
-  const working = drivers.value.filter(d => {
-    const status = calculateDriverStatus(d)
-    return status === 'working'
-  }).length
-  const available = drivers.value.filter(d => {
-    const status = calculateDriverStatus(d)
-    return status === 'available'
-  }).length
-
-  return { total, active, available, working, inactive }
-})
-
-// ===== MÉTODOS PRINCIPALES =====
-async function loadDrivers() {
-  loading.value = true
-  try {
-    console.log('🔄 Cargando conductores...')
-    const response = await shipdayService.getDrivers()
-    const rawData = response.data?.data || response.data || response || []
-    
-    console.log('🔍 Datos raw de conductores:', rawData)
-    
-    // Procesar y normalizar datos
-    drivers.value = (Array.isArray(rawData) ? rawData : []).map(driver => ({
-      ...driver,
-      isActive: Boolean(driver.isActive),
-      isOnShift: Boolean(driver.isOnShift)
-    }))
-    
-    console.log('✅ Conductores procesados:', drivers.value.length)
-    
-  } catch (error) {
-    console.error('❌ Error cargando conductores:', error)
-    drivers.value = []
-    showNotificationMessage('Error al cargar conductores: ' + error.message, 'error')
-  } finally {
-    loading.value = false
-  }
-}
-
-// Métodos de UI
-function startEdit(driver) {
-  editingDriver.value = { ...driver }
-}
-
-function startDelete(driver) {
-  driverToDelete.value = driver
-}
-
-function startAssign(driver) {
-  console.log('Asignar orden a:', driver)
-  showNotificationMessage('Función de asignación en desarrollo', 'info')
-}
-
-async function toggleStatus(driver) {
-  const driverKey = getDriverKey(driver)
-  updatingStatus.value = driverKey
-  
-  try {
-    const newStatus = !driver.isActive
-    await shipdayService.updateDriver(driverKey, {
-      ...driver,
-      isActive: newStatus
-    })
-    
-    // Actualizar en la lista local
-    const index = drivers.value.findIndex(d => getDriverKey(d) === driverKey)
-    if (index !== -1) {
-      drivers.value[index].isActive = newStatus
-    }
-    
-    showNotificationMessage(
-      `Conductor ${newStatus ? 'activado' : 'desactivado'} exitosamente`,
-      'success'
-    )
-  } catch (error) {
-    console.error('❌ Error actualizando estado:', error)
-    showNotificationMessage('Error al actualizar estado del conductor: ' + error.message, 'error')
-  } finally {
-    updatingStatus.value = null
-  }
-}
-
-async function confirmDelete() {
-  if (!driverToDelete.value) return
-
-  deleting.value = true
-  try {
-    const driverKey = getDriverKey(driverToDelete.value)
-    await shipdayService.deleteDriver(driverKey)
-    
-    // Remover de la lista local
-    drivers.value = drivers.value.filter(d => 
-      getDriverKey(d) !== getDriverKey(driverToDelete.value)
-    )
-    
-    showNotificationMessage('Conductor eliminado exitosamente', 'success')
-    cancelDelete()
-  } catch (error) {
-    console.error('❌ Error eliminando conductor:', error)
-    showNotificationMessage('Error al eliminar conductor: ' + error.message, 'error')
-  } finally {
-    deleting.value = false
-  }
-}
-
-function onDriverSuccess(event) {
-  if (editingDriver.value) {
-    // Actualizar conductor existente
-    const index = drivers.value.findIndex(d => 
-      getDriverKey(d) === getDriverKey(editingDriver.value)
-    )
-    if (index !== -1) {
-      drivers.value[index] = { ...event.driver }
-    }
-  } else {
-    // Agregar nuevo conductor
-    drivers.value.push(event.driver)
-  }
-  
-  showNotificationMessage(event.message, 'success')
-  closeAllModals()
-}
-
-// Métodos de control de modales
-function closeAllModals() {
-  showCreateForm.value = false
-  editingDriver.value = null
-}
-
-function cancelDelete() {
-  driverToDelete.value = null
-}
-
-// Métodos de notificaciones
-function showNotificationMessage(message, type = 'info') {
-  notification.value = { message, type }
-  setTimeout(() => {
-    notification.value = null
-  }, 5000)
-}
-
-// Métodos de eventos
-function openDriverLocation(driver) {
-  const lat = driver.carrrierLocationLat || driver.location?.lat
-  const lng = driver.carrrierLocationLng || driver.location?.lng
-  
-  if (lat && lng) {
-    const googleMapsUrl = `https://www.google.com/maps?q=${lat},${lng}&zoom=15`
-    window.open(googleMapsUrl, '_blank')
-  } else {
-    showNotificationMessage('Ubicación no disponible', 'info')
-  }
-}
-
-function onImageError(event) {
-  // Si la imagen falla al cargar, ocultar la imagen y mostrar iniciales
-  event.target.style.display = 'none'
-  event.target.nextElementSibling.style.display = 'flex'
-}
-
-// ===== LIFECYCLE =====
-onMounted(() => {
-  loadDrivers()
-})
 </script>
 
 <style scoped>
@@ -698,38 +438,55 @@ onMounted(() => {
 
 .stat-icon.active { background: #dbeafe; }
 .stat-icon.available { background: #dcfce7; }
-.stat-icon.working { background: #fef3c7; }
-.stat-icon.inactive { background: #fee2e2; }
+.location-indicator {
+  margin-left: 8px;
+  font-size: 12px;
+  opacity: 0.7;
+}
 
-.stat-value {
+.btn-location {
+  background: #8b5cf6;
+  color: white;
+  padding: 6px 12px;
+  border: none;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-location:hover {
+  background: #7c3aed;
+}
+
+.stat-icon.working { background: #fef3c7; }
+.stat-icon.inactive { background: #f3f4f6; }
+
+.stat-number {
   font-size: 24px;
   font-weight: 700;
   color: #1f2937;
 }
 
 .stat-label {
+  color: #6b7280;
   font-size: 14px;
-  color: #6b7280;
 }
 
-/* Loading */
-.loading-container {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 64px 24px;
-  color: #6b7280;
+/* Loading & Empty States */
+.loading-state {
+  text-align: center;
+  padding: 64px 0;
 }
 
-.loading-spinner {
+.spinner {
   width: 40px;
   height: 40px;
-  border: 4px solid #f3f4f6;
+  border: 4px solid #e5e7eb;
   border-top: 4px solid #3b82f6;
   border-radius: 50%;
   animation: spin 1s linear infinite;
-  margin-bottom: 16px;
+  margin: 0 auto 16px;
 }
 
 @keyframes spin {
@@ -737,11 +494,9 @@ onMounted(() => {
   100% { transform: rotate(360deg); }
 }
 
-/* Empty state */
 .empty-state {
   text-align: center;
-  padding: 64px 24px;
-  color: #6b7280;
+  padding: 64px 0;
 }
 
 .empty-icon {
@@ -749,17 +504,11 @@ onMounted(() => {
   margin-bottom: 16px;
 }
 
-.empty-state h3 {
-  font-size: 20px;
-  margin-bottom: 8px;
-  color: #1f2937;
-}
-
 /* Drivers Grid */
 .drivers-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
-  gap: 24px;
+  gap: 20px;
 }
 
 .driver-card {
@@ -768,38 +517,56 @@ onMounted(() => {
   padding: 20px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   transition: transform 0.2s, box-shadow 0.2s;
-  position: relative;
+  border-left: 4px solid #e5e7eb;
 }
 
 .driver-card:hover {
   transform: translateY(-2px);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
-.status-badge {
-  position: absolute;
-  top: 16px;
-  right: 16px;
-  padding: 4px 12px;
-  border-radius: 20px;
+.driver-card.driver-available {
+  border-left-color: #10b981;
+}
+
+.driver-card.driver-working {
+  border-left-color: #f59e0b;
+}
+
+.driver-card.driver-inactive {
+  border-left-color: #ef4444;
+}
+
+/* Status */
+.status-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.status-dot.status-available {
+  background: #10b981;
+}
+
+.status-dot.status-working {
+  background: #f59e0b;
+}
+
+.status-dot.status-inactive {
+  background: #ef4444;
+}
+
+.status-text {
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 500;
   text-transform: uppercase;
-}
-
-.status-available {
-  background: #dcfce7;
-  color: #166534;
-}
-
-.status-working {
-  background: #fef3c7;
-  color: #92400e;
-}
-
-.status-inactive {
-  background: #fee2e2;
-  color: #dc2626;
 }
 
 /* Driver Info */
@@ -862,7 +629,6 @@ onMounted(() => {
   display: flex;
   gap: 8px;
   margin-top: 8px;
-  margin-bottom: 16px;
   flex-wrap: wrap;
 }
 
@@ -968,8 +734,7 @@ onMounted(() => {
 .modal-content {
   background: white;
   border-radius: 12px;
-  max-width: 500px;
-  width: 90%;
+  max-width: 90vw;
   max-height: 90vh;
   overflow-y: auto;
 }
@@ -977,6 +742,7 @@ onMounted(() => {
 .delete-modal {
   padding: 24px;
   text-align: center;
+  max-width: 400px;
 }
 
 .delete-icon {
@@ -992,10 +758,10 @@ onMounted(() => {
 }
 
 .btn-cancel {
-  background: #6b7280;
-  color: white;
-  border: none;
-  padding: 10px 20px;
+  background: #f3f4f6;
+  color: #374151;
+  border: 1px solid #d1d5db;
+  padding: 8px 16px;
   border-radius: 6px;
   cursor: pointer;
 }
@@ -1004,70 +770,60 @@ onMounted(() => {
   background: #ef4444;
   color: white;
   border: none;
-  padding: 10px 20px;
+  padding: 8px 16px;
   border-radius: 6px;
   cursor: pointer;
-  transition: background 0.2s;
 }
 
-/* Toast notifications */
+/* Toast */
 .toast {
   position: fixed;
   top: 20px;
   right: 20px;
-  background: white;
-  padding: 16px 20px;
+  padding: 12px 16px;
   border-radius: 8px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  color: white;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   z-index: 1001;
-  min-width: 300px;
-  animation: slideInRight 0.3s ease;
 }
 
-@keyframes slideInRight {
-  from {
-    transform: translateX(100%);
-    opacity: 0;
-  }
-  to {
-    transform: translateX(0);
-    opacity: 1;
-  }
-}
-
-.toast.success {
-  border-left: 4px solid #10b981;
-}
-
-.toast.error {
-  border-left: 4px solid #ef4444;
-}
-
-.toast.info {
-  border-left: 4px solid #3b82f6;
-}
-
-.toast.warning {
-  border-left: 4px solid #f59e0b;
-}
+.toast.success { background: #10b981; }
+.toast.error { background: #ef4444; }
+.toast.info { background: #3b82f6; }
 
 .toast-close {
   background: none;
   border: none;
-  font-size: 18px;
+  color: white;
   cursor: pointer;
-  color: #6b7280;
-  margin-left: auto;
+  font-size: 18px;
 }
 
-.toast-close:hover {
-  color: #374151;
+/* Debug Info */
+.debug-info {
+  margin-bottom: 20px;
+  padding: 12px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  border: 1px solid #e9ecef;
 }
 
-/* Responsive */
+.debug-info summary {
+  cursor: pointer;
+  font-weight: 500;
+  color: #495057;
+}
+
+.debug-info pre {
+  margin-top: 8px;
+  font-size: 11px;
+  background: white;
+  padding: 8px;
+  border-radius: 4px;
+  overflow-x: auto;
+}
 @media (max-width: 768px) {
   .drivers-management {
     padding: 16px;
@@ -1084,12 +840,7 @@ onMounted(() => {
   }
   
   .search-box {
-    min-width: auto;
-  }
-  
-  .stats-grid {
-    grid-template-columns: repeat(2, 1fr);
-    gap: 12px;
+    min-width: unset;
   }
   
   .drivers-grid {
@@ -1097,27 +848,8 @@ onMounted(() => {
   }
   
   .driver-actions {
-    flex-direction: column;
-  }
-  
-  .driver-stats {
-    justify-content: space-around;
+    justify-content: center;
   }
 }
 
-@media (max-width: 480px) {
-  .stats-grid {
-    grid-template-columns: 1fr;
-  }
-  
-  .driver-meta {
-    flex-direction: column;
-    gap: 4px;
-  }
-  
-  .modal-content {
-    width: 95%;
-    margin: 20px;
-  }
-}
 </style>
