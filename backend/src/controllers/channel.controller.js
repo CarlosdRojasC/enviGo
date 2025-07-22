@@ -50,40 +50,43 @@ async getByCompany(req, res) {
 }
 
   // Obtener un canal específico con estadísticas
-  async getById(req, res) {
-    try {
-      const { id } = req.params;
+async getById(req, res) {
+  try {
+    const { id } = req.params;
 
-      const channel = await Channel.findById(id);
-      if (!channel) {
-        return res.status(404).json({ error: 'Canal no encontrado' });
-      }
-
-      if (req.user.role !== 'admin' && req.user.company_id.toString() !== channel.company_id.toString()) {
-        return res.status(403).json({ error: ERRORS.FORBIDDEN });
-      }
-
-      const totalOrders = await Order.countDocuments({ channel_id: channel._id });
-      const deliveredOrders = await Order.countDocuments({ channel_id: channel._id, status: 'delivered' });
-      const totalRevenueAgg = await Order.aggregate([
-        { $match: { channel_id: channel._id } },
-        { $group: { _id: null, total: { $sum: '$total_amount' } } }
-      ]);
-      const totalRevenue = totalRevenueAgg.length > 0 ? totalRevenueAgg[0].total : 0;
-
-      res.json({
-        ...channel.toObject(),
-        stats: {
-          total_orders: totalOrders,
-          delivered_orders: deliveredOrders,
-          total_revenue: totalRevenue,
-        },
-      });
-    } catch (error) {
-      console.error('Error obteniendo canal:', error);
-      res.status(500).json({ error: ERRORS.SERVER_ERROR });
+    const channel = await Channel.findById(id);
+    if (!channel) {
+      return res.status(404).json({ error: 'Canal no encontrado' });
     }
+
+    if (req.user.role !== 'admin' && req.user.company_id.toString() !== channel.company_id.toString()) {
+      return res.status(403).json({ error: ERRORS.FORBIDDEN });
+    }
+
+    const totalOrders = await Order.countDocuments({ channel_id: channel._id });
+    const deliveredOrders = await Order.countDocuments({ channel_id: channel._id, status: 'delivered' });
+    const totalRevenueAgg = await Order.aggregate([
+      { $match: { channel_id: channel._id } },
+      { $group: { _id: null, total: { $sum: '$total_amount' } } }
+    ]);
+    const totalRevenue = totalRevenueAgg.length > 0 ? totalRevenueAgg[0].total : 0;
+
+    const channelWithStats = {
+      ...channel.toObject(),
+      total_orders: totalOrders,
+      delivered_orders: deliveredOrders,
+      total_revenue: totalRevenue,
+      delivery_rate: totalOrders > 0 ? Math.round((deliveredOrders / totalOrders) * 100) : 0,
+      last_sync_at: channel.last_sync || channel.last_sync_at || null
+    };
+
+    // 🔧 FIX PRINCIPAL: Envolver en objeto data para consistencia con el frontend
+    res.json({ data: channelWithStats });
+  } catch (error) {
+    console.error('Error obteniendo canal específico:', error);
+    res.status(500).json({ error: ERRORS.SERVER_ERROR });
   }
+}
 
   // Crear canal de venta
   async create(req, res) {

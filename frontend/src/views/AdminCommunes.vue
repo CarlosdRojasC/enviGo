@@ -155,29 +155,57 @@ async function loadChannelData() {
     const response = await apiService.channels.getById(selectedChannelId.value);
     console.log('✅ Respuesta completa:', response)
     
-    // 🆕 CAMBIO: Manejar si viene como array
-    let channelData;
-    if (Array.isArray(response.data)) {
-      // Si es un array, buscar el canal específico
-      channelData = response.data.find(channel => channel._id === selectedChannelId.value);
-    } else {
-      // Si es un objeto directo
+    // 🆕 MEJORA: Manejo más robusto de diferentes formatos de respuesta
+    let channelData = null;
+    
+    if (response.data?.data) {
+      // Formato: { data: { canal } }
+      channelData = response.data.data;
+    } else if (response.data && !Array.isArray(response.data)) {
+      // Formato: { canal } directamente
       channelData = response.data;
+    } else if (Array.isArray(response.data)) {
+      // Formato: [canales] - buscar el específico
+      channelData = response.data.find(channel => channel._id === selectedChannelId.value);
+    } else if (response.data?.length > 0) {
+      // Último recurso: tomar el primer elemento si es array
+      channelData = response.data[0];
     }
     
-    console.log('🎯 Canal encontrado:', channelData)
+    console.log('🎯 Canal procesado:', channelData)
     
     if (channelData) {
+      // 🔧 MEJORA: Manejo más seguro de accepted_communes
       selectedCommunes.value = channelData.accepted_communes || [];
       console.log('📍 Comunas seleccionadas:', selectedCommunes.value)
+      
+      // 🆕 BONUS: Mostrar info adicional del canal si está disponible
+      if (channelData.total_orders) {
+        console.log('📊 Estadísticas del canal:', {
+          total_orders: channelData.total_orders,
+          total_revenue: channelData.total_revenue,
+          delivery_rate: channelData.delivery_rate
+        });
+      }
     } else {
       console.error('❌ Canal no encontrado en la respuesta')
       selectedCommunes.value = [];
+      toast.error('No se pudo encontrar la información del canal seleccionado')
     }
     
   } catch (error) {
     console.error(`❌ Error cargando datos del canal ${selectedChannelId.value}:`, error);
-    toast.error('Error al cargar configuración del canal')
+    
+    // 🆕 MEJORA: Mensaje de error más específico
+    if (error.response?.status === 404) {
+      toast.error('Canal no encontrado')
+    } else if (error.response?.status === 403) {
+      toast.error('No tienes permisos para ver este canal')
+    } else {
+      toast.error('Error al cargar configuración del canal')
+    }
+    
+    selectedCommunes.value = [];
   }
 }
 function toggleCommune(commune) {
