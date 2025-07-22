@@ -137,15 +137,27 @@ async function loadChannelsForCompany() {
 }
 
 async function loadChannelData() {
+  console.log('🔍 loadChannelData ejecutado con canal:', selectedChannelId.value)
+  
   if (!selectedChannelId.value) {
     selectedCommunes.value = [];
     return;
   }
+  
   try {
-    const { data } = await apiService.channels.getById(selectedChannelId.value);
-    selectedCommunes.value = data.accepted_communes || [];
+    console.log('📡 Obteniendo datos del canal...')
+    const response = await apiService.channels.getById(selectedChannelId.value);
+    console.log('✅ Respuesta completa:', response)
+    console.log('✅ Datos del canal:', response.data)
+    
+    // 🆕 CAMBIO: El backend devuelve el canal directamente en response.data
+    const channelData = response.data;
+    selectedCommunes.value = channelData.accepted_communes || [];
+    
+    console.log('📍 Comunas seleccionadas:', selectedCommunes.value)
   } catch (error) {
-    console.error(`Error cargando datos del canal ${selectedChannelId.value}:`, error);
+    console.error(`❌ Error cargando datos del canal ${selectedChannelId.value}:`, error);
+    toast.error('Error al cargar configuración del canal')
   }
 }
 
@@ -524,5 +536,43 @@ onMounted(() => {
   .test-input-group {
     flex-direction: column;
   }
+}
+.selectors-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  margin-bottom: 30px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.form-group label {
+  margin-bottom: 8px;
+  font-weight: bold;
+  color: #333;
+}
+
+.loading-state {
+  text-align: center;
+  padding: 40px;
+  color: #666;
+}
+
+.loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid #f3f3f3;
+  border-top: 4px solid #3498db;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin: 0 auto 20px;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
 }
 </style>
