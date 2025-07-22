@@ -490,24 +490,25 @@ async function fetchChannels() {
 }
 
 async function fetchCommunesStats() {
-  loadingCommunes.value = true
-  try {
-    console.log('🏘️ Obteniendo estadísticas de comunas...')
-    const response = await apiService.dashboard.getCommunesStats()
-    
-    // Tomar las top 5 comunas con más entregas
-    const stats = response.data?.envigo_communes || response.data?.all_communes || []
-    communesStats.value = stats
-      .sort((a, b) => b.delivered_orders - a.delivered_orders)
-      .slice(0, 5)
-    
-    console.log('🏘️ Top comunas obtenidas:', communesStats.value.length)
-  } catch (error) {
-    console.error('❌ Error fetching communes stats:', error)
-    communesStats.value = []
-  } finally {
-    loadingCommunes.value = false
-  }
+  loadingCommunes.value = true
+  try {
+    console.log('🏘️ Obteniendo estadísticas de comunas...')
+    const response = await apiService.dashboard.getCommunesStats()
+    
+    // Se corrige la obtención de los datos para asegurar que sea un arreglo
+    const communesData = response.data?.all_communes || Object.values(response.data?.envigo_communes || {})
+
+    communesStats.value = communesData
+      .sort((a, b) => (b.delivered_orders || 0) - (a.delivered_orders || 0))
+      .slice(0, 5)
+    
+    console.log('🏘️ Top comunas obtenidas:', communesStats.value.length)
+  } catch (error) {
+    console.error('❌ Error fetching communes stats:', error)
+    communesStats.value = []
+  } finally {
+    loadingCommunes.value = false
+  }
 }
 
 function refreshAllData() {
