@@ -13,6 +13,7 @@
           <option value="shipped">Enviado</option>
           <option value="delivered">Entregado</option>
           <option value="cancelled">Cancelado</option>
+          <option value="warehouse_received">Recibido en Bodega</option>
         </select>
       </div>
       <div class="actions">
