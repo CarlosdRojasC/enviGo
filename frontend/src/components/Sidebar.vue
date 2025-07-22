@@ -2,7 +2,7 @@
   <aside class="sidebar">
     <div class="sidebar-header">
       <h2 class="logo">
-        <img src="../assets/envigoLogo.png" alt="" srcset="">
+        <img class="imagelogo" src="../assets/envigoLogo.png" alt="" srcset="">
       </h2>
     </div>
     <nav class="nav-menu">
@@ -75,19 +75,10 @@ function logout() {
   border-bottom: 1px solid #1e293b;
 }
 
-.logo {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  color: #e2e8f0; /* Blanco un poco más suave */
-  font-size: 22px;
-  font-weight: 700;
-  margin: 0;
-  text-decoration: none;
-}
-
-.logo svg {
-  color: #4f46e5; /* Morado del diseño original */
+.imagelogo {
+  width: 160px;
+  height: auto;
+  filter: drop-shadow(0 0 4px rgba(0, 255, 128, 0.2));
 }
 
 .nav-menu {
