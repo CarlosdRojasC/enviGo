@@ -87,63 +87,73 @@ async getByCompany(req, res) {
 
   // Crear canal de venta
 async create(req, res) {
-  try {
-    const { companyId } = req.params;
-    const { channel_type, channel_name, store_url, api_key, api_secret } = req.body;
+    try {
+        const { companyId } = req.params;
+        const { channel_type, channel_name, store_url, api_key, api_secret, webhook_secret } = req.body;
 
-    if (!channel_type) {
-      return res.status(400).json({ error: 'El tipo de canal es obligatorio' });
+        // --- VALIDACIONES INICIALES ---
+        if (req.user.role !== 'admin' && req.user.company_id.toString() !== companyId) {
+            return res.status(403).json({ error: ERRORS.FORBIDDEN });
+        }
+        if (!channel_type) {
+            return res.status(400).json({ error: 'El tipo de canal es obligatorio.' });
+        }
+        if (!Object.values(CHANNEL_TYPES).includes(channel_type)) {
+            return res.status(400).json({ error: 'Tipo de canal no válido.' });
+        }
+
+        const exists = await Channel.findOne({ company_id: companyId, channel_name });
+        if (exists) {
+            return res.status(400).json({ error: 'Ya existe un canal con ese nombre para esta empresa.' });
+        }
+
+        // --- ✅ CONSTRUCCIÓN INTELIGENTE DEL OBJETO DEL CANAL ---
+        
+        // 1. Empezamos con los datos comunes a todos los canales.
+        const channelPayload = {
+            company_id: companyId,
+            channel_type,
+            channel_name,
+            store_url,
+            webhook_secret: webhook_secret || '', // Asignar por si viene
+            settings: {}, // Inicializar objeto de configuración
+        };
+
+        // 2. Añadimos las credenciales SOLO si no es Mercado Libre.
+        if (channel_type !== CHANNEL_TYPES.MERCADOLIBRE) {
+            if (!api_key || !api_secret) {
+                return res.status(400).json({ error: `El canal de tipo '${channel_type}' requiere credenciales de API.` });
+            }
+            channelPayload.api_key = api_key;
+            channelPayload.api_secret = api_secret;
+        }
+
+        // 3. Creamos la instancia del canal con el payload correcto.
+        const channel = new Channel(channelPayload);
+        await channel.save();
+        
+        // --- FIN DE LA CORRECCIÓN ---
+
+        // Devolvemos la respuesta adecuada para cada caso
+        if (channel.channel_type === CHANNEL_TYPES.MERCADOLIBRE) {
+            const authorizationUrl = MercadoLibreService.getAuthorizationUrl(channel._id);
+            return res.status(201).json({
+                message: 'Canal creado. Redirigiendo para autorización...',
+                channel,
+                authorizationUrl,
+            });
+        }
+
+        res.status(201).json({ 
+            message: 'Canal creado exitosamente', 
+            channel 
+        });
+
+    } catch (error) {
+        console.error('Error creando canal:', error);
+        // Devolvemos un error más específico si es posible
+        res.status(500).json({ error: error.message || ERRORS.SERVER_ERROR });
     }
-
-    // --- ✅ LÓGICA CORREGIDA Y MEJORADA ---
-
-    // 1. Preparamos los datos base del canal
-    const channelPayload = {
-      company_id: companyId,
-      channel_type,
-      channel_name,
-      store_url,
-      settings: {}, // Inicializamos el objeto de configuración
-    };
-
-    // 2. Añadimos las claves de API solo si NO es Mercado Libre
-    if (channel_type !== CHANNEL_TYPES.MERCADOLIBRE) {
-      if (!api_key || !api_secret) {
-        return res.status(400).json({ error: `El canal ${channel_type} requiere credenciales de API.` });
-      }
-      channelPayload.api_key = api_key;
-      channelPayload.api_secret = api_secret;
-    }
-
-    const exists = await Channel.findOne({ company_id: companyId, channel_name });
-    if (exists) {
-      return res.status(400).json({ error: 'Ya existe un canal con ese nombre para esta empresa' });
-    }
-
-    const channel = new Channel(channelPayload);
-    await channel.save();
-
-    // 3. RESPUESTA ESPECIAL PARA MERCADO LIBRE
-    if (channel.channel_type === CHANNEL_TYPES.MERCADOLIBRE) {
-      // Si es Mercado Libre, generamos la URL de autorización y la devolvemos
-      const authorizationUrl = MercadoLibreService.getAuthorizationUrl(channel._id);
-      return res.status(201).json({
-        message: 'Canal creado. Redirigiendo para autorización...',
-        channel,
-        authorizationUrl, // <-- URL para que el frontend redirija
-      });
-    }
-
-    // Respuesta normal para otros canales
-    res.status(201).json({ 
-      message: 'Canal creado exitosamente', 
-      channel 
-    });
-
-  } catch (error) {
-    console.error('Error creando canal:', error);
-    res.status(500).json({ error: 'Error interno del servidor' });
-  }
 }
 
   // Actualizar canal
