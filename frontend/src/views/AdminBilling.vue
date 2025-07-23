@@ -134,19 +134,6 @@
         </button>
       </div>
     </div>
-
-    <!-- Gráfico de ingresos -->
-    <div class="chart-section" v-if="!loading">
-      <h3 class="chart-title">
-        <span class="chart-icon">📊</span>
-        Tendencia de Ingresos
-      </h3>
-      <div class="chart-wrapper">
-  <OrdersTrendChart :chart-data="revenueChartData" />
-</div>
-
-    </div>
-
     <!-- Tabla de facturas mejorada -->
     <div class="invoices-section">
       <div class="section-header">
