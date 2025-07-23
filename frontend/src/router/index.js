@@ -4,6 +4,7 @@ import DashboardLayout from '../layouts/DashboardLayout.vue'
 import Login from '../views/login.vue'
 import PickupManifest from '../views/PickupManifest.vue'
 import MercadoLibreCallback from '../views/MercadoLibreCallback.vue'
+import DriverPayments from '../components/DriverPayments.vue'
 
 const routes = [
   {
@@ -106,7 +107,16 @@ const routes = [
         name: 'AdminChannels',
         component: () => import('../views/Channels.vue'), // Reutilizamos la misma vista
         meta: { roles: ['admin'] }
-      }
+      },
+      {
+        path: '/driver-payments',
+        name: 'DriverPayments',
+        component: DriverPayments,
+        meta: { 
+          requiresAuth: true,
+          roles: ['admin']
+        }
+      },
     ]
   },
   {
