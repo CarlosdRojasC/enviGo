@@ -354,6 +354,7 @@ export function useOrdersActions(newOrder, isCreatingOrder, fetchOrders) {
     warehouse_received: '📦 En Bodega',
     shipped: '🚚 En Ruta',
     delivered: '✅ Entregado',
+    invoiced: '🧾 Facturado',
     cancelled: '❌ Cancelado'
     }
     return statusMap[status] || status

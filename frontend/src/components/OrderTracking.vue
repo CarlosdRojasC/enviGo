@@ -507,6 +507,7 @@ function getStatusName(status) {
     processing: 'Procesando',
     shipped: 'En Tránsito',
     delivered: 'Entregado',
+    invoiced: 'Facturado',
     cancelled: 'Cancelado'
   };
   return names[status] || status;

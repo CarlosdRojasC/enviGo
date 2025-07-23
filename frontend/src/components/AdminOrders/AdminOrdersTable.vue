@@ -518,6 +518,7 @@ function getStatusName(status) {
     processing: 'Procesando',
     shipped: 'Enviado',
     delivered: 'Entregado',
+    invoiced: 'Facturado',
     cancelled: 'Cancelado',
     ready_for_pickup: 'Listo para recoger',
     warehouse_received: 'Recibido en bodega',
@@ -792,6 +793,7 @@ function deleteOrder(order) {
 .status-processing { background: #dbeafe; color: #1e40af; }
 .status-shipped { background: #e9d5ff; color: #6b21a8; }
 .status-delivered { background: #d1fae5; color: #065f46; }
+.status-invoiced { background:#e9d5ff; color: darkgreen;}
 .status-cancelled { background: #fee2e2; color: #991b1b; }
 .status-ready_for_pickup { background: #ddd6fe; color: #5b21b6; }
 .status-warehouse_received { 

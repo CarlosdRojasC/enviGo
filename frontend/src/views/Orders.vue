@@ -594,6 +594,7 @@ function getStatusName(status) {
     processing: 'Procesando',
     shipped: '🚚 En Ruta',                  // 🔧 MEJORAR con emoji
     delivered: '✅ Entregado',
+    invoiced: '🧾 Facturado',
     cancelled: '❌ Cancelado'
   }
   return names[status] || status

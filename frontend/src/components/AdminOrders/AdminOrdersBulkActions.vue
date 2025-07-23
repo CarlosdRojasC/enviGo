@@ -320,6 +320,7 @@ function getStatusName(status) {
     processing: 'Procesando',
     shipped: 'Enviado',
     delivered: 'Entregado',
+    invoiced: 'Facturado',
     cancelled: 'Cancelado',
     ready_for_pickup: 'Listo'
   }

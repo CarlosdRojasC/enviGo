@@ -435,6 +435,7 @@ function getStatusName(status) {
     ready_for_pickup: 'Listo',
     shipped: 'En Tránsito',
     delivered: 'Entregado',
+    invoiced: 'Facturado',
     cancelled: 'Cancelado',
     warehouse_received: 'Recibido en Bodega'
   }

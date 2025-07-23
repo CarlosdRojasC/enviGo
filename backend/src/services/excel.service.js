@@ -526,6 +526,7 @@ class ExcelService {
       ['Procesando:', stats.processing],
       ['Enviados:', stats.shipped],
       ['Entregados:', stats.delivered],
+      ['Facturados:', stats.invoiced],
       ['Cancelados:', stats.cancelled],
       [''],
       ['RESUMEN FINANCIERO:'],
