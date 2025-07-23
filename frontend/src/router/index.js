@@ -3,6 +3,8 @@ import { useAuthStore } from '../store/auth'
 import DashboardLayout from '../layouts/DashboardLayout.vue'
 import Login from '../views/login.vue'
 import PickupManifest from '../views/PickupManifest.vue'
+import MercadoLibreCallback from '../views/MercadoLibreCallback.vue'
+
 const routes = [
   {
     path: '/login',
