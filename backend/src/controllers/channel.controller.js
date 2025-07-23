@@ -109,24 +109,53 @@ async create(req, res) {
 
         // --- VALIDACIÓN ESPECÍFICA PARA MERCADOLIBRE ---
         if (channel_type === CHANNEL_TYPES.MERCADOLIBRE) {
-            // Verificar que las variables de entorno estén configuradas
+            // Verificar variables de entorno
             if (!process.env.MERCADOLIBRE_APP_ID || !process.env.MERCADOLIBRE_SECRET_KEY) {
-                console.error('❌ [ML] Variables de entorno no configuradas:', {
-                    hasAppId: !!process.env.MERCADOLIBRE_APP_ID,
-                    hasSecretKey: !!process.env.MERCADOLIBRE_SECRET_KEY
-                });
+                console.error('❌ [ML] Variables de entorno no configuradas');
                 return res.status(500).json({ 
-                    error: 'La integración con MercadoLibre no está configurada. Las variables MERCADOLIBRE_APP_ID y MERCADOLIBRE_SECRET_KEY son requeridas.',
-                    details: 'Contacta al administrador del sistema para configurar las credenciales de MercadoLibre.'
+                    error: 'La integración con MercadoLibre no está configurada correctamente.',
+                    details: 'Las variables MERCADOLIBRE_APP_ID y MERCADOLIBRE_SECRET_KEY son requeridas.'
                 });
             }
 
-            // Validación adicional de formato de URL para ML
-            if (!store_url || !store_url.includes('mercadolibre.com')) {
+            // ✅ VALIDACIÓN DE URL MEJORADA PARA MERCADOLIBRE
+            if (!store_url) {
                 return res.status(400).json({ 
-                    error: 'La URL debe ser un sitio válido de MercadoLibre (ej: https://mercadolibre.com.mx)' 
+                    error: 'La URL de MercadoLibre es obligatoria.' 
                 });
             }
+
+            // Lista de dominios válidos de MercadoLibre
+            const validMLDomains = [
+                'mercadolibre.com.ar',  // Argentina
+                'mercadolibre.com.mx',  // México
+                'mercadolibre.cl',      // Chile
+                'mercadolibre.com.co',  // Colombia
+                'mercadolibre.com.pe',  // Perú
+                'mercadolibre.com.uy',  // Uruguay
+                'mercadolibre.com.ve',  // Venezuela
+                'mercadolivre.com.br'   // Brasil
+            ];
+
+            // Verificar que la URL contenga un dominio válido de ML
+            const isValidMLUrl = validMLDomains.some(domain => 
+                store_url.toLowerCase().includes(domain)
+            );
+
+            if (!isValidMLUrl) {
+                return res.status(400).json({ 
+                    error: `La URL debe ser de un sitio válido de MercadoLibre.`,
+                    details: `Dominios válidos: ${validMLDomains.join(', ')}`,
+                    examples: [
+                        'https://mercadolibre.com.ar',
+                        'https://mercadolibre.com.mx', 
+                        'https://mercadolibre.cl',
+                        'https://mercadolibre.com.co'
+                    ]
+                });
+            }
+
+            console.log(`✅ [ML] URL válida para MercadoLibre: ${store_url}`);
         }
 
         // --- CONSTRUCCIÓN DEL OBJETO DEL CANAL ---
@@ -134,7 +163,7 @@ async create(req, res) {
             company_id: companyId,
             channel_type,
             channel_name,
-            store_url,
+            store_url: store_url.trim(), // Limpiar espacios
             webhook_secret: webhook_secret || '',
             settings: {
                 // Para MercadoLibre, inicializar campos específicos
@@ -158,18 +187,19 @@ async create(req, res) {
                     error: `El canal de tipo '${channel_type}' requiere credenciales de API (api_key y api_secret).` 
                 });
             }
-            channelPayload.api_key = api_key;
-            channelPayload.api_secret = api_secret;
+            channelPayload.api_key = api_key.trim();
+            channelPayload.api_secret = api_secret.trim();
         }
 
         // Crear el canal
         const channel = new Channel(channelPayload);
         await channel.save();
 
-        console.log(`✅ [Canal] Canal ${channel_type} creado:`, {
+        console.log(`✅ [Canal] Canal ${channel_type} creado exitosamente:`, {
             id: channel._id,
             name: channel_name,
-            company: companyId
+            company: companyId,
+            store_url: store_url
         });
 
         // --- RESPUESTA ESPECÍFICA PARA MERCADOLIBRE ---
@@ -181,20 +211,21 @@ async create(req, res) {
                 
                 return res.status(201).json({
                     success: true,
-                    message: 'Canal de MercadoLibre creado exitosamente. Ahora debes autorizar la conexión.',
+                    message: 'Canal de MercadoLibre creado exitosamente. Procede con la autorización.',
                     channel: {
                         id: channel._id,
                         channel_name: channel.channel_name,
                         channel_type: channel.channel_type,
+                        store_url: channel.store_url,
                         sync_status: channel.sync_status,
                         created_at: channel.created_at
                     },
                     authorizationUrl,
                     next_steps: [
-                        'Haz clic en el enlace de autorización',
+                        'Haz clic en "Autorizar" para conectar con MercadoLibre',
                         'Inicia sesión en tu cuenta de MercadoLibre',
                         'Autoriza el acceso a enviGo',
-                        'Serás redirigido de vuelta para completar la configuración'
+                        'Serás redirigido de vuelta a la plataforma'
                     ]
                 });
             } catch (authError) {
@@ -219,6 +250,7 @@ async create(req, res) {
                 id: channel._id,
                 channel_name: channel.channel_name,
                 channel_type: channel.channel_type,
+                store_url: channel.store_url,
                 sync_status: channel.sync_status,
                 created_at: channel.created_at
             }
