@@ -334,6 +334,9 @@ app.post('/api/test-multiple-orders', (req, res) => {
   }
 });
 
+const driverHistoryRoutes = require('./routes/driverHistory.routes');
+app.use('/api/driver-history', driverHistoryRoutes);
+
 app.get('/api/admin/sync/status', async (req, res) => {
   try {
     const stats = SyncSchedulerService.getStats();
@@ -429,6 +432,10 @@ app.get('/api/admin/sync/upcoming', async (req, res) => {
     });
   }
 });
+
+const driverHistoryRoutes = require('./routes/driverHistory.routes');
+app.use('/api/driver-history', driverHistoryRoutes);
+
 
 // Rutas API
 app.use('/api', routes);

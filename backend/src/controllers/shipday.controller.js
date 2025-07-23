@@ -2,6 +2,7 @@
 
 const ShipdayService = require('../services/shipday.service');
 const Order = require('../models/Order'); // ¡CORRECCIÓN: Modelo Order importado!
+const DriverHistoryService = require('../services/driverHistory.service');
 
 /**
  * Función auxiliar para generar un timeline de eventos basado en los datos de la orden de Shipday.
@@ -502,15 +503,33 @@ async handleWebhook(req, res) {
     orderUpdated = true;
     break;
 
-  case 'order_delivered':
+ case 'order_delivered':
   case 'order_completed':
-    console.log('✅ Evento: Pedido Entregado.');
-    order.status = 'delivered';
-    order.delivery_date = webhookData.order?.delivery_time ? new Date(webhookData.order.delivery_time) : new Date();
-    notificationEventType = 'delivered';
-    orderUpdated = true;
-    break;
+  console.log('✅ Evento: Pedido Entregado.');
+  order.status = 'delivered';
+  order.delivery_date = webhookData.order?.delivery_time ? new Date(webhookData.order.delivery_time) : new Date();
+  notificationEventType = 'delivered';
+  orderUpdated = true;
 
+  // NUEVO: Registrar entrega en historial de conductores
+  try {
+    const carrierInfo = webhookData.carrier || webhookData.order?.carrier;
+    if (carrierInfo) {
+      await DriverHistoryService.recordDelivery(order, {
+        driver_id: carrierInfo.id || carrierInfo.driver_id,
+        driver_email: carrierInfo.email || 'sin-email@conductor.com',
+        driver_name: carrierInfo.name || 'Conductor'
+      });
+      
+      console.log(`💰 Entrega registrada en historial: ${order.order_number} - $1700`);
+    } else {
+      console.warn('⚠️ No se encontró información del conductor en el webhook');
+    }
+  } catch (historyError) {
+    console.error('❌ Error registrando en historial:', historyError);
+    // No fallar el webhook por esto, solo logear el error
+  }
+  break;
   // ELIMINAR casos de assigned y out_for_delivery
 }
     

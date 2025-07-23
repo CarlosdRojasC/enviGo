@@ -179,37 +179,47 @@
 
         <!-- Actions -->
         <div class="driver-actions">
-          <!-- Toggle Status usando isActive de ShipDay -->
-          <button
-            @click="toggleDriverStatus(driver)"
-            :class="[
-              'btn-status',
-              driver.isActive ? 'btn-deactivate' : 'btn-activate'
-            ]"
-            :disabled="updatingStatus === driver.email"
-          >
-            {{ updatingStatus === driver.email ? '...' : (driver.isActive ? 'Desactivar' : 'Activar') }}
-          </button>
-          
-          <!-- Edit -->
-          <button @click="editDriver(driver)" class="btn-edit">
-            ✏️
-          </button>
-          
-          <!-- Delete -->
-          <button @click="confirmDelete(driver)" class="btn-delete">
-            🗑️
-          </button>
-          
-          <!-- Assign Order (solo si está disponible según ShipDay) -->
-          <button
-            v-if="driver.isActive && !driver.isOnShift"
-            @click="assignOrder(driver)"
-            class="btn-assign"
-          >
-            📦 Asignar
-          </button>
-        </div>
+  <!-- Toggle Status usando isActive de ShipDay -->
+  <button
+    @click="toggleDriverStatus(driver)"
+    :class="[
+      'btn-status',
+      driver.isActive ? 'btn-deactivate' : 'btn-activate'
+    ]"
+    :disabled="updatingStatus === driver.email"
+  >
+    {{ updatingStatus === driver.email ? '...' : (driver.isActive ? 'Desactivar' : 'Activar') }}
+  </button>
+  
+  <!-- Edit -->
+  <button @click="editDriver(driver)" class="btn-edit" title="Editar conductor">
+    ✏️
+  </button>
+  
+  <!-- NUEVO: Botón de Pagos -->
+  <button 
+    @click="viewDriverPayments(driver)" 
+    class="btn-payments"
+    title="Ver historial de pagos"
+  >
+    💰
+  </button>
+  
+  <!-- Delete -->
+  <button @click="confirmDelete(driver)" class="btn-delete" title="Eliminar conductor">
+    🗑️
+  </button>
+  
+  <!-- Assign Order (solo si está disponible según ShipDay) -->
+  <button
+    v-if="driver.isActive && !driver.isOnShift"
+    @click="assignOrder(driver)"
+    class="btn-assign"
+    title="Asignar pedido"
+  >
+    📦
+  </button>
+</div>
       </div>
     </div>
 
@@ -255,7 +265,10 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import DriverForm from './DriverForm.vue'
 import { shipdayService } from '../services/shipday'
+import { useRouter } from 'vue-router'
 
+
+const router = useRouter()
 // Estado
 const drivers = ref([])
 const loading = ref(false)
@@ -528,6 +541,15 @@ const getVehicleIcon = (type) => {
     van: '🚐'
   }
   return icons[type] || '🚗'
+}
+const viewDriverPayments = (driver) => {
+  router.push({
+    name: 'DriverPayments',
+    query: {
+      driverId: driver.id || driver.carrierId,
+      driverName: driver.name
+    }
+  })
 }
 </script>
 
@@ -1060,6 +1082,43 @@ const getVehicleIcon = (type) => {
   
   .driver-actions {
     justify-content: center;
+  }
+}
+.btn-payments {
+  background: #10b981;
+  color: white;
+  min-width: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-payments:hover {
+  background: #059669;
+  transform: scale(1.05);
+}
+
+/* Ajustar el grid de acciones para que se vea mejor */
+.driver-actions {
+  display: grid;
+  grid-template-columns: 1fr auto auto auto auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.btn-status {
+  grid-column: 1;
+}
+
+/* En mobile, cambiar a layout vertical */
+@media (max-width: 768px) {
+  .driver-actions {
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  
+  .btn-status {
+    grid-column: 1 / -1;
   }
 }
 </style>
