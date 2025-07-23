@@ -120,6 +120,7 @@ const orderSchema = new mongoose.Schema({
     'warehouse_received',
     'invoiced',
     'shipped',
+    'delivered',
     'cancelled',
     'facturado'  ],
     default: 'pending' 
