@@ -86,66 +86,65 @@ async getByCompany(req, res) {
   }
 
   // Crear canal de venta
-  async create(req, res) {
-    try {
-      const { companyId } = req.params;
-      const { channel_type, channel_name, api_key, api_secret, store_url, webhook_secret } = req.body;
+async create(req, res) {
+  try {
+    const { companyId } = req.params;
+    const { channel_type, channel_name, store_url, api_key, api_secret } = req.body;
 
-      if (req.user.role !== 'admin' && req.user.company_id.toString() !== companyId) {
-        return res.status(403).json({ error: ERRORS.FORBIDDEN });
-      }
-
-      // VALIDACIÓN CRÍTICA: Verificar que el channel_type esté presente
-      if (!channel_type) {
-        return res.status(400).json({ error: 'El tipo de canal es obligatorio' });
-      }
-
-      if (!Object.values(CHANNEL_TYPES).includes(channel_type)) {
-        return res.status(400).json({ error: 'Tipo de canal no válido' });
-      }
-
-      if (channel_type === CHANNEL_TYPES.SHOPIFY && (!api_key || !api_secret || !store_url)) {
-        return res.status(400).json({ error: 'Shopify requiere API key, secret y URL de la tienda' });
-      }
-
-      // Verificar si canal con mismo nombre existe para la empresa
-      const exists = await Channel.findOne({ company_id: companyId, channel_name });
-      if (exists) {
-        return res.status(400).json({ error: 'Ya existe un canal con ese nombre para esta empresa' });
-      }
-
-      const channel = new Channel({
-        company_id: companyId,
-        channel_type,
-        channel_name,
-        api_key,
-        api_secret,
-        store_url,
-        webhook_secret,
-      });
-
-      await channel.save();
-
-      try {
-        if (channel_type === CHANNEL_TYPES.SHOPIFY) {
-          await ShopifyService.registerWebhook(channel);
-        } else if (channel_type === CHANNEL_TYPES.WOOCOMMERCE) {
-          await WooCommerceService.registerWebhook(channel);
-        }
-      } catch (webhookError) {
-        console.warn('Error registrando webhook:', webhookError.message);
-        // No fallar la creación del canal por un error de webhook
-      }
-
-      res.status(201).json({ 
-        message: 'Canal creado exitosamente', 
-        channel 
-      });
-    } catch (error) {
-      console.error('Error creando canal:', error);
-      res.status(500).json({ error: ERRORS.SERVER_ERROR });
+    if (!channel_type) {
+      return res.status(400).json({ error: 'El tipo de canal es obligatorio' });
     }
+
+    // --- ✅ LÓGICA CORREGIDA Y MEJORADA ---
+
+    // 1. Preparamos los datos base del canal
+    const channelPayload = {
+      company_id: companyId,
+      channel_type,
+      channel_name,
+      store_url,
+      settings: {}, // Inicializamos el objeto de configuración
+    };
+
+    // 2. Añadimos las claves de API solo si NO es Mercado Libre
+    if (channel_type !== CHANNEL_TYPES.MERCADOLIBRE) {
+      if (!api_key || !api_secret) {
+        return res.status(400).json({ error: `El canal ${channel_type} requiere credenciales de API.` });
+      }
+      channelPayload.api_key = api_key;
+      channelPayload.api_secret = api_secret;
+    }
+
+    const exists = await Channel.findOne({ company_id: companyId, channel_name });
+    if (exists) {
+      return res.status(400).json({ error: 'Ya existe un canal con ese nombre para esta empresa' });
+    }
+
+    const channel = new Channel(channelPayload);
+    await channel.save();
+
+    // 3. RESPUESTA ESPECIAL PARA MERCADO LIBRE
+    if (channel.channel_type === CHANNEL_TYPES.MERCADOLIBRE) {
+      // Si es Mercado Libre, generamos la URL de autorización y la devolvemos
+      const authorizationUrl = MercadoLibreService.getAuthorizationUrl(channel._id);
+      return res.status(201).json({
+        message: 'Canal creado. Redirigiendo para autorización...',
+        channel,
+        authorizationUrl, // <-- URL para que el frontend redirija
+      });
+    }
+
+    // Respuesta normal para otros canales
+    res.status(201).json({ 
+      message: 'Canal creado exitosamente', 
+      channel 
+    });
+
+  } catch (error) {
+    console.error('Error creando canal:', error);
+    res.status(500).json({ error: 'Error interno del servidor' });
   }
+}
 
   // Actualizar canal
   async update(req, res) {

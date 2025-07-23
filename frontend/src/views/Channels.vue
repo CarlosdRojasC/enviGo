@@ -652,34 +652,58 @@ function openAddChannelModal() {
 }
 
 async function addChannel() {
-  try {
-    addingChannel.value = true
-    
-  let companyId
-if (auth.isAdmin) {
-  companyId = channelData.value.company_id
-  if (!companyId) {
-    toast.error('Selecciona una empresa para el canal')
-    return
-  }
-} else {
-  companyId = getCompanyId.value
-  if (!companyId) {
-    toast.error('Error: Usuario sin empresa asignada')
-    return
-  }
-}
+    try {
+        addingChannel.value = true;
+        
+        // This part for getting the companyId is correct.
+        let companyId;
+        if (auth.isAdmin) {
+            companyId = channelData.value.company_id;
+            if (!companyId) {
+                toast.error('Selecciona una empresa para el canal');
+                addingChannel.value = false; // Stop execution
+                return;
+            }
+        } else {
+            companyId = getCompanyId.value;
+            if (!companyId) {
+                toast.error('Error: Usuario sin empresa asignada');
+                addingChannel.value = false; // Stop execution
+                return;
+            }
+        }
 
-await apiService.channels.create(companyId, channelData.value)
-    
-    toast.success('Canal creado exitosamente')
-    await fetchChannels()
-    showAddChannelModal.value = false
-  } catch (error) {
-    toast.error(`Error al crear canal: ${error.message}`)
-  } finally {
-    addingChannel.value = false
-  }
+        // --- ✅ MODIFICATION START ---
+        
+        // 1. Capture the response from the API call.
+        const response = await apiService.channels.create(companyId, channelData.value);
+
+        // 2. Check if the backend sent an authorizationUrl.
+        if (response.data.authorizationUrl) {
+            // This means it's a Mercado Libre channel.
+            toast.info('Canal creado. Redirigiendo a Mercado Libre para autorizar...');
+            
+            // Wait 1.5 seconds for the user to read the message, then redirect.
+            setTimeout(() => {
+                window.location.href = response.data.authorizationUrl;
+            }, 1500);
+
+            // Don't close the modal immediately, as the page will redirect.
+
+        } else {
+            // This is the original flow for Shopify, WooCommerce, etc.
+            toast.success('Canal creado exitosamente');
+            await fetchChannels();
+            showAddChannelModal.value = false;
+        }
+        
+        // --- END OF MODIFICATION ---
+
+    } catch (error) {
+        toast.error(`Error al crear canal: ${error.response?.data?.error || error.message}`);
+    } finally {
+        addingChannel.value = false;
+    }
 }
 
 function showChannelDetails(channel) {
