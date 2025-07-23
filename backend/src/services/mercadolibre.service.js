@@ -1,7 +1,6 @@
 const axios = require('axios');
-const SalesChannel = require('../models/SalesChannel');
+const SalesChannel = require('../models/Channel');
 const Order = require('../models/Order');
-const OrderItem = require('../models/OrderItem');
 
 class MercadoLibreService {
   static API_BASE_URL = 'https://api.mercadolibre.com';
@@ -93,7 +92,7 @@ class MercadoLibreService {
 
         return channel;
     }
-    
+
   /**
    * Sincroniza los pedidos, importando únicamente los de tipo Flex.
    */
@@ -223,19 +222,6 @@ class MercadoLibreService {
     };
     
     const newOrder = await new Order(newOrderData).save();
-
-    const items = fullOrder.order_items.map(item => ({
-      order_id: newOrder._id,
-      product_id: item.item.id,
-      sku: item.item.seller_sku,
-      name: item.item.title,
-      quantity: item.quantity,
-      unit_price: item.unit_price,
-    }));
-
-    if (items.length > 0) {
-      await OrderItem.insertMany(items);
-    }
   }
 
   /**
