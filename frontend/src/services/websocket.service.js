@@ -86,8 +86,6 @@ class WebSocketManager {
       this.state.stats.messagesReceived++
       this.state.lastMessage = message
       
-      console.log('📨 WS: Mensaje recibido:', message)
-      
       // Manejar diferentes tipos de mensajes
       this.handleMessage(message)
       
@@ -127,12 +125,7 @@ class WebSocketManager {
   // Manejar mensajes específicos
  handleMessage(message) {
   const { type, data } = message
-  
-  // Solo mostrar logs para mensajes importantes (no pings/pongs)
-  if (!['pong', 'ping'].includes(type)) {
-    console.log('📨 WS: Mensaje recibido:', type, data)
-  }
-  
+
   switch (type) {
     case 'connection_established':
       console.log('🎉 WS: Conexión establecida:', data.message)

@@ -420,7 +420,7 @@ const selectedInvoice = ref(null);
 
 // --- REFERENCIAS ---
 const revenueChartCanvas = ref(null);
-let revenueChart = null;
+const revenueChart = ref(null);
 
 // --- COMPUTED PROPERTIES ---
 const filteredInvoices = computed(() => {
@@ -539,7 +539,6 @@ async function fetchFinancialSummary() {
   try {
     const { data } = await apiService.billing.getFinancialSummary();
     metrics.value = data; // Asigna directamente los datos del backend
-    createRevenueChart(data.monthlyRevenueData || []);
   } catch (error) {
     console.error('Error fetching financial summary:', error);
     toast.error('No se pudo cargar el resumen financiero.');
@@ -569,33 +568,36 @@ async function fetchCompanies() {
   }
 }
 
-function createRevenueChart(data) {
-  if (revenueChart) revenueChart.destroy();
-  if (!revenueChartCanvas.value || !data) return;
-
-  const ctx = revenueChartCanvas.value.getContext('2d');
-  revenueChart = new Chart(ctx, {
-    type: 'line',
-    data: {
-      labels: data.map(item => item.month),
-      datasets: [{
-        label: 'Ingresos por Envío',
-        data: data.map(item => item.revenue),
-        backgroundColor: 'rgba(59, 130, 246, 0.1)',
-        borderColor: '#3b82f6',
-        borderWidth: 3,
-        fill: true,
-        tension: 0.4
-      }]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
-      scales: { y: { beginAtZero: true } }
+watch(metrics, (newMetrics) => {
+  if (newMetrics && newMetrics.monthlyRevenueData && revenueChartCanvas.value) {
+    if (revenueChart.value) {
+      revenueChart.value.destroy();
     }
-  });
-}
+
+    const ctx = revenueChartCanvas.value.getContext('2d');
+    revenueChart.value = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: newMetrics.monthlyRevenueData.map(item => item.month),
+        datasets: [{
+          label: 'Ingresos por Envío',
+          data: newMetrics.monthlyRevenueData.map(item => item.revenue),
+          backgroundColor: 'rgba(59, 130, 246, 0.1)',
+          borderColor: '#3b82f6',
+          borderWidth: 3,
+          fill: true,
+          tension: 0.4
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: { y: { beginAtZero: true } }
+      }
+    });
+  }
+}, { deep: true });
 
 // --- ACCIONES DE BOTONES Y EVENTOS ---
 
@@ -771,8 +773,8 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
-    if (revenueChart) {
-        revenueChart.destroy();
+  if (revenueChart.value) { // <-- CAMBIA revenueChart por revenueChart.value
+        revenueChart.value.destroy(); // <-- CAMBIA revenueChart por revenueChart.value
     }
 });
 
