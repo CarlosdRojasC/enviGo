@@ -151,7 +151,7 @@ export default {
     const loadPaymentReport = async () => {
       loading.value = true
       try {
-        const response = await apiService.driverHistory.getMonthlyReport(`/driver-history/company/${authStore.user.company_id}/monthly-report`, {
+        const response = await apiService.drivers.getMonthlyReport(`/driver-history/company/${authStore.user.company_id}/monthly-report`, {
           params: {
             year: selectedYear.value,
             month: selectedMonth.value
@@ -178,7 +178,7 @@ export default {
     const confirmPayment = async () => {
       isProcessing.value = true
       try {
-        await apiService.driverHistory.payDriver(`/driver-history/driver/${confirmData.value.driverId}/pay-all`, {
+        await apiService.drivers.payDriver(`/driver-history/driver/${confirmData.value.driverId}/pay-all`, {
           companyId: authStore.user.company_id
         })
         
@@ -206,7 +206,7 @@ export default {
       try {
         // Pagar a cada conductor individualmente
         for (const driver of reportData.value.drivers) {
-          await apiService.driverHistory.payDriver(`/driver-history/driver/${driver._id}/pay-all`, {
+          await apiService.drivers.payDriver(`/driver-history/driver/${driver._id}/pay-all`, {
             companyId: authStore.user.company_id
           })
         }
