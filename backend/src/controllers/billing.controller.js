@@ -118,10 +118,10 @@ async generateInvoice(req, res) {
 
       await newInvoice.save();
       
-      await Order.updateMany(
-        { _id: { $in: newOrders.map(o => o._id) } },
-        { $set: { billed: true, invoice_id: newInvoice._id } }
-      );
+await Order.updateMany(
+  { _id: { $in: newOrders.map(o => o._id) } },
+  { $set: { billed: true, invoice_id: newInvoice._id, status: 'invoiced' } }
+);
 
       const invoiceWithCompany = await Invoice.findById(newInvoice._id).populate('company_id', 'name email');
 
