@@ -10,7 +10,7 @@ async function quickMigration() {
     console.log('🔄 Iniciando migración rápida de pedidos...');
     
     // Conectar a la base de datos
-    const mongoUrl = process.env.MONGODB_URI || 
+    const mongoUrl = process.env.MONGO_URI || 
                  process.env.MONGODB_URL || 
                  process.env.DATABASE_URL || 
                  process.env.MONGO_URL ||
