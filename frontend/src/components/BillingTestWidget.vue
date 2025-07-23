@@ -3,7 +3,7 @@
   <div class="billing-test-widget">
     <div class="widget-header">
       <h3 class="widget-title">
-        🧪 Test de Facturación Mejorada
+        Facturación Mejorada
         <span class="company-name" v-if="selectedCompany">
           - {{ selectedCompany.name }}
         </span>
@@ -22,7 +22,7 @@
 
     <div v-if="loading" class="loading-state">
       <div class="loading-spinner"></div>
-      <p>Cargando datos de prueba...</p>
+      <p>Cargando datos...</p>
     </div>
 
     <div v-else-if="!selectedCompanyId" class="no-selection">
@@ -94,9 +94,8 @@
         </div>
       </div>
 
-      <!-- Sección 3: Generar Factura de Prueba -->
       <div class="test-section">
-        <h4 class="section-title">📄 3. Generar Factura de Prueba</h4>
+        <h4 class="section-title">📄 3. Generar Factura</h4>
         <div class="invoice-form">
           <div class="form-row">
             <label>Período Inicio:</label>
@@ -120,31 +119,8 @@
           >
             {{ generatingInvoice ? 'Generando...' : '💰 Generar Factura Mejorada' }}
           </button>
-          <button 
-            @click="generateWithOldMethod" 
-            class="test-btn secondary" 
-            :disabled="selectedOrderIds.length === 0 || generatingInvoice"
-          >
-            🔄 Comparar con Método Original
-          </button>
         </div>
       </div>
-
-      <!-- Sección 4: Resultados -->
-      <div class="test-section" v-if="testResults.length > 0">
-        <h4 class="section-title">📋 4. Resultados de Pruebas</h4>
-        <div class="results-list">
-          <div v-for="(result, index) in testResults" :key="index" class="result-item" :class="result.type">
-            <div class="result-time">{{ result.timestamp }}</div>
-            <div class="result-message">{{ result.message }}</div>
-            <div v-if="result.data" class="result-data">
-              <pre>{{ JSON.stringify(result.data, null, 2) }}</pre>
-            </div>
-          </div>
-        </div>
-        <button @click="clearResults" class="test-btn danger">🗑️ Limpiar Resultados</button>
-      </div>
-
     </div>
   </div>
 </template>
@@ -427,6 +403,9 @@ onMounted(() => {
   background: rgba(255,255,255,0.1);
   color: white;
   font-size: 14px;
+}
+.company-selector select option {
+  color: black;
 }
 
 /* ==================== ESTADOS ==================== */
