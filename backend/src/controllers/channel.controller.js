@@ -118,14 +118,13 @@ async create(req, res) {
                 });
             }
 
-            // ✅ VALIDACIÓN DE URL MEJORADA PARA MERCADOLIBRE
+            // Validación de URL para MercadoLibre
             if (!store_url) {
                 return res.status(400).json({ 
                     error: 'La URL de MercadoLibre es obligatoria.' 
                 });
             }
 
-            // Lista de dominios válidos de MercadoLibre
             const validMLDomains = [
                 'mercadolibre.com.ar',  // Argentina
                 'mercadolibre.com.mx',  // México
@@ -137,7 +136,6 @@ async create(req, res) {
                 'mercadolivre.com.br'   // Brasil
             ];
 
-            // Verificar que la URL contenga un dominio válido de ML
             const isValidMLUrl = validMLDomains.some(domain => 
                 store_url.toLowerCase().includes(domain)
             );
@@ -163,10 +161,10 @@ async create(req, res) {
             company_id: companyId,
             channel_type,
             channel_name,
-            store_url: store_url.trim(), // Limpiar espacios
+            store_url: store_url.trim(),
             webhook_secret: webhook_secret || '',
             settings: {
-                // Para MercadoLibre, inicializar campos específicos
+                // Para MercadoLibre, inicializar campos OAuth
                 ...(channel_type === CHANNEL_TYPES.MERCADOLIBRE && {
                     oauth_configured: false,
                     last_token_refresh: null,
@@ -177,14 +175,15 @@ async create(req, res) {
                 })
             },
             is_active: true,
-            sync_status: channel_type === CHANNEL_TYPES.MERCADOLIBRE ? 'pending_oauth' : 'pending'
+            // ✅ CORRECCIÓN: Usar solo valores válidos del enum
+            sync_status: 'pending' // Usar 'pending' en lugar de 'pending_oauth'
         };
 
         // Añadir credenciales solo si NO es MercadoLibre
         if (channel_type !== CHANNEL_TYPES.MERCADOLIBRE) {
             if (!api_key || !api_secret) {
                 return res.status(400).json({ 
-                    error: `El canal de tipo '${channel_type}' requiere credenciales de API (api_key y api_secret).` 
+                    error: `El canal de tipo '${channel_type}' requiere credenciales de API.` 
                 });
             }
             channelPayload.api_key = api_key.trim();
@@ -280,7 +279,6 @@ async create(req, res) {
         });
     }
 }
-
   // Actualizar canal
   async update(req, res) {
     try {
