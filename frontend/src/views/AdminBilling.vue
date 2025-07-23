@@ -345,7 +345,7 @@
 
     <!-- Modales -->
     <Modal v-model="showGenerateModal" title="Generar Nueva Factura" width="800px">
-      <GenerateInvoiceForm 
+      <BillingTestWidget 
         :companies="companies"
         @close="showGenerateModal = false"
         @generated="handleInvoiceGenerated"
@@ -377,7 +377,6 @@ import { useAuthStore } from '../store/auth';
 import { apiService } from '../services/api';
 import { Chart, registerables } from 'chart.js';
 import Modal from '../components/Modal.vue';
-import GenerateInvoiceForm from '../components/billing/GenerateInvoiceForm.vue';
 import BulkGenerateForm from '../components/billing/BulkGenerateForm.vue';
 import InvoiceDetails from '../components/billing/InvoiceDetails.vue';
 import BillingTestWidget from '../components/BillingTestWidget.vue';
