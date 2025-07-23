@@ -31,91 +31,64 @@
       </div>
 
       <!-- Métricas mejoradas -->
-   <div class="metrics-dashboard">
-  <!-- Tarjeta de Ingresos con tendencias mejoradas -->
-  <div class="metric-card revenue">
-    <div class="metric-header">
-      <div class="metric-icon">💰</div>
-      <!-- Mostrar tendencia tanto positiva como negativa -->
-      <div 
-        class="metric-trend" 
-        :class="{
-          'positive': metrics.revenueGrowth > 0,
-          'negative': metrics.revenueGrowth < 0,
-          'neutral': metrics.revenueGrowth === 0
-        }"
-        v-if="metrics.revenueGrowth !== undefined"
-      >
-        <span class="trend-icon">
-          {{ metrics.revenueGrowth > 0 ? '📈' : metrics.revenueGrowth < 0 ? '📉' : '➡️' }}
-        </span>
-        <span>{{ Math.abs(metrics.revenueGrowth).toFixed(1) }}%</span>
-      </div>
-    </div>
-    <div class="metric-content">
-      <div class="metric-value">${{ formatCurrency(metrics.totalRevenue || 0) }}</div>
-      <div class="metric-label">Ingresos Totales</div>
-      <div class="metric-detail">
-        Este mes: ${{ formatCurrency(metrics.currentMonthRevenue || 0) }}
-        <span 
-          class="growth-indicator"
-          :class="{
-            'positive': metrics.revenueGrowth > 0,
-            'negative': metrics.revenueGrowth < 0
-          }"
-          v-if="metrics.revenueGrowth !== undefined && metrics.revenueGrowth !== 0"
-        >
-          ({{ metrics.revenueGrowth > 0 ? '+' : '' }}{{ metrics.revenueGrowth.toFixed(1) }}% vs mes anterior)
-        </span>
-      </div>
-    </div>
-  </div>
-  
-  <!-- Tarjeta de Monto Pendiente -->
-  <div class="metric-card pending">
-    <div class="metric-header">
-      <div class="metric-icon">⏰</div>
-      <div class="metric-alert" v-if="(metrics.overdueInvoices || 0) > 0">
-        {{ metrics.overdueInvoices }}
-      </div>
-    </div>
-    <div class="metric-content">
-      <div class="metric-value">${{ formatCurrency(metrics.pendingAmount || 0) }}</div>
-      <div class="metric-label">Monto Pendiente</div>
-      <div class="metric-detail">{{ metrics.pendingInvoices || 0 }} facturas</div>
-    </div>
-  </div>
-  
-  <!-- Tarjeta de Facturas Generadas -->
-  <div class="metric-card invoices">
-    <div class="metric-header">
-      <div class="metric-icon">📄</div>
-      <div class="metric-badge">{{ metrics.newInvoicesThisMonth || 0 }}</div>
-    </div>
-    <div class="metric-content">
-      <div class="metric-value">{{ metrics.totalInvoices || 0 }}</div>
-      <div class="metric-label">Facturas Generadas</div>
-      <div class="metric-detail">Promedio: ${{ formatCurrency(metrics.averageInvoiceAmount || 0) }}</div>
-    </div>
-  </div>
-  
-  <!-- Tarjeta de Pedidos Sin Facturar -->
-  <div class="metric-card orders">
-    <div class="metric-header">
-      <div class="metric-icon">📦</div>
-      <div class="metric-progress">
-        <div class="progress-bar">
-          <div class="progress-fill" :style="{ width: billingRate + '%' }"></div>
+      <div class="metrics-dashboard">
+        <div class="metric-card revenue">
+          <div class="metric-header">
+            <div class="metric-icon">💰</div>
+            <div class="metric-trend positive" v-if="metrics.revenueGrowth > 0">
+              <span class="trend-icon">📈</span>
+              +{{ metrics.revenueGrowth.toFixed(1) }}%
+            </div>
+          </div>
+          <div class="metric-content">
+            <div class="metric-value">${{ formatCurrency(metrics.totalRevenue) }}</div>
+            <div class="metric-label">Ingresos Totales</div>
+            <div class="metric-detail">Este mes: ${{ formatCurrency(metrics.currentMonthRevenue) }}</div>
+          </div>
+        </div>
+        
+        <div class="metric-card pending">
+          <div class="metric-header">
+            <div class="metric-icon">⏰</div>
+            <div class="metric-alert" v-if="metrics.overdueInvoices > 0">
+              {{ metrics.overdueInvoices }}
+            </div>
+          </div>
+          <div class="metric-content">
+            <div class="metric-value">${{ formatCurrency(metrics.pendingAmount) }}</div>
+            <div class="metric-label">Monto Pendiente</div>
+            <div class="metric-detail">{{ metrics.pendingInvoices }} facturas</div>
+          </div>
+        </div>
+        
+        <div class="metric-card invoices">
+          <div class="metric-header">
+            <div class="metric-icon">📄</div>
+            <div class="metric-badge">{{ metrics.newInvoicesThisMonth }}</div>
+          </div>
+          <div class="metric-content">
+            <div class="metric-value">{{ metrics.totalInvoices }}</div>
+            <div class="metric-label">Facturas Generadas</div>
+            <div class="metric-detail">Promedio: ${{ formatCurrency(metrics.averageInvoiceAmount) }}</div>
+          </div>
+        </div>
+        
+        <div class="metric-card orders">
+          <div class="metric-header">
+            <div class="metric-icon">📦</div>
+            <div class="metric-progress">
+              <div class="progress-bar">
+                <div class="progress-fill" :style="{ width: billingRate + '%' }"></div>
+              </div>
+            </div>
+          </div>
+          <div class="metric-content">
+            <div class="metric-value">{{ metrics.unfactoredOrders }}</div>
+            <div class="metric-label">Pedidos Sin Facturar</div>
+            <div class="metric-detail">{{ billingRate }}% facturado</div>
+          </div>
         </div>
       </div>
-    </div>
-    <div class="metric-content">
-      <div class="metric-value">{{ metrics.unfactoredOrders || 0 }}</div>
-      <div class="metric-label">Pedidos Sin Facturar</div>
-      <div class="metric-detail">{{ billingRate }}% facturado</div>
-    </div>
-  </div>
-</div>
     </div>
 
     <!-- Filtros avanzados -->
@@ -516,14 +489,11 @@ const allSelected = computed(() => paginatedInvoices.value.length > 0 && paginat
 const someSelected = computed(() => selectedInvoices.value.length > 0 && !allSelected.value);
 
 const billingRate = computed(() => {
-  const unfactored = metrics.value.unfactoredOrders || 0;
-  const total = metrics.value.totalInvoices || 0;
-  const totalFacturable = unfactored + total;
-  
-  if (totalFacturable === 0) return 0;
-  
-  return Math.round((total / totalFacturable) * 100);
+    const totalFacturable = metrics.value.unfactoredOrders + metrics.value.billedOrders;
+    if (totalFacturable === 0) return 0;
+    return Math.round((metrics.value.billedOrders / totalFacturable) * 100);
 });
+
 // --- MÉTODOS ---
 async function sendInvoice(invoiceId) {
   if (!confirm('¿Estás seguro de que quieres enviar esta factura al cliente? Esta acción no se puede deshacer.')) return;
@@ -552,164 +522,122 @@ async function confirmPayment(invoiceId) {
 }
 
 async function fetchInitialData() {
-  console.log('🚀 AdminBilling: Iniciando carga de datos...');
-  
-  const startTime = performance.now();
-  
+  loading.value = true;
   try {
-    // Cargar datos en paralelo para mejor rendimiento
     await Promise.all([
       fetchFinancialSummary(),
       fetchInvoices(),
       fetchCompanies()
     ]);
-    
-    const endTime = performance.now();
-    console.log(`✅ AdminBilling: Datos cargados en ${Math.round(endTime - startTime)}ms`);
-    
   } catch (error) {
-    console.error("❌ AdminBilling: Error crítico cargando datos:", error);
-    toast.error("Error crítico al cargar el dashboard de facturación");
-    throw error;
+    toast.error("Error fatal al cargar los datos del dashboard.");
+  } finally {
+    loading.value = false;
   }
 }
-// Método mejorado para obtener el resumen financiero
+
 async function fetchFinancialSummary() {
   try {
-    console.log('💰 AdminBilling: Obteniendo resumen financiero...');
-    
     const { data } = await apiService.billing.getFinancialSummary();
+    metrics.value = data;
     
-    console.log('💰 AdminBilling: Datos recibidos:', data);
-    
-    // Asegurar que todos los campos necesarios existen con valores por defecto
-    metrics.value = {
-      totalRevenue: data.totalRevenue || 0,
-      currentMonthRevenue: data.currentMonthRevenue || 0,
-      revenueGrowth: data.revenueGrowth !== undefined ? data.revenueGrowth : 0,
-      pendingAmount: data.pendingAmount || 0,
-      totalInvoices: data.totalInvoices || 0,
-      pendingInvoices: data.pendingInvoices || 0,
-      overdueInvoices: data.overdueInvoices || 0,
-      newInvoicesThisMonth: data.newInvoicesThisMonth || 0,
-      unfactoredOrders: data.unfactoredOrders || 0,
-      averageInvoiceAmount: data.averageInvoiceAmount || 0,
-      monthlyRevenueData: data.monthlyRevenueData || []
-    };
-    
-    console.log('💰 AdminBilling: Métricas procesadas:', {
-      totalRevenue: metrics.value.totalRevenue,
-      revenueGrowth: metrics.value.revenueGrowth,
-      currentMonthRevenue: metrics.value.currentMonthRevenue
-    });
-    
-    // Crear gráfico con datos válidos
-    createRevenueChart(metrics.value.monthlyRevenueData);
-    
+    // Crear el gráfico inmediatamente después de obtener los datos
+    await nextTick(); // Asegurar que el DOM se haya actualizado
+    createRevenueChart();
   } catch (error) {
-    console.error('❌ AdminBilling: Error obteniendo resumen financiero:', error);
-    
-    // Valores por defecto en caso de error
-    metrics.value = {
-      totalRevenue: 0,
-      currentMonthRevenue: 0,
-      revenueGrowth: 0,
-      pendingAmount: 0,
-      totalInvoices: 0,
-      pendingInvoices: 0,
-      overdueInvoices: 0,
-      newInvoicesThisMonth: 0,
-      unfactoredOrders: 0,
-      averageInvoiceAmount: 0,
-      monthlyRevenueData: []
-    };
-    
-    toast.error('Error cargando métricas financieras. Mostrando datos por defecto.');
+    console.error('Error fetching financial summary:', error);
+    toast.error('No se pudo cargar el resumen financiero.');
   }
 }
 
-// Método mejorado para crear el gráfico de ingresos
-function createRevenueChart(data) {
-  if (revenueChart) {
-    revenueChart.destroy();
-    revenueChart = null;
+function createRevenueChart() {
+  if (!revenueChartCanvas.value || !metrics.value.monthlyRevenueData) return;
+  
+  // Destruir gráfico existente si existe
+  if (revenueChart.value) {
+    revenueChart.value.destroy();
   }
-  
-  if (!revenueChartCanvas.value) {
-    console.log('⚠️ AdminBilling: Canvas no disponible para el gráfico');
-    return;
-  }
-  
-  // Datos por defecto si no hay información
-  const chartData = data && data.length > 0 ? data : [
-    { month: 'Sin datos', revenue: 0 }
-  ];
-  
-  console.log('📊 AdminBilling: Creando gráfico con datos:', chartData);
-  
-  try {
-    const ctx = revenueChartCanvas.value.getContext('2d');
-    
-    revenueChart = new Chart(ctx, {
-      type: 'line',
-      data: {
-        labels: chartData.map(item => item.month),
-        datasets: [{
-          label: 'Ingresos por Envío',
-          data: chartData.map(item => item.revenue || 0),
-          backgroundColor: 'rgba(59, 130, 246, 0.1)',
-          borderColor: '#3b82f6',
-          borderWidth: 3,
-          fill: true,
-          tension: 0.4,
-          pointBackgroundColor: '#3b82f6',
-          pointBorderColor: '#ffffff',
-          pointBorderWidth: 2,
-          pointRadius: 6,
-          pointHoverRadius: 8
-        }]
+
+  const ctx = revenueChartCanvas.value.getContext('2d');
+  revenueChart.value = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: metrics.value.monthlyRevenueData.map(item => {
+        // Formatear etiquetas de meses
+        const date = new Date(item.month + '-01');
+        return date.toLocaleDateString('es-CL', { month: 'short', year: '2-digit' });
+      }),
+      datasets: [{
+        label: 'Ingresos Mensuales',
+        data: metrics.value.monthlyRevenueData.map(item => item.revenue),
+        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+        borderColor: '#3b82f6',
+        borderWidth: 3,
+        fill: true,
+        tension: 0.4,
+        pointBackgroundColor: '#3b82f6',
+        pointBorderColor: '#ffffff',
+        pointBorderWidth: 2,
+        pointRadius: 6,
+        pointHoverRadius: 8
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { 
+        legend: { 
+          display: true,
+          position: 'top',
+          labels: {
+            font: {
+              family: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+              size: 12
+            }
+          }
+        },
+        tooltip: {
+          backgroundColor: 'rgba(0, 0, 0, 0.8)',
+          titleColor: '#ffffff',
+          bodyColor: '#ffffff',
+          callbacks: {
+            label: function(context) {
+              return `Ingresos: $${new Intl.NumberFormat('es-CL').format(context.parsed.y)}`;
+            }
+          }
+        }
       },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: { 
-          legend: { display: false },
-          tooltip: {
-            backgroundColor: 'rgba(17, 24, 39, 0.9)',
-            titleColor: '#f9fafb',
-            bodyColor: '#f9fafb',
-            borderColor: '#3b82f6',
-            borderWidth: 1,
-            callbacks: {
-              label: function(context) {
-                return `Ingresos: $${formatCurrency(context.parsed.y)}`;
-              }
+      scales: { 
+        y: { 
+          beginAtZero: true,
+          ticks: {
+            callback: function(value) {
+              return '$' + new Intl.NumberFormat('es-CL').format(value);
+            },
+            font: {
+              family: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+              size: 11
             }
+          },
+          grid: {
+            color: 'rgba(0, 0, 0, 0.1)'
           }
         },
-        scales: { 
-          y: { 
-            beginAtZero: true,
-            ticks: {
-              callback: function(value) {
-                return '$' + formatCurrency(value);
-              }
+        x: {
+          ticks: {
+            font: {
+              family: '-apple-system, BlinkMacSystemFont, "Segue UI", Roboto, sans-serif',
+              size: 11
             }
+          },
+          grid: {
+            display: false
           }
-        },
-        interaction: {
-          intersect: false,
-          mode: 'index'
         }
       }
-    });
-    
-    console.log('✅ AdminBilling: Gráfico creado exitosamente');
-  } catch (error) {
-    console.error('❌ AdminBilling: Error creando gráfico:', error);
-  }
+    }
+  });
 }
-
 
 async function fetchInvoices() {
   try {
@@ -735,30 +663,9 @@ async function fetchCompanies() {
 }
 // --- ACCIONES DE BOTONES Y EVENTOS ---
 
-async function refreshData() {
-  console.log('🔄 AdminBilling: Refrescando todos los datos...');
-  
-  loading.value = true;
-  
-  try {
-    await fetchInitialData();
-    
-    // Pequeño delay para mostrar el indicador de carga
-    await new Promise(resolve => setTimeout(resolve, 300));
-    
-    toast.success('✅ Datos actualizados correctamente');
-    
-    // Debug opcional
-    if (process.env.NODE_ENV === 'development') {
-      debugFinancialData();
-    }
-    
-  } catch (error) {
-    console.error('❌ AdminBilling: Error refrescando datos:', error);
-    toast.error('Error actualizando los datos');
-  } finally {
-    loading.value = false;
-  }
+function refreshData() {
+  fetchInitialData();
+  toast.success('Datos actualizados');
 }
 
 function openGenerateModal() {
