@@ -4,6 +4,8 @@ const Order = require('../models/Order');
 
 class MercadoLibreService {
   static API_BASE_URL = 'https://api.mercadolibre.com';
+  // ✅ NUEVO: URL base para autorización OAuth
+  static AUTH_BASE_URL = 'https://auth.mercadolibre.com.ar'; // Cambiar según país si es necesario
 
   /**
    * Obtiene y renueva el token de acceso si es necesario.
@@ -30,7 +32,7 @@ class MercadoLibreService {
           expires_in: response.data.expires_in,
           updated_at: new Date(),
         });
-        channel.markModified('settings'); // Importante para que Mongoose guarde los cambios en el objeto
+        channel.markModified('settings');
         await channel.save();
         
         return response.data.access_token;
@@ -42,57 +44,116 @@ class MercadoLibreService {
     return channel.api_key;
   }
 
+  /**
+   * ✅ CORREGIDO: Genera la URL de autorización con el dominio correcto
+   */
+  static getAuthorizationUrl(channelId) {
+    const redirectUri = `${process.env.FRONTEND_URL}/integrations/mercadolibre/callback`;
+
+    // ✅ USAR AUTH_BASE_URL en lugar de API_BASE_URL
+    const authUrl = new URL(`${this.AUTH_BASE_URL}/authorization`);
+    authUrl.searchParams.append('response_type', 'code');
+    authUrl.searchParams.append('client_id', process.env.MERCADOLIBRE_APP_ID);
+    authUrl.searchParams.append('redirect_uri', redirectUri);
+    authUrl.searchParams.append('state', channelId);
+    
+    console.log(`🔐 [ML Service] URL de autorización generada: ${authUrl.toString()}`);
+    
+    return authUrl.toString();
+  }
 
   /**
-     * Genera la URL de autorización de Mercado Libre a la que se debe redirigir al usuario.
-     */
-    static getAuthorizationUrl(channelId) {
-        const redirectUri = `${process.env.FRONTEND_URL}/integrations/mercadolibre/callback`;
+   * ✅ MEJORADO: Detecta el país automáticamente para usar el dominio correcto
+   */
+  static getAuthUrlForCountry(storeUrl, channelId) {
+    const redirectUri = `${process.env.FRONTEND_URL}/integrations/mercadolibre/callback`;
+    
+    // Mapeo de dominios de tienda a dominios de auth
+    const authDomains = {
+      'mercadolibre.com.ar': 'https://auth.mercadolibre.com.ar',
+      'mercadolibre.com.mx': 'https://auth.mercadolibre.com.mx', 
+      'mercadolibre.cl': 'https://auth.mercadolibre.cl',
+      'mercadolibre.com.co': 'https://auth.mercadolibre.com.co',
+      'mercadolibre.com.pe': 'https://auth.mercadolibre.com.pe',
+      'mercadolibre.com.uy': 'https://auth.mercadolibre.com.uy',
+      'mercadolibre.com.ve': 'https://auth.mercadolibre.com.ve',
+      'mercadolivre.com.br': 'https://auth.mercadolivre.com.br'
+    };
+    
+    // Detectar el dominio correcto basado en la store_url
+    let authDomain = 'https://auth.mercadolibre.com.ar'; // Default Argentina
+    
+    for (const [storeDomain, authUrl] of Object.entries(authDomains)) {
+      if (storeUrl.includes(storeDomain)) {
+        authDomain = authUrl;
+        break;
+      }
+    }
+    
+    const authUrl = new URL(`${authDomain}/authorization`);
+    authUrl.searchParams.append('response_type', 'code');
+    authUrl.searchParams.append('client_id', process.env.MERCADOLIBRE_APP_ID);
+    authUrl.searchParams.append('redirect_uri', redirectUri);
+    authUrl.searchParams.append('state', channelId);
+    
+    console.log(`🔐 [ML Service] URL de autorización (${authDomain}): ${authUrl.toString()}`);
+    
+    return authUrl.toString();
+  }
 
-        const authUrl = new URL(`${this.API_BASE_URL}/authorization`);
-        authUrl.searchParams.append('response_type', 'code');
-        authUrl.searchParams.append('client_id', process.env.MERCADOLIBRE_APP_ID);
-        authUrl.searchParams.append('redirect_uri', redirectUri);
-        // Usamos el 'state' para pasar el ID del canal de forma segura.
-        authUrl.searchParams.append('state', channelId);
-        
-        return authUrl.toString();
+  /**
+   * Intercambia el código de autorización por un access_token y refresh_token.
+   */
+  static async exchangeCodeForTokens(code, channelId) {
+    const channel = await Channel.findById(channelId);
+    if (!channel) {
+      throw new Error('Canal no encontrado durante el intercambio de código.');
     }
 
-    /**
-     * Intercambia el código de autorización por un access_token y refresh_token.
-     */
-    static async exchangeCodeForTokens(code, channelId) {
-        const channel = await Channel.findById(channelId);
-        if (!channel) {
-            throw new Error('Canal no encontrado durante el intercambio de código.');
-        }
+    const redirectUri = `${process.env.FRONTEND_URL}/integrations/mercadolibre/callback`;
 
-        const redirectUri = `${process.env.FRONTEND_URL}/integrations/mercadolibre/callback`;
+    try {
+      const { data } = await axios.post(`${this.API_BASE_URL}/oauth/token`, {
+        grant_type: 'authorization_code',
+        client_id: process.env.MERCADOLIBRE_APP_ID,
+        client_secret: process.env.MERCADOLIBRE_SECRET_KEY,
+        code: code,
+        redirect_uri: redirectUri,
+      });
 
-        const { data } = await axios.post(`${this.API_BASE_URL}/oauth/token`, {
-            grant_type: 'authorization_code',
-            client_id: process.env.MERCADOLIBRE_APP_ID,
-            client_secret: process.env.MERCADOLIBRE_SECRET_KEY,
-            code: code,
-            redirect_uri: redirectUri,
-        });
+      // Guardamos los tokens y la información del usuario en el canal
+      channel.api_key = data.access_token;
+      Object.assign(channel.settings, {
+        access_token: data.access_token,
+        refresh_token: data.refresh_token,
+        expires_in: data.expires_in,
+        user_id: data.user_id,
+        updated_at: new Date(),
+        oauth_configured: true
+      });
+      channel.sync_status = 'success'; // ✅ Actualizar estado
+      channel.markModified('settings');
+      await channel.save();
 
-        // Guardamos los tokens y la información del usuario en el canal
-        channel.api_key = data.access_token; // El access_token se guarda aquí
-        Object.assign(channel.settings, {
-            access_token: data.access_token,
-            refresh_token: data.refresh_token,
-            expires_in: data.expires_in,
-            user_id: data.user_id,
-            updated_at: new Date(),
-        });
-        channel.markModified('settings'); // Muy importante para guardar objetos anidados
-        await channel.save();
+      console.log(`✅ [ML Service] OAuth completado para canal ${channel.channel_name}`);
 
-        return channel;
+      return channel;
+    } catch (error) {
+      console.error(`❌ [ML Service] Error intercambiando código por tokens:`, error.response?.data || error.message);
+      throw new Error(`Error en OAuth: ${error.response?.data?.message || error.message}`);
     }
+  }
 
+  /**
+   * ✅ NUEVO: Método actualizado que usa el país detectado
+   */
+  static getAuthorizationUrlWithCountry(channelId, storeUrl) {
+    if (storeUrl) {
+      return this.getAuthUrlForCountry(storeUrl, channelId);
+    } else {
+      return this.getAuthorizationUrl(channelId); // Fallback al método original
+    }
+  }
   /**
    * Sincroniza los pedidos, importando únicamente los de tipo Flex.
    */

@@ -204,7 +204,11 @@ async create(req, res) {
         // --- RESPUESTA ESPECÍFICA PARA MERCADOLIBRE ---
         if (channel.channel_type === CHANNEL_TYPES.MERCADOLIBRE) {
             try {
-                const authorizationUrl = MercadoLibreService.getAuthorizationUrl(channel._id);
+                        const authorizationUrl = MercadoLibreService.getAuthorizationUrlWithCountry(
+            channel._id, 
+            channel.store_url
+        );
+
                 
                 console.log(`🔐 [ML] URL de autorización generada para canal ${channel._id}`);
                 
