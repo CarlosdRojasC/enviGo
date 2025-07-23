@@ -423,6 +423,98 @@ const selectedInvoice = ref(null);
 const revenueChartCanvas = ref(null);
 const revenueChart = ref(null);
 
+
+watch(metrics, (newMetricsData) => {
+  // Asegurarnos de que el DOM esté listo y tengamos datos para el gráfico
+  if (!loading.value && newMetricsData.monthlyRevenueData && revenueChartCanvas.value) {
+    
+    // Destruir el gráfico anterior si existe
+    if (revenueChart.value) {
+      revenueChart.value.destroy();
+    }
+
+    const ctx = revenueChartCanvas.value.getContext('2d');
+    revenueChart.value = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: newMetricsData.monthlyRevenueData.map(item => {
+          const date = new Date(item.month + '-01T12:00:00Z'); //Asegurar UTC
+          return date.toLocaleDateString('es-CL', { month: 'short', year: '2-digit', timeZone: 'UTC' });
+        }),
+        datasets: [{
+          label: 'Ingresos Mensuales',
+          data: newMetricsData.monthlyRevenueData.map(item => item.revenue),
+          backgroundColor: 'rgba(59, 130, 246, 0.1)',
+          borderColor: '#3b82f6',
+          borderWidth: 3,
+          fill: true,
+          tension: 0.4,
+          pointBackgroundColor: '#3b82f6',
+          pointBorderColor: '#ffffff',
+          pointBorderWidth: 2,
+          pointRadius: 6,
+          pointHoverRadius: 8
+        }]
+      },
+      // Tu sección de 'options' se mantiene igual, la puedes copiar de tu función eliminada.
+      options: { 
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { 
+            legend: { 
+              display: true,
+              position: 'top',
+              labels: {
+                font: {
+                  family: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+                  size: 12
+                }
+              }
+            },
+            tooltip: {
+              backgroundColor: 'rgba(0, 0, 0, 0.8)',
+              titleColor: '#ffffff',
+              bodyColor: '#ffffff',
+              callbacks: {
+                label: function(context) {
+                  return `Ingresos: $${new Intl.NumberFormat('es-CL').format(context.parsed.y)}`;
+                }
+              }
+            }
+          },
+          scales: { 
+            y: { 
+              beginAtZero: true,
+              ticks: {
+                callback: function(value) {
+                  return '$' + new Intl.NumberFormat('es-CL').format(value);
+                },
+                font: {
+                  family: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+                  size: 11
+                }
+              },
+              grid: {
+                color: 'rgba(0, 0, 0, 0.1)'
+              }
+            },
+            x: {
+              ticks: {
+                font: {
+                  family: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+                  size: 11
+                }
+              },
+              grid: {
+                display: false
+              }
+            }
+          }
+      }
+    });
+  }
+}, { deep: true }); // 'deep' es importante para detectar cambios dentro del objeto
+
 // --- COMPUTED PROPERTIES ---
 const filteredInvoices = computed(() => {
   let filtered = invoices.value;
@@ -541,103 +633,12 @@ async function fetchFinancialSummary() {
     const { data } = await apiService.billing.getFinancialSummary();
     metrics.value = data;
     
-    // Crear el gráfico inmediatamente después de obtener los datos
-    await nextTick(); // Asegurar que el DOM se haya actualizado
-    createRevenueChart();
   } catch (error) {
     console.error('Error fetching financial summary:', error);
     toast.error('No se pudo cargar el resumen financiero.');
   }
 }
 
-function createRevenueChart() {
-  if (!revenueChartCanvas.value || !metrics.value.monthlyRevenueData) return;
-  
-  // Destruir gráfico existente si existe
-  if (revenueChart.value) {
-    revenueChart.value.destroy();
-  }
-
-  const ctx = revenueChartCanvas.value.getContext('2d');
-  revenueChart.value = new Chart(ctx, {
-    type: 'line',
-    data: {
-      labels: metrics.value.monthlyRevenueData.map(item => {
-        // Formatear etiquetas de meses
-        const date = new Date(item.month + '-01');
-        return date.toLocaleDateString('es-CL', { month: 'short', year: '2-digit' });
-      }),
-      datasets: [{
-        label: 'Ingresos Mensuales',
-        data: metrics.value.monthlyRevenueData.map(item => item.revenue),
-        backgroundColor: 'rgba(59, 130, 246, 0.1)',
-        borderColor: '#3b82f6',
-        borderWidth: 3,
-        fill: true,
-        tension: 0.4,
-        pointBackgroundColor: '#3b82f6',
-        pointBorderColor: '#ffffff',
-        pointBorderWidth: 2,
-        pointRadius: 6,
-        pointHoverRadius: 8
-      }]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: { 
-        legend: { 
-          display: true,
-          position: 'top',
-          labels: {
-            font: {
-              family: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-              size: 12
-            }
-          }
-        },
-        tooltip: {
-          backgroundColor: 'rgba(0, 0, 0, 0.8)',
-          titleColor: '#ffffff',
-          bodyColor: '#ffffff',
-          callbacks: {
-            label: function(context) {
-              return `Ingresos: $${new Intl.NumberFormat('es-CL').format(context.parsed.y)}`;
-            }
-          }
-        }
-      },
-      scales: { 
-        y: { 
-          beginAtZero: true,
-          ticks: {
-            callback: function(value) {
-              return '$' + new Intl.NumberFormat('es-CL').format(value);
-            },
-            font: {
-              family: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-              size: 11
-            }
-          },
-          grid: {
-            color: 'rgba(0, 0, 0, 0.1)'
-          }
-        },
-        x: {
-          ticks: {
-            font: {
-              family: '-apple-system, BlinkMacSystemFont, "Segue UI", Roboto, sans-serif',
-              size: 11
-            }
-          },
-          grid: {
-            display: false
-          }
-        }
-      }
-    }
-  });
-}
 
 async function fetchInvoices() {
   try {
