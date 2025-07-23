@@ -241,58 +241,107 @@
     </div>
 
     <!-- Modal para agregar canal (simplificado) -->
-    <Modal v-model="showAddChannelModal" title="Agregar Nuevo Canal" width="500px">
-        <form @submit.prevent="addChannel">
-          <div class="form-group">
-            <label>Tipo de Canal:</label>
-            <select v-model="channelData.channel_type" required>
-              <option value="" disabled>Seleccionar...</option>
-              <option value="shopify">Shopify</option>
-              <option value="woocommerce">WooCommerce</option>
-              <option value="mercadolibre">MercadoLibre</option>
-            </select>
+  <Modal v-model="showAddChannelModal" title="Agregar Nuevo Canal" width="500px">
+  <form @submit.prevent="addChannel">
+    <div class="form-group">
+      <label>Tipo de Canal:</label>
+      <select v-model="channelData.channel_type" required>
+        <option value="" disabled>Seleccionar...</option>
+        <option value="shopify">Shopify</option>
+        <option value="woocommerce">WooCommerce</option>
+        <option value="mercadolibre">MercadoLibre</option>
+      </select>
+    </div>
+    
+    <div v-if="channelData.channel_type">
+      <div class="form-group">
+        <label>Nombre del Canal:</label>
+        <input 
+          v-model="channelData.channel_name" 
+          type="text" 
+          required 
+          :placeholder="getChannelNamePlaceholder(channelData.channel_type)"
+        >
+      </div>
+      
+      <div class="form-group">
+        <label>URL de la Tienda:</label>
+        <input 
+          v-model="channelData.store_url" 
+          type="text" 
+          required 
+          :placeholder="getUrlPlaceholder(channelData.channel_type)"
+        >
+        <small class="form-help">{{ getUrlHelp(channelData.channel_type) }}</small>
+      </div>
+      
+      <!-- ✅ CAMPOS CONDICIONALES: Solo para Shopify y WooCommerce -->
+      <div v-if="channelData.channel_type !== 'mercadolibre'">
+        <div class="form-group">
+          <label>{{ channelData.channel_type === 'shopify' ? 'Token de Acceso (API Secret)' : 'Consumer Key' }}</label>
+          <input 
+            v-model="channelData.api_key" 
+            type="text" 
+            :required="channelData.channel_type !== 'mercadolibre'"
+            :placeholder="getApiKeyPlaceholder(channelData.channel_type)"
+          >
+        </div>
+        
+        <div class="form-group">
+          <label>{{ channelData.channel_type === 'shopify' ? 'API Key' : 'Consumer Secret' }}</label>
+          <input 
+            v-model="channelData.api_secret" 
+            type="password" 
+            :required="channelData.channel_type !== 'mercadolibre'"
+            :placeholder="getApiSecretPlaceholder(channelData.channel_type)"
+          >
+        </div>
+      </div>
+      
+      <!-- ✅ INFO ESPECIAL PARA MERCADOLIBRE -->
+      <div v-if="channelData.channel_type === 'mercadolibre'" class="oauth-info">
+        <div class="info-box">
+          <div class="info-icon">🔐</div>
+          <div class="info-content">
+            <h4>Autenticación OAuth 2.0</h4>
+            <p>MercadoLibre utiliza OAuth para mayor seguridad. Después de crear el canal, serás redirigido a MercadoLibre para autorizar la conexión.</p>
+            <ul>
+              <li>✅ No necesitas credenciales manuales</li>
+              <li>✅ Conexión segura y automática</li>
+              <li>✅ Solo pedidos Flex serán importados</li>
+            </ul>
           </div>
-          
-          <div v-if="channelData.channel_type">
-            <div class="form-group">
-              <label>Nombre del Canal:</label>
-              <input v-model="channelData.channel_name" type="text" required placeholder="Mi Tienda Shopify">
-            </div>
-            <div class="form-group">
-              <label>URL de la Tienda:</label>
-              <input v-model="channelData.store_url" type="text" required placeholder="ejemplo.myshopify.com">
-            </div>
-            <div class="form-group">
-              <label>{{ channelData.channel_type === 'shopify' ? 'Token de Acceso (API Secret)' : 'Consumer Key' }}</label>
-              <input v-model="channelData.api_key" type="text" required>
-            </div>
-            <div class="form-group">
-              <label>{{ channelData.channel_type === 'shopify' ? 'API Key' : 'Consumer Secret' }}</label>
-              <input v-model="channelData.api_secret" type="password" required>
-            </div>
-            
-            <!-- Selector de empresa para admin -->
-            <div v-if="isAdmin" class="form-group">
-              <label>Empresa:</label>
-              <select v-model="channelData.company_id" required>
-                <option value="" disabled>Seleccionar empresa...</option>
-                <option v-for="company in companies" :key="company._id" :value="company._id">
-                  {{ company.name }}
-                </option>
-              </select>
-            </div>
-          </div>
-          
-          <div class="modal-actions">
-            <button type="button" @click="showAddChannelModal = false" class="btn-cancel">
-              Cancelar
-            </button>
-            <button type="submit" :disabled="addingChannel || !channelData.channel_type" class="btn-save">
-              {{ addingChannel ? 'Creando...' : 'Crear Canal' }}
-            </button>
-          </div>
-        </form>
-    </Modal>
+        </div>
+      </div>
+      
+      <!-- Selector de empresa para admin -->
+      <div v-if="isAdmin" class="form-group">
+        <label>Empresa:</label>
+        <select v-model="channelData.company_id" required>
+          <option value="" disabled>Seleccionar empresa...</option>
+          <option v-for="company in companies" :key="company._id" :value="company._id">
+            {{ company.name }}
+          </option>
+        </select>
+      </div>
+    </div>
+    
+    <div class="modal-actions">
+      <button type="button" @click="showAddChannelModal = false" class="btn-cancel">
+        Cancelar
+      </button>
+      <button 
+        type="submit" 
+        :disabled="addingChannel || !isFormValid" 
+        class="btn-save"
+        :class="{ 'btn-ml': channelData.channel_type === 'mercadolibre' }"
+      >
+        {{ getButtonText() }}
+      </button>
+    </div>
+  </form>
+</Modal>
+
 
     <!-- Modal de detalles simplificado -->
     <Modal v-model="showChannelDetailsModal" :title="`Detalles de ${selectedChannel?.channel_name}`" width="600px">
@@ -816,6 +865,77 @@ function getChannelSyncStatus(channel) {
     };
   }
 }
+const isFormValid = computed(() => {
+  if (!channelData.value.channel_type) return false
+  if (!channelData.value.channel_name?.trim()) return false
+  if (!channelData.value.store_url?.trim()) return false
+  
+  // Para admin, también validar empresa
+  if (isAdmin.value && !channelData.value.company_id) return false
+  
+  // Para canales que NO son MercadoLibre, validar credenciales
+  if (channelData.value.channel_type !== 'mercadolibre') {
+    if (!channelData.value.api_key?.trim()) return false
+    if (!channelData.value.api_secret?.trim()) return false
+  }
+  
+  return true
+})
+
+function getChannelNamePlaceholder(type) {
+  const placeholders = {
+    shopify: 'Mi Tienda Shopify',
+    woocommerce: 'Mi Tienda WooCommerce',
+    mercadolibre: 'Mi Tienda MercadoLibre'
+  }
+  return placeholders[type] || 'Mi Tienda'
+}
+
+function getUrlPlaceholder(type) {
+  const placeholders = {
+    shopify: 'mi-tienda.myshopify.com',
+    woocommerce: 'https://mi-tienda.com',
+    mercadolibre: 'https://mercadolibre.com.mx'
+  }
+  return placeholders[type] || 'https://mi-tienda.com'
+}
+
+function getUrlHelp(type) {
+  const helps = {
+    shopify: 'Dominio de tu tienda Shopify',
+    woocommerce: 'URL completa de tu sitio WordPress',
+    mercadolibre: 'Ejemplos: mercadolibre.com.mx, mercadolibre.cl, mercadolibre.com.ar'
+  }
+  return helps[type] || 'URL de tu tienda'
+}
+
+function getApiKeyPlaceholder(type) {
+  const placeholders = {
+    shopify: 'shpat_...',
+    woocommerce: 'ck_...'
+  }
+  return placeholders[type] || ''
+}
+
+function getApiSecretPlaceholder(type) {
+  const placeholders = {
+    shopify: 'Tu API Key público',
+    woocommerce: 'cs_...'
+  }
+  return placeholders[type] || ''
+}
+
+function getButtonText() {
+  if (addingChannel.value) {
+    return 'Creando...'
+  }
+  
+  if (channelData.value.channel_type === 'mercadolibre') {
+    return 'Crear y Autorizar'
+  }
+  
+  return 'Crear Canal'
+}
 
 // ==================== LIFECYCLE ====================
 onMounted(async () => {
@@ -831,6 +951,82 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+.form-group {
+  margin-bottom: 16px;
+}
+
+.form-help {
+  font-size: 12px;
+  color: #666;
+  margin-top: 4px;
+  display: block;
+}
+
+.oauth-info {
+  margin: 16px 0;
+}
+
+.info-box {
+  background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+  border: 1px solid #0ea5e9;
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.info-icon {
+  font-size: 24px;
+  flex-shrink: 0;
+}
+
+.info-content h4 {
+  margin: 0 0 8px 0;
+  color: #0369a1;
+  font-size: 16px;
+}
+
+.info-content p {
+  margin: 0 0 12px 0;
+  color: #374151;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.info-content ul {
+  margin: 0;
+  padding-left: 16px;
+  color: #374151;
+  font-size: 14px;
+}
+
+.info-content li {
+  margin-bottom: 4px;
+}
+
+.btn-ml {
+  background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%) !important;
+  position: relative;
+  overflow: hidden;
+}
+
+.btn-ml::before {
+  content: '🚀';
+  margin-right: 8px;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  margin-top: 24px;
+}
+
+.btn-save:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
 /* Reutilizar los estilos de la versión anterior pero simplificados */
 .channels-page {
   min-height: 100vh;
