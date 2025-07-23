@@ -18,23 +18,76 @@
               {{ getStatusIcon(invoiceData.status) }} {{ getStatusText(invoiceData.status) }}
             </span>
             <div class="status-actions">
-              <button 
-                v-if="invoiceData.status === 'draft'" 
-                @click="sendInvoice"
-                class="status-btn send"
-                :disabled="actionLoading"
-              >
-                📤 Enviar
-              </button>
-              <button 
-                v-if="['sent', 'overdue'].includes(invoiceData.status)" 
-                @click="markAsPaid"
-                class="status-btn paid"
-                :disabled="actionLoading"
-              >
-                ✅ Marcar Pagada
-              </button>
-            </div>
+  <!-- ADMIN: Solo puede enviar si está en borrador -->
+  <button 
+    v-if="auth.isAdmin && invoiceData.status === 'draft'" 
+    @click="sendInvoice"
+    class="status-btn send"
+    :disabled="actionLoading"
+  >
+    📤 Enviar al Cliente
+  </button>
+  
+  <!-- ADMIN: Confirmar pago cuando está en revisión -->
+  <button 
+    v-if="auth.isAdmin && invoiceData.status === 'pending_confirmation'" 
+    @click="confirmPayment"
+    class="status-btn confirm"
+    :disabled="actionLoading"
+  >
+    ✅ Confirmar Pago
+  </button>
+  
+  <!-- ADMIN: Rechazar pago cuando está en revisión -->
+  <button 
+    v-if="auth.isAdmin && invoiceData.status === 'pending_confirmation'" 
+    @click="rejectPayment"
+    class="status-btn reject"
+    :disabled="actionLoading"
+  >
+    ❌ Rechazar Pago
+  </button>
+  
+  <!-- CLIENTE: Marcar como pagada cuando está enviada -->
+  <button 
+    v-if="!auth.isAdmin && ['sent', 'overdue'].includes(invoiceData.status)" 
+    @click="markAsPaidByClient"
+    class="status-btn client-paid"
+    :disabled="actionLoading"
+  >
+    💰 Ya Transferí
+  </button>
+  
+  <!-- ADMIN: Volver a enviar si está marcada como pagada por error -->
+  <button 
+    v-if="auth.isAdmin && invoiceData.status === 'paid'" 
+    @click="markAsUnpaid"
+    class="status-btn unpaid"
+    :disabled="actionLoading"
+  >
+    🔄 Marcar Impaga
+  </button>
+</div>
+<div class="status-info">
+  <div v-if="invoiceData.status === 'sent' && invoiceData.due_date" class="due-date-info">
+    <span class="due-label">Vence:</span>
+    <span class="due-date" :class="{ overdue: isOverdue() }">
+      {{ formatDate(invoiceData.due_date) }}
+    </span>
+  </div>
+  
+  <div v-if="invoiceData.status === 'pending_confirmation'" class="pending-info">
+    <span class="pending-icon">⏳</span>
+    <span class="pending-text">
+      {{ auth.isAdmin ? 'Esperando confirmación de pago' : 'Pago reportado, esperando confirmación' }}
+    </span>
+  </div>
+  
+  <div v-if="invoiceData.paid_date" class="paid-date-info">
+    <span class="paid-icon">✅</span>
+    <span class="paid-text">Pagada el {{ formatDate(invoiceData.paid_date) }}</span>
+  </div>
+</div>
           </div>
         </div>
         
@@ -43,14 +96,22 @@
             <span class="btn-icon">📥</span>
             Descargar PDF
           </button>
-          <button @click="duplicateInvoice" class="action-btn secondary" :disabled="actionLoading">
-            <span class="btn-icon">📋</span>
-            Duplicar
-          </button>
-          <button @click="toggleEditMode" class="action-btn primary">
-            <span class="btn-icon">{{ editMode ? '👁️' : '✏️' }}</span>
-            {{ editMode ? 'Ver' : 'Editar' }}
-          </button>
+          <template v-if="auth.isAdmin">
+    <button @click="duplicateInvoice" class="action-btn secondary" :disabled="actionLoading">
+      <span class="btn-icon">📋</span>
+      Duplicar
+    </button>
+    <button @click="toggleEditMode" class="action-btn primary">
+      <span class="btn-icon">{{ editMode ? '👁️' : '✏️' }}</span>
+      {{ editMode ? 'Ver' : 'Editar' }}
+    </button>
+  </template>
+  <template v-else>
+    <button @click="showPaymentInfo" class="action-btn secondary">
+      <span class="btn-icon">🏦</span>
+      Info de Pago
+    </button>
+  </template>
         </div>
       </div>
 
@@ -77,7 +138,7 @@
               </div>
               <div class="info-item">
                 <span class="info-label">Precio por pedido:</span>
-                <span class="info-value">${{ formatCurrency(invoiceData.company_id?.price_per_order || 0) }}</span>
+                <span class="info-value">${{ formatCurrency(invoiceData.company_id?.price_per_order || 2500) }}</span>
               </div>
             </div>
           </div>
@@ -117,7 +178,67 @@
           </div>
         </div>
       </div>
-
+      <div class="payment-instructions" v-if="!auth.isAdmin && ['sent', 'overdue'].includes(invoiceData.status)">
+  <h4 class="section-title">
+    <span class="section-icon">🏦</span>
+    Instrucciones para el Pago
+  </h4>
+  
+  <div class="payment-info-card">
+    <div class="payment-steps">
+      <p class="payment-intro">Para completar el pago de esta factura:</p>
+      <ol class="payment-list">
+        <li>Realiza la transferencia por el monto total: <strong>${{ formatCurrency(invoiceData.total_amount) }}</strong></li>
+        <li>Incluye como referencia: <strong>{{ invoiceData.invoice_number }}</strong></li>
+        <li>Haz clic en "Ya Transferí" una vez completada la transferencia</li>
+        <li>Esperaremos la confirmación del pago para actualizarlo</li>
+      </ol>
+    </div>
+    
+    <div class="bank-info">
+      <h5 class="bank-title">Datos bancarios:</h5>
+      <div class="bank-details">
+        <div class="bank-item">
+          <span class="bank-label">Banco:</span>
+          <span class="bank-value">Banco de Chile</span>
+        </div>
+        <div class="bank-item">
+          <span class="bank-label">Cuenta Corriente:</span>
+          <span class="bank-value">12345678-9</span>
+        </div>
+        <div class="bank-item">
+          <span class="bank-label">RUT:</span>
+          <span class="bank-value">76.XXX.XXX-X</span>
+        </div>
+        <div class="bank-item">
+          <span class="bank-label">Email:</span>
+          <span class="bank-value">pagos@tuempresa.com</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="review-notice" v-if="invoiceData.status === 'pending_confirmation'">
+  <div class="notice-card">
+    <div class="notice-icon">⏳</div>
+    <div class="notice-content">
+      <h4 class="notice-title">
+        {{ auth.isAdmin ? 'Pago Pendiente de Confirmación' : 'Pago en Revisión' }}
+      </h4>
+      <p class="notice-text">
+        <template v-if="auth.isAdmin">
+          El cliente ha reportado el pago de esta factura. Verifica la transferencia y confirma o rechaza el pago.
+        </template>
+        <template v-else>
+          Hemos recibido tu reporte de pago. Estamos verificando la transferencia y te confirmaremos en breve.
+        </template>
+      </p>
+      <div class="notice-date" v-if="invoiceData.payment_reported_at">
+        Reportado el: {{ formatDateTime(invoiceData.payment_reported_at) }}
+      </div>
+    </div>
+  </div>
+</div>
       <!-- Resumen financiero -->
       <div class="financial-section">
         <h4 class="section-title">
@@ -306,7 +427,7 @@
       </div>
 
       <!-- Historial de actividad -->
-      <div class="activity-section">
+      <div class="activity-section" v-if="auth.isAdmin">
         <h4 class="section-title">
           <span class="section-icon">📋</span>
           Historial de Actividad
@@ -335,7 +456,37 @@
         </div>
       </div>
     </div>
-
+<div class="contact-section" v-if="!auth.isAdmin">
+  <h4 class="section-title">
+    <span class="section-icon">💬</span>
+    ¿Tienes dudas sobre esta factura?
+  </h4>
+  
+  <div class="contact-info">
+    <p class="contact-text">
+      Si tienes alguna consulta sobre esta factura, puedes contactarnos:
+    </p>
+    <div class="contact-methods">
+      <div class="contact-method">
+        <span class="contact-icon">📧</span>
+        <span class="contact-detail">facturacion@tuempresa.com</span>
+      </div>
+      <div class="contact-method">
+        <span class="contact-icon">📞</span>
+        <span class="contact-detail">+56 2 2XXX XXXX</span>
+      </div>
+      <div class="contact-method">
+        <span class="contact-icon">💬</span>
+        <span class="contact-detail">Chat en línea: 9:00 - 18:00</span>
+      </div>
+    </div>
+    
+    <button @click="reportIssue" class="contact-btn">
+      <span class="btn-icon">🚨</span>
+      Reportar Problema con esta Factura
+    </button>
+  </div>
+</div>
     <!-- Modal de confirmación -->
     <div v-if="showConfirmModal" class="modal-overlay" @click="cancelAction">
       <div class="confirm-modal" @click.stop>
@@ -344,6 +495,15 @@
         </div>
         <div class="confirm-body">
           <p class="confirm-message">{{ confirmAction.message }}</p>
+           <div v-if="confirmAction.action === 'reject_payment'" class="reject-reason">
+    <label class="reason-label">Motivo del rechazo:</label>
+    <textarea 
+      v-model="rejectReason" 
+      class="reason-textarea"
+      placeholder="Explica por qué se rechaza el pago (ej: monto incorrecto, transferencia no encontrada, etc.)"
+      rows="3"
+    ></textarea>
+  </div>
         </div>
         <div class="confirm-actions">
           <button @click="cancelAction" class="btn-cancel">
@@ -361,13 +521,37 @@
       </div>
     </div>
   </div>
+  <div v-if="showPaymentModal" class="modal-overlay" @click="showPaymentModal = false">
+  <div class="payment-modal" @click.stop>
+    <div class="payment-modal-header">
+      <h4 class="payment-modal-title">Información de Pago</h4>
+      <button @click="showPaymentModal = false" class="close-btn">✕</button>
+    </div>
+    <div class="payment-modal-body">
+      <div class="payment-summary">
+        <div class="summary-item">
+          <span class="summary-label">Factura:</span>
+          <span class="summary-value">{{ invoiceData.invoice_number }}</span>
+        </div>
+        <div class="summary-item">
+          <span class="summary-label">Monto Total:</span>
+          <span class="summary-value total">${{ formatCurrency(invoiceData.total_amount) }}</span>
+        </div>
+        <div class="summary-item">
+          <span class="summary-label">Estado:</span>
+          <span class="summary-value">{{ getStatusText(invoiceData.status) }}</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
 </template>
 
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue'
 import { useToast } from 'vue-toastification'
 import { apiService } from '../../services/api'
-
+import { useAuthStore } from '../../store/auth'
 // Props y emits
 const props = defineProps({
   invoice: {
@@ -377,7 +561,7 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['close', 'updated'])
-
+const auth = useAuthStore()
 // Estado
 const toast = useToast()
 const loading = ref(true)
@@ -609,9 +793,40 @@ async function executeAction() {
         await apiService.billing.sendInvoice(invoiceData.value._id)
         invoiceData.value.status = 'sent'
         invoiceData.value.sent_at = new Date().toISOString()
-        toast.success('Factura enviada correctamente')
+        toast.success('Factura enviada al cliente correctamente')
         break
         
+      case 'mark_paid_by_client':
+        await apiService.billing.reportPaymentByClient(invoiceData.value._id)
+        invoiceData.value.status = 'pending_confirmation'
+        invoiceData.value.payment_reported_at = new Date().toISOString()
+        toast.success('Pago reportado correctamente. Esperando confirmación.')
+        break
+        
+      case 'confirm_payment':
+        await apiService.billing.confirmPaymentByAdmin(invoiceData.value._id)
+        invoiceData.value.status = 'paid'
+        invoiceData.value.paid_date = new Date().toISOString()
+        toast.success('Pago confirmado correctamente')
+        break
+        
+      case 'reject_payment':
+        await apiService.billing.rejectPaymentByAdmin(invoiceData.value._id, {
+          reason: rejectReason.value
+        })
+        invoiceData.value.status = 'sent'
+        invoiceData.value.payment_reported_at = null
+        toast.success('Pago rechazado. La factura vuelve al estado "Enviada".')
+        break
+        
+      case 'mark_unpaid':
+        await apiService.billing.markInvoiceAsUnpaid(invoiceData.value._id)
+        invoiceData.value.status = 'sent'
+        invoiceData.value.paid_date = null
+        toast.success('Factura marcada como impaga')
+        break
+        
+      // Mantener los casos existentes que ya funcionan
       case 'mark_paid':
         await apiService.billing.markAsPaid(invoiceData.value._id)
         invoiceData.value.status = 'paid'
@@ -624,10 +839,11 @@ async function executeAction() {
     
   } catch (error) {
     console.error('Error executing action:', error)
-    toast.error('Error ejecutando la acción')
+    toast.error(error.response?.data?.message || 'Error ejecutando la acción')
   } finally {
     actionLoading.value = false
     showConfirmModal.value = false
+    rejectReason.value = ''
   }
 }
 
@@ -704,21 +920,23 @@ function getDaysOverdue() {
 }
 
 function getStatusText(status) {
-  const texts = {
+const texts = {
     draft: 'Borrador',
     sent: 'Enviada',
     paid: 'Pagada',
-    overdue: 'Vencida'
+    overdue: 'Vencida',
+    pending_confirmation: 'En Revisión'
   }
   return texts[status] || status
 }
 
 function getStatusIcon(status) {
   const icons = {
-    draft: '⚪',
+   draft: '⚪',
     sent: '🟨',
     paid: '🟩',
-    overdue: '🟧'
+    overdue: '🟧',
+    pending_confirmation: '🔵' // ⬅️ AGREGAR ESTA LÍNEA
   }
   return icons[status] || '❓'
 }
@@ -744,6 +962,60 @@ function getActivityIcon(type) {
     deleted: '🗑️'
   }
   return icons[type] || '📋'
+}
+function markAsPaidByClient() {
+  showConfirmModal.value = true
+  confirmAction.value = {
+    type: 'client-paid',
+    title: 'Confirmar Transferencia',
+    message: `¿Confirmas que ya realizaste la transferencia de $${formatCurrency(invoiceData.value.total_amount)} para la factura ${invoiceData.value.invoice_number}?`,
+    confirmText: 'Sí, Ya Transferí',
+    action: 'mark_paid_by_client'
+  }
+}
+
+// Admin confirma el pago
+function confirmPayment() {
+  showConfirmModal.value = true
+  confirmAction.value = {
+    type: 'confirm',
+    title: 'Confirmar Pago Recibido',
+    message: `¿Confirmas que recibiste el pago de $${formatCurrency(invoiceData.value.total_amount)} por la factura ${invoiceData.value.invoice_number}?`,
+    confirmText: 'Confirmar Pago',
+    action: 'confirm_payment'
+  }
+}
+
+// Admin rechaza el pago
+function rejectPayment() {
+  rejectReason.value = ''
+  showConfirmModal.value = true
+  confirmAction.value = {
+    type: 'reject',
+    title: 'Rechazar Pago',
+    message: `¿Estás seguro de rechazar el pago reportado para la factura ${invoiceData.value.invoice_number}?`,
+    confirmText: 'Rechazar Pago',
+    action: 'reject_payment'
+  }
+}
+
+// Admin marca como impaga (revertir)
+function markAsUnpaid() {
+  showConfirmModal.value = true
+  confirmAction.value = {
+    type: 'unpaid',
+    title: 'Marcar como Impaga',
+    message: `¿Estás seguro de marcar la factura ${invoiceData.value.invoice_number} como impaga? Volverá al estado "Enviada".`,
+    confirmText: 'Marcar Impaga',
+    action: 'mark_unpaid'
+  }
+}
+function showPaymentInfo() {
+  showPaymentModal.value = true
+}
+
+function reportIssue() {
+  toast.info('Función de reporte de problemas próximamente disponible')
 }
 
 // Watchers
@@ -1661,6 +1933,409 @@ onMounted(() => {
   .order-action-btn {
     width: 100%;
     padding: 6px 8px;
+  }
+}
+.status-btn.client-paid {
+  background: #10b981;
+  color: white;
+}
+
+.status-btn.client-paid:hover:not(:disabled) {
+  background: #059669;
+}
+
+.status-btn.confirm {
+  background: #3b82f6;
+  color: white;
+}
+
+.status-btn.confirm:hover:not(:disabled) {
+  background: #2563eb;
+}
+
+.status-btn.reject {
+  background: #ef4444;
+  color: white;
+}
+
+.status-btn.reject:hover:not(:disabled) {
+  background: #dc2626;
+}
+
+.status-btn.unpaid {
+  background: #f59e0b;
+  color: white;
+}
+
+.status-btn.unpaid:hover:not(:disabled) {
+  background: #d97706;
+}
+
+.status-info {
+  margin-top: 8px;
+}
+
+.due-date-info, .pending-info, .paid-date-info {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.05);
+  margin-bottom: 4px;
+}
+
+.pending-info {
+  background: rgba(59, 130, 246, 0.1);
+  color: #1e40af;
+}
+
+.paid-date-info {
+  background: rgba(16, 185, 129, 0.1);
+  color: #065f46;
+}
+
+.due-date.overdue {
+  color: #dc2626;
+  font-weight: 600;
+}
+
+/* Instrucciones de pago */
+.payment-instructions {
+  background: #f0f9ff;
+  border: 1px solid #bae6fd;
+  border-radius: 12px;
+  padding: 24px;
+  margin-bottom: 24px;
+}
+
+.payment-info-card {
+  display: grid;
+  grid-template-columns: 1fr 300px;
+  gap: 24px;
+  background: white;
+  border-radius: 8px;
+  padding: 20px;
+}
+
+.payment-intro {
+  font-weight: 500;
+  color: #1f2937;
+  margin-bottom: 12px;
+}
+
+.payment-list {
+  color: #374151;
+  line-height: 1.6;
+}
+
+.payment-list li {
+  margin-bottom: 8px;
+}
+
+.bank-info {
+  background: #f9fafb;
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.bank-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1f2937;
+  margin: 0 0 12px 0;
+}
+
+.bank-details {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.bank-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+}
+
+.bank-label {
+  color: #6b7280;
+}
+
+.bank-value {
+  font-weight: 600;
+  color: #1f2937;
+}
+
+/* Aviso de revisión */
+.review-notice {
+  margin-bottom: 24px;
+}
+
+.notice-card {
+  display: flex;
+  gap: 16px;
+  background: linear-gradient(135deg, #dbeafe 0%, #eff6ff 100%);
+  border: 1px solid #93c5fd;
+  border-radius: 12px;
+  padding: 20px;
+}
+
+.notice-icon {
+  font-size: 24px;
+  line-height: 1;
+}
+
+.notice-content {
+  flex: 1;
+}
+
+.notice-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1e40af;
+  margin: 0 0 8px 0;
+}
+
+.notice-text {
+  color: #1e3a8a;
+  line-height: 1.5;
+  margin: 0 0 8px 0;
+}
+
+.notice-date {
+  font-size: 12px;
+  color: #3730a3;
+  font-style: italic;
+}
+
+/* Modal de rechazo */
+.reject-reason {
+  margin-top: 16px;
+}
+
+.reason-label {
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+  color: #374151;
+  margin-bottom: 6px;
+}
+
+.reason-textarea {
+  width: 100%;
+  padding: 8px 12px;
+  border: 2px solid #e5e7eb;
+  border-radius: 6px;
+  font-size: 14px;
+  resize: vertical;
+}
+
+.reason-textarea:focus {
+  outline: none;
+  border-color: #ef4444;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);
+}
+
+/* Modal de información de pago */
+.payment-modal {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+  max-width: 500px;
+  width: 90%;
+  overflow: hidden;
+}
+
+.payment-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 24px;
+  border-bottom: 1px solid #e5e7eb;
+  background: #f9fafb;
+}
+
+.payment-modal-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #1f2937;
+  margin: 0;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  font-size: 18px;
+  color: #6b7280;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.close-btn:hover {
+  background: #e5e7eb;
+  color: #374151;
+}
+
+.payment-modal-body {
+  padding: 24px;
+}
+
+.payment-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.summary-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.summary-item:last-child {
+  border-bottom: none;
+}
+
+.summary-label {
+  color: #6b7280;
+  font-weight: 500;
+}
+
+.summary-value {
+  color: #1f2937;
+  font-weight: 600;
+}
+
+.summary-value.total {
+  font-size: 18px;
+  color: #059669;
+}
+
+/* Sección de contacto para empresas */
+.contact-section {
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 24px;
+  margin-bottom: 24px;
+}
+
+.contact-info {
+  text-align: center;
+}
+
+.contact-text {
+  color: #374151;
+  margin-bottom: 20px;
+}
+
+.contact-methods {
+  display: flex;
+  justify-content: center;
+  gap: 24px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.contact-method {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: #374151;
+}
+
+.contact-icon {
+  font-size: 16px;
+}
+
+.contact-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 24px;
+  background: #ef4444;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 500;
+  margin: 0 auto;
+  transition: all 0.2s;
+}
+
+.contact-btn:hover {
+  background: #dc2626;
+  transform: translateY(-1px);
+}
+
+/* Botones de confirmación por tipo */
+.btn-confirm.client-paid {
+  background: #10b981;
+}
+
+.btn-confirm.client-paid:hover:not(:disabled) {
+  background: #059669;
+}
+
+.btn-confirm.confirm {
+  background: #3b82f6;
+}
+
+.btn-confirm.confirm:hover:not(:disabled) {
+  background: #2563eb;
+}
+
+.btn-confirm.reject {
+  background: #ef4444;
+}
+
+.btn-confirm.reject:hover:not(:disabled) {
+  background: #dc2626;
+}
+
+.btn-confirm.unpaid {
+  background: #f59e0b;
+}
+
+.btn-confirm.unpaid:hover:not(:disabled) {
+  background: #d97706;
+}
+
+/* Estado pending_confirmation */
+.status-badge.pending_confirmation {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .payment-info-card {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  
+  .notice-card {
+    flex-direction: column;
+    gap: 12px;
+    text-align: center;
+  }
+  
+  .payment-modal {
+    width: 95%;
+    margin: 0 auto;
+  }
+  
+  .contact-methods {
+    flex-direction: column;
+    gap: 12px;
   }
 }
 </style>
