@@ -326,6 +326,48 @@ const canTest = computed(() => {
 const isFormValid = computed(() => {
   return hasRequiredFields.value && !testing.value
 })
+const validateFormData = computed(() => {
+  const errors = [];
+  
+  if (!formData.value.channel_type) {
+    errors.push('Selecciona un tipo de canal');
+  }
+  
+  if (!formData.value.channel_name?.trim()) {
+    errors.push('El nombre del canal es obligatorio');
+  }
+  
+  if (!formData.value.store_url?.trim()) {
+    errors.push('La URL de la tienda es obligatoria');
+  }
+  
+  // Validaciones específicas por tipo de canal
+  if (formData.value.channel_type === 'mercadolibre') {
+    // Validar que sea una URL de MercadoLibre válida
+    const mlUrlPattern = /^https?:\/\/(www\.)?(mercadolibre|mercadolivre)\.(com|com\.ar|com\.mx|cl|com\.co|com\.pe|com\.uy|com\.ve|com\.br)/i;
+    
+    if (!mlUrlPattern.test(formData.value.store_url)) {
+      errors.push('La URL debe ser un sitio válido de MercadoLibre (ej: https://mercadolibre.com.mx)');
+    }
+    
+    // Para ML no necesitamos validar credenciales
+  } else {
+    // Para otros canales, validar credenciales
+    if (!formData.value.api_key?.trim()) {
+      errors.push('La API Key es obligatoria');
+    }
+    
+    if (!formData.value.api_secret?.trim()) {
+      errors.push('El API Secret es obligatorio');
+    }
+  }
+  
+  return errors;
+});
+
+const isFormValid = computed(() => {
+  return validateFormData.value.length === 0 && !testing.value;
+});
 
 // ==================== MÉTODOS ====================
 function selectChannelType(type) {
@@ -404,7 +446,98 @@ function resetForm() {
   showAdvanced.value = false
   testResult.value = null
 }
+async function createChannel() {
+  if (!isFormValid.value) {
+    toast.error('Por favor, completa todos los campos requeridos');
+    return;
+  }
+  
+  creating.value = true;
+  
+  try {
+    const payload = {
+      channel_type: formData.value.channel_type,
+      channel_name: formData.value.channel_name.trim(),
+      store_url: formData.value.store_url.trim(),
+      webhook_secret: formData.value.webhook_secret || ''
+    };
+    
+    // Solo agregar credenciales si NO es MercadoLibre
+    if (formData.value.channel_type !== 'mercadolibre') {
+      payload.api_key = formData.value.api_key.trim();
+      payload.api_secret = formData.value.api_secret.trim();
+    }
+    
+    console.log('🚀 Creando canal:', {
+      type: payload.channel_type,
+      name: payload.channel_name,
+      requiresOAuth: payload.channel_type === 'mercadolibre'
+    });
+    
+    const response = await apiService.post(`companies/${props.companyId}/channels`, payload);
+    
+    // Manejo específico para MercadoLibre
+    if (formData.value.channel_type === 'mercadolibre') {
+      if (response.data.authorizationUrl) {
+        toast.info('Redirigiendo a MercadoLibre para autorizar la conexión...');
+        
+        // Guardar información del canal creado
+        localStorage.setItem('pendingMLChannel', JSON.stringify({
+          channelId: response.data.channel.id,
+          channelName: response.data.channel.channel_name,
+          companyId: props.companyId
+        }));
+        
+        // Redirigir a MercadoLibre
+        window.location.href = response.data.authorizationUrl;
+        return;
+      } else {
+        throw new Error('No se recibió la URL de autorización de MercadoLibre');
+      }
+    }
+    
+    // Para otros tipos de canal
+    toast.success(`Canal ${response.data.channel.channel_name} creado exitosamente`);
+    emit('channel-created', response.data.channel);
+    resetForm();
+    
+  } catch (error) {
+    console.error('❌ Error creando canal:', error);
+    
+    const errorMsg = error.response?.data?.error || 'Error al crear el canal';
+    const errorDetails = error.response?.data?.details;
+    
+    if (errorDetails) {
+      toast.error(`${errorMsg}\n${errorDetails}`);
+    } else {
+      toast.error(errorMsg);
+    }
+    
+    // Si es un error de configuración de ML, mostrar ayuda
+    if (errorMsg.includes('MERCADOLIBRE_APP_ID')) {
+      toast.warning('La integración con MercadoLibre no está configurada. Contacta al administrador.');
+    }
+    
+  } finally {
+    creating.value = false;
+  }
+}
 
+// Función para validar URL de MercadoLibre en tiempo real
+const validateMLUrl = (url) => {
+  const mlCountries = [
+    'mercadolibre.com.ar', // Argentina
+    'mercadolibre.com.mx', // México  
+    'mercadolibre.cl',     // Chile
+    'mercadolibre.com.co', // Colombia
+    'mercadolibre.com.pe', // Perú
+    'mercadolibre.com.uy', // Uruguay
+    'mercadolibre.com.ve', // Venezuela
+    'mercadolivre.com.br'  // Brasil
+  ];
+  
+  return mlCountries.some(domain => url.includes(domain));
+};
 // ==================== WATCHERS ====================
 watch(() => props.channel, (newChannel) => {
   if (newChannel) {

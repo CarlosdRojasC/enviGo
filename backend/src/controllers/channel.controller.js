@@ -107,52 +107,145 @@ async create(req, res) {
             return res.status(400).json({ error: 'Ya existe un canal con ese nombre para esta empresa.' });
         }
 
-        // --- ✅ CONSTRUCCIÓN INTELIGENTE DEL OBJETO DEL CANAL ---
-        
-        // 1. Empezamos con los datos comunes a todos los canales.
+        // --- VALIDACIÓN ESPECÍFICA PARA MERCADOLIBRE ---
+        if (channel_type === CHANNEL_TYPES.MERCADOLIBRE) {
+            // Verificar que las variables de entorno estén configuradas
+            if (!process.env.MERCADOLIBRE_APP_ID || !process.env.MERCADOLIBRE_SECRET_KEY) {
+                console.error('❌ [ML] Variables de entorno no configuradas:', {
+                    hasAppId: !!process.env.MERCADOLIBRE_APP_ID,
+                    hasSecretKey: !!process.env.MERCADOLIBRE_SECRET_KEY
+                });
+                return res.status(500).json({ 
+                    error: 'La integración con MercadoLibre no está configurada. Las variables MERCADOLIBRE_APP_ID y MERCADOLIBRE_SECRET_KEY son requeridas.',
+                    details: 'Contacta al administrador del sistema para configurar las credenciales de MercadoLibre.'
+                });
+            }
+
+            // Validación adicional de formato de URL para ML
+            if (!store_url || !store_url.includes('mercadolibre.com')) {
+                return res.status(400).json({ 
+                    error: 'La URL debe ser un sitio válido de MercadoLibre (ej: https://mercadolibre.com.mx)' 
+                });
+            }
+        }
+
+        // --- CONSTRUCCIÓN DEL OBJETO DEL CANAL ---
         const channelPayload = {
             company_id: companyId,
             channel_type,
             channel_name,
             store_url,
-            webhook_secret: webhook_secret || '', // Asignar por si viene
-            settings: {}, // Inicializar objeto de configuración
+            webhook_secret: webhook_secret || '',
+            settings: {
+                // Para MercadoLibre, inicializar campos específicos
+                ...(channel_type === CHANNEL_TYPES.MERCADOLIBRE && {
+                    oauth_configured: false,
+                    last_token_refresh: null,
+                    user_id: null,
+                    access_token: null,
+                    refresh_token: null,
+                    expires_in: null
+                })
+            },
+            is_active: true,
+            sync_status: channel_type === CHANNEL_TYPES.MERCADOLIBRE ? 'pending_oauth' : 'pending'
         };
 
-        // 2. Añadimos las credenciales SOLO si no es Mercado Libre.
+        // Añadir credenciales solo si NO es MercadoLibre
         if (channel_type !== CHANNEL_TYPES.MERCADOLIBRE) {
             if (!api_key || !api_secret) {
-                return res.status(400).json({ error: `El canal de tipo '${channel_type}' requiere credenciales de API.` });
+                return res.status(400).json({ 
+                    error: `El canal de tipo '${channel_type}' requiere credenciales de API (api_key y api_secret).` 
+                });
             }
             channelPayload.api_key = api_key;
             channelPayload.api_secret = api_secret;
         }
 
-        // 3. Creamos la instancia del canal con el payload correcto.
+        // Crear el canal
         const channel = new Channel(channelPayload);
         await channel.save();
-        
-        // --- FIN DE LA CORRECCIÓN ---
 
-        // Devolvemos la respuesta adecuada para cada caso
+        console.log(`✅ [Canal] Canal ${channel_type} creado:`, {
+            id: channel._id,
+            name: channel_name,
+            company: companyId
+        });
+
+        // --- RESPUESTA ESPECÍFICA PARA MERCADOLIBRE ---
         if (channel.channel_type === CHANNEL_TYPES.MERCADOLIBRE) {
-            const authorizationUrl = MercadoLibreService.getAuthorizationUrl(channel._id);
-            return res.status(201).json({
-                message: 'Canal creado. Redirigiendo para autorización...',
-                channel,
-                authorizationUrl,
-            });
+            try {
+                const authorizationUrl = MercadoLibreService.getAuthorizationUrl(channel._id);
+                
+                console.log(`🔐 [ML] URL de autorización generada para canal ${channel._id}`);
+                
+                return res.status(201).json({
+                    success: true,
+                    message: 'Canal de MercadoLibre creado exitosamente. Ahora debes autorizar la conexión.',
+                    channel: {
+                        id: channel._id,
+                        channel_name: channel.channel_name,
+                        channel_type: channel.channel_type,
+                        sync_status: channel.sync_status,
+                        created_at: channel.created_at
+                    },
+                    authorizationUrl,
+                    next_steps: [
+                        'Haz clic en el enlace de autorización',
+                        'Inicia sesión en tu cuenta de MercadoLibre',
+                        'Autoriza el acceso a enviGo',
+                        'Serás redirigido de vuelta para completar la configuración'
+                    ]
+                });
+            } catch (authError) {
+                console.error('❌ [ML] Error generando URL de autorización:', authError);
+                
+                // Si falla la URL de autorización, eliminamos el canal creado
+                await Channel.findByIdAndDelete(channel._id);
+                
+                return res.status(500).json({ 
+                    error: 'Error al generar la URL de autorización de MercadoLibre.',
+                    details: authError.message,
+                    solution: 'Verifica que las variables MERCADOLIBRE_APP_ID y MERCADOLIBRE_SECRET_KEY estén correctamente configuradas.'
+                });
+            }
         }
 
+        // Respuesta para otros tipos de canal
         res.status(201).json({ 
+            success: true,
             message: 'Canal creado exitosamente', 
-            channel 
+            channel: {
+                id: channel._id,
+                channel_name: channel.channel_name,
+                channel_type: channel.channel_type,
+                sync_status: channel.sync_status,
+                created_at: channel.created_at
+            }
         });
 
     } catch (error) {
-        console.error('Error creando canal:', error);
-        // Devolvemos un error más específico si es posible
-        res.status(500).json({ error: error.message || ERRORS.SERVER_ERROR });
+        console.error('❌ [Canal] Error creando canal:', error);
+        
+        // Manejo específico de errores
+        if (error.code === 11000) {
+            return res.status(400).json({ 
+                error: 'Ya existe un canal con esos datos.',
+                details: 'Verifica que el nombre del canal sea único para esta empresa.'
+            });
+        }
+        
+        if (error.name === 'ValidationError') {
+            return res.status(400).json({ 
+                error: 'Error de validación en los datos del canal.',
+                details: Object.values(error.errors).map(e => e.message)
+            });
+        }
+        
+        res.status(500).json({ 
+            error: 'Error interno del servidor al crear el canal.',
+            details: process.env.NODE_ENV === 'development' ? error.message : 'Contacta al soporte técnico.'
+        });
     }
 }
 
