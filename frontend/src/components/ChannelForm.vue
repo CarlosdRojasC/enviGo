@@ -379,7 +379,7 @@ function getUrlPlaceholder(type) {
   const placeholders = {
     shopify: 'https://mi-tienda.myshopify.com',
     woocommerce: 'https://mi-tienda.com',
-    mercadolibre: 'https://mercadolibre.com.mx (o .com.ar, .cl, etc.)'
+    mercadolibre: 'https://mercadolibre.cl (o .com.ar, .cl, etc.)'
   }
   return placeholders[type] || 'https://mi-tienda.com'
 }

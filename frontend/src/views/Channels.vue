@@ -253,7 +253,7 @@
             </select>
           </div>
           
-          <div v-if="channelData.channel_type !== 'mercadolibre'">
+          <div v-if="channelData.channel_type">
             <div class="form-group">
               <label>Nombre del Canal:</label>
               <input v-model="channelData.channel_name" type="text" required placeholder="Mi Tienda Shopify">
