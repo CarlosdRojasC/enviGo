@@ -147,7 +147,6 @@
     </div>
     <div>
       <BillingTestWidget />
-
     </div>
     
     <!-- Tabla de facturas mejorada -->
@@ -381,6 +380,7 @@ import Modal from '../components/Modal.vue';
 import GenerateInvoiceForm from '../components/billing/GenerateInvoiceForm.vue';
 import BulkGenerateForm from '../components/billing/BulkGenerateForm.vue';
 import InvoiceDetails from '../components/billing/InvoiceDetails.vue';
+import BillingTestWidget from '../components/BillingTestWidget.vue';
 
 Chart.register(...registerables);
 
