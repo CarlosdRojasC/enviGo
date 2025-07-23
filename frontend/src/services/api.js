@@ -696,7 +696,13 @@ const drivers = {
   delete: (driverId) => api.delete(`/drivers/${driverId}`),
   
   // Obtener conductores por empresa (si necesitas)
-  getByCompany: (companyId) => api.get(`/companies/${companyId}/drivers`)
+  getByCompany: (companyId) => api.get(`/companies/${companyId}/drivers`),
+
+    getMonthlyReport: (companyId, params) => 
+    api.get(`/driver-history/company/${companyId}/monthly-report`, { params }),
+  
+  payDriver: (driverId, companyId) => 
+    api.post(`/driver-history/driver/${driverId}/pay-all`, { companyId }),
 }
 // Servicios de Shipday
 const shipday = {
