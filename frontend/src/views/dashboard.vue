@@ -95,14 +95,6 @@
         </div>
       </section>
 
-      <!-- Debug info (quitar en producción) -->
-      <section class="content-section full-width" v-if="showDebug">
-        <div class="section-header">
-          <h2 class="section-title">Debug Info</h2>
-          <button @click="showDebug = false" class="btn btn-secondary">Ocultar</button>
-        </div>
-        <pre class="debug-content">{{ JSON.stringify(stats, null, 2) }}</pre>
-      </section>
 
       <!-- Gráfico de tendencias -->
       <section class="content-section chart-section">
@@ -250,11 +242,6 @@
   </div>
 </section>
     </div>
-
-    <!-- Botón debug -->
-    <button @click="showDebug = !showDebug" class="debug-toggle" v-if="!showDebug">
-      🐛 Debug
-    </button>
   </div>
 </template>
 
@@ -278,7 +265,6 @@ const chartPeriod = ref('30d')
 const currentTime = ref('')
 const currentDate = ref('')
 const timeInterval = ref(null)
-const showDebug = ref(false)
 
 const loadingCommunes = ref(false)
 const communesStats = ref([])
@@ -722,31 +708,6 @@ onUnmounted(() => {
 .btn-icon {
   font-size: 16px;
 }
-
-/* ==================== DEBUG ==================== */
-.debug-toggle {
-  position: fixed;
-  bottom: 20px;
-  right: 20px;
-  background: #ef4444;
-  color: white;
-  border: none;
-  border-radius: 50px;
-  padding: 12px 16px;
-  font-size: 12px;
-  cursor: pointer;
-  z-index: 1000;
-}
-
-.debug-content {
-  background: #f3f4f6;
-  padding: 16px;
-  border-radius: 8px;
-  font-size: 12px;
-  overflow: auto;
-  max-height: 400px;
-}
-
 /* ==================== LAYOUT GRID ==================== */
 .dashboard-grid {
   display: grid;
