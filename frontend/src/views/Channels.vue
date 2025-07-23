@@ -249,10 +249,11 @@
               <option value="" disabled>Seleccionar...</option>
               <option value="shopify">Shopify</option>
               <option value="woocommerce">WooCommerce</option>
+              <option value="mercadolibre">MercadoLibre</option>
             </select>
           </div>
           
-          <div v-if="channelData.channel_type">
+          <div v-if="channelData.channel_type !== 'mercadolibre'">
             <div class="form-group">
               <label>Nombre del Canal:</label>
               <input v-model="channelData.channel_name" type="text" required placeholder="Mi Tienda Shopify">
