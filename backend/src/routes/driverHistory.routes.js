@@ -1,7 +1,7 @@
 // backend/src/routes/driverHistory.routes.js
 const express = require('express');
 const router = express.Router();
-const { authenticateToken } = require('../middleware/auth');
+const { authenticateToken } = require('../middlewares/auth.middleware');
 const driverHistoryController = require('../controllers/driverHistory.controller');
 
 // ==================== RUTAS DE CONDUCTORES ====================
