@@ -39,4 +39,10 @@ router.post('/:id/test-connection', ChannelController.testConnection);
 // Obtener historial de sincronizaciones
 router.get('/:id/sync-logs', ChannelController.getSyncLogs);
 
+// Ruta para obtener la URL de autorización de Mercado Libre
+router.post('/mercadolibre/authorize', authMiddleware, ChannelController.getMLAuthorizationUrl);
+
+// Ruta para manejar el callback de Mercado Libre después de la autorización
+router.post('/mercadolibre/callback', authMiddleware, ChannelController.handleMLCallback);
+
 module.exports = router;

@@ -107,6 +107,12 @@ const routes = [
       }
     ]
   },
+  {
+    path: '/integrations/mercadolibre/callback',
+    name: 'MercadoLibreCallback',
+    component: MercadoLibreCallback,
+    meta: { requiresAuth: true }
+  },
   { path: '/:pathMatch(.*)*', redirect: '/login' }
 ]
 

@@ -355,6 +355,44 @@ async syncOrders(req, res) {
       res.status(500).json({ success: false, message: error.message || 'Error al probar la conexión' });
     }
   }
+   async getMLAuthorizationUrl(req, res) {
+        try {
+            const { channelId } = req.body;
+
+            // Delega la creación de la URL al servicio
+            const authUrl = MercadoLibreService.getAuthorizationUrl(channelId);
+
+            res.status(200).json({ authUrl });
+        } catch (error) {
+            console.error('[Controller] Error obteniendo URL de autorización de ML:', error);
+            res.status(500).json({ error: 'No se pudo generar la URL de autorización.' });
+        }
+    }
+
+    /**
+     * Maneja el callback de OAuth2, intercambia el código por tokens.
+     */
+    async handleMLCallback(req, res) {
+        try {
+            const { code, state } = req.body; // 'state' contiene el channelId
+
+            if (!code || !state) {
+                return res.status(400).json({ error: 'Faltan el código o el estado en la solicitud.' });
+            }
+
+            // Delega el intercambio de tokens al servicio
+            const updatedChannel = await MercadoLibreService.exchangeCodeForTokens(code, state);
+
+            res.status(200).json({
+                message: '¡Conexión con Mercado Libre exitosa!',
+                channel: updatedChannel,
+            });
+        } catch (error) {
+            console.error('[Controller] Error en el callback de ML:', error);
+            res.status(500).json({ error: 'No se pudo completar la conexión con Mercado Libre.' });
+        }
+    }
+
 
   // NUEVO: Obtener historial de sincronizaciones
   async getSyncLogs(req, res) {

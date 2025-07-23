@@ -168,7 +168,15 @@
               <span class="btn-icon">{{ syncingChannels.includes(channel._id) ? '⏳' : '🔄' }}</span>
               {{ syncingChannels.includes(channel._id) ? 'Sincronizando...' : 'Sincronizar' }}
             </button>
-            
+            <button
+    v-if="channel.channel_type === 'mercadolibre' && !channel.api_key"
+    @click="authorizeMercadoLibre(channel)"
+    class="action-btn details"
+    title="Autorizar este canal con Mercado Libre"
+  >
+    <span class="btn-icon">🔗</span>
+    Autorizar
+  </button>
             <button 
               @click="showChannelDetails(channel)" 
               class="action-btn details"
@@ -542,6 +550,24 @@ function getChannelStatus(channel) {
   if (!channel.last_sync_at) return 'needs_sync'
   if (daysSinceLastSync > 7) return 'sync_issues'
   return 'active'
+}
+
+async function authorizeMercadoLibre(channel) {
+  try {
+    toast.info(`Redirigiendo a Mercado Libre para autorizar "${channel.channel_name}"...`);
+    
+    // Este nuevo endpoint del backend generará la URL correcta para este canal
+    const response = await apiService.mercadolibre.getAuthorizationUrl({
+      channelId: channel._id
+    });
+    
+    // Redirige al usuario a la página de Mercado Libre
+    window.location.href = response.data.authUrl;
+
+  } catch (error) {
+    console.error("Error al iniciar la autorización de Mercado Libre:", error);
+    toast.error("No se pudo iniciar la conexión con Mercado Libre.");
+  }
 }
 
 function getChannelStatusText(channel) {
