@@ -1,6 +1,6 @@
 // backend/src/controllers/driverHistory.controller.js
 const DriverHistoryService = require('../services/driverHistory.service');
-const DriverHistory = require('../models/DriverHistory');
+const DriverHistory = require('../models/DriveryHistory');
 
 class DriverHistoryController {
 
