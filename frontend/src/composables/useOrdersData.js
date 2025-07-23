@@ -304,7 +304,7 @@ async function exportOrders(format = 'excel', filters = {}) {
     console.log('📤 Exportando pedidos con filtros:', filters)
     
     // Llamada correcta a la API
-    const response = await apiService.orders.export({ format, ...filters })
+    const response = await apiService.orders.exportOrders({ format, ...filters })
     
     // Crear y descargar archivo
     const blob = new Blob([response.data], { 
