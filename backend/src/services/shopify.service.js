@@ -228,7 +228,9 @@ class ShopifyService {
         customer_name: this.getCustomerName(shopifyOrder),
         customer_email: shopifyOrder.email,
         customer_phone: shopifyOrder.phone || shopifyOrder.shipping_address?.phone,
-        
+
+        delivery_type: (shopifyOrder.shipping_lines && shopifyOrder.shipping_lines.length > 0) ? 'shipping' : 'pickup',
+
         // Dirección de envío
         shipping_address: this.getShippingAddress(shopifyOrder),
         // 🏘️ NUEVA LÓGICA: Mapear city a comuna chilena

@@ -54,7 +54,13 @@ const orderSchema = new mongoose.Schema({
   customer_document: { type: String },
   
   // Dirección de entrega
-  shipping_address: { type: String, required: true },
+  shipping_address: {
+  type: String,
+  required: function() {
+    // La dirección solo es requerida si el tipo de entrega es 'shipping'
+    return this.delivery_type === 'shipping';
+  }
+},
   shipping_city: { type: String },
   shipping_state: { type: String },
   shipping_zip: { type: String },
