@@ -26,6 +26,21 @@ const orderSchema = new mongoose.Schema({
   // Relación con factura
   invoice_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Invoice', default: null },
   billed: { type: Boolean, default: false },
+   // ✅ NUEVOS CAMPOS MEJORADOS PARA FACTURACIÓN
+  billing_status: {
+    is_billable: {
+      type: Boolean,
+      default: false  // Solo true cuando status = 'delivered'
+    },
+    billed_at: {
+      type: Date,
+      default: null
+    },
+    billing_amount: {
+      type: Number,
+      default: null
+    }
+  },
   
   // Identificación del pedido
   external_order_id: { type: String, required: true }, // ID del pedido en la plataforma externa
@@ -103,6 +118,7 @@ const orderSchema = new mongoose.Schema({
     enum: ['pending',
     'ready_for_pickup', 
     'warehouse_received',
+    'invoiced',
     'shipped',
     'cancelled',
     'facturado'  ],
@@ -126,8 +142,77 @@ const orderSchema = new mongoose.Schema({
 // Middleware para actualizar updated_at
 orderSchema.pre('save', function(next) {
   this.updated_at = Date.now();
+  
+  // Si el pedido cambia a 'delivered', puede ser facturado
+  if (this.status === 'delivered' && !this.invoice_id) {
+    this.billing_status.is_billable = true;
+    // Asegurar que delivery_date esté establecida
+    if (!this.delivery_date) {
+      this.delivery_date = new Date();
+    }
+  }
+  
+  // Si se factura, ya no puede ser facturado nuevamente
+  if (this.status === 'invoiced') {
+    this.billing_status.is_billable = false;
+    this.billed = true;
+    if (!this.billing_status.billed_at) {
+      this.billing_status.billed_at = new Date();
+    }
+  }
+  
+  // Migración automática: convertir 'facturado' a 'invoiced'
+  if (this.status === 'facturado') {
+    this.status = 'invoiced';
+    this.billing_status.is_billable = false;
+    this.billed = true;
+    if (!this.billing_status.billed_at) {
+      this.billing_status.billed_at = new Date();
+    }
+  }
+  
   next();
 });
+orderSchema.methods.markAsDelivered = function(proofData = {}) {
+  this.status = 'delivered';
+  this.delivery_date = new Date();
+  this.billing_status.is_billable = true;
+  
+  if (proofData.photo_url || proofData.signature_url || proofData.notes) {
+    this.proof_of_delivery = proofData;
+  }
+  
+  return this;
+};
+
+// ✅ MÉTODO PARA MARCAR COMO FACTURADO
+orderSchema.methods.markAsInvoiced = function(invoiceId, billingAmount = null) {
+  this.status = 'invoiced';
+  this.invoice_id = invoiceId;
+  this.billed = true;
+  this.billing_status.is_billable = false;
+  this.billing_status.billed_at = new Date();
+  
+  if (billingAmount) {
+    this.billing_status.billing_amount = billingAmount;
+  }
+  
+  return this;
+};
+
+// ✅ MÉTODO PARA REVERTIR FACTURACIÓN
+orderSchema.methods.revertBilling = function() {
+  if (this.status === 'invoiced') {
+    this.status = 'delivered';
+    this.invoice_id = null;
+    this.billed = false;
+    this.billing_status.is_billable = true;
+    this.billing_status.billed_at = null;
+    this.billing_status.billing_amount = null;
+  }
+  
+  return this;
+};
 
 // Índices para mejorar rendimiento
 orderSchema.index({ company_id: 1, status: 1 });
@@ -136,6 +221,12 @@ orderSchema.index({ order_date: -1 });
 orderSchema.index({ customer_email: 1 });
 orderSchema.index({ invoice_id: 1 });
 orderSchema.index({ billed: 1 });
+
+// ✅ NUEVOS ÍNDICES PARA FACTURACIÓN
+orderSchema.index({ 'billing_status.is_billable': 1 });
+orderSchema.index({ 'billing_status.billed_at': 1 });
+orderSchema.index({ delivery_date: -1 });
+
 // 🆕 NUEVOS ÍNDICES PARA TRACKING
 orderSchema.index({ shipday_tracking_url: 1 });
 orderSchema.index({ shipday_order_id: 1 });

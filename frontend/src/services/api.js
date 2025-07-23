@@ -408,7 +408,17 @@ const billing = {
   markAsPaid: (invoiceId) => api.post(`/billing/invoices/${invoiceId}/mark-as-paid`),
   
   // Enviar factura
-  sendInvoice: (invoiceId) => api.post(`/billing/invoices/${invoiceId}/send`),
+  sendInvoice: async (invoiceId) => {
+  try {
+    console.log('📤 API: Enviando factura:', invoiceId);
+    const response = await api.post(`/billing/invoices/${invoiceId}/send`);
+    console.log('✅ API: Factura enviada exitosamente');
+    return response;
+  } catch (error) {
+    console.error('❌ API: Error enviando factura:', error);
+    throw error;
+  }
+},
   
   // Descargar factura
   downloadInvoice: (invoiceId) => api.get(`/billing/invoices/${invoiceId}/download`, {
@@ -416,7 +426,17 @@ const billing = {
   }),
   
   // Eliminar facturas
-  deleteInvoice: (invoiceId) => api.delete(`/billing/invoices/${invoiceId}`),
+  deleteInvoice: async (invoiceId) => {
+  try {
+    console.log('🗑️ API: Eliminando factura:', invoiceId);
+    const response = await api.delete(`/billing/invoices/${invoiceId}`);
+    console.log('✅ API: Factura eliminada exitosamente');
+    return response;
+  } catch (error) {
+    console.error('❌ API: Error eliminando factura:', error);
+    throw error;
+  }
+},
   bulkDelete: (invoiceIds) => api.delete('/billing/invoices', { data: { invoice_ids: invoiceIds } }),
   
   // Operaciones masivas
@@ -438,9 +458,150 @@ const billing = {
     const params = companyId ? `?company_id=${companyId}` : '';
     return api.get(`/billing/next-estimate${params}`);
   },
-  requestConfirmation: (invoiceId) => api.put(`/billing/invoices/${invoiceId}/request-confirmation`),
-  confirmPayment: (invoiceId) => api.put(`/billing/invoices/${invoiceId}/confirm-payment`),
-};
+  requestConfirmation: async (invoiceId) => {
+  try {
+    console.log('💸 API: Solicitando confirmación de pago:', invoiceId);
+    const response = await api.put(`/billing/invoices/${invoiceId}/request-confirmation`);
+    console.log('✅ API: Confirmación solicitada exitosamente');
+    return response;
+  } catch (error) {
+    console.error('❌ API: Error solicitando confirmación:', error);
+    throw error;
+  }
+},
+ confirmPayment: async (invoiceId) => {
+  try {
+    console.log('✅ API: Confirmando pago como admin:', invoiceId);
+    const response = await api.put(`/billing/invoices/${invoiceId}/confirm-payment`);
+    console.log('✅ API: Pago confirmado exitosamente');
+    return response;
+  } catch (error) {
+    console.error('❌ API: Error confirmando pago:', error);
+    throw error;
+  }
+},
+
+
+  // ✅ Obtener pedidos facturables (solo delivered, no facturados)
+getInvoiceableOrders: (companyId = null) => {
+  const params = companyId ? `?company_id=${companyId}` : '';
+  return api.get(`/billing/invoiceable-orders${params}`);
+},
+
+// ✅ Generar factura con flujo mejorado (complementa generateInvoice existente)
+generateInvoiceImproved: (invoiceData) => {
+  console.log('📤 API: Generando factura mejorada:', invoiceData);
+  return api.post('/billing/invoices/generate-improved', invoiceData);
+},
+
+// ✅ Revertir facturación (volver pedidos de invoiced a delivered)
+revertInvoicing: (invoiceId) => {
+  console.log('🔄 API: Revirtiendo facturación:', invoiceId);
+  return api.post(`/billing/invoices/${invoiceId}/revert`);
+},
+
+// ✅ Obtener estadísticas completas del dashboard
+getDashboardStats: (companyId) => {
+  console.log('📊 API: Obteniendo estadísticas del dashboard para:', companyId);
+  return api.get(`/billing/dashboard-stats/${companyId}`);
+},
+
+// ✅ Obtener estadísticas del usuario actual (sin especificar empresa)
+getMyDashboardStats: () => {
+  return api.get('/billing/my-dashboard-stats');
+},
+
+// ✅ Obtener resumen rápido de facturación
+getQuickSummary: (companyId = null) => {
+  const params = companyId ? `?company_id=${companyId}` : '';
+  return api.get(`/billing/quick-summary${params}`);
+},
+
+// ==================== MÉTODOS AUXILIARES ÚTILES ====================
+
+// ✅ Verificar si un pedido puede ser facturado
+canOrderBeInvoiced: (order) => {
+  return order.status === 'delivered' && 
+         order.billing_status?.is_billable === true && 
+         !order.invoice_id;
+},
+
+// ✅ Obtener estado de facturación de un pedido
+getOrderBillingStatus: (order) => {
+  if (order.status === 'invoiced') {
+    return {
+      status: 'invoiced',
+      message: 'Pedido facturado',
+      billed_at: order.billing_status?.billed_at,
+      invoice_id: order.invoice_id
+    };
+  }
+  
+  if (order.status === 'delivered' && order.billing_status?.is_billable) {
+    return {
+      status: 'billable',
+      message: 'Listo para facturar',
+      delivered_at: order.delivery_date
+    };
+  }
+  
+  return {
+    status: 'not_billable',
+    message: 'No se puede facturar aún',
+    current_status: order.status
+  };
+},
+
+// ✅ Formatear datos para facturación
+prepareInvoiceData: (companyId, orderIds, periodStart, periodEnd) => {
+  return {
+    company_id: companyId,
+    order_ids: orderIds,
+    period_start: periodStart,
+    period_end: periodEnd,
+    type: 'invoice'
+  };
+},
+validateInvoiceData: (invoiceData) => {
+  const errors = [];
+  
+  if (!invoiceData.company_id) {
+    errors.push('ID de empresa es requerido');
+  }
+  
+  if (!invoiceData.order_ids || invoiceData.order_ids.length === 0) {
+    errors.push('Se requiere al menos un pedido');
+  }
+  
+  if (!invoiceData.period_start || !invoiceData.period_end) {
+    errors.push('Período de facturación es requerido');
+  }
+  
+  if (new Date(invoiceData.period_start) > new Date(invoiceData.period_end)) {
+    errors.push('La fecha de inicio debe ser anterior a la fecha de fin');
+  }
+  
+  return {
+    isValid: errors.length === 0,
+    errors
+  };
+},
+
+// ✅ Calcular totales estimados
+calculateEstimatedTotals: (orders, pricePerOrder = 0) => {
+  const subtotal = orders.reduce((sum, order) => sum + (order.shipping_cost || pricePerOrder), 0);
+  const iva = Math.round(subtotal * 0.19);
+  const total = subtotal + iva;
+  
+  return {
+    order_count: orders.length,
+    subtotal,
+    iva,
+    total,
+    average_per_order: orders.length > 0 ? Math.round(subtotal / orders.length) : 0
+  };
+}
+}
 
 // Servicios de dashboard
 const dashboard = {

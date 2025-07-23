@@ -1407,6 +1407,370 @@ async bulkMarkAsPaid(req, res) {
     res.status(500).json({ error: ERRORS.SERVER_ERROR });
   }
 }
+// ✅ OBTENER PEDIDOS FACTURABLES (solo delivered)
+async getInvoiceableOrders(req, res) {
+  try {
+    const companyId = req.user.role === 'admin' ? req.query.company_id : req.user.company_id;
+    
+    if (!companyId) {
+      return res.status(400).json({ error: 'Company ID requerido' });
+    }
+
+    console.log(`📦 Buscando pedidos facturables para empresa: ${companyId}`);
+
+    // Solo pedidos entregados que NO han sido facturados
+    const invoiceableOrders = await Order.find({
+      company_id: companyId,
+      status: 'delivered',
+      'billing_status.is_billable': true,
+      invoice_id: null
+    })
+    .populate('channel_id', 'name platform')
+    .sort({ delivery_date: -1 });
+
+    const summary = {
+      total_orders: invoiceableOrders.length,
+      total_amount: invoiceableOrders.reduce((sum, order) => sum + (order.shipping_cost || 0), 0),
+      date_range: {
+        from: invoiceableOrders.length > 0 ? 
+          invoiceableOrders[invoiceableOrders.length - 1].delivery_date : null,
+        to: invoiceableOrders.length > 0 ? 
+          invoiceableOrders[0].delivery_date : null
+      }
+    };
+
+    console.log(`✅ Encontrados ${invoiceableOrders.length} pedidos facturables`);
+
+    res.json({
+      orders: invoiceableOrders,
+      summary
+    });
+
+  } catch (error) {
+    console.error('❌ Error obteniendo pedidos facturables:', error);
+    res.status(500).json({ error: 'Error del servidor' });
+  }
+}
+
+// ✅ GENERAR FACTURA MEJORADA (complementa el método generateInvoice existente)
+async generateInvoiceImproved(req, res) {
+  const session = await mongoose.startSession();
+  
+  try {
+    await session.withTransaction(async () => {
+      const {
+        company_id,
+        period_start,
+        period_end,
+        order_ids,
+        type = 'invoice'
+      } = req.body;
+
+      console.log(`🧾 Iniciando generación de factura mejorada para empresa: ${company_id}`);
+
+      if (req.user.role !== 'admin') {
+        return res.status(403).json({ error: ERRORS.FORBIDDEN });
+      }
+
+      if (!company_id || !period_start || !period_end || !order_ids || order_ids.length === 0) {
+        return res.status(400).json({ 
+          error: 'Se requieren company_id, period_start, period_end y al menos un order_id' 
+        });
+      }
+
+      // ✅ VALIDAR QUE TODOS LOS PEDIDOS ESTÉN EN ESTADO 'DELIVERED'
+      const orders = await Order.find({
+        _id: { $in: order_ids.map(id => new mongoose.Types.ObjectId(id)) },
+        company_id: new mongoose.Types.ObjectId(company_id),
+        status: 'delivered',
+        'billing_status.is_billable': true,
+        invoice_id: null
+      }).session(session);
+
+      console.log(`📋 Validando pedidos: ${orders.length}/${order_ids.length} válidos`);
+
+      if (orders.length !== order_ids.length) {
+        const invalidOrders = order_ids.length - orders.length;
+        throw new Error(`${invalidOrders} pedidos no son facturables. Solo se pueden facturar pedidos entregados que no estén ya facturados.`);
+      }
+
+      const company = await Company.findById(company_id).session(session);
+      if (!company) {
+        throw new Error('Empresa no encontrada');
+      }
+
+      // Verificar si ya existe una factura en borrador para este período
+      const month = new Date(period_end).getMonth() + 1;
+      const year = new Date(period_end).getFullYear();
+
+      let existingInvoice = await Invoice.findOne({
+        company_id: company_id,
+        month: month,
+        year: year,
+        status: 'draft'
+      }).session(session);
+
+      if (existingInvoice) {
+        console.log(`🔄 Actualizando factura existente: ${existingInvoice.invoice_number}`);
+        
+        // ✅ ACTUALIZAR FACTURA EXISTENTE
+        const currentOrderIds = existingInvoice.order_ids || [];
+        const allOrderIds = [...new Set([...currentOrderIds, ...order_ids])];
+        const allOrders = await Order.find({ 
+          _id: { $in: allOrderIds.map(id => new mongoose.Types.ObjectId(id)) } 
+        }).session(session);
+
+        const subtotal = allOrders.reduce((acc, order) => acc + (order.shipping_cost || 0), 0);
+        const tax_amount = Math.round(subtotal * 0.19);
+        const total_amount = subtotal + tax_amount;
+
+        existingInvoice.total_orders = allOrders.length;
+        existingInvoice.subtotal = subtotal;
+        existingInvoice.tax_amount = tax_amount;
+        existingInvoice.total_amount = total_amount;
+        existingInvoice.amount_due = subtotal;
+        existingInvoice.order_ids = allOrderIds;
+        
+        await existingInvoice.save({ session });
+
+        // ✅ CAMBIAR ESTADO DE PEDIDOS A 'INVOICED' USANDO MÉTODO DEL MODELO
+        for (const order of orders) {
+          order.markAsInvoiced(existingInvoice._id, company.price_per_order);
+          await order.save({ session });
+        }
+
+        const invoiceWithCompany = await Invoice.findById(existingInvoice._id)
+          .populate('company_id', 'name email')
+          .session(session);
+
+        console.log(`✅ Factura actualizada: ${existingInvoice.invoice_number} - ${orders.length} pedidos añadidos`);
+
+        return res.status(200).json({
+          message: 'Factura actualizada exitosamente con nuevos pedidos',
+          invoice: invoiceWithCompany,
+          orders_added: orders.length,
+          total_orders: allOrders.length
+        });
+
+      } else {
+        console.log(`✨ Creando nueva factura para ${company.name} - ${month}/${year}`);
+        
+        // ✅ CREAR NUEVA FACTURA
+        const subtotal = orders.reduce((acc, order) => acc + (order.shipping_cost || 0), 0);
+        const tax_amount = Math.round(subtotal * 0.19);
+        const total_amount = subtotal + tax_amount;
+        
+        const invoiceCount = await Invoice.countDocuments({}).session(session) + 1;
+        const now = new Date();
+        const invoice_number = `INV-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}-${String(invoiceCount).padStart(4, '0')}`;
+
+        const newInvoice = new Invoice({
+          company_id,
+          invoice_number,
+          month,
+          year,
+          total_orders: orders.length,
+          price_per_order: company.price_per_order,
+          subtotal,
+          tax_amount,
+          total_amount,
+          amount_due: subtotal,
+          period_start: new Date(period_start),
+          period_end: new Date(period_end),
+          due_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+          status: 'draft',
+          order_ids: order_ids
+        });
+
+        await newInvoice.save({ session });
+        
+        // ✅ CAMBIAR ESTADO DE PEDIDOS A 'INVOICED' USANDO MÉTODO DEL MODELO
+        for (const order of orders) {
+          order.markAsInvoiced(newInvoice._id, company.price_per_order);
+          await order.save({ session });
+        }
+
+        const invoiceWithCompany = await Invoice.findById(newInvoice._id)
+          .populate('company_id', 'name email')
+          .session(session);
+
+        console.log(`✅ Nueva factura creada: ${newInvoice.invoice_number} con ${orders.length} pedidos`);
+
+        return res.status(201).json({
+          message: 'Factura generada exitosamente',
+          invoice: invoiceWithCompany,
+          orders_invoiced: orders.length
+        });
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Error generando factura mejorada:', error);
+    
+    if (error.code === 11000) {
+      return res.status(409).json({ 
+        error: 'Conflicto: Ya existe una factura para esta empresa en este período que no está en borrador.' 
+      });
+    }
+    
+    res.status(500).json({ 
+      error: error.message || 'Error interno del servidor al generar la factura' 
+    });
+  } finally {
+    await session.endSession();
+  }
+}
+
+// ✅ REVERTIR FACTURACIÓN (volver pedidos de 'invoiced' a 'delivered')
+async revertInvoicing(req, res) {
+  const session = await mongoose.startSession();
+  
+  try {
+    await session.withTransaction(async () => {
+      const { id } = req.params;
+
+      if (req.user.role !== 'admin') {
+        return res.status(403).json({ error: ERRORS.FORBIDDEN });
+      }
+
+      const invoice = await Invoice.findById(id).session(session);
+      if (!invoice) {
+        return res.status(404).json({ error: 'Factura no encontrada' });
+      }
+
+      if (invoice.status === 'paid') {
+        return res.status(400).json({ 
+          error: 'No se puede revertir una factura que ya está pagada' 
+        });
+      }
+
+      console.log(`🔄 Revirtiendo facturación: ${invoice.invoice_number}`);
+
+      // ✅ REVERTIR ESTADO DE PEDIDOS USANDO MÉTODO DEL MODELO
+      const orders = await Order.find({ invoice_id: invoice._id }).session(session);
+      let revertedCount = 0;
+
+      for (const order of orders) {
+        order.revertBilling();
+        await order.save({ session });
+        revertedCount++;
+      }
+
+      // Eliminar la factura
+      await Invoice.findByIdAndDelete(id).session(session);
+
+      console.log(`✅ Facturación revertida: ${invoice.invoice_number} - ${revertedCount} pedidos liberados`);
+
+      res.json({ 
+        message: `Facturación revertida exitosamente. ${revertedCount} pedidos volvieron a estado 'delivered'`,
+        orders_reverted: revertedCount,
+        invoice_number: invoice.invoice_number
+      });
+    });
+
+  } catch (error) {
+    console.error('❌ Error revirtiendo facturación:', error);
+    res.status(500).json({ error: 'Error interno del servidor' });
+  } finally {
+    await session.endSession();
+  }
+}
+
+// ✅ OBTENER ESTADÍSTICAS MEJORADAS PARA EL DASHBOARD
+async getDashboardStats(req, res) {
+  try {
+    const companyId = req.user.role === 'admin' ? req.params.companyId : req.user.company_id;
+    
+    // Verificar permisos
+    if (req.user.role !== 'admin' && req.user.company_id.toString() !== companyId) {
+      return res.status(403).json({ error: 'Sin permisos para acceder a esta empresa' });
+    }
+
+    console.log(`📊 Generando estadísticas del dashboard para empresa: ${companyId}`);
+
+    const currentMonth = new Date().getMonth() + 1;
+    const currentYear = new Date().getFullYear();
+
+    // ✅ OBTENER ESTADÍSTICAS DE PEDIDOS POR ESTADO
+    const orderStats = await Order.aggregate([
+      { $match: { company_id: new mongoose.Types.ObjectId(companyId) } },
+      {
+        $group: {
+          _id: '$status',
+          count: { $sum: 1 },
+          total_amount: { $sum: '$shipping_cost' }
+        }
+      }
+    ]);
+
+    // ✅ PEDIDOS FACTURABLES (delivered pero no facturados)
+    const invoiceableOrders = await Order.countDocuments({
+      company_id: companyId,
+      status: 'delivered',
+      'billing_status.is_billable': true
+    });
+
+    // ✅ INGRESOS DEL MES (pedidos facturados)
+    const monthlyRevenue = await Order.aggregate([
+      {
+        $match: {
+          company_id: new mongoose.Types.ObjectId(companyId),
+          status: 'invoiced',
+          $expr: {
+            $and: [
+              { $eq: [{ $month: '$billing_status.billed_at' }, currentMonth] },
+              { $eq: [{ $year: '$billing_status.billed_at' }, currentYear] }
+            ]
+          }
+        }
+      },
+      {
+        $group: {
+          _id: null,
+          total_revenue: { $sum: '$shipping_cost' },
+          invoiced_orders: { $sum: 1 }
+        }
+      }
+    ]);
+
+    // ✅ CALCULAR TASA DE FACTURACIÓN
+    const deliveredCount = orderStats.find(s => s._id === 'delivered')?.count || 0;
+    const invoicedCount = orderStats.find(s => s._id === 'invoiced')?.count || 0;
+    const totalDeliverable = deliveredCount + invoicedCount;
+    const billingRate = totalDeliverable > 0 ? Math.round((invoicedCount / totalDeliverable) * 100) : 0;
+
+    const stats = {
+      ordersByStatus: orderStats.reduce((acc, stat) => {
+        acc[stat._id] = {
+          count: stat.count,
+          total_amount: stat.total_amount
+        };
+        return acc;
+      }, {}),
+      invoiceableOrders,
+      monthlyRevenue: monthlyRevenue[0] || { total_revenue: 0, invoiced_orders: 0 },
+      billingRate,
+      summary: {
+        total_orders: orderStats.reduce((sum, stat) => sum + stat.count, 0),
+        total_delivered: deliveredCount,
+        total_invoiced: invoicedCount,
+        pending_billing: invoiceableOrders
+      }
+    };
+
+    console.log(`✅ Estadísticas generadas:`, {
+      total_orders: stats.summary.total_orders,
+      invoiceable: invoiceableOrders,
+      billing_rate: billingRate
+    });
+
+    res.json(stats);
+
+  } catch (error) {
+    console.error('❌ Error obteniendo estadísticas del dashboard:', error);
+    res.status(500).json({ error: 'Error del servidor' });
+  }
+}
 }
 
 const billingControllerInstance = new BillingController();
@@ -1417,6 +1781,7 @@ Object.getOwnPropertyNames(BillingController.prototype).forEach(method => {
         billingControllerInstance[method] = billingControllerInstance[method].bind(billingControllerInstance);
     }
 });
+
 
 
 

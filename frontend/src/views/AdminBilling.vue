@@ -145,7 +145,11 @@
         <canvas ref="revenueChartCanvas"></canvas>
       </div>
     </div>
+    <div>
+      <BillingTestWidget />
 
+    </div>
+    
     <!-- Tabla de facturas mejorada -->
     <div class="invoices-section">
       <div class="section-header">
