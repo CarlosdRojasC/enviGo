@@ -89,7 +89,7 @@ const orders = {
   getManifestData: (orderIds) => api.post('/orders/manifest', { orderIds }),
   getTrend: (params = {}) => api.get('/orders/trend', { params }),
   debugShipday: (orderId) => api.get(`/orders/${orderId}/debug-shipday`),
-  exportForOptiRoute: (params = {}) => api.get('/orders/export', { 
+  exportOrders: (params = {}) => api.get('/orders/export', { 
     params,
     responseType: 'blob'
   }),

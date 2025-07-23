@@ -301,44 +301,22 @@ function calculateAdditionalStats() {
 async function exportOrders(format = 'excel', filters = {}) {
   loadingStates.value.exporting = true
   try {
-    console.log('📤 Exportando pedidos con filtros:', filters)
-    
-    // Llamada correcta a la API
-    const response = await apiService.orders.exportOrders({ format, ...filters })
-    
-    // Crear y descargar archivo
-    const blob = new Blob([response.data], { 
-      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
-    })
+    const response = await apiService.orders.export({ format, ...filters })
+    // Manejar descarga
+    const blob = new Blob([response.data])
     const url = window.URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
-    
-    // Nombre del archivo con timestamp
-    const timestamp = new Date().toISOString().split('T')[0]
-    link.download = `pedidos_envigo_${timestamp}.xlsx`
-    
-    document.body.appendChild(link)
+    link.download = `orders_${new Date().toISOString().split('T')[0]}.${format}`
     link.click()
-    document.body.removeChild(link)
     window.URL.revokeObjectURL(url)
-    
-    toast.success('✅ Exportación completada exitosamente')
-    return response
-    
   } catch (error) {
-    console.error('❌ Error exportando pedidos:', error)
-    if (error.response?.status === 404) {
-      toast.warning('No se encontraron pedidos para exportar')
-    } else {
-      toast.error('Error al exportar pedidos')
-    }
+    console.error('Error exporting:', error)
     throw error
   } finally {
     loadingStates.value.exporting = false
   }
 }
-
 
 // Obtener tendencias
 async function getOrdersTrend(period = '30d') {
