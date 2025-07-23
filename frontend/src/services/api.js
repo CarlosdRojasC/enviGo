@@ -4,7 +4,7 @@ import axios from 'axios'
 // Configuración base de axios
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || 'http://localhost:3001/api',
-  timeout: 10000,
+  timeout: 30000,
   headers: {
     'Content-Type': 'application/json'
   }
@@ -378,8 +378,11 @@ getAllForAdmin: () => api.get('/channels/admin/all'),
 // Servicios de facturación
 const billing = {
   // Obtener resumen financiero para admin dashboard
-  getFinancialSummary: () => api.get('/billing/financial-summary'),
-  
+   getFinancialSummary: () => {
+    return api.get('/billing/financial-summary', {
+      timeout: 45000 // 45 segundos para summary financiero
+    });
+  },
   // Obtener facturas
   getInvoices: (params = {}) => {
     const queryParams = new URLSearchParams(params).toString();
@@ -483,16 +486,21 @@ const billing = {
 
 
   // ✅ Obtener pedidos facturables (solo delivered, no facturados)
-getInvoiceableOrders: (companyId = null) => {
-  const params = companyId ? `?company_id=${companyId}` : '';
-  return api.get(`/billing/invoiceable-orders${params}`);
-},
+  getInvoiceableOrders: (companyId = null) => {
+    const params = companyId ? `?company_id=${companyId}` : '';
+    console.log('📦 API: Obteniendo pedidos facturables');
+    return api.get(`/billing/invoiceable-orders${params}`, {
+      timeout: 30000 // 30 segundos para pedidos
+    });
+  },
 
 // ✅ Generar factura con flujo mejorado (complementa generateInvoice existente)
-generateInvoiceImproved: (invoiceData) => {
-  console.log('📤 API: Generando factura mejorada:', invoiceData);
-  return api.post('/billing/invoices/generate-improved', invoiceData);
-},
+  generateInvoiceImproved: (invoiceData) => {
+    console.log('📤 API: Generando factura mejorada:', invoiceData);
+    return api.post('/billing/invoices/generate-improved', invoiceData, {
+      timeout: 60000 // 60 segundos para generación de factura
+    });
+  },
 
 // ✅ Revertir facturación (volver pedidos de invoiced a delivered)
 revertInvoicing: (invoiceId) => {
@@ -502,9 +510,11 @@ revertInvoicing: (invoiceId) => {
 
 // ✅ Obtener estadísticas completas del dashboard
 getDashboardStats: (companyId) => {
-  console.log('📊 API: Obteniendo estadísticas del dashboard para:', companyId);
-  return api.get(`/billing/dashboard-stats/${companyId}`);
-},
+    console.log('📊 API: Obteniendo estadísticas del dashboard para:', companyId);
+    return api.get(`/billing/dashboard-stats/${companyId}`, {
+      timeout: 45000 // 45 segundos para estadísticas complejas
+    });
+  },
 
 // ✅ Obtener estadísticas del usuario actual (sin especificar empresa)
 getMyDashboardStats: () => {
@@ -512,11 +522,12 @@ getMyDashboardStats: () => {
 },
 
 // ✅ Obtener resumen rápido de facturación
-getQuickSummary: (companyId = null) => {
-  const params = companyId ? `?company_id=${companyId}` : '';
-  return api.get(`/billing/quick-summary${params}`);
-},
-
+  getQuickSummary: (companyId = null) => {
+    const params = companyId ? `?company_id=${companyId}` : '';
+    return api.get(`/billing/quick-summary${params}`, {
+      timeout: 15000 // 15 segundos para resumen rápido
+    });
+  },
 // ==================== MÉTODOS AUXILIARES ÚTILES ====================
 
 // ✅ Verificar si un pedido puede ser facturado

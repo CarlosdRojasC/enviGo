@@ -1416,33 +1416,57 @@ async getInvoiceableOrders(req, res) {
       return res.status(400).json({ error: 'Company ID requerido' });
     }
 
-    console.log(`📦 Buscando pedidos facturables para empresa: ${companyId}`);
+    console.log(`📦 Buscando pedidos facturables optimizado para empresa: ${companyId}`);
+    const startTime = new Date();
 
-    // Solo pedidos entregados que NO han sido facturados
-    const invoiceableOrders = await Order.find({
-      company_id: companyId,
-      status: 'delivered',
-      'billing_status.is_billable': true,
-      invoice_id: null
-    })
-    .populate('channel_id', 'name platform')
-    .sort({ delivery_date: -1 });
+    // ✅ CONSULTA OPTIMIZADA CON LÍMITE Y PROYECCIÓN
+    const [orders, totalCount] = await Promise.all([
+      // Obtener pedidos con proyección limitada
+      Order.find({
+        company_id: companyId,
+        status: 'delivered',
+        'billing_status.is_billable': true,
+        invoice_id: null
+      })
+      .select('order_number customer_name customer_phone delivery_date shipping_cost channel_id') // Solo campos necesarios
+      .populate('channel_id', 'name platform') // Solo campos necesarios del canal
+      .sort({ delivery_date: -1 })
+      .limit(100) // ✅ LIMITAR RESULTADOS PARA EVITAR TIMEOUT
+      .lean(), // ✅ USAR LEAN PARA MEJOR PERFORMANCE
+
+      // Contar total por separado
+      Order.countDocuments({
+        company_id: companyId,
+        status: 'delivered',
+        'billing_status.is_billable': true,
+        invoice_id: null
+      })
+    ]);
+
+    // ✅ CALCULAR RESUMEN DE FORMA EFICIENTE
+    const totalAmount = orders.reduce((sum, order) => sum + (order.shipping_cost || 0), 0);
+    
+    // Encontrar rango de fechas sin ordenar todo
+    const dates = orders.map(o => o.delivery_date).filter(Boolean);
+    const minDate = dates.length > 0 ? new Date(Math.min(...dates.map(d => new Date(d)))) : null;
+    const maxDate = dates.length > 0 ? new Date(Math.max(...dates.map(d => new Date(d)))) : null;
 
     const summary = {
-      total_orders: invoiceableOrders.length,
-      total_amount: invoiceableOrders.reduce((sum, order) => sum + (order.shipping_cost || 0), 0),
+      total_orders: orders.length,
+      total_count: totalCount, // Total real sin límite
+      total_amount: totalAmount,
       date_range: {
-        from: invoiceableOrders.length > 0 ? 
-          invoiceableOrders[invoiceableOrders.length - 1].delivery_date : null,
-        to: invoiceableOrders.length > 0 ? 
-          invoiceableOrders[0].delivery_date : null
-      }
+        from: minDate,
+        to: maxDate
+      },
+      showing_limit: orders.length < totalCount ? 100 : null
     };
 
-    console.log(`✅ Encontrados ${invoiceableOrders.length} pedidos facturables`);
+    const executionTime = new Date() - startTime;
+    console.log(`✅ Encontrados ${orders.length}/${totalCount} pedidos facturables en ${executionTime}ms`);
 
     res.json({
-      orders: invoiceableOrders,
+      orders,
       summary
     });
 
@@ -1686,81 +1710,87 @@ async getDashboardStats(req, res) {
       return res.status(403).json({ error: 'Sin permisos para acceder a esta empresa' });
     }
 
-    console.log(`📊 Generando estadísticas del dashboard para empresa: ${companyId}`);
+    console.log(`📊 Generando estadísticas optimizadas para empresa: ${companyId}`);
+    const startTime = new Date();
 
-    const currentMonth = new Date().getMonth() + 1;
-    const currentYear = new Date().getFullYear();
-
-    // ✅ OBTENER ESTADÍSTICAS DE PEDIDOS POR ESTADO
-    const orderStats = await Order.aggregate([
-      { $match: { company_id: new mongoose.Types.ObjectId(companyId) } },
-      {
-        $group: {
-          _id: '$status',
-          count: { $sum: 1 },
-          total_amount: { $sum: '$shipping_cost' }
-        }
-      }
-    ]);
-
-    // ✅ PEDIDOS FACTURABLES (delivered pero no facturados)
-    const invoiceableOrders = await Order.countDocuments({
-      company_id: companyId,
-      status: 'delivered',
-      'billing_status.is_billable': true
-    });
-
-    // ✅ INGRESOS DEL MES (pedidos facturados)
-    const monthlyRevenue = await Order.aggregate([
-      {
-        $match: {
-          company_id: new mongoose.Types.ObjectId(companyId),
-          status: 'invoiced',
-          $expr: {
-            $and: [
-              { $eq: [{ $month: '$billing_status.billed_at' }, currentMonth] },
-              { $eq: [{ $year: '$billing_status.billed_at' }, currentYear] }
-            ]
+    // ✅ USAR AGREGACIONES OPTIMIZADAS CON ÍNDICES
+    const [orderStats, invoiceableCount, monthlyRevenue] = await Promise.all([
+      // 1. Estadísticas por estado (optimizada)
+      Order.aggregate([
+        { 
+          $match: { 
+            company_id: new mongoose.Types.ObjectId(companyId)
+          } 
+        },
+        {
+          $group: {
+            _id: '$status',
+            count: { $sum: 1 },
+            total_amount: { $sum: { $ifNull: ['$shipping_cost', 0] } }
           }
         }
-      },
-      {
-        $group: {
-          _id: null,
-          total_revenue: { $sum: '$shipping_cost' },
-          invoiced_orders: { $sum: 1 }
+      ]),
+
+      // 2. Conteo simple de facturables (optimizada con índices)
+      Order.countDocuments({
+        company_id: companyId,
+        status: 'delivered',
+        'billing_status.is_billable': true
+      }),
+
+      // 3. Ingresos del mes actual (optimizada con rango de fechas)
+      Order.aggregate([
+        {
+          $match: {
+            company_id: new mongoose.Types.ObjectId(companyId),
+            status: 'invoiced',
+            'billing_status.billed_at': {
+              $gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
+              $lt: new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1)
+            }
+          }
+        },
+        {
+          $group: {
+            _id: null,
+            total_revenue: { $sum: { $ifNull: ['$shipping_cost', 0] } },
+            invoiced_orders: { $sum: 1 }
+          }
         }
-      }
+      ])
     ]);
 
-    // ✅ CALCULAR TASA DE FACTURACIÓN
-    const deliveredCount = orderStats.find(s => s._id === 'delivered')?.count || 0;
-    const invoicedCount = orderStats.find(s => s._id === 'invoiced')?.count || 0;
+    // ✅ CALCULAR TASA DE FACTURACIÓN DE FORMA EFICIENTE
+    const ordersByStatus = orderStats.reduce((acc, stat) => {
+      acc[stat._id] = {
+        count: stat.count,
+        total_amount: stat.total_amount || 0
+      };
+      return acc;
+    }, {});
+
+    const deliveredCount = ordersByStatus.delivered?.count || 0;
+    const invoicedCount = ordersByStatus.invoiced?.count || 0;
     const totalDeliverable = deliveredCount + invoicedCount;
     const billingRate = totalDeliverable > 0 ? Math.round((invoicedCount / totalDeliverable) * 100) : 0;
 
     const stats = {
-      ordersByStatus: orderStats.reduce((acc, stat) => {
-        acc[stat._id] = {
-          count: stat.count,
-          total_amount: stat.total_amount
-        };
-        return acc;
-      }, {}),
-      invoiceableOrders,
+      ordersByStatus,
+      invoiceableOrders: invoiceableCount,
       monthlyRevenue: monthlyRevenue[0] || { total_revenue: 0, invoiced_orders: 0 },
       billingRate,
       summary: {
         total_orders: orderStats.reduce((sum, stat) => sum + stat.count, 0),
         total_delivered: deliveredCount,
         total_invoiced: invoicedCount,
-        pending_billing: invoiceableOrders
+        pending_billing: invoiceableCount
       }
     };
 
-    console.log(`✅ Estadísticas generadas:`, {
+    const executionTime = new Date() - startTime;
+    console.log(`✅ Estadísticas generadas en ${executionTime}ms:`, {
       total_orders: stats.summary.total_orders,
-      invoiceable: invoiceableOrders,
+      invoiceable: invoiceableCount,
       billing_rate: billingRate
     });
 
