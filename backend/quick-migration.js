@@ -10,8 +10,13 @@ async function quickMigration() {
     console.log('🔄 Iniciando migración rápida de pedidos...');
     
     // Conectar a la base de datos
-    await mongoose.connect(process.env.MONGODB_URI || process.env.MONGODB_URL || 'mongodb://localhost:27017/envigo');
-    console.log('✅ Conectado a MongoDB');
+    const mongoUrl = process.env.MONGODB_URI || 
+                 process.env.MONGODB_URL || 
+                 process.env.DATABASE_URL || 
+                 process.env.MONGO_URL ||
+                 'mongodb://localhost:27017/envigo';
+   console.log('🔌 Conectando a:', mongoUrl.replace(/\/\/.*@/, '//***:***@')); // Ocultar credenciales en log
+await mongoose.connect(mongoUrl);
 
     // 1. Ver el estado actual
     console.log('\n📊 ESTADO ACTUAL:');
