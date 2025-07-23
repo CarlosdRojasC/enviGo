@@ -135,6 +135,7 @@ import OrdersTable from '../components/Orders/OrdersTable.vue'
 import { useOrdersData } from '../composables/useOrdersData'
 import { useOrdersFilters } from '../composables/useOrdersFilters'
 import { useOrdersSelection } from '../composables/useOrdersSelection'
+import ExportDropdown from '../components/Orders/ExportDropdown.vue'
 
 
 const toast = useToast()
@@ -252,15 +253,39 @@ async function handleRefresh() {
   }
 }
 
-async function handleExport() {
+async function handleExport(exportConfig = {}) {
   try {
-    await exportOrders('excel', allFilters.value)
-    toast.success('Exportación completada')
+    const { type = 'dashboard', filters = {} } = exportConfig
+    
+    console.log('📤 Exportando pedidos:', { type, filters: allFilters.value })
+    
+    if (type === 'optiroute') {
+      // Verificar que es admin
+      if (!auth.isAdmin) {
+        toast.error('Solo los administradores pueden exportar para OptiRoute')
+        return
+      }
+      
+      // Exportar para OptiRoute
+      await exportOrdersForOptiRoute(allFilters.value)
+      toast.success('✅ Exportación para OptiRoute completada')
+      
+    } else {
+      // Exportación normal para dashboard (por defecto)
+      await exportOrders('excel', allFilters.value)
+      toast.success('✅ Exportación completada')
+    }
+    
   } catch (error) {
+    console.error('❌ Error en handleExport:', error)
     toast.error('Error al exportar pedidos')
   }
 }
 
+// 4. Función simplificada para el header (mantener compatibilidad)
+async function handleSimpleExport() {
+  await handleExport({ type: 'dashboard' })
+}
 function handleCreateOrder() {
   // Navegar a crear pedido o abrir modal
   router.push('/orders/create')

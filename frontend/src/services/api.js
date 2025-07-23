@@ -93,6 +93,18 @@ const orders = {
     params,
     responseType: 'blob'
   }),
+   // 🆕 Nueva función para exportación de dashboard
+  exportForDashboard: (params = {}) => api.get('/orders/export-dashboard', { 
+    params,
+    responseType: 'blob'
+  }),
+  
+  // ✅ Función genérica que ahora usará dashboard por defecto
+  export: (params = {}) => api.get('/orders/export-dashboard', { 
+    params,
+    responseType: 'blob'
+  }),
+  
   bulkUpload: (formData) => api.post('/orders/bulk-upload', formData, {
     headers: {
       'Content-Type': 'multipart/form-data'

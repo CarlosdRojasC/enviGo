@@ -956,5 +956,75 @@ async bulkUpload(req, res) {
       res.status(500).json({ error: 'Error interno del servidor' });
     }
   }
+  async exportForDashboard(req, res) {
+  try {
+    const { date_from, date_to, company_id, status, channel_id } = req.query;
+
+    const filters = {};
+
+    // Aplicar filtro de empresa según el rol del usuario
+    if (req.user.role !== 'admin') {
+      // Si no es admin, solo puede ver órdenes de su empresa
+      filters.company_id = req.user.company_id;
+    } else {
+      // Si es admin, puede filtrar por empresa específica
+      if (company_id) {
+        filters.company_id = company_id;
+      }
+    }
+
+    // Filtros adicionales
+    if (status) {
+      filters.status = status;
+    }
+
+    if (channel_id) {
+      filters.channel_id = channel_id;
+    }
+
+    if (date_from || date_to) {
+      filters.order_date = {};
+      if (date_from) filters.order_date.$gte = new Date(date_from);
+      if (date_to) filters.order_date.$lte = new Date(date_to);
+    }
+
+    console.log('📊 Exportando pedidos para dashboard con filtros:', filters);
+
+    const orders = await Order.find(filters)
+      .populate('company_id', 'name')
+      .populate('channel_id', 'channel_name')
+      .sort({ created_at: -1 }) // Ordenar por fecha de creación descendente
+      .lean();
+
+    if (orders.length === 0) {
+      return res.status(404).json({ 
+        error: 'No se encontraron pedidos para exportar con los filtros aplicados' 
+      });
+    }
+
+    console.log(`✅ Encontrados ${orders.length} pedidos para exportar`);
+
+    // Usar el nuevo método de ExcelService para dashboard
+    const excelBuffer = await ExcelService.generateDashboardExport(orders);
+
+    // Configurar headers para descarga
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    );
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename=pedidos_dashboard_${Date.now()}.xlsx`
+    );
+
+    res.send(excelBuffer);
+    
+    console.log('✅ Exportación para dashboard completada exitosamente');
+
+  } catch (error) {
+    console.error('❌ Error exportando para dashboard:', error);
+    res.status(500).json({ error: 'Error interno del servidor' });
+  }
+}
 }
 module.exports = new OrderController();

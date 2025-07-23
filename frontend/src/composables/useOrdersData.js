@@ -301,17 +301,54 @@ function calculateAdditionalStats() {
 async function exportOrders(format = 'excel', filters = {}) {
   loadingStates.value.exporting = true
   try {
-    const response = await apiService.orders.export({ format, ...filters })
-    // Manejar descarga
-    const blob = new Blob([response.data])
+    console.log('📤 Exportando pedidos para dashboard con filtros:', filters)
+    
+    // ✅ USAR LA NUEVA FUNCIÓN DE DASHBOARD
+    const response = await apiService.orders.exportForDashboard(filters)
+    
+    if (!response || !response.data) {
+      throw new Error('Respuesta vacía del servidor')
+    }
+    
+    // Crear y descargar archivo
+    const blob = new Blob([response.data], { 
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+    })
+    
     const url = window.URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
-    link.download = `orders_${new Date().toISOString().split('T')[0]}.${format}`
+    
+    // Nombre del archivo más descriptivo
+    const timestamp = new Date().toISOString().split('T')[0]
+    const totalOrders = orders.value.length
+    link.download = `pedidos_envigo_${timestamp}_${totalOrders}_pedidos.xlsx`
+    
+    document.body.appendChild(link)
     link.click()
+    document.body.removeChild(link)
     window.URL.revokeObjectURL(url)
+    
+    console.log('✅ Exportación de dashboard completada')
+    toast.success(`✅ Exportación completada: ${totalOrders} pedidos descargados`)
+    return response
+    
   } catch (error) {
-    console.error('Error exporting:', error)
+    console.error('❌ Error exportando pedidos:', error)
+    
+    // Manejo de errores más específico
+    if (error.response?.status === 404) {
+      toast.warning('No se encontraron pedidos para exportar con los filtros aplicados')
+    } else if (error.response?.status === 403) {
+      toast.error('No tienes permisos para exportar pedidos')
+    } else if (error.response?.status === 500) {
+      toast.error('Error interno del servidor. Contacta al soporte.')
+    } else if (error.message?.includes('Network Error')) {
+      toast.error('Error de conexión. Verifica tu internet.')
+    } else {
+      toast.error('Error al exportar pedidos: ' + (error.message || 'Error desconocido'))
+    }
+    
     throw error
   } finally {
     loadingStates.value.exporting = false

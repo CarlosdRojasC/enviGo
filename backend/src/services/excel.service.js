@@ -410,6 +410,197 @@ class ExcelService {
     
     return errors;
   }
+  static async generateDashboardExport(orders) {
+  try {
+    // Preparar datos básicos para dashboard
+    const data = orders.map((order, index) => ({
+      // Información básica del pedido
+      'Número de Pedido': order.order_number,
+      'ID Externo': order.external_order_id || '',
+      'Fecha de Pedido': order.order_date ? new Date(order.order_date).toLocaleDateString('es-CL') : '',
+      'Fecha de Creación': new Date(order.created_at).toLocaleDateString('es-CL'),
+      
+      // Cliente
+      'Cliente': order.customer_name,
+      'Email': order.customer_email || '',
+      'Teléfono': order.customer_phone || '',
+      'Documento': order.customer_document || '',
+      
+      // Dirección
+      'Dirección': order.shipping_address,
+      'Ciudad': order.shipping_city || '',
+      'Comuna': order.shipping_commune || '',
+      'Región': order.shipping_state || '',
+      'Código Postal': order.shipping_zip || '',
+      
+      // Estado y seguimiento
+      'Estado': this.translateStatus(order.status),
+      'Estado Original': order.status,
+      'En Shipday': order.shipday_order_id ? 'Sí' : 'No',
+      'ID Shipday': order.shipday_order_id || '',
+      'Conductor Asignado': order.driver_id || '',
+      
+      // Costos y montos
+      'Monto Total': order.total_amount || 0,
+      'Costo de Envío': order.shipping_cost || 0,
+      'Subtotal': (order.total_amount || 0) - (order.shipping_cost || 0),
+      
+      // Fechas importantes
+      'Fecha de Entrega': order.delivery_date ? new Date(order.delivery_date).toLocaleDateString('es-CL') : '',
+      'Fecha de Recogida': order.pickup_time ? new Date(order.pickup_time).toLocaleDateString('es-CL') : '',
+      'Última Actualización': new Date(order.updated_at).toLocaleDateString('es-CL'),
+      
+      // Empresa y canal
+      'Empresa': order.company_id?.name || '',
+      'Canal': order.channel_id?.channel_name || '',
+      
+      // Información adicional
+      'Notas': order.notes || '',
+      'Prioridad': order.priority || 'Normal',
+      'Paquetes': order.load1Packages || 1,
+      'Peso (kg)': order.load2WeightKg || 0,
+      
+      // URLs de seguimiento
+      'URL de Tracking': order.shipday_tracking_url || '',
+      'Tiene Prueba de Entrega': order.proof_of_delivery ? 'Sí' : 'No'
+    }));
+    
+    // Crear libro de Excel
+    const wb = XLSX.utils.book_new();
+    
+    // Crear hoja principal con los datos
+    const ws = XLSX.utils.json_to_sheet(data);
+    
+    // Ajustar anchos de columna para mejor visualización
+    const colWidths = [
+      { wch: 18 }, // Número de Pedido
+      { wch: 15 }, // ID Externo
+      { wch: 12 }, // Fecha de Pedido
+      { wch: 12 }, // Fecha de Creación
+      { wch: 25 }, // Cliente
+      { wch: 25 }, // Email
+      { wch: 15 }, // Teléfono
+      { wch: 15 }, // Documento
+      { wch: 40 }, // Dirección
+      { wch: 15 }, // Ciudad
+      { wch: 15 }, // Comuna
+      { wch: 20 }, // Región
+      { wch: 10 }, // Código Postal
+      { wch: 15 }, // Estado
+      { wch: 15 }, // Estado Original
+      { wch: 10 }, // En Shipday
+      { wch: 15 }, // ID Shipday
+      { wch: 20 }, // Conductor
+      { wch: 12 }, // Monto Total
+      { wch: 12 }, // Costo Envío
+      { wch: 12 }, // Subtotal
+      { wch: 12 }, // Fecha Entrega
+      { wch: 12 }, // Fecha Recogida
+      { wch: 12 }, // Última Actualización
+      { wch: 20 }, // Empresa
+      { wch: 20 }, // Canal
+      { wch: 30 }, // Notas
+      { wch: 10 }, // Prioridad
+      { wch: 10 }, // Paquetes
+      { wch: 10 }, // Peso
+      { wch: 30 }, // URL Tracking
+      { wch: 15 }  // Tiene Prueba
+    ];
+    ws['!cols'] = colWidths;
+    
+    // Agregar la hoja al libro
+    XLSX.utils.book_append_sheet(wb, ws, 'Pedidos');
+    
+    // Crear hoja de estadísticas
+    const stats = this.generateOrdersStats(orders);
+    const statsSheet = [
+      ['ESTADÍSTICAS DE PEDIDOS'],
+      [''],
+      ['Total de Pedidos:', orders.length],
+      ['Fecha de Exportación:', new Date().toLocaleString('es-CL')],
+      [''],
+      ['RESUMEN POR ESTADO:'],
+      ['Pendientes:', stats.pending],
+      ['Listos para Retiro:', stats.ready_for_pickup],
+      ['En Bodega:', stats.warehouse_received],
+      ['Procesando:', stats.processing],
+      ['Enviados:', stats.shipped],
+      ['Entregados:', stats.delivered],
+      ['Cancelados:', stats.cancelled],
+      [''],
+      ['RESUMEN FINANCIERO:'],
+      ['Monto Total:', `$${stats.totalAmount.toLocaleString('es-CL')}`],
+      ['Monto Promedio:', `$${stats.averageAmount.toLocaleString('es-CL')}`],
+      ['Costos de Envío:', `$${stats.totalShippingCost.toLocaleString('es-CL')}`],
+      [''],
+      ['RESUMEN POR EMPRESA:']
+    ];
+    
+    // Agregar estadísticas por empresa
+    Object.entries(stats.byCompany).forEach(([company, count]) => {
+      statsSheet.push([company + ':', count]);
+    });
+    
+    statsSheet.push(['']);
+    statsSheet.push(['RESUMEN POR CANAL:']);
+    
+    // Agregar estadísticas por canal
+    Object.entries(stats.byChannel).forEach(([channel, count]) => {
+      statsSheet.push([channel + ':', count]);
+    });
+    
+    const wsStats = XLSX.utils.aoa_to_sheet(statsSheet);
+    XLSX.utils.book_append_sheet(wb, wsStats, 'Estadísticas');
+    
+    // Generar buffer
+    const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+    
+    return buffer;
+  } catch (error) {
+    console.error('Error generando Excel para dashboard:', error);
+    throw new Error('Error al generar archivo Excel');
+  }
+}
+
+// Método auxiliar para generar estadísticas
+static generateOrdersStats(orders) {
+  const stats = {
+    pending: 0,
+    ready_for_pickup: 0,
+    warehouse_received: 0,
+    processing: 0,
+    shipped: 0,
+    delivered: 0,
+    cancelled: 0,
+    totalAmount: 0,
+    totalShippingCost: 0,
+    byCompany: {},
+    byChannel: {}
+  };
+  
+  orders.forEach(order => {
+    // Contar por estado
+    if (stats.hasOwnProperty(order.status)) {
+      stats[order.status]++;
+    }
+    
+    // Sumar montos
+    stats.totalAmount += order.total_amount || 0;
+    stats.totalShippingCost += order.shipping_cost || 0;
+    
+    // Contar por empresa
+    const company = order.company_id?.name || 'Sin Empresa';
+    stats.byCompany[company] = (stats.byCompany[company] || 0) + 1;
+    
+    // Contar por canal
+    const channel = order.channel_id?.channel_name || 'Sin Canal';
+    stats.byChannel[channel] = (stats.byChannel[channel] || 0) + 1;
+  });
+  
+  stats.averageAmount = orders.length > 0 ? stats.totalAmount / orders.length : 0;
+  
+  return stats;
+}
 }
 
 module.exports = ExcelService;
