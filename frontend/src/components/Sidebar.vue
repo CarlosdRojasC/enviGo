@@ -2,7 +2,7 @@
   <aside class="sidebar">
     <div class="sidebar-header">
       <h2 class="logo">
-        <img class="imagelogo" src="../assets/envigoLogo.png" alt="" srcset="">
+        <img class="imagelogo" src="../assets/favicon.png" alt="" srcset="">
       </h2>
     </div>
     <nav class="nav-menu">
@@ -58,27 +58,25 @@ function logout() {
 <style scoped>
 .sidebar {
   width: 260px;
-  background-color: #0f172a; /* Azul oscuro casi negro */
+  background-color: #e9e8eb;
   color: #94a3b8; /* Gris azulado claro */
   display: flex;
   flex-direction: column;
   height: 100vh;
   flex-shrink: 0;
   transition: width 0.3s ease;
-  border-right: 1px solid #1e293b; /* Borde sutil */
 }
 
 .sidebar-header {
   padding: 20px 24px;
   display: flex;
   align-items: center;
-  border-bottom: 1px solid #1e293b;
+  flex-direction: column;
 }
 
 .imagelogo {
-  width: 160px;
+  width: 200px;
   height: auto;
-  filter: drop-shadow(0 0 4px rgba(0, 255, 128, 0.2));
 }
 
 .nav-menu {
