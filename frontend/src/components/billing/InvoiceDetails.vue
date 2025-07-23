@@ -581,6 +581,8 @@ const ordersPerPage = ref(10)
 // Modal de confirmación
 const showConfirmModal = ref(false)
 const confirmAction = ref({})
+const showPaymentModal = ref(false)
+const rejectReason = ref('')
 
 // Computed
 const filteredOrders = computed(() => {
