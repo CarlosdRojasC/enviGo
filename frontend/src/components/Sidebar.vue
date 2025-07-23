@@ -58,25 +58,28 @@ function logout() {
 <style scoped>
 .sidebar {
   width: 260px;
-  background-color: #e9e8eb;
+  background-color: #0f172a; /* Azul oscuro casi negro */
   color: #94a3b8; /* Gris azulado claro */
   display: flex;
   flex-direction: column;
   height: 100vh;
   flex-shrink: 0;
   transition: width 0.3s ease;
+  border-right: 1px solid #1e293b; /* Borde sutil */
 }
 
 .sidebar-header {
   padding: 20px 24px;
   display: flex;
   align-items: center;
+  border-bottom: 1px solid #1e293b;
   flex-direction: column;
 }
 
 .imagelogo {
-  width: 200px;
+  width: 160px;
   height: auto;
+  filter: drop-shadow(0 0 4px rgba(0, 255, 128, 0.2));
 }
 
 .nav-menu {
