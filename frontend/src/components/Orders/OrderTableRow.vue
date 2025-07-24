@@ -311,324 +311,301 @@
 import { computed } from 'vue'
 
 const props = defineProps({
-  order: {
-    type: Object,
-    required: true
-  },
-  selected: {
-    type: Boolean,
-    default: false
-  },
-  selectable: {
-    type: Boolean,
-    default: true
-  }
+  orders: { type: Array, default: () => [] },
+  selectedOrders: { type: Array, default: () => [] },
+  selectAllChecked: Boolean,
+  selectAllIndeterminate: Boolean,
+  loading: Boolean,
+  pagination: Object,
+  showCreateButton: Boolean,
+  hasTrackingInfo: Function,
+  hasProofOfDelivery: Function,
+  getActionButton: Function
 })
 
-defineEmits([
-  'toggle-selection',
-  'view-details',
-  'mark-ready',
-  'track-live',
-  'view-tracking',
-  'view-proof',
-  'contact-support'
+const emit = defineEmits([
+  'toggle-selection', 'toggle-select-all', 'clear-selection',
+  'view-details', 'mark-ready', 'track-live', 'view-tracking', 
+  'view-proof', 'handle-action', 'contact-support',
+  'bulk-mark-ready', 'generate-manifest', 'bulk-export',
+  'create-order', 'go-to-page', 'change-page-size'
 ])
 
-// Computed properties
-const rowClasses = computed(() => {
-  const classes = []
-  
-  if (props.selected) classes.push('selected')
-  if (!props.selectable) classes.push('non-selectable')
-  if (props.order.status === 'delivered') classes.push('delivered-row')
-  if (props.order.status === 'shipped') classes.push('shipped-row')
-  if (props.order.shipday_tracking_url) classes.push('live-tracking-row')
-  if (props.order.status === 'warehouse_received') classes.push('warehouse-received-row')
-  if (isUrgent.value) classes.push('urgent-row')
-  
-  return classes.join(' ')
-})
+// Helper functions
+const isOrderSelected = (order) => {
+  return props.selectedOrders.some(selected => selected._id === order._id)
+}
 
-const hasLiveTracking = computed(() => {
-  return props.order.shipday_tracking_url || 
-         (props.order.status === 'shipped' && props.order.shipday_order_id)
-})
+const isOrderSelectable = (order) => {
+  return order.status === 'pending' || order.status === 'ready_for_pickup'
+}
 
-const hasGeneralTracking = computed(() => {
-  return props.order.status !== 'delivered' && 
-         (props.order.shipday_driver_id || 
-          props.order.shipday_order_id ||
-          ['processing', 'shipped'].includes(props.order.status))
-})
+const isInTransit = (order) => {
+  return order.status === 'in_transit' || order.status === 'out_for_delivery'
+}
 
-const hasProofOfDelivery = computed(() => {
-  if (props.order.status !== 'delivered') return false
-  
-  return props.order.proof_of_delivery?.photo_url || 
-         props.order.proof_of_delivery?.signature_url ||
-         props.order.podUrls?.length > 0 ||
-         props.order.signatureUrl ||
-         props.order.shipday_order_id
-})
-
-const canContactSupport = computed(() => {
-  if (props.order.status === 'delivered') {
-    const deliveryDate = new Date(props.order.delivery_date)
-    const now = new Date()
-    const daysDiff = (now - deliveryDate) / (1000 * 60 * 60 * 24)
-    return daysDiff <= 7
+const getStatusClass = (status) => {
+  const statusClasses = {
+    'pending': 'status-pending',
+    'ready_for_pickup': 'status-ready',
+    'in_transit': 'status-transit',
+    'out_for_delivery': 'status-delivery',
+    'delivered': 'status-delivered',
+    'cancelled': 'status-cancelled'
   }
-  return ['pending', 'processing', 'shipped'].includes(props.order.status)
-})
-
-const isUrgent = computed(() => {
-  const orderDate = new Date(props.order.order_date)
-  const now = new Date()
-  const daysDiff = (now - orderDate) / (1000 * 60 * 60 * 24)
-  
-  // Consider urgent if pending for more than 2 days
-  return props.order.status === 'pending' && daysDiff > 2
-})
-
-// Methods
-function handleRowClick() {
-  // Optional: emit row click for details view
-  // $emit('view-details')
+  return statusClasses[status] || 'status-unknown'
 }
 
-function truncateText(text, maxLength) {
-  if (!text) return 'N/A'
-  return text.length > maxLength ? text.substring(0, maxLength) + '...' : text
-}
-
-function formatPhone(phone) {
-  if (!phone) return ''
-  // Format Chilean phone numbers
-  const cleaned = phone.replace(/\D/g, '')
-  if (cleaned.length === 9) {
-    return `+56 ${cleaned.substring(0, 1)} ${cleaned.substring(1, 5)} ${cleaned.substring(5)}`
+const getStatusText = (status) => {
+  const statusTexts = {
+    'pending': 'Pendiente',
+    'ready_for_pickup': 'Listo para recoger',
+    'in_transit': 'En tránsito',
+    'out_for_delivery': 'En camino',
+    'delivered': 'Entregado',
+    'cancelled': 'Cancelado'
   }
-  return phone
+  return statusTexts[status] || 'Desconocido'
 }
 
-function formatCurrency(amount) {
+const formatAmount = (amount) => {
   return new Intl.NumberFormat('es-CL').format(amount || 0)
 }
 
-function formatDate(dateStr) {
-  if (!dateStr) return 'N/A'
-  return new Date(dateStr).toLocaleDateString('es-CL', {
+const formatDate = (date) => {
+  if (!date) return '-'
+  return new Intl.DateTimeFormat('es-CL', {
     day: '2-digit',
     month: '2-digit',
-    year: '2-digit'
-  })
+    year: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit'
+  }).format(new Date(date))
 }
 
-function getChannelIcon(channelType) {
-  const icons = {
-    shopify: '🛍️',
-    woocommerce: '🏪',
-    mercadolibre: '🛒',
-    manual: '📝',
-    api: '🔗'
+const formatStatusTime = (date) => {
+  if (!date) return ''
+  return new Intl.DateTimeFormat('es-CL', {
+    hour: '2-digit',
+    minute: '2-digit'
+  }).format(new Date(date))
+}
+
+const formatDeliveryTime = (date) => {
+  if (!date) return ''
+  return new Intl.DateTimeFormat('es-CL', {
+    day: '2-digit',
+    month: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit'
+  }).format(new Date(date))
+}
+
+const getVisiblePages = () => {
+  if (!props.pagination) return []
+  
+  const { page: currentPage, totalPages } = props.pagination
+  const delta = 2
+  const range = []
+  
+  for (let i = Math.max(2, currentPage - delta); 
+       i <= Math.min(totalPages - 1, currentPage + delta); 
+       i++) {
+    range.push(i)
   }
-  return icons[channelType] || '🏬'
-}
-
-function getChannelClass(channelType) {
-  return `channel-${channelType}`
-}
-
-function getPriorityIcon(priority) {
-  const icons = {
-    high: '🔴',
-    medium: '🟡',
-    low: '🟢'
+  
+  if (currentPage - delta > 2) {
+    range.unshift('...')
   }
-  return icons[priority] || ''
-}
-
-function getStatusIcon(status) {
-  const icons = {
-    pending: '⏳',
-    ready_for_pickup: '📦',
-    shipped: '🚚',
-    delivered: '✅',
-    cancelled: '❌',
-    warehouse_received: '🏭'
+  if (currentPage + delta < totalPages - 1) {
+    range.push('...')
   }
-  return icons[status] || '📦'
-}
-
-function getStatusName(status) {
-  const names = {
-    pending: 'Pendiente',
-    processing: 'Procesando',
-    ready_for_pickup: 'Listo',
-    shipped: 'En Tránsito',
-    delivered: 'Entregado',
-    invoiced: 'Facturado',
-    cancelled: 'Cancelado',
-    warehouse_received: 'Recibido en Bodega'
+  
+  range.unshift(1)
+  if (totalPages !== 1) {
+    range.push(totalPages)
   }
-  return names[status] || status
+  
+  return range
 }
 
-function getStatusClass(status) {
-  return `status-${status}`
-}
-
-async function copyOrderNumber() {
-  try {
-    await navigator.clipboard.writeText(props.order.order_number)
-    // You might want to show a toast notification here
-  } catch (err) {
-    console.error('Failed to copy order number:', err)
-  }
-}
-
-function shareOrder() {
-  if (navigator.share) {
-    navigator.share({
-      title: `Pedido #${props.order.order_number}`,
-      text: `Cliente: ${props.order.customer_name}\nEstado: ${getStatusName(props.order.status)}`,
-      url: window.location.href
-    })
-  } else {
-    // Fallback to copying link
-    copyOrderNumber()
-  }
+const duplicateOrder = (order) => {
+  console.log('📋 Duplicate order:', order._id)
+  // Implementar lógica de duplicación
 }
 </script>
 
 <style scoped>
-.order-row {
+/* ==================== TABLA PRINCIPAL - Mismo estilo que AdminOrdersTable ==================== */
+.table-section {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+}
+
+.table-container {
+  /* SOLUCIÓN AL DOBLE SCROLL: Solo overflow vertical cuando sea necesario */
+  overflow-x: auto;
+  min-height: 400px;
+}
+
+.orders-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+/* ==================== HEADER - Idéntico a AdminOrdersTable ==================== */
+.orders-table thead {
+  background: #f8fafc;
+  border-bottom: 2px solid #e2e8f0;
+}
+
+.orders-table th {
+  padding: 16px 12px;
+  text-align: left;
+  font-weight: 600;
+  color: #475569;
+  white-space: nowrap;
+  position: sticky;
+  top: 0;
+  background: #f8fafc;
+  z-index: 10;
+}
+
+/* Column widths - Ajustados para empresas */
+.col-checkbox { width: 40px; }
+.col-order { width: 140px; }
+.col-customer { width: 180px; }
+.col-address { width: 200px; }
+.col-status { width: 120px; }
+.col-tracking { width: 140px; }
+.col-amount { width: 120px; }
+.col-date { width: 160px; }
+.col-actions { width: 160px; }
+
+/* ==================== BODY - Mismo estilo que AdminOrdersTable ==================== */
+.orders-table tbody tr {
+  border-bottom: 1px solid #e2e8f0;
   transition: all 0.2s ease;
-  cursor: pointer;
 }
 
-.order-row:hover {
-  background: linear-gradient(135deg, #fafbfc 0%, #f8fafc 100%);
+.orders-table tbody tr:hover {
+  background: #f1f5f9;
 }
 
-.order-row.selected {
-  background: linear-gradient(135deg, #e0e7ff 0%, #c7d2fe 100%);
-  border-left: 4px solid #6366f1;
+.orders-table tbody tr.selected {
+  background: #eff6ff;
+  border-color: #3b82f6;
 }
 
-.order-row.delivered-row {
-  background: linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%);
+.orders-table tbody tr.in-transit {
+  background: #f0fdf4;
+  border-left: 3px solid #22c55e;
 }
 
-.order-row.shipped-row {
-  background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
-}
-.order-row.warehouse-received-row {
-  background: linear-gradient(135deg, #f3e8ff 0%, #ede9fe 100%);
-}
-
-.order-row.live-tracking-row {
+.orders-table tbody tr.ready-for-pickup {
+  background: #fff7ed;
   border-left: 3px solid #f59e0b;
 }
 
-.order-row.urgent-row {
-  border-left: 3px solid #ef4444;
-  background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
-}
-.order-row td {
-  padding: 16px 12px;
+.orders-table td {
+  padding: 12px;
   vertical-align: top;
-  border-bottom: 1px solid #f1f5f9;
 }
 
-/* Checkbox Column */
-.checkbox-container {
-  display: flex;
-  justify-content: center;
-  align-items: center;
+/* ==================== ESTADOS DE LOADING Y EMPTY ==================== */
+.loading-state,
+.empty-state {
+  text-align: center;
+  padding: 40px 20px;
+  color: #6b7280;
 }
 
-.row-checkbox {
-  width: 16px;
-  height: 16px;
+.loading-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid #f3f4f6;
+  border-top: 3px solid #3b82f6;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin: 0 auto 16px;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.empty-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+  opacity: 0.6;
+}
+
+.empty-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #374151;
+  margin: 0 0 8px 0;
+}
+
+.empty-subtitle {
+  color: #6b7280;
+  margin: 0 0 20px 0;
+}
+
+.create-order-btn {
+  background: #3b82f6;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-weight: 500;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: background 0.2s;
 }
 
-.row-checkbox.disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
+.create-order-btn:hover {
+  background: #2563eb;
 }
+
+/* ==================== CONTENIDO DE CELDAS ==================== */
 
 /* Order Info */
-.order-info {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+.order-info .order-number {
+  font-weight: 600;
+  color: #1e293b;
+  margin-bottom: 2px;
 }
 
-.order-number-wrapper {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.order-number {
-  font-weight: 700;
-  color: #1f2937;
-  font-size: 14px;
-}
-
-.order-badges {
-  display: flex;
-  gap: 4px;
-}
-
-.channel-badge {
-  font-size: 12px;
-  padding: 2px 4px;
-  border-radius: 4px;
-  background: #f3f4f6;
-}
-
-.channel-shopify { background: #e0f2fe; }
-.channel-woocommerce { background: #f3e8ff; }
-.channel-mercadolibre { background: #fef3c7; }
-.channel-manual { background: #f0fdf4; }
-
-.priority-badge {
-  font-size: 10px;
-  padding: 2px 4px;
-  border-radius: 50%;
-}
-
-.external-id {
+.order-info .order-id,
+.order-info .external-id {
   font-size: 11px;
-  color: #6b7280;
-  font-style: italic;
+  color: #64748b;
 }
 
 /* Customer Info */
-.customer-info {
+.customer-info .customer-name {
+  font-weight: 500;
+  color: #1e293b;
+  margin-bottom: 4px;
+}
+
+.customer-contact {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
 }
 
-.customer-name {
-  font-weight: 600;
-  color: #1f2937;
-  font-size: 14px;
-}
-
-.customer-contact,
-.customer-email {
+.customer-email,
+.customer-phone {
+  font-size: 11px;
+  color: #64748b;
   display: flex;
   align-items: center;
   gap: 4px;
-  font-size: 11px;
-  color: #6b7280;
 }
 
 .contact-icon {
@@ -636,287 +613,204 @@ function shareOrder() {
 }
 
 /* Address Info */
-.address-info {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.address-text {
-  color: #374151;
-  font-size: 13px;
-  line-height: 1.3;
+.address-info .address-main {
+  font-weight: 500;
+  color: #1e293b;
+  margin-bottom: 2px;
 }
 
 .address-details {
+  font-size: 11px;
+  color: #64748b;
+}
+
+.commune {
+  font-weight: 500;
+}
+
+/* Status */
+.status-container {
   display: flex;
   flex-direction: column;
   gap: 2px;
-}
-
-.commune-tag {
-  font-size: 10px;
-  color: #0369a1;
-  background: #e0f2fe;
-  padding: 2px 6px;
-  border-radius: 8px;
-  display: inline-block;
-  align-self: flex-start;
-}
-
-.city-text {
-  font-size: 10px;
-  color: #6b7280;
-}
-
-/* Status Info */
-.status-info {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  align-items: center;
 }
 
 .status-badge {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 6px 10px;
-  border-radius: 12px;
+  padding: 4px 8px;
+  border-radius: 6px;
   font-size: 11px;
   font-weight: 600;
   text-align: center;
+  width: fit-content;
 }
 
 .status-pending { background: #fef3c7; color: #92400e; }
-.status-processing { background: #dbeafe; color: #1e40af; }
-.status-ready_for_pickup { background: #e9d5ff; color: #6b21a8; }
-.status-shipped { background: #e9d5ff; color: #6b21a8; }
+.status-ready { background: #dbeafe; color: #1e40af; }
+.status-transit { background: #dcfce7; color: #166534; }
+.status-delivery { background: #f0fdf4; color: #15803d; }
 .status-delivered { background: #d1fae5; color: #065f46; }
 .status-cancelled { background: #fee2e2; color: #991b1b; }
-.status-warehouse_received { background: linear-gradient(135deg, #6f42c1, #8e44ad); 
-  color: white; 
-  font-weight: 600; 
-  text-transform: uppercase; 
-  letter-spacing: 0.5px;
-}
-.status-icon {
-  font-size: 12px;
-}
 
-.driver-info,
-.shipday-status {
-  display: flex;
-  align-items: center;
-  gap: 4px;
+.status-time {
   font-size: 10px;
-  color: #6b7280;
+  color: #64748b;
 }
-
-/* Tracking Info */
-.tracking-info {
+/* Tracking - FUNCIONALIDAD ESPECÍFICA DE EMPRESAS */
+.tracking-container {
   display: flex;
   flex-direction: column;
-  align-items: center;
   gap: 4px;
 }
 
-.tracking-action {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-}
-
-.tracking-btn {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 6px 10px;
+.track-live-btn {
+  background: #22c55e;
+  color: white;
   border: none;
-  border-radius: 8px;
+  padding: 4px 8px;
+  border-radius: 4px;
   font-size: 10px;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: background 0.2s;
+}
+
+.track-live-btn:hover {
+  background: #16a34a;
 }
 
 .proof-btn {
-  background: #d1fae5;
-  color: #065f46;
-}
-
-.live-btn {
-  background: #fed7aa;
-  color: #9a3412;
-  animation: pulse 2s infinite;
-}
-
-.tracking-btn-general {
-  background: #dbeafe;
-  color: #1e40af;
-}
-
-.tracking-btn:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-}
-
-.btn-icon.live-pulse {
-  animation: pulse 1s infinite;
-}
-
-.delivery-indicator,
-.live-indicator,
-.tracking-indicator {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  font-size: 9px;
-  color: #6b7280;
-}
-
-.live-dot {
-  width: 6px;
-  height: 6px;
-  background: #ef4444;
-  border-radius: 50%;
-  animation: pulse 1s infinite;
-}
-
-.no-tracking {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-  color: #9ca3af;
+  background: #3b82f6;
+  color: white;
+  border: none;
+  padding: 4px 8px;
+  border-radius: 4px;
   font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
 }
 
-/* Amount Info */
-.amount-info {
+.proof-btn:hover {
+  background: #2563eb;
+}
+
+.tracking-info,
+.delivery-info {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
+}
+
+.driver-name,
+.eta,
+.delivery-time {
+  font-size: 10px;
+  color: #64748b;
+}
+
+.no-tracking .tracking-status {
+  font-size: 11px;
+  color: #9ca3af;
+  font-style: italic;
+}
+
+/* Amount */
+.amount-info {
   text-align: right;
 }
 
 .total-amount {
-  font-weight: 700;
-  color: #059669;
-  font-size: 14px;
+  font-weight: 600;
+  color: #1e293b;
+  margin-bottom: 2px;
 }
 
 .shipping-cost {
-  font-size: 10px;
-  color: #6b7280;
+  font-size: 11px;
+  color: #64748b;
 }
 
-/* Date Info */
+/* Date */
 .date-info {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  font-size: 12px;
 }
 
-.order-date,
-.delivery-date {
+.date-creation,
+.date-delivery {
   display: flex;
-  align-items: center;
-  gap: 4px;
+  flex-direction: column;
+  gap: 1px;
 }
 
-.date-icon,
-.delivery-date-icon {
+.date-label {
   font-size: 10px;
-}
-
-.delivery-date {
-  color: #059669;
-  font-size: 10px;
-}
-
-.urgent-indicator {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  color: #ef4444;
-  font-size: 9px;
-  font-weight: 600;
-}
-
-/* Actions Menu */
-.actions-menu {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  justify-content: center;
-}
-
-.primary-actions {
-  display: flex;
-  gap: 4px;
-}
-
-.action-btn {
-  width: 32px;
-  height: 32px;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-  font-size: 14px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.2s ease;
-}
-
-.ready-btn {
-  background: #dcfce7;
-  color: #166534;
-}
-
-.details-btn {
-  background: #f3f4f6;
-  color: #374151;
-}
-
-.action-btn:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-}
-
-/* Dropdown Menu */
-.dropdown {
-  position: relative;
-}
-
-.dropdown-toggle {
-  width: 24px;
-  height: 32px;
-  border: none;
-  background: #f9fafb;
+  font-weight: 500;
   color: #6b7280;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 16px;
-  font-weight: bold;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.2s ease;
 }
 
-.dropdown-toggle:hover {
-  background: #f3f4f6;
+.date-value {
+  font-size: 11px;
   color: #374151;
 }
 
-.dropdown:hover .dropdown-menu {
-  opacity: 1;
-  visibility: visible;
-  transform: translateY(0);
+/* Actions - Igual que AdminOrdersTable */
+.action-buttons {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.btn-table-action {
+  font-size: 12px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid #d1d5db;
+  background: white;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.btn-table-action.view {
+  color: #3b82f6;
+  border-color: #bfdbfe;
+}
+
+.btn-table-action.view:hover {
+  background: #eff6ff;
+}
+
+.btn-table-action.ready {
+  color: #059669;
+  border-color: #6ee7b7;
+}
+
+.btn-table-action.ready:hover {
+  background: #d1fae5;
+}
+
+.btn-table-action.track {
+  color: #7c3aed;
+  border-color: #c4b5fd;
+}
+
+.btn-table-action.track:hover {
+  background: #f3f4f6;
+}
+
+.btn-table-action.more {
+  color: #64748b;
+}
+
+.btn-table-action.more:hover {
+  background: #f1f5f9;
+}
+
+/* Action Dropdown */
+.action-dropdown {
+  position: relative;
 }
 
 .dropdown-menu {
@@ -924,16 +818,16 @@ function shareOrder() {
   top: 100%;
   right: 0;
   background: white;
-  border: 1px solid #e5e7eb;
+  border: 1px solid #e2e8f0;
   border-radius: 8px;
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
-  padding: 4px 0;
-  min-width: 180px;
-  z-index: 100;
-  opacity: 0;
-  visibility: hidden;
-  transform: translateY(-8px);
-  transition: all 0.2s ease;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  z-index: 20;
+  min-width: 160px;
+  display: none;
+}
+
+.action-dropdown:hover .dropdown-menu {
+  display: block;
 }
 
 .dropdown-item {
@@ -944,127 +838,169 @@ function shareOrder() {
   padding: 8px 12px;
   border: none;
   background: none;
-  text-align: left;
+  color: #64748b;
   font-size: 12px;
-  color: #374151;
   cursor: pointer;
-  transition: background 0.2s ease;
+  transition: background 0.2s;
 }
 
 .dropdown-item:hover {
-  background: #f9fafb;
+  background: #f1f5f9;
 }
 
 .dropdown-divider {
   height: 1px;
-  background: #e5e7eb;
+  background: #e2e8f0;
   margin: 4px 0;
 }
 
-/* Animations */
-@keyframes pulse {
-  0%, 100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.5;
-  }
+/* ==================== PAGINATION - Igual que AdminOrdersTable ==================== */
+.pagination-section {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 24px;
+  background: #f8fafc;
+  border-top: 1px solid #e2e8f0;
+  flex-wrap: wrap;
+  gap: 16px;
 }
 
-/* Responsive */
+.pagination-info {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  color: #64748b;
+  font-size: 14px;
+}
+
+.page-size-selector {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.page-size-selector select {
+  padding: 4px 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.page-btn {
+  padding: 8px 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: white;
+  color: #64748b;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.page-btn:hover:not(:disabled) {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+}
+
+.page-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.page-btn.active {
+  background: #3b82f6;
+  color: white;
+  border-color: #3b82f6;
+}
+
+.page-numbers {
+  display: flex;
+  gap: 4px;
+}
+
+/* ==================== RESPONSIVE ==================== */
+@media (max-width: 1200px) {
+  .col-address { width: 180px; }
+  .col-customer { width: 150px; }
+}
+
 @media (max-width: 1024px) {
-  .order-row td {
-    padding: 12px 8px;
+  .table-section {
+    margin: 0 -16px;
+    border-radius: 0;
   }
   
-  .customer-contact,
-  .customer-email {
-    display: none;
-  }
-  
-  .address-details {
-    display: none;
-  }
-  
-  .dropdown-menu {
-    left: auto;
-    right: 0;
+  .pagination-section {
+    padding: 16px;
+    flex-direction: column;
+    gap: 12px;
   }
 }
 
 @media (max-width: 768px) {
-  .col-customer,
-  .col-address {
+  .table-container {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  
+  .orders-table {
+    min-width: 1000px;
+  }
+  
+  .orders-table th,
+  .orders-table td {
+    padding: 12px 8px;
+  }
+  
+  .col-address,
+  .col-customer {
     display: none;
   }
   
-  .actions-menu {
-    flex-direction: column;
-    gap: 2px;
-  }
-  
-  .action-btn {
-    width: 28px;
-    height: 28px;
-    font-size: 12px;
-  }
-  
-  .dropdown-menu {
-    min-width: 160px;
+  .page-numbers {
+    display: none;
   }
 }
 
 @media (max-width: 480px) {
+  .orders-table th,
+  .orders-table td {
+    padding: 8px 6px;
+  }
+  
   .col-tracking {
     display: none;
   }
   
-  .order-row td {
-    padding: 8px 6px;
-  }
-  
-  .order-number {
-    font-size: 12px;
-  }
-  
-  .status-badge {
-    padding: 4px 6px;
-    font-size: 10px;
-  }
-  
-  .total-amount {
+  .orders-table {
     font-size: 12px;
   }
 }
 
-/* Accessibility */
-.order-row:focus-within {
-  outline: 2px solid #6366f1;
-  outline-offset: -2px;
+/* ==================== CHECKBOX STYLES ==================== */
+.select-all-checkbox,
+.order-checkbox {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
 }
 
-.row-checkbox:focus,
-.action-btn:focus,
-.dropdown-toggle:focus {
-  outline: 2px solid #6366f1;
-  outline-offset: 2px;
+/* ==================== ANIMACIONES ==================== */
+.slide-down-enter-active,
+.slide-down-leave-active {
+  transition: all 0.3s ease;
 }
 
-/* Print styles */
-@media print {
-  .actions-menu,
-  .dropdown {
-    display: none;
-  }
-  
-  .order-row {
-    background: white !important;
-    border: none !important;
-  }
-  
-  .status-badge {
-    background: #f5f5f5 !important;
-    color: #000 !important;
-  }
+.slide-down-enter-from,
+.slide-down-leave-to {
+  opacity: 0;
+  transform: translateY(-20px);
 }
 </style>
