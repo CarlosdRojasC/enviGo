@@ -346,6 +346,14 @@ class WooCommerceService {
       throw error;
     }
   }
+  async syncChannelById(channelId) {
+  const channel = await Channel.findById(channelId);
+  if (!channel) {
+    throw new Error(`Canal con ID ${channelId} no encontrado`);
+  }
+  
+  return await this.syncChannel(channel);
+}
 }
 
 module.exports = WooCommerceService;
