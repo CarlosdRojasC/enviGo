@@ -409,19 +409,6 @@ function applyPreset(presetId) {
   emit('apply-preset', presetId)
 }
 
-function clearAllFilters() {
-  // Clear local filters
-  Object.keys(localFilters.value).forEach(key => {
-    localFilters.value[key] = ''
-  })
-  Object.keys(localAdvancedFilters.value).forEach(key => {
-    localAdvancedFilters.value[key] = ''
-  })
-  searchTerm.value = ''
-  
-  emit('clear-all')
-}
-
 function clearSearch() {
   searchTerm.value = ''
   debouncedSearch()
