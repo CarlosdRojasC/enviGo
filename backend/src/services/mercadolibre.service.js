@@ -216,61 +216,167 @@ static async exchangeCodeForTokens(code, channelId) {
   /**
    * Sincroniza los pedidos, importando únicamente los de tipo Flex.
    */
-  static async syncOrders(channel, dateFrom, dateTo) {
-    let ordersImported = 0;
-    let offset = 0;
-    const limit = 50;
-    let hasMore = true;
-
-    const accessToken = await this.getAccessToken(channel);
-    const userId = channel.settings?.user_id || 'me';
-
-    while (hasMore) {
-      const params = new URLSearchParams({
-        seller: userId,
-        offset,
-        limit,
-        sort: 'date_desc',
-        'order.date_created.from': dateFrom.toISOString(),
-        'order.date_created.to': dateTo.toISOString(),
-      });
-
-      const response = await axios.get(`${this.API_BASE_URL}/orders/search?${params.toString()}`, {
-        headers: { 'Authorization': `Bearer ${accessToken}` },
-      });
-
-      const orders = response.data.results;
-      if (!orders || orders.length === 0) {
-        hasMore = false;
-        continue;
-      }
-
-      for (const mlOrder of orders) {
-        try {
-          const orderDetails = await axios.get(`${this.API_BASE_URL}/orders/${mlOrder.id}`, {
-            headers: { 'Authorization': `Bearer ${accessToken}` },
-          });
-          const fullOrder = orderDetails.data;
-
-          // --- ✅ FILTRO PRINCIPAL PARA MERCADO LIBRE FLEX ---
-          if (fullOrder.shipping?.logistics_type !== 'self_service') {
-            console.log(`[ML Sync] Pedido #${fullOrder.id} ignorado (Logística: ${fullOrder.shipping?.logistics_type}).`);
-            continue;
-          }
-
-          const existingOrder = await Order.findOne({ channel_id: channel._id, external_order_id: fullOrder.id.toString() });
-          if (!existingOrder) {
-            await this.createOrderFromApiData(fullOrder, channel, accessToken);
-            ordersImported++;
-          }
-        } catch (orderError) {
-          console.error(`[ML Sync] Error procesando pedido individual ${mlOrder.id}:`, orderError.message);
-        }
-      }
-      offset += limit;
-    }
-    return ordersImported;
+static async syncOrders(channelId, options = {}) {
+  console.log('🔄 Iniciando sincronización para canal:', channelId);
+  
+  const channel = await Channel.findById(channelId);
+  if (!channel) {
+    throw new Error('Canal no encontrado');
   }
+
+  console.log(`🔄 Iniciando sincronización para canal ${channel.channel_name}`);
+
+  // ✅ ARREGLAR LA CREACIÓN DE FECHAS
+  const now = new Date();
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(now.getDate() - 30);
+
+  // Usar las fechas de options si están disponibles, sino usar defaults
+  let dateFrom, dateTo;
+  
+  if (options.dateFrom) {
+    // Si viene como string, convertir a Date
+    dateFrom = typeof options.dateFrom === 'string' ? new Date(options.dateFrom) : options.dateFrom;
+  } else {
+    dateFrom = thirtyDaysAgo;
+  }
+  
+  if (options.dateTo) {
+    // Si viene como string, convertir a Date
+    dateTo = typeof options.dateTo === 'string' ? new Date(options.dateTo) : options.dateTo;
+  } else {
+    dateTo = now;
+  }
+
+  // ✅ VERIFICAR QUE SON DATES VÁLIDOS
+  if (!(dateFrom instanceof Date) || isNaN(dateFrom.getTime())) {
+    console.error('❌ dateFrom no es una fecha válida:', dateFrom);
+    dateFrom = thirtyDaysAgo;
+  }
+  
+  if (!(dateTo instanceof Date) || isNaN(dateTo.getTime())) {
+    console.error('❌ dateTo no es una fecha válida:', dateTo);
+    dateTo = now;
+  }
+
+  console.log('📅 [ML Sync] Rango de fechas:', {
+    dateFrom: dateFrom.toISOString(),
+    dateTo: dateTo.toISOString()
+  });
+
+  try {
+    // Obtener access token
+    const accessToken = await this.getValidAccessToken(channel);
+    
+    // Construir URL de la API de pedidos
+    const apiUrl = `${this.API_BASE_URL}/orders/search`;
+    const params = {
+  seller: channel.settings.user_id,
+  'order.date_created.from': dateFrom.toISOString(), // ✅ CON COMILLAS
+  'order.date_created.to': dateTo.toISOString(),     // ✅ CON COMILLAS
+  sort: 'date_desc',
+  limit: 50
+};
+
+    console.log('🌐 [ML Sync] Consultando pedidos con params:', params);
+
+    const response = await axios.get(apiUrl, {
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Accept': 'application/json'
+      },
+      params: params,
+      timeout: 30000
+    });
+
+    console.log('✅ [ML Sync] Respuesta de ML:', {
+      total: response.data.paging?.total || 0,
+      results: response.data.results?.length || 0
+    });
+
+    // Procesar pedidos
+    const orders = response.data.results || [];
+    let syncedCount = 0;
+    let errorCount = 0;
+
+    for (const mlOrder of orders) {
+      try {
+        await this.processOrder(mlOrder, channel);
+        syncedCount++;
+      } catch (error) {
+        console.error(`❌ [ML Sync] Error procesando pedido ${mlOrder.id}:`, error.message);
+        errorCount++;
+      }
+    }
+
+    // Actualizar última sincronización
+    channel.last_sync_at = new Date();
+    channel.sync_status = 'success';
+    await channel.save();
+
+    console.log(`✅ [ML Sync] Sincronización completada: ${syncedCount} pedidos sincronizados, ${errorCount} errores`);
+
+    return {
+      success: true,
+      syncedCount,
+      errorCount,
+      totalFound: orders.length
+    };
+
+  } catch (error) {
+    console.error('❌ [ML Sync] Error en sincronización:', error.message);
+    
+    // Actualizar estado de error
+    channel.sync_status = 'error';
+    channel.last_sync_at = new Date();
+    await channel.save();
+    
+    throw error;
+  }
+}
+
+static async processOrder(mlOrder, channel) {
+  console.log(`📦 [ML Process] Procesando pedido ${mlOrder.id}`);
+  
+  // Verificar si el pedido ya existe
+  const existingOrder = await Order.findOne({
+    external_order_id: mlOrder.id.toString(),
+    channel_id: channel._id
+  });
+
+  if (existingOrder) {
+    console.log(`⏭️ [ML Process] Pedido ${mlOrder.id} ya existe, actualizando...`);
+    // Actualizar estado si es necesario
+    return existingOrder;
+  }
+
+  // Crear nuevo pedido
+  const orderData = {
+    company_id: channel.company_id,
+    channel_id: channel._id,
+    external_order_id: mlOrder.id.toString(),
+    order_number: `ML-${mlOrder.id}`,
+    customer_name: mlOrder.buyer?.nickname || 'Cliente ML',
+    customer_email: mlOrder.buyer?.email || '',
+    customer_phone: mlOrder.buyer?.phone || '',
+    total_amount: mlOrder.total_amount || 0,
+    shipping_cost: mlOrder.shipping?.cost || 0,
+    status: this.mapMercadoLibreStatus(mlOrder.status),
+    order_date: new Date(mlOrder.date_created),
+    shipping_address: this.extractShippingAddress(mlOrder),
+    items: mlOrder.order_items?.map(item => ({
+      name: item.item?.title || 'Producto ML',
+      quantity: item.quantity || 1,
+      price: item.unit_price || 0
+    })) || []
+  };
+
+  const newOrder = new Order(orderData);
+  await newOrder.save();
+
+  console.log(`✅ [ML Process] Pedido ${mlOrder.id} creado exitosamente`);
+  return newOrder;
+}
   
   /**
    * Procesa notificaciones (webhooks) y crea pedidos si son de tipo Flex.
