@@ -318,14 +318,14 @@ function isOrderSelectable(order) {
 <style scoped>
 .orders-table-container {
   background: white;
-  border-radius: 16px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  border-radius: 12px; /* Cambié de 16px a 12px como AdminOrdersTable */
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1); /* Simplificado como AdminOrdersTable */
   display: flex;
   flex-direction: column;
-  border: 1px solid #e2e8f0;
-  max-height: 85vh; 
+  border: none; /* Quitar border */
+  overflow: hidden; /* CRÍTICO: evita el scroll del contenedor */
+  /* QUITAR max-height: 85vh; */
 }
-
 /* Bulk Actions Bar */
 .bulk-actions-bar {
   display: flex;
@@ -496,8 +496,8 @@ function isOrderSelectable(order) {
 
 /* Table Wrapper */
 .table-wrapper {
-  flex-grow: 1; 
-  overflow-x: auto;
+  overflow-x: auto; /* Solo para móvil */
+  min-height: 400px; /* Como AdminOrdersTable */
   background: white;
 }
 
@@ -510,11 +510,11 @@ function isOrderSelectable(order) {
 
 /* Table Header */
 .table-header th {
-  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  background: #f8fafc; /* Color plano como AdminOrdersTable */
   padding: 16px 12px;
   text-align: left;
   font-weight: 600;
-  color: #374151;
+  color: #475569; /* Color como AdminOrdersTable */
   border-bottom: 2px solid #e2e8f0;
   font-size: 13px;
   white-space: nowrap;
@@ -530,7 +530,7 @@ function isOrderSelectable(order) {
 }
 
 .table-header th.sortable:hover {
-  background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%);
+  background: #f1f5f9; /* Sin gradiente como AdminOrdersTable */
 }
 
 .header-content {
