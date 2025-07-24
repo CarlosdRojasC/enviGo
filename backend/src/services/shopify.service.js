@@ -238,7 +238,60 @@ class ShopifyService {
       throw error;
     }
   }
+  static formatValidatedAddress(address) {
+  if (!address) return '';
   
+  const parts = [];
+  if (address.address1) parts.push(address.address1);
+  if (address.address2) parts.push(address.address2);
+  if (address.city) parts.push(address.city);
+  if (address.province) parts.push(address.province);
+  
+  return parts.join(', ') + ', Chile';
+}
+
+// 🚀 MÉTODO 2: validateShippingAddress (si no lo agregaste)
+static validateShippingAddress(shopifyOrder) {
+  const errors = [];
+  
+  // Verificar que exista al menos una dirección
+  if (!shopifyOrder.shipping_address && !shopifyOrder.billing_address) {
+    errors.push('Pedido sin dirección de envío ni facturación');
+    return { isValid: false, errors };
+  }
+  
+  // Priorizar shipping_address, luego billing_address
+  const address = shopifyOrder.shipping_address || shopifyOrder.billing_address;
+  
+  // Validar campos críticos de dirección
+  if (!address.address1 || address.address1.trim().length < 10) {
+    errors.push('Dirección muy corta o faltante (mínimo 10 caracteres)');
+  }
+  
+  if (!address.city || address.city.trim().length < 3) {
+    errors.push('Comuna/Ciudad faltante o inválida');
+  }
+  
+  // Validar que sea de Chile (opcional pero recomendado)
+  if (address.country && address.country.toLowerCase() !== 'chile' && address.country.toLowerCase() !== 'cl') {
+    errors.push('Solo se procesan pedidos de Chile');
+  }
+  
+  // Validar información del destinatario
+  if (!address.first_name && !address.last_name && !address.name) {
+    errors.push('Nombre del destinatario faltante');
+  }
+  
+  if (!address.phone || address.phone.trim().length < 8) {
+    errors.push('Teléfono del destinatario faltante o inválido');
+  }
+  
+  return {
+    isValid: errors.length === 0,
+    errors,
+    address
+  };
+}
   // Crear pedido desde webhook
   static async createOrderFromWebhook(channel, shopifyOrder) {
   try {
@@ -743,7 +796,7 @@ static async syncOrders(channel, dateFrom, dateTo) {
   }
   
   // Helpers
-  static getCustomerName(order, validatedAddress = null) {
+static getCustomerName(order, validatedAddress = null) {
   // Prioridad: dirección validada -> customer -> shipping_address -> fallback
   if (validatedAddress && (validatedAddress.first_name || validatedAddress.last_name)) {
     return `${validatedAddress.first_name || ''} ${validatedAddress.last_name || ''}`.trim();
