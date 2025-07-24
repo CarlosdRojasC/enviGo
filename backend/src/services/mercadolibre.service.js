@@ -104,27 +104,49 @@ static getAuthorizationUrl(channelId) {
    * Intercambia el código de autorización por un access_token y refresh_token.
    */
 static async exchangeCodeForTokens(code, channelId) {
+  console.log('🔄 [ML Exchange] INICIANDO intercambio de tokens...');
+  
   const channel = await Channel.findById(channelId);
   if (!channel) {
+    console.error('❌ [ML Exchange] Canal no encontrado:', channelId);
     throw new Error('Canal no encontrado durante el intercambio de código.');
   }
 
-  // ✅ CORRECCIÓN: Usar la ruta que coincide con tu router
-  const redirectUri = `${process.env.BACKEND_URL}/api/webhooks/mercadolibre/callback`;
+  console.log('✅ [ML Exchange] Canal encontrado:', channel.channel_name);
 
-  console.log('🔄 [ML Service] Intercambiando tokens...', {
+  const redirectUri = `${process.env.BACKEND_URL}/api/webhooks/mercadolibre/callback`;
+  
+  console.log('📤 [ML Exchange] Preparando petición a ML:', {
+    redirectUri,
+    codeLength: code.length,
     channelId,
-    channelName: channel.channel_name,
-    redirectUri
+    appId: process.env.MERCADOLIBRE_APP_ID,
+    hasSecret: !!process.env.MERCADOLIBRE_SECRET_KEY
   });
 
   try {
+    console.log('🌐 [ML Exchange] Enviando petición a MercadoLibre...');
+    
     const { data } = await axios.post(`${this.API_BASE_URL}/oauth/token`, {
       grant_type: 'authorization_code',
       client_id: process.env.MERCADOLIBRE_APP_ID,
       client_secret: process.env.MERCADOLIBRE_SECRET_KEY,
       code: code,
       redirect_uri: redirectUri,
+    }, {
+      timeout: 15000,
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      }
+    });
+
+    console.log('✅ [ML Exchange] Respuesta exitosa de MercadoLibre');
+    console.log('📦 [ML Exchange] Datos recibidos:', {
+      hasAccessToken: !!data.access_token,
+      hasRefreshToken: !!data.refresh_token,
+      userId: data.user_id,
+      expiresIn: data.expires_in
     });
 
     // Guardamos los tokens y la información del usuario en el canal
@@ -141,12 +163,19 @@ static async exchangeCodeForTokens(code, channelId) {
     channel.markModified('settings');
     await channel.save();
 
-    console.log(`✅ [ML Service] OAuth completado para canal ${channel.channel_name}`);
+    console.log(`✅ [ML Exchange] Canal ${channel.channel_name} configurado exitosamente`);
     return channel;
     
   } catch (error) {
-    console.error(`❌ [ML Service] Error intercambiando código por tokens:`, error.response?.data || error.message);
-    throw new Error(`Error en OAuth: ${error.response?.data?.message || error.message}`);
+    console.error('❌ [ML Exchange] ERROR DETALLADO:', {
+      message: error.message,
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      data: error.response?.data,
+      timeout: error.code === 'ECONNABORTED'
+    });
+    
+    throw new Error(`Error OAuth: ${error.response?.data?.message || error.message}`);
   }
 }
 
