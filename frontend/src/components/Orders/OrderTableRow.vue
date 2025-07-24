@@ -95,12 +95,6 @@
           <span class="driver-icon">👨‍💼</span>
           <span class="driver-name">{{ order.driver_info.name }}</span>
         </div>
-        
-        <!-- Shipday Status -->
-        <div v-if="order.shipday_order_id" class="shipday-status">
-          <span class="shipday-icon">🚚</span>
-          <span class="shipday-text">En Shipday</span>
-        </div>
       </div>
     </td>
 
@@ -503,11 +497,6 @@ function shareOrder() {
   border-left: 3px solid #ef4444;
   background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
 }
-
-.order-row.non-selectable {
-  opacity: 0.7;
-}
-
 .order-row td {
   padding: 16px 12px;
   vertical-align: top;

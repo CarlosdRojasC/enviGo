@@ -136,6 +136,48 @@ class ShopifyService {
     return communeMap[lowerNormalized] || normalized;
   }
 
+  static validateShippingAddress(shopifyOrder) {
+  const errors = [];
+  
+  // Verificar que exista al menos una dirección
+  if (!shopifyOrder.shipping_address && !shopifyOrder.billing_address) {
+    errors.push('Pedido sin dirección de envío ni facturación');
+    return { isValid: false, errors };
+  }
+  
+  // Priorizar shipping_address, luego billing_address
+  const address = shopifyOrder.shipping_address || shopifyOrder.billing_address;
+  
+  // Validar campos críticos de dirección
+  if (!address.address1 || address.address1.trim().length < 10) {
+    errors.push('Dirección muy corta o faltante (mínimo 10 caracteres)');
+  }
+  
+  if (!address.city || address.city.trim().length < 3) {
+    errors.push('Comuna/Ciudad faltante o inválida');
+  }
+  
+  // Validar que sea de Chile (opcional pero recomendado)
+  if (address.country && address.country.toLowerCase() !== 'chile' && address.country.toLowerCase() !== 'cl') {
+    errors.push('Solo se procesan pedidos de Chile');
+  }
+  
+  // Validar información del destinatario
+  if (!address.first_name && !address.last_name && !address.name) {
+    errors.push('Nombre del destinatario faltante');
+  }
+  
+  if (!address.phone || address.phone.trim().length < 8) {
+    errors.push('Teléfono del destinatario faltante o inválido');
+  }
+  
+  return {
+    isValid: errors.length === 0,
+    errors,
+    address
+  };
+}
+
   // 🏘️ NUEVA FUNCIÓN: Validar si comuna está permitida
   static isCommuneAllowed(orderCommune, allowedCommunes) {
     if (!allowedCommunes || allowedCommunes.length === 0) {
@@ -199,76 +241,94 @@ class ShopifyService {
   
   // Crear pedido desde webhook
   static async createOrderFromWebhook(channel, shopifyOrder) {
-    try {
-      // Verificar si el pedido ya existe
-      const existingOrder = await Order.findOne({
-        channel_id: channel._id,
-        external_order_id: shopifyOrder.id.toString()
-      });
+  try {
+    console.log(`🔍 Validando pedido ${shopifyOrder.name} antes de crear...`);
+    
+    // NUEVA VALIDACIÓN: Verificar dirección ANTES de procesar
+    const addressValidation = this.validateShippingAddress(shopifyOrder);
+    
+    if (!addressValidation.isValid) {
+      console.log(`🚫 Pedido ${shopifyOrder.name} RECHAZADO por dirección inválida:`);
+      addressValidation.errors.forEach(error => console.log(`   - ${error}`));
       
-      if (existingOrder) {
-        console.log('🔄 Actualizando pedido existente:', shopifyOrder.name);
-        return await this.updateExistingOrder(existingOrder, shopifyOrder);
-      }
+      // Opcional: Registrar el rechazo para estadísticas
+      await this.logRejectedOrder(shopifyOrder, channel._id, addressValidation.errors);
       
-      console.log('🆕 Creando nuevo pedido:', shopifyOrder.name);
-      
-      // Obtener información de la empresa para pricing
-      const company = await Company.findById(channel.company_id);
-      const fixedShippingCost = company?.price_per_order || 0;
-      
-      // Crear nuevo pedido
-      const newOrder = new Order({
-        company_id: channel.company_id,
-        channel_id: channel._id,
-        external_order_id: shopifyOrder.id.toString(),
-        order_number: shopifyOrder.name,
-        
-        // Información del cliente
-        customer_name: this.getCustomerName(shopifyOrder),
-        customer_email: shopifyOrder.email,
-        customer_phone: shopifyOrder.phone || shopifyOrder.shipping_address?.phone,
-
-        delivery_type: (shopifyOrder.shipping_lines && shopifyOrder.shipping_lines.length > 0) ? 'shipping' : 'pickup',
-
-        // Dirección de envío
-        shipping_address: this.getShippingAddress(shopifyOrder),
-        // 🏘️ NUEVA LÓGICA: Mapear city a comuna chilena
-        shipping_commune: this.normalizeCommune(shopifyOrder.shipping_address?.city || shopifyOrder.billing_address?.city || ''),
-        shipping_state: shopifyOrder.shipping_address?.province || shopifyOrder.billing_address?.province || 'Región Metropolitana',
-        shipping_zip: shopifyOrder.shipping_address?.zip || shopifyOrder.billing_address?.zip,
-        
-        // Información financiera
-        total_amount: parseFloat(shopifyOrder.total_price) || 0,
-        shipping_cost: fixedShippingCost, // Usar precio fijo de la empresa
-        currency: shopifyOrder.currency,
-        
-        // Estado y fechas
-        status: this.mapOrderStatus(shopifyOrder),
-        order_date: new Date(shopifyOrder.created_at),
-        
-        // Items del pedido
-        items: this.mapOrderItems(shopifyOrder.line_items),
-        items_count: shopifyOrder.line_items?.length || 0,
-        
-        // Datos adicionales
-        notes: shopifyOrder.note,
-        raw_data: shopifyOrder,
-        
-        // Metadatos
-        created_at: new Date(),
-        updated_at: new Date()
-      });
-      
-      const savedOrder = await newOrder.save();
-      console.log(`✅ Pedido creado exitosamente: ${savedOrder.order_number} - Comuna: ${savedOrder.shipping_commune}`);
-      
-      return savedOrder;
-    } catch (error) {
-      console.error('❌ Error creando pedido desde webhook:', error);
-      throw error;
+      return null; // No crear el pedido
     }
+    
+    // Verificar si el pedido ya existe
+    const existingOrder = await Order.findOne({
+      channel_id: channel._id,
+      external_order_id: shopifyOrder.id.toString()
+    });
+    
+    if (existingOrder) {
+      console.log('🔄 Actualizando pedido existente:', shopifyOrder.name);
+      return await this.updateExistingOrder(existingOrder, shopifyOrder);
+    }
+    
+    console.log(`✅ Pedido ${shopifyOrder.name} pasó validación, creando...`);
+    
+    // Obtener información de la empresa para pricing
+    const company = await Company.findById(channel.company_id);
+    const fixedShippingCost = company?.price_per_order || 0;
+    
+    // Usar la dirección validada
+    const validatedAddress = addressValidation.address;
+    
+    // Crear nuevo pedido
+    const newOrder = new Order({
+      company_id: channel.company_id,
+      channel_id: channel._id,
+      external_order_id: shopifyOrder.id.toString(),
+      order_number: shopifyOrder.name,
+      
+      // Información del cliente (mejorada con datos de dirección validada)
+      customer_name: this.getCustomerName(shopifyOrder, validatedAddress),
+      customer_email: shopifyOrder.email || shopifyOrder.customer?.email || '',
+      customer_phone: validatedAddress.phone || shopifyOrder.phone || shopifyOrder.customer?.phone || '',
+
+      delivery_type: (shopifyOrder.shipping_lines && shopifyOrder.shipping_lines.length > 0) ? 'shipping' : 'pickup',
+
+      // Dirección validada
+      shipping_address: this.formatValidatedAddress(validatedAddress),
+      shipping_commune: this.normalizeCommune(validatedAddress.city),
+      shipping_state: validatedAddress.province || validatedAddress.province_code || 'Región Metropolitana',
+      shipping_zip: validatedAddress.zip,
+      
+      // Información financiera
+      total_amount: parseFloat(shopifyOrder.total_price) || 0,
+      shipping_cost: fixedShippingCost,
+      currency: shopifyOrder.currency,
+      
+      // Estado y fechas
+      status: this.mapOrderStatus(shopifyOrder),
+      order_date: new Date(shopifyOrder.created_at),
+      
+      // Items del pedido
+      items: this.mapOrderItems(shopifyOrder.line_items),
+      items_count: shopifyOrder.line_items?.length || 0,
+      
+      // Datos adicionales
+      notes: shopifyOrder.note,
+      raw_data: shopifyOrder,
+      
+      // Metadatos
+      created_at: new Date(),
+      updated_at: new Date()
+    });
+    
+    const savedOrder = await newOrder.save();
+    console.log(`✅ Pedido creado: ${savedOrder.order_number} - Comuna: ${savedOrder.shipping_commune}`);
+    
+    return savedOrder;
+    
+  } catch (error) {
+    console.error('❌ Error creando pedido desde webhook:', error);
+    throw error;
   }
+}
   static async notifyOrderEnRoute(channel, order, trackingUrl) {
   try {
     console.log(`🚗 Notificando a Shopify que repartidor va en camino para pedido #${order.order_number}`);
@@ -382,102 +442,121 @@ static async updateExistingFulfillment(channel, shopifyOrderId, trackingUrl) {
   
   // Sincronizar pedidos históricos
   static async syncOrders(channel, dateFrom, dateTo) {
-    try {
-      console.log('🔄 Sincronizando pedidos de Shopify...');
-      
-      let ordersImported = 0;
-      let ordersRejected = 0;
-      let page = 1;
-      const limit = 250;
-      let hasMoreOrders = true;
-      
-      // Obtener comunas permitidas
-      const allowedCommunes = channel.accepted_communes || [];
-      console.log(`📋 Comunas permitidas: ${allowedCommunes.join(', ')}`);
-      
-      while (hasMoreOrders) {
-        try {
-          // Construir parámetros de fecha
-          const params = new URLSearchParams();
-          if (dateFrom) params.append('created_at_min', dateFrom);
-          if (dateTo) params.append('created_at_max', dateTo);
-          params.append('status', 'any');
-          params.append('limit', limit.toString());
-          
-          // Obtener pedidos de Shopify
-          const response = await axios.get(
-            `${this.getApiUrl(channel)}/orders.json?${params}`,
-            { headers: this.getHeaders(channel) }
-          );
-          
-          const orders = response.data.orders;
-          
-          if (!orders || orders.length === 0) {
-            hasMoreOrders = false;
-            break;
-          }
-          
-          // Procesar cada pedido
-          for (const shopifyOrder of orders) {
-            try {
-              // 🏘️ NUEVA LÓGICA: Filtrar por comunas durante sincronización
-              const orderCommune = shopifyOrder.shipping_address?.city || shopifyOrder.billing_address?.city || '';
-              
-              if (!this.isCommuneAllowed(orderCommune, allowedCommunes)) {
-                console.log(`🚫 Pedido #${shopifyOrder.name} rechazado durante sincronización. Comuna "${orderCommune}" no permitida.`);
-                ordersRejected++;
-                continue;
-              }
-              
-              // Verificar si el pedido ya existe
-              const existingOrder = await Order.findOne({
-                channel_id: channel._id,
-                external_order_id: shopifyOrder.id.toString()
-              });
-              
-              if (!existingOrder) {
-                await this.createOrderFromWebhook(channel, shopifyOrder);
-                ordersImported++;
-                console.log(`✅ Pedido #${shopifyOrder.name} importado - Comuna: ${orderCommune}`);
-              } else {
-                console.log(`⏭️ Pedido ${shopifyOrder.name} ya existe, omitiendo...`);
-              }
-            } catch (orderError) {
-              console.error(`❌ Error importando pedido ${shopifyOrder.name}:`, orderError);
-              // Continuar con el siguiente pedido
+  try {
+    console.log('🔄 Sincronizando pedidos de Shopify con validación de direcciones...');
+    
+    let ordersImported = 0;
+    let ordersRejected = 0;
+    let addressRejected = 0; // NUEVO: contador específico para direcciones
+    let page = 1;
+    const limit = 100; // Reducir para mejor control
+    let hasMoreOrders = true;
+    
+    // Obtener comunas permitidas
+    const allowedCommunes = channel.accepted_communes || [];
+    console.log(`📋 Comunas permitidas: ${allowedCommunes.join(', ')}`);
+    
+    while (hasMoreOrders) {
+      try {
+        // Construir parámetros de fecha
+        const params = new URLSearchParams();
+        if (dateFrom) params.append('created_at_min', dateFrom);
+        if (dateTo) params.append('created_at_max', dateTo);
+        params.append('status', 'any');
+        params.append('limit', limit.toString());
+        params.append('page', page.toString());
+        
+        // Obtener pedidos de Shopify
+        const response = await axios.get(
+          `${this.getApiUrl(channel)}/orders.json?${params}`,
+          { headers: this.getHeaders(channel) }
+        );
+        
+        const orders = response.data.orders;
+        
+        if (!orders || orders.length === 0) {
+          hasMoreOrders = false;
+          break;
+        }
+        
+        // Procesar cada pedido con validación completa
+        for (const shopifyOrder of orders) {
+          try {
+            // 1. VALIDAR DIRECCIÓN PRIMERO
+            const addressValidation = this.validateShippingAddress(shopifyOrder);
+            
+            if (!addressValidation.isValid) {
+              console.log(`🚫 Pedido ${shopifyOrder.name} rechazado por dirección: ${addressValidation.errors.join(', ')}`);
+              addressRejected++;
+              continue;
             }
+            
+            // 2. VALIDAR COMUNA (solo si la dirección es válida)
+            const orderCommune = addressValidation.address.city;
+            
+            if (!this.isCommuneAllowed(orderCommune, allowedCommunes)) {
+              console.log(`🚫 Pedido ${shopifyOrder.name} rechazado por comuna: "${orderCommune}" no permitida`);
+              ordersRejected++;
+              continue;
+            }
+            
+            // 3. VERIFICAR SI YA EXISTE
+            const existingOrder = await Order.findOne({
+              channel_id: channel._id,
+              external_order_id: shopifyOrder.id.toString()
+            });
+            
+            if (existingOrder) {
+              console.log(`⏭️ Pedido ${shopifyOrder.name} ya existe, omitiendo...`);
+              continue;
+            }
+            
+            // 4. CREAR PEDIDO (ya validado)
+            await this.createOrderFromWebhook(channel, shopifyOrder);
+            ordersImported++;
+            console.log(`✅ Pedido ${shopifyOrder.name} importado - Comuna: ${orderCommune}`);
+            
+          } catch (orderError) {
+            console.error(`❌ Error procesando pedido ${shopifyOrder.name}:`, orderError);
+            ordersRejected++;
           }
-          
-          // Si obtuvo menos pedidos que el límite, no hay más páginas
-          if (orders.length < limit) {
-            hasMoreOrders = false;
-          }
-          
-          page++;
-          
-          // Pequeña pausa para evitar rate limiting
-          await new Promise(resolve => setTimeout(resolve, 500));
-          
-        } catch (pageError) {
-          console.error(`❌ Error obteniendo página ${page}:`, pageError);
+        }
+        
+        // Control de páginas
+        if (orders.length < limit) {
           hasMoreOrders = false;
         }
+        
+        page++;
+        
+        // Pausa para evitar rate limiting
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+      } catch (pageError) {
+        console.error(`❌ Error obteniendo página ${page}:`, pageError);
+        hasMoreOrders = false;
       }
-      
-      console.log(`✅ Sincronización completada.`);
-      console.log(`   📊 Pedidos importados: ${ordersImported}`);
-      console.log(`   🚫 Pedidos rechazados por filtro de comuna: ${ordersRejected}`);
-      
-      return {
-        imported: ordersImported,
-        rejected: ordersRejected,
-        total: ordersImported + ordersRejected
-      };
-    } catch (error) {
-      console.error('❌ Error sincronizando pedidos:', error);
-      throw error;
     }
+    
+    console.log(`✅ Sincronización completada:`);
+    console.log(`   📦 Pedidos importados: ${ordersImported}`);
+    console.log(`   🚫 Rechazados por comuna: ${ordersRejected}`);
+    console.log(`   ❌ Rechazados por dirección: ${addressRejected}`);
+    console.log(`   📊 Total procesados: ${ordersImported + ordersRejected + addressRejected}`);
+    
+    return {
+      imported: ordersImported,
+      rejected: ordersRejected + addressRejected,
+      addressRejected: addressRejected,
+      communeRejected: ordersRejected,
+      total: ordersImported + ordersRejected + addressRejected
+    };
+    
+  } catch (error) {
+    console.error('❌ Error en sincronización:', error);
+    throw error;
   }
+}
   
   // Mapear items del pedido
   static mapOrderItems(lineItems) {
@@ -593,15 +672,26 @@ static async updateExistingFulfillment(channel, shopifyOrderId, trackingUrl) {
   }
   
   // Helpers
-  static getCustomerName(order) {
-    if (order.customer) {
-      return `${order.customer.first_name || ''} ${order.customer.last_name || ''}`.trim();
-    }
-    if (order.shipping_address) {
-      return order.shipping_address.name;
-    }
-    return 'Cliente';
+  static getCustomerName(order, validatedAddress = null) {
+  // Prioridad: dirección validada -> customer -> shipping_address -> fallback
+  if (validatedAddress && (validatedAddress.first_name || validatedAddress.last_name)) {
+    return `${validatedAddress.first_name || ''} ${validatedAddress.last_name || ''}`.trim();
   }
+  
+  if (validatedAddress && validatedAddress.name) {
+    return validatedAddress.name;
+  }
+  
+  if (order.customer) {
+    return `${order.customer.first_name || ''} ${order.customer.last_name || ''}`.trim();
+  }
+  
+  if (order.shipping_address) {
+    return order.shipping_address.name || 'Cliente';
+  }
+  
+  return 'Cliente';
+}
   
   static getShippingAddress(order) {
     if (!order.shipping_address) return '';
