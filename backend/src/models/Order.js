@@ -87,6 +87,8 @@ const orderSchema = new mongoose.Schema({
   shipday_tracking_url: { type: String, default: '' }, 
   shipday_status: { type: String }, // Estado en Shipday
   proof_of_delivery: { type: evidenceSchema, default: null },
+  podUrls: [{ type: String }], // Array de URLs de fotos de entrega
+  signatureUrl: { type: String }, // URL de firma digital
   
   // 🆕 Información del conductor expandida
   driver_info: {
@@ -238,5 +240,7 @@ orderSchema.index({ delivery_date: -1 });
 orderSchema.index({ shipday_tracking_url: 1 });
 orderSchema.index({ shipday_order_id: 1 });
 orderSchema.index({ 'driver_info.name': 1 });
+orderSchema.index({ podUrls: 1 });
+orderSchema.index({ signatureUrl: 1 });
 
 module.exports = mongoose.model('Order', orderSchema);

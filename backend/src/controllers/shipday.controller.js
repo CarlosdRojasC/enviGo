@@ -484,7 +484,7 @@ async handleWebhook(req, res) {
 
     // --- LÓGICA DE EVENTOS ESPECÍFICOS ---
 
- switch (eventType.toLowerCase()) {
+ switch (eventType.toUpperCase()) {
   case 'order_assigned':
   case 'driver_assigned':
     console.log('👨‍💼 Evento: Conductor Asignado.');
@@ -505,6 +505,7 @@ async handleWebhook(req, res) {
 
  case 'order_delivered':
   case 'order_completed':
+    case 'ORDER_POD_UPLOAD':
   console.log('✅ Evento: Pedido Entregado.');
   order.status = 'delivered';
   order.delivery_date = webhookData.order?.delivery_time ? new Date(webhookData.order.delivery_time) : new Date();
