@@ -441,40 +441,95 @@ static async updateExistingFulfillment(channel, shopifyOrderId, trackingUrl) {
   }
   
   // Sincronizar pedidos históricos
-  static async syncOrders(channel, dateFrom, dateTo) {
+static async syncOrders(channel, dateFrom, dateTo) {
   try {
     console.log('🔄 Sincronizando pedidos de Shopify con validación de direcciones...');
     
     let ordersImported = 0;
     let ordersRejected = 0;
-    let addressRejected = 0; // NUEVO: contador específico para direcciones
-    let page = 1;
-    const limit = 100; // Reducir para mejor control
+    let addressRejected = 0;
+    let currentPage = 1;
+    const limit = 50; // ✅ REDUCIR LÍMITE para evitar timeouts
     let hasMoreOrders = true;
     
     // Obtener comunas permitidas
     const allowedCommunes = channel.accepted_communes || [];
     console.log(`📋 Comunas permitidas: ${allowedCommunes.join(', ')}`);
     
+    // ✅ VALIDAR Y CORREGIR FECHAS
+    let correctedDateFrom = dateFrom;
+    let correctedDateTo = dateTo;
+    
+    // Si dateFrom es futuro, corregir a fecha pasada
+    if (correctedDateFrom && new Date(correctedDateFrom) > new Date()) {
+      correctedDateFrom = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(); // 30 días atrás
+      console.log(`⚠️ Fecha desde era futura, corregida a: ${correctedDateFrom}`);
+    }
+    
+    // Si dateTo es futuro, corregir a ahora
+    if (correctedDateTo && new Date(correctedDateTo) > new Date()) {
+      correctedDateTo = new Date().toISOString();
+      console.log(`⚠️ Fecha hasta era futura, corregida a: ${correctedDateTo}`);
+    }
+    
     while (hasMoreOrders) {
       try {
-        // Construir parámetros de fecha
+        console.log(`📄 Obteniendo página ${currentPage}...`);
+        
+        // ✅ CONSTRUIR PARÁMETROS CORRECTAMENTE
         const params = new URLSearchParams();
-        if (dateFrom) params.append('created_at_min', dateFrom);
-        if (dateTo) params.append('created_at_max', dateTo);
+        if (correctedDateFrom) {
+          params.append('created_at_min', correctedDateFrom);
+        }
+        if (correctedDateTo) {
+          params.append('created_at_max', correctedDateTo);
+        }
         params.append('status', 'any');
         params.append('limit', limit.toString());
-        params.append('page', page.toString());
         
-        // Obtener pedidos de Shopify
+        // ✅ NO USAR 'page' - Shopify lo maneja automáticamente con links
+        
+        console.log(`🔍 URL consultada: ${this.getApiUrl(channel)}/orders.json?${params}`);
+        
+        // ✅ AGREGAR TIMEOUT Y HEADERS MEJORADOS
         const response = await axios.get(
           `${this.getApiUrl(channel)}/orders.json?${params}`,
-          { headers: this.getHeaders(channel) }
+          { 
+            headers: this.getHeaders(channel),
+            timeout: 30000, // 30 segundos timeout
+            validateStatus: function (status) {
+              return status >= 200 && status < 500; // No lanzar error en 4xx
+            }
+          }
         );
         
+        // ✅ MANEJAR ERRORES HTTP ESPECÍFICOS
+        if (response.status === 400) {
+          console.error('❌ Error 400 - Bad Request desde Shopify:', response.data);
+          throw new Error(`Parámetros inválidos: ${JSON.stringify(response.data)}`);
+        }
+        
+        if (response.status === 401) {
+          console.error('❌ Error 401 - No autorizado');
+          throw new Error('Token de acceso inválido o expirado');
+        }
+        
+        if (response.status === 429) {
+          console.log('⏳ Rate limit alcanzado, esperando 2 segundos...');
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          continue; // Reintentar la misma página
+        }
+        
+        if (!response.data || !response.data.orders) {
+          console.error('❌ Respuesta inválida de Shopify:', response.data);
+          throw new Error('Respuesta inválida de la API');
+        }
+        
         const orders = response.data.orders;
+        console.log(`📦 Obtenidos ${orders.length} pedidos en página ${currentPage}`);
         
         if (!orders || orders.length === 0) {
+          console.log('✅ No hay más pedidos para procesar');
           hasMoreOrders = false;
           break;
         }
@@ -522,18 +577,34 @@ static async updateExistingFulfillment(channel, shopifyOrderId, trackingUrl) {
           }
         }
         
-        // Control de páginas
+        // ✅ CONTROL DE PÁGINAS MEJORADO
         if (orders.length < limit) {
+          // Si obtuvimos menos pedidos que el límite, no hay más páginas
           hasMoreOrders = false;
+        } else {
+          // Obtener el último pedido para usar su fecha como punto de partida
+          const lastOrder = orders[orders.length - 1];
+          correctedDateFrom = lastOrder.created_at;
+          currentPage++;
         }
         
-        page++;
-        
-        // Pausa para evitar rate limiting
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        // ✅ PAUSA OBLIGATORIA entre páginas para evitar rate limiting
+        if (hasMoreOrders) {
+          console.log('⏳ Esperando 1 segundo antes de la siguiente página...');
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
         
       } catch (pageError) {
-        console.error(`❌ Error obteniendo página ${page}:`, pageError);
+        console.error(`❌ Error obteniendo página ${currentPage}:`, pageError.message);
+        
+        // Si es un error de rate limiting, esperar más tiempo
+        if (pageError.response?.status === 429) {
+          console.log('⏳ Rate limit severo, esperando 5 segundos...');
+          await new Promise(resolve => setTimeout(resolve, 5000));
+          continue; // Reintentar la misma página
+        }
+        
+        // Para otros errores, terminar la sincronización
         hasMoreOrders = false;
       }
     }
