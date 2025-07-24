@@ -1,6 +1,6 @@
 const axios = require('axios');
-const SalesChannel = require('../models/Channel');
 const Order = require('../models/Order');
+const Channel = require('../models/Channel');
 
 class MercadoLibreService {
   static API_BASE_URL = 'https://api.mercadolibre.com';
@@ -257,7 +257,7 @@ static async exchangeCodeForTokens(code, channelId) {
       return true;
     }
 
-    const channel = await SalesChannel.findById(channelId);
+    const channel = await Channel.findById(channelId);
     if (!channel) throw new Error(`[ML Webhook] Canal con ID ${channelId} no encontrado.`);
 
     const accessToken = await this.getAccessToken(channel);
