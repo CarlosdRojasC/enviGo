@@ -48,16 +48,16 @@ class MercadoLibreService {
    * ✅ CORREGIDO: Genera la URL de autorización con el dominio correcto
    */
 static getAuthorizationUrl(channelId) {
-  const redirectUri = `${process.env.FRONTEND_URL}/channels/mercadolibre/callback`;
+  // ✅ DEBE apuntar al BACKEND (mismo que configuraste en MercadoLibre)
+  const redirectUri = `${process.env.BACKEND_URL}/api/channels/mercadolibre/callback`;
   
-  // ✅ USAR EL DOMINIO CORRECTO
-  const authUrl = new URL('https://auth.mercadolibre.cl/authorization');
+  const authUrl = new URL(`${this.AUTH_BASE_URL}/authorization`);
   authUrl.searchParams.append('response_type', 'code');
   authUrl.searchParams.append('client_id', process.env.MERCADOLIBRE_APP_ID);
   authUrl.searchParams.append('redirect_uri', redirectUri);
   authUrl.searchParams.append('state', channelId);
   
-  console.log(`🔐 [ML Service] URL generada: ${authUrl.toString()}`);
+  console.log(`🔐 [ML Service] URL de autorización generada: ${authUrl.toString()}`);
   return authUrl.toString();
 }
 
@@ -110,7 +110,7 @@ static async exchangeCodeForTokens(code, channelId) {
   }
 
   // ✅ CORRECCIÓN: Usar la ruta que coincide con tu router
-  const redirectUri = `${process.env.FRONTEND_URL}/channels/mercadolibre/callback`;
+  const redirectUri = `${process.env.BACKEND_URL}/api/channels/mercadolibre/callback`;
 
   console.log('🔄 [ML Service] Intercambiando tokens...', {
     channelId,
