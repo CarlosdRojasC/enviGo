@@ -508,26 +508,38 @@ async syncOrders(req, res) {
     /**
      * Maneja el callback de OAuth2, intercambia el código por tokens.
      */
-    async handleMLCallback(req, res) {
-        try {
-            const { code, state } = req.body; // 'state' contiene el channelId
-
-            if (!code || !state) {
-                return res.status(400).json({ error: 'Faltan el código o el estado en la solicitud.' });
-            }
-
-            // Delega el intercambio de tokens al servicio
-            const updatedChannel = await MercadoLibreService.exchangeCodeForTokens(code, state);
-
-            res.status(200).json({
-                message: '¡Conexión con Mercado Libre exitosa!',
-                channel: updatedChannel,
-            });
-        } catch (error) {
-            console.error('[Controller] Error en el callback de ML:', error);
-            res.status(500).json({ error: 'No se pudo completar la conexión con Mercado Libre.' });
-        }
+async handleMLCallback(req, res) {
+  try {
+    const { code, state, error: oauthError } = req.query; // Usar req.query, no req.body
+    
+    console.log('📥 [ML Callback] Parámetros recibidos:', { code: !!code, state, error: oauthError });
+    
+    if (oauthError) {
+      console.error('❌ [ML Callback] Error OAuth:', oauthError);
+      return res.redirect(`${process.env.FRONTEND_URL}/channels?error=oauth_denied`);
     }
+    
+    if (!code || !state) {
+      console.error('❌ [ML Callback] Faltan parámetros requeridos');
+      return res.redirect(`${process.env.FRONTEND_URL}/channels?error=missing_params`);
+    }
+    
+    // ✅ AGREGAR TIMEOUT para evitar códigos expirados
+    const updatedChannel = await Promise.race([
+      MercadoLibreService.exchangeCodeForTokens(code, state),
+      new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Timeout en validación')), 10000)
+      )
+    ]);
+    
+    console.log('✅ [ML Callback] OAuth completado exitosamente');
+    res.redirect(`${process.env.FRONTEND_URL}/channels?success=ml_connected`);
+    
+  } catch (error) {
+    console.error('❌ [ML Callback] Error:', error.message);
+    res.redirect(`${process.env.FRONTEND_URL}/channels?error=validation_failed`);
+  }
+}
 
 
   // NUEVO: Obtener historial de sincronizaciones
