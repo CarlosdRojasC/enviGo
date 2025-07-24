@@ -532,7 +532,7 @@ static async syncOrders(channel, dateFrom, dateTo) {
     }
     
     params.append('status', 'any');
-    params.append('limit', '30'); // ✅ MÁXIMO 30 PEDIDOS
+    params.append('limit', '50'); // ✅ MÁXIMO 50 PEDIDOS
     params.append('order', 'created_at desc'); // ✅ ORDENAR POR MÁS RECIENTES PRIMERO
     
     console.log(`🔍 URL consultada: ${this.getApiUrl(channel)}/orders.json?${params}`);

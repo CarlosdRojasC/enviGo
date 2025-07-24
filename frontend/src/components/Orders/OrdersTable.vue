@@ -320,8 +320,10 @@ function isOrderSelectable(order) {
   background: white;
   border-radius: 16px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
-  overflow: hidden;
+  display: flex;
+  flex-direction: column;
   border: 1px solid #e2e8f0;
+  max-height: 85vh; 
 }
 
 /* Bulk Actions Bar */
@@ -333,6 +335,7 @@ function isOrderSelectable(order) {
   background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
   color: white;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  flex-shrink: 0;
 }
 
 .bulk-selection-info {
@@ -493,6 +496,7 @@ function isOrderSelectable(order) {
 
 /* Table Wrapper */
 .table-wrapper {
+  flex-grow: 1; 
   overflow-x: auto;
   background: white;
 }
