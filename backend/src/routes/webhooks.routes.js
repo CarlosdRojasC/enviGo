@@ -5,6 +5,7 @@ const Channel = require('../models/Channel');
 const { authenticateToken } = require('../middlewares/auth.middleware');
 const ShipdayService = require('../services/shipday.service');
 const shipdayController = require('../controllers/shipday.controller');
+const MercadoLibreService = require('../services/mercadolibre.service');
 
 // OAuth MercadoLibre
 router.get('/channels/mercadolibre/auth', authenticateToken, async (req, res) => {
@@ -31,7 +32,6 @@ router.get('/channels/mercadolibre/auth', authenticateToken, async (req, res) =>
 
 router.get('/mercadolibre/callback', async (req, res) => {
   console.log('🚨 [ML CALLBACK] EJECUTADO - URL completa:', req.url);
-  console.log('🚨 [ML CALLBACK] Headers:', req.headers);
   console.log('🚨 [ML CALLBACK] Query completa:', req.query);
   
   try {
@@ -42,22 +42,28 @@ router.get('/mercadolibre/callback', async (req, res) => {
       return res.redirect(`${process.env.FRONTEND_URL}/channels?error=oauth_denied&details=${oauthError}`);
     }
     
-    if (!code) {
-      console.log('❌ [ML Callback] NO SE RECIBIÓ CÓDIGO');
-      return res.redirect(`${process.env.FRONTEND_URL}/channels?error=no_code`);
-    }
-    
-    if (!state) {
-      console.log('❌ [ML Callback] NO SE RECIBIÓ STATE');
-      return res.redirect(`${process.env.FRONTEND_URL}/channels?error=no_state`);
+    if (!code || !state) {
+      console.log('❌ [ML Callback] Faltan parámetros');
+      return res.redirect(`${process.env.FRONTEND_URL}/channels?error=missing_params`);
     }
     
     console.log(`🔄 [ML Callback] Procesando - Code: ${code.substring(0, 10)}..., State: ${state}`);
     
-    // resto del código...
+    // ✅ VERIFICAR QUE EL SERVICIO SE CARGÓ
+    console.log('🔍 [ML Callback] MercadoLibreService cargado:', !!MercadoLibreService);
+    console.log('🔍 [ML Callback] Método exchangeCodeForTokens disponible:', typeof MercadoLibreService.exchangeCodeForTokens);
+    
+    // ✅ LLAMAR AL MÉTODO CON LOG
+    console.log('🚀 [ML Callback] Llamando a exchangeCodeForTokens...');
+    const channel = await MercadoLibreService.exchangeCodeForTokens(code, state);
+    
+    console.log(`✅ [ML Callback] Autorización exitosa para: ${channel.channel_name}`);
+    res.redirect(`${process.env.FRONTEND_URL}/channels?success=ml_connected&channel_name=${encodeURIComponent(channel.channel_name)}`);
+    
   } catch (error) {
-    console.error('❌ [ML Callback] Error:', error);
-    res.redirect(`${process.env.FRONTEND_URL}/channels?error=callback_error`);
+    console.error('❌ [ML Callback] Error procesando:', error.message);
+    console.error('❌ [ML Callback] Stack trace:', error.stack);
+    res.redirect(`${process.env.FRONTEND_URL}/channels?error=validation_failed&details=${encodeURIComponent(error.message)}`);
   }
 });
 
