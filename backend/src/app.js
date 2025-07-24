@@ -1,45 +1,41 @@
 require('dotenv').config();
 const express = require('express');
-const http = require('http'); // ← AGREGAR ESTA LÍNEA
+const http = require('http');
 const cors = require('cors');
 const helmet = require('helmet');
 const compression = require('compression');
 const rateLimit = require('express-rate-limit');
 const routes = require('./routes');
 const connectDB = require('./config/database');
-const WebSocketService = require('./services/websocket.service'); // ← AGREGAR ESTA LÍNEA
-const SyncSchedulerService = require('./services/sync.service'); // ← AGREGAR ESTA LÍNEA
+const WebSocketService = require('./services/websocket.service');
+const syncService = require('./services/sync.service'); // ✅ CORRECTO: Es una instancia
 const app = express();
-const server = http.createServer(app); // ← AGREGAR ESTA LÍNEA
+const server = http.createServer(app);
 const PORT = process.env.PORT || 3001;
 
-// --- INICIALIZAR WEBSOCKET ---
-const wsService = new WebSocketService(server); // ← AGREGAR
-global.wsService = wsService; // ← AGREGAR
+// Inicializar WebSocket
+const wsService = new WebSocketService(server);
+global.wsService = wsService;
 let syncSchedulerInitialized = false;
 
-// --- AÑADE ESTA LÍNEA AQUÍ ---
-app.set('trust proxy', 1); // Confía en el primer proxy (el de Render)
+app.set('trust proxy', 1);
 
 // Middlewares de seguridad
 app.use(helmet());
 app.use(compression());
 
 const allowedOrigins = [
-  'http://localhost:5173', // tu frontend de desarrollo
-  'http://localhost:3000', // otro puerto común
+  'http://localhost:5173',
+  'http://localhost:3000',
   'http://127.0.0.1:5173',
   'http://127.0.0.1:3000',
   'https://envigo-frontend-production.up.railway.app',
   process.env.FRONTEND_URL,
-  null // ← IMPORTANTE: esto permite archivos HTML locales (file://)
+  null
 ];
-
 
 const corsOptions = {
   origin: function (origin, callback) {
-    // Permite peticiones sin 'origin' (como apps móviles, Postman, o archivos HTML locales)
-    // y las de la lista de orígenes permitidos
     if (!origin || allowedOrigins.indexOf(origin) !== -1) {
       callback(null, true);
     } else {
@@ -47,41 +43,41 @@ const corsOptions = {
       callback(new Error('No permitido por CORS'));
     }
   },
-  credentials: true // Permite que el frontend envíe cookies o tokens de autorización
+  credentials: true
 };
 
+// ✅ FUNCIÓN CORREGIDA
 async function initializeSyncScheduler() {
   if (syncSchedulerInitialized) return;
   
   try {
     console.log('🚀 Inicializando Sync Scheduler...');
-    await SyncSchedulerService.initialize();
+    await syncService.initialize(); // ✅ CORREGIDO
     syncSchedulerInitialized = true;
     console.log('✅ Sync Scheduler inicializado correctamente');
   } catch (error) {
     console.error('❌ Error inicializando Sync Scheduler:', error);
-    // Reintentar en 30 segundos
     setTimeout(initializeSyncScheduler, 30000);
   }
 }
 
 app.use(cors(corsOptions));
 
-app.set('trust proxy', 1); // Esto es para que express-rate-limit funcione correctamente en Render
-
-
 // Rate limiting
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutos
-  max: 100 // límite de 100 requests por IP
+  windowMs: 15 * 60 * 1000,
+  max: 100
 });
 
 app.use('/api/', limiter);
 
 // Body parser
-app.use(express.json({ limit: '10mb',verify: (req, res, buf) => {
-    req.rawBody = buf; // Guarda el buffer del body
-  } }));
+app.use(express.json({ 
+  limit: '10mb',
+  verify: (req, res, buf) => {
+    req.rawBody = buf;
+  } 
+}));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Logging en desarrollo
@@ -92,10 +88,10 @@ if (process.env.NODE_ENV === 'development') {
   });
 }
 
-// Health check
+// ✅ HEALTH CHECK CORREGIDO
 app.get('/health', async (req, res) => {
   try {
-    const syncStats = SyncSchedulerService.getStats();
+    const syncStats = syncService.getStats(); // ✅ CORREGIDO
     
     res.json({ 
       status: 'OK', 
@@ -118,7 +114,7 @@ app.get('/health', async (req, res) => {
   }
 });
 
-// ← AGREGAR ESTAS RUTAS WEBSOCKET
+// WebSocket routes
 app.get('/api/ws-stats', (req, res) => {
   if (global.wsService) {
     res.json(global.wsService.getStats());
@@ -140,8 +136,6 @@ app.post('/api/ws-test', (req, res) => {
   }
 });
 
-
-// Simular cambio de estado de pedido individual
 app.post('/api/test-order-notification', (req, res) => {
   if (global.wsService) {
     const { orderNumber = 'TEST-123', eventType = 'delivered', customerName = 'Cliente de Prueba' } = req.body;
@@ -161,7 +155,6 @@ app.post('/api/test-order-notification', (req, res) => {
       driver_name: eventType === 'driver_assigned' ? 'Juan Pérez' : null
     };
 
-    // Mensajes específicos por tipo de evento
     const notifications = {
       'driver_assigned': {
         message: `👨‍💼 Conductor Juan Pérez asignado a pedido #${orderNumber}`,
@@ -212,7 +205,6 @@ app.post('/api/test-order-notification', (req, res) => {
   }
 });
 
-// Simular flujo completo de un pedido
 app.post('/api/test-order-flow', (req, res) => {
   if (global.wsService) {
     const { orderNumber = `FLOW-${Date.now()}`, customerName = 'Cliente Demo' } = req.body;
@@ -276,7 +268,6 @@ app.post('/api/test-order-flow', (req, res) => {
   }
 });
 
-// Simular múltiples pedidos simultáneos
 app.post('/api/test-multiple-orders', (req, res) => {
   if (global.wsService) {
     const { count = 5 } = req.body;
@@ -320,7 +311,7 @@ app.post('/api/test-multiple-orders', (req, res) => {
         });
         
         sentCount += sent;
-      }, i * 1000); // Una cada segundo
+      }, i * 1000);
     }
 
     res.json({ 
@@ -334,15 +325,15 @@ app.post('/api/test-multiple-orders', (req, res) => {
   }
 });
 
-
+// ✅ ENDPOINTS ADMIN CORREGIDOS
 app.get('/api/admin/sync/status', async (req, res) => {
   try {
-    const stats = SyncSchedulerService.getStats();
-    const upcomingSyncs = await SyncSchedulerService.getUpcomingSyncs();
+    const stats = syncService.getStats(); // ✅ CORREGIDO
+    const upcomingSyncs = await syncService.getUpcomingSyncs(); // ✅ CORREGIDO
     
     res.json({
       scheduler: stats,
-      upcoming_syncs: upcomingSyncs.slice(0, 10) // Solo los próximos 10
+      upcoming_syncs: upcomingSyncs.slice(0, 10)
     });
   } catch (error) {
     console.error('❌ Error obteniendo estado sync:', error);
@@ -350,12 +341,11 @@ app.get('/api/admin/sync/status', async (req, res) => {
   }
 });
 
-// Endpoint para forzar sincronización de todos los canales
 app.post('/api/admin/sync/force-all', async (req, res) => {
   try {
     console.log('🚀 Forzando sincronización de todos los canales...');
     
-    const results = await SyncSchedulerService.forceSyncAll();
+    const results = await syncService.forceSyncAll(); // ✅ CORREGIDO
     
     res.json({ 
       success: true, 
@@ -371,13 +361,12 @@ app.post('/api/admin/sync/force-all', async (req, res) => {
   }
 });
 
-// Endpoint para forzar sincronización de un canal específico
 app.post('/api/admin/sync/force/:channelId', async (req, res) => {
   try {
     const { channelId } = req.params;
     console.log(`🚀 Forzando sincronización del canal ${channelId}...`);
     
-    const result = await SyncSchedulerService.syncChannelById(channelId);
+    const result = await syncService.syncChannelById(channelId); // ✅ CORREGIDO
     
     res.json({ 
       success: true, 
@@ -393,12 +382,11 @@ app.post('/api/admin/sync/force/:channelId', async (req, res) => {
   }
 });
 
-// Endpoint para reiniciar el sync scheduler
 app.post('/api/admin/sync/restart', async (req, res) => {
   try {
     console.log('🔄 Reiniciando Sync Scheduler...');
     
-    await SyncSchedulerService.restart();
+    await syncService.restart(); // ✅ CORREGIDO
     
     res.json({ 
       success: true, 
@@ -413,10 +401,9 @@ app.post('/api/admin/sync/restart', async (req, res) => {
   }
 });
 
-// Endpoint para obtener próximas sincronizaciones
 app.get('/api/admin/sync/upcoming', async (req, res) => {
   try {
-    const upcomingSyncs = await SyncSchedulerService.getUpcomingSyncs();
+    const upcomingSyncs = await syncService.getUpcomingSyncs(); // ✅ CORREGIDO
     
     res.json({ 
       success: true,
@@ -434,7 +421,6 @@ app.get('/api/admin/sync/upcoming', async (req, res) => {
 const driverHistoryRoutes = require('./routes/driverHistory.routes');
 app.use('/api/driver-history', driverHistoryRoutes);
 
-
 // Rutas API
 app.use('/api', routes);
 
@@ -449,29 +435,29 @@ app.use((err, req, res, next) => {
   if (err.name === 'ValidationError') {
     return res.status(400).json({ error: 'Error de validación', details: err.errors });
   }
-  if (err.code === 11000) { // Mongo duplicate key error
+  if (err.code === 11000) {
     return res.status(400).json({ error: 'El registro ya existe' });
   }
-  res.status(err.status || 500).json({ error: err.message || 'Error interno del servidor', ...(process.env.NODE_ENV === 'development' && { stack: err.stack }) });
+  res.status(err.status || 500).json({ 
+    error: err.message || 'Error interno del servidor', 
+    ...(process.env.NODE_ENV === 'development' && { stack: err.stack }) 
+  });
 });
 
-
-// Iniciar servidor
-
+// ✅ FUNCIÓN STARTSERVER CORREGIDA
 const startServer = async () => {
   try {
-    await connectDB();  // <-- conecta a MongoDB
+    await connectDB();
     
-    // 🆕 AGREGAR: Inicializar sync scheduler después de DB
     console.log('🔄 Inicializando sistema de sincronización automática...');
     setTimeout(async () => {
       try {
-        await SyncSchedulerService.initialize();
+        await syncService.initialize(); // ✅ CORREGIDO
         console.log('✅ Sistema de sincronización automática iniciado');
       } catch (error) {
         console.error('❌ Error inicializando sync scheduler:', error);
       }
-    }, 3000); // Esperar 3 segundos después de conectar DB
+    }, 3000);
     
     server.listen(PORT, '0.0.0.0', () => {
       console.log(`🚀 Servidor corriendo en http://localhost:${PORT}`);
@@ -479,14 +465,14 @@ const startServer = async () => {
       console.log(`📊 Ambiente: ${process.env.NODE_ENV}`);
       console.log(`🔐 JWT configurado: ${process.env.JWT_SECRET ? 'Sí' : 'No'}`);
       console.log(`📊 WebSocket Stats: http://localhost:${PORT}/api/ws-stats`);
-      console.log(`🤖 Auto-sync habilitado: Sí`); // 🆕 AGREGAR ESTA LÍNEA
+      console.log(`🤖 Auto-sync habilitado: Sí`);
     });
   } catch (error) {
     console.error('❌ Error al iniciar:', error);
     process.exit(1);
   }
 };
-// Manejo de señales para cierre graceful
+
 process.on('SIGTERM', () => {
   console.log('SIGTERM recibido, cerrando servidor...');
   process.exit(0);
@@ -497,5 +483,4 @@ process.on('SIGINT', () => {
   process.exit(0);
 });
 
-// Iniciar
 startServer();
