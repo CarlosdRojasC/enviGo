@@ -602,6 +602,59 @@ static generateOrdersStats(orders) {
   
   return stats;
 }
+
+async generateDriverPaymentReport(ordersData, summary) {
+  const workbook = new ExcelJS.Workbook();
+  
+  // Hoja 1: Resumen
+  const summarySheet = workbook.addWorksheet('Resumen');
+  
+  summarySheet.addRow(['REPORTE DE PAGOS A CONDUCTORES']);
+  summarySheet.addRow([`Período: ${summary.period.date_from} al ${summary.period.date_to}`]);
+  summarySheet.addRow([]);
+  summarySheet.addRow(['Total Conductores:', summary.total_drivers]);
+  summarySheet.addRow(['Total Entregas:', summary.total_deliveries]);
+  summarySheet.addRow(['Pago por Entrega:', `$${summary.payment_per_delivery}`]);
+  summarySheet.addRow(['TOTAL A PAGAR:', `$${summary.total_amount_to_pay.toLocaleString('es-CL')}`]);
+  
+  // Hoja 2: Detalle por pedido
+  const detailSheet = workbook.addWorksheet('Detalle por Pedido');
+  
+  // Headers
+  const headers = ['Conductor', 'N° Pedido', 'Cliente', 'Comuna', 'Fecha Entrega', 'Monto'];
+  detailSheet.addRow(headers);
+  
+  // Estilo para headers
+  const headerRow = detailSheet.getRow(1);
+  headerRow.font = { bold: true };
+  headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE6F3FF' } };
+  
+  // Datos
+  ordersData.forEach(order => {
+    detailSheet.addRow([
+      order.Conductor,
+      order['N° Pedido'],
+      order.Cliente,
+      order.Comuna,
+      order['Fecha Entrega'],
+      `${order.Monto.toLocaleString('es-CL')}`
+    ]);
+  });
+  
+  // Ajustar ancho de columnas
+  detailSheet.columns = [
+    { width: 20 }, // Conductor
+    { width: 15 }, // N° Pedido
+    { width: 25 }, // Cliente
+    { width: 15 }, // Comuna
+    { width: 12 }, // Fecha
+    { width: 10 }  // Monto
+  ];
+  
+  // Generar buffer
+  const buffer = await workbook.xlsx.writeBuffer();
+  return buffer;
+}
 }
 
 module.exports = ExcelService;

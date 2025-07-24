@@ -1,465 +1,640 @@
+<!-- frontend/src/views/DriverPayments.vue -->
 <template>
   <div class="driver-payments">
-    <div class="header">
-      <h2>Gestión de Pagos a Conductores</h2>
-      <div class="filters">
-        <select v-model="selectedMonth" @change="loadPaymentReport">
-          <option v-for="month in months" :key="month.value" :value="month.value">
-            {{ month.label }}
-          </option>
-        </select>
-        <select v-model="selectedYear" @change="loadPaymentReport">
-          <option v-for="year in years" :key="year" :value="year">
-            {{ year }}
-          </option>
-        </select>
+    <div class="page-header">
+      <div class="header-content">
+        <h1>💰 Pagos a Conductores</h1>
+        <p>Pedidos entregados y montos a pagar</p>
       </div>
-    </div>
-
-    <!-- Resumen del período -->
-    <div class="summary-cards" v-if="reportData">
-      <div class="card">
-        <h3>Total Conductores</h3>
-        <span class="amount">{{ reportData.summary.total_drivers }}</span>
-      </div>
-      <div class="card">
-        <h3>Total Entregas</h3>
-        <span class="amount">{{ reportData.summary.total_deliveries }}</span>
-      </div>
-      <div class="card total-amount">
-        <h3>Total a Pagar</h3>
-        <span class="amount">${{ formatCurrency(reportData.summary.total_amount) }}</span>
-      </div>
-    </div>
-
-    <!-- Lista de conductores -->
-    <div class="drivers-list" v-if="reportData?.drivers">
-      <div class="drivers-header">
-        <h3>Conductores - {{ reportData.period }}</h3>
-        <button 
-          @click="payAllDrivers" 
-          :disabled="isProcessing || reportData.drivers.length === 0"
-          class="btn-pay-all"
-        >
-          {{ isProcessing ? 'Procesando...' : 'Pagar a Todos' }}
+      <div class="header-actions">
+        <button @click="exportToExcel" class="btn-export" :disabled="loading">
+          📊 Exportar Excel
+        </button>
+        <button @click="refreshData" class="btn-refresh" :disabled="loading">
+          🔄 Actualizar
         </button>
       </div>
+    </div>
 
-      <div class="table-container">
-        <table class="drivers-table">
-          <thead>
-            <tr>
-              <th>Conductor</th>
-              <th>Email</th>
-              <th>Entregas</th>
-              <th>Monto Total</th>
-              <th>Acciones</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="driver in reportData.drivers" :key="driver._id">
-              <td class="driver-name">{{ driver.driver_name }}</td>
-              <td class="driver-email">{{ driver.driver_email }}</td>
-              <td class="deliveries-count">{{ driver.total_deliveries }}</td>
-              <td class="amount">${{ formatCurrency(driver.total_amount) }}</td>
-              <td class="actions">
-                <button 
-                  @click="payDriver(driver._id, driver.driver_name, driver.total_amount)"
-                  :disabled="isProcessing"
-                  class="btn-pay"
-                >
-                  Pagar
-                </button>
-                <button 
-                  @click="viewDriverDetails(driver._id)"
-                  class="btn-details"
-                >
-                  Ver Detalles
-                </button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+    <!-- Filtros -->
+    <div class="filters-section">
+      <div class="date-filters">
+        <label>Desde:</label>
+        <input 
+          v-model="dateFrom" 
+          type="date" 
+          @change="fetchDriverPayments"
+        />
+        
+        <label>Hasta:</label>
+        <input 
+          v-model="dateTo" 
+          type="date" 
+          @change="fetchDriverPayments"
+        />
+      </div>
+      
+      <div class="search-box">
+        <input 
+          v-model="searchDriver" 
+          type="text" 
+          placeholder="🔍 Buscar conductor..."
+          class="search-input"
+        />
       </div>
     </div>
 
-    <!-- Cargando -->
-    <div v-if="loading" class="loading">
-      <p>Cargando datos...</p>
-    </div>
-
-    <!-- Sin datos -->
-    <div v-if="!loading && (!reportData?.drivers || reportData.drivers.length === 0)" class="no-data">
-      <p>No hay conductores con pagos pendientes para este período.</p>
-    </div>
-
-    <!-- Modal de confirmación -->
-    <div v-if="showConfirmModal" class="modal-overlay" @click="closeConfirmModal">
-      <div class="modal" @click.stop>
-        <h3>Confirmar Pago</h3>
-        <p>¿Estás seguro de pagar <strong>${{ formatCurrency(confirmData.amount) }}</strong> a <strong>{{ confirmData.driverName }}</strong>?</p>
-        <div class="modal-actions">
-          <button @click="closeConfirmModal" class="btn-cancel">Cancelar</button>
-          <button @click="confirmPayment" class="btn-confirm">Confirmar Pago</button>
+    <!-- Resumen General -->
+    <div class="summary-section" v-if="!loading && Object.keys(driverPayments).length > 0">
+      <div class="summary-card">
+        <h3>📊 Resumen General</h3>
+        <div class="summary-stats">
+          <div class="stat">
+            <span class="stat-label">Total Conductores:</span>
+            <span class="stat-value">{{ Object.keys(filteredDriverPayments).length }}</span>
+          </div>
+          <div class="stat">
+            <span class="stat-label">Total Pedidos:</span>
+            <span class="stat-value">{{ totalOrders }}</span>
+          </div>
+          <div class="stat">
+            <span class="stat-label">Total a Pagar:</span>
+            <span class="stat-value total-amount">${{ formatCurrency(totalToPay) }}</span>
+          </div>
         </div>
       </div>
+    </div>
+
+    <!-- Loading -->
+    <div v-if="loading" class="loading-container">
+      <div class="spinner"></div>
+      <p>Cargando pagos de conductores...</p>
+    </div>
+
+    <!-- Lista de Conductores y sus Entregas -->
+    <div v-else-if="Object.keys(filteredDriverPayments).length > 0" class="drivers-list">
+      <div 
+        v-for="(driverData, driverName) in filteredDriverPayments" 
+        :key="driverName"
+        class="driver-section"
+      >
+        <div class="driver-header">
+          <div class="driver-info">
+            <h3>🚗 {{ driverName }}</h3>
+            <div class="driver-stats">
+              <span class="orders-count">{{ driverData.orders.length }} pedidos</span>
+              <span class="total-payment">${{ formatCurrency(driverData.total) }}</span>
+            </div>
+          </div>
+          <button 
+            @click="toggleDriverDetails(driverName)"
+            class="toggle-btn"
+          >
+            {{ expandedDrivers.has(driverName) ? '▲ Ocultar' : '▼ Ver Detalle' }}
+          </button>
+        </div>
+
+        <!-- Detalle de Pedidos del Conductor -->
+        <div 
+          v-if="expandedDrivers.has(driverName)" 
+          class="driver-orders"
+        >
+          <div class="orders-table">
+            <div class="table-header">
+              <div class="col">N° Pedido</div>
+              <div class="col">Comuna</div>
+              <div class="col">Fecha Entrega</div>
+              <div class="col">Monto</div>
+            </div>
+            
+            <div 
+              v-for="order in driverData.orders" 
+              :key="order._id"
+              class="table-row"
+            >
+              <div class="col order-number">{{ order.order_number }}</div>
+              <div class="col commune">{{ order.shipping_commune || 'Sin comuna' }}</div>
+              <div class="col date">{{ formatDate(order.delivery_date) }}</div>
+              <div class="col amount">$1.700</div>
+            </div>
+          </div>
+          
+          <div class="driver-total">
+            <strong>Total {{ driverName }}: ${{ formatCurrency(driverData.total) }}</strong>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Estado Vacío -->
+    <div v-else-if="!loading" class="empty-state">
+      <div class="empty-icon">📦</div>
+      <h3>No hay pedidos entregados</h3>
+      <p>No se encontraron pedidos entregados por conductores en el período seleccionado.</p>
     </div>
   </div>
 </template>
 
-<script>
-import { ref, onMounted, computed } from 'vue'
-import { useAuthStore } from '../store/auth'
+<script setup>
+import { ref, computed, onMounted } from 'vue'
+import { useToast } from 'vue-toastification'
 import { apiService } from '../services/api'
 
-export default {
-  name: 'DriverPayments',
-  setup() {
-    const authStore = useAuthStore()
-    const loading = ref(false)
-    const isProcessing = ref(false)
-    const reportData = ref(null)
-    const showConfirmModal = ref(false)
-    const confirmData = ref({})
+const toast = useToast()
 
-    // Filtros de fecha
-    const currentDate = new Date()
-    const selectedMonth = ref(currentDate.getMonth() + 1)
-    const selectedYear = ref(currentDate.getFullYear())
+// ==================== ESTADO ====================
+const loading = ref(false)
+const driverPayments = ref({})
+const expandedDrivers = ref(new Set())
+const searchDriver = ref('')
 
-    const months = ref([
-      { value: 1, label: 'Enero' },
-      { value: 2, label: 'Febrero' },
-      { value: 3, label: 'Marzo' },
-      { value: 4, label: 'Abril' },
-      { value: 5, label: 'Mayo' },
-      { value: 6, label: 'Junio' },
-      { value: 7, label: 'Julio' },
-      { value: 8, label: 'Agosto' },
-      { value: 9, label: 'Septiembre' },
-      { value: 10, label: 'Octubre' },
-      { value: 11, label: 'Noviembre' },
-      { value: 12, label: 'Diciembre' }
-    ])
+// Filtros de fecha (últimos 30 días por defecto)
+const today = new Date()
+const thirtyDaysAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000)
 
-    const years = computed(() => {
-      const currentYear = new Date().getFullYear()
-      return Array.from({ length: 3 }, (_, i) => currentYear - i)
+const dateTo = ref(today.toISOString().split('T')[0])
+const dateFrom = ref(thirtyDaysAgo.toISOString().split('T')[0])
+
+// ==================== COMPUTED ====================
+const filteredDriverPayments = computed(() => {
+  if (!searchDriver.value) return driverPayments.value
+  
+  const search = searchDriver.value.toLowerCase()
+  const filtered = {}
+  
+  Object.keys(driverPayments.value).forEach(driverName => {
+    if (driverName.toLowerCase().includes(search)) {
+      filtered[driverName] = driverPayments.value[driverName]
+    }
+  })
+  
+  return filtered
+})
+
+const totalOrders = computed(() => {
+  return Object.values(filteredDriverPayments.value)
+    .reduce((total, driver) => total + driver.orders.length, 0)
+})
+
+const totalToPay = computed(() => {
+  return Object.values(filteredDriverPayments.value)
+    .reduce((total, driver) => total + driver.total, 0)
+})
+
+// ==================== MÉTODOS ====================
+async function fetchDriverPayments() {
+  loading.value = true
+  try {
+    console.log('📦 Cargando pagos de conductores...')
+    
+    // Llamar al endpoint que vamos a crear
+    const { data } = await apiService.drivers.getDeliveredOrders({
+      date_from: dateFrom.value,
+      date_to: dateTo.value
     })
-
-    // Métodos
-    const loadPaymentReport = async () => {
-      loading.value = true
-      try {
-        const response = await apiService.drivers.getMonthlyReport(`/driver-history/company/${authStore.user.company_id}/monthly-report`, {
-          params: {
-            year: selectedYear.value,
-            month: selectedMonth.value
-          }
-        })
-        reportData.value = response.data.data
-      } catch (error) {
-        console.error('Error cargando reporte:', error)
-        // Aquí podrías mostrar una notificación de error
-      } finally {
-        loading.value = false
-      }
-    }
-
-    const payDriver = (driverId, driverName, amount) => {
-      confirmData.value = {
-        driverId,
-        driverName,
-        amount
-      }
-      showConfirmModal.value = true
-    }
-
-    const confirmPayment = async () => {
-      isProcessing.value = true
-      try {
-        await apiService.drivers.payDriver(`/driver-history/driver/${confirmData.value.driverId}/pay-all`, {
-          companyId: authStore.user.company_id
-        })
-        
-        // Recargar datos
-        await loadPaymentReport()
-        
-        // Mostrar mensaje de éxito
-        alert(`Pago realizado exitosamente a ${confirmData.value.driverName}`)
-        
-      } catch (error) {
-        console.error('Error procesando pago:', error)
-        alert('Error al procesar el pago')
-      } finally {
-        isProcessing.value = false
-        showConfirmModal.value = false
-      }
-    }
-
-    const payAllDrivers = async () => {
-      if (!confirm(`¿Pagar ${formatCurrency(reportData.value.summary.total_amount)} a todos los conductores?`)) {
-        return
-      }
-
-      isProcessing.value = true
-      try {
-        // Pagar a cada conductor individualmente
-        for (const driver of reportData.value.drivers) {
-          await apiService.drivers.payDriver(`/driver-history/driver/${driver._id}/pay-all`, {
-            companyId: authStore.user.company_id
-          })
-        }
-        
-        await loadPaymentReport()
-        alert('Pagos realizados exitosamente a todos los conductores')
-        
-      } catch (error) {
-        console.error('Error pagando a todos:', error)
-        alert('Error al procesar los pagos')
-      } finally {
-        isProcessing.value = false
-      }
-    }
-
-    const viewDriverDetails = (driverId) => {
-      // Navegar a vista detallada del conductor
-      // router.push(`/driver-history/${driverId}`)
-      console.log('Ver detalles del conductor:', driverId)
-    }
-
-    const closeConfirmModal = () => {
-      showConfirmModal.value = false
-      confirmData.value = {}
-    }
-
-    const formatCurrency = (amount) => {
-      return new Intl.NumberFormat('es-CL').format(amount)
-    }
-
-    onMounted(() => {
-      loadPaymentReport()
-    })
-
-    return {
-      loading,
-      isProcessing,
-      reportData,
-      selectedMonth,
-      selectedYear,
-      months,
-      years,
-      showConfirmModal,
-      confirmData,
-      loadPaymentReport,
-      payDriver,
-      confirmPayment,
-      payAllDrivers,
-      viewDriverDetails,
-      closeConfirmModal,
-      formatCurrency
-    }
+    
+    // Procesar los datos para agrupar por conductor
+    processDriverPayments(data.orders || [])
+    
+  } catch (error) {
+    console.error('❌ Error cargando pagos:', error)
+    toast.error('Error al cargar los pagos de conductores')
+  } finally {
+    loading.value = false
   }
 }
+
+function processDriverPayments(orders) {
+  const grouped = {}
+  
+  orders.forEach(order => {
+    // Usar el nombre del conductor o un identificador
+    const driverName = order.driver_info?.name || 
+                      order.shipday_driver_id || 
+                      'Conductor Desconocido'
+    
+    if (!grouped[driverName]) {
+      grouped[driverName] = {
+        orders: [],
+        total: 0
+      }
+    }
+    
+    grouped[driverName].orders.push(order)
+    grouped[driverName].total += 1700 // $1.700 fijo por entrega
+  })
+  
+  driverPayments.value = grouped
+}
+
+function toggleDriverDetails(driverName) {
+  if (expandedDrivers.value.has(driverName)) {
+    expandedDrivers.value.delete(driverName)
+  } else {
+    expandedDrivers.value.add(driverName)
+  }
+}
+
+function refreshData() {
+  fetchDriverPayments()
+}
+
+async function exportToExcel() {
+  try {
+    loading.value = true
+    toast.info('Preparando archivo Excel...')
+    
+    // Crear datos para Excel
+    const excelData = []
+    
+    Object.keys(filteredDriverPayments.value).forEach(driverName => {
+      const driverData = filteredDriverPayments.value[driverName]
+      
+      driverData.orders.forEach(order => {
+        excelData.push({
+          'Conductor': driverName,
+          'N° Pedido': order.order_number,
+          'Comuna': order.shipping_commune || 'Sin comuna',
+          'Fecha Entrega': formatDate(order.delivery_date),
+          'Monto': 1700,
+          'Cliente': order.customer_name,
+          'Dirección': order.shipping_address
+        })
+      })
+    })
+    
+    // Llamar al servicio de exportación
+    const response = await apiService.exports.exportToExcel({
+      data: excelData,
+      filename: `pagos-conductores-${dateFrom.value}-${dateTo.value}`
+    })
+    
+    // Descargar archivo
+    const url = window.URL.createObjectURL(new Blob([response.data]))
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `pagos-conductores-${dateFrom.value}-${dateTo.value}.xlsx`
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    
+    toast.success('Archivo Excel descargado')
+    
+  } catch (error) {
+    console.error('❌ Error exportando:', error)
+    toast.error('Error al exportar a Excel')
+  } finally {
+    loading.value = false
+  }
+}
+
+// ==================== UTILS ====================
+function formatCurrency(amount) {
+  return new Intl.NumberFormat('es-CL').format(amount)
+}
+
+function formatDate(date) {
+  if (!date) return 'Sin fecha'
+  return new Date(date).toLocaleDateString('es-CL')
+}
+
+// ==================== LIFECYCLE ====================
+onMounted(() => {
+  fetchDriverPayments()
+})
 </script>
 
 <style scoped>
 .driver-payments {
-  padding: 20px;
-  max-width: 1200px;
+  padding: 24px;
+  max-width: 1400px;
   margin: 0 auto;
 }
 
-.header {
+/* Header */
+.page-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 30px;
+  margin-bottom: 32px;
 }
 
-.filters {
+.header-content h1 {
+  font-size: 28px;
+  font-weight: 700;
+  color: #1f2937;
+  margin: 0;
+}
+
+.header-content p {
+  color: #6b7280;
+  margin: 4px 0 0 0;
+}
+
+.header-actions {
   display: flex;
-  gap: 10px;
+  gap: 12px;
 }
 
-.filters select {
+.btn-export, .btn-refresh {
+  padding: 12px 20px;
+  border: none;
+  border-radius: 8px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-export {
+  background: #10b981;
+  color: white;
+}
+
+.btn-export:hover {
+  background: #059669;
+}
+
+.btn-refresh {
+  background: #3b82f6;
+  color: white;
+}
+
+.btn-refresh:hover {
+  background: #2563eb;
+}
+
+/* Filtros */
+.filters-section {
+  display: flex;
+  gap: 24px;
+  margin-bottom: 32px;
+  flex-wrap: wrap;
+}
+
+.date-filters {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.date-filters label {
+  font-weight: 500;
+  color: #374151;
+}
+
+.date-filters input {
   padding: 8px 12px;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  font-size: 14px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
 }
 
-.summary-cards {
+.search-box {
+  flex: 1;
+  min-width: 300px;
+}
+
+.search-input {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 16px;
+}
+
+/* Resumen */
+.summary-section {
+  margin-bottom: 32px;
+}
+
+.summary-card {
+  background: white;
+  padding: 24px;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.summary-card h3 {
+  margin: 0 0 16px 0;
+  color: #1f2937;
+}
+
+.summary-stats {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 20px;
-  margin-bottom: 30px;
+  gap: 16px;
 }
 
-.card {
-  background: white;
-  padding: 20px;
-  border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-  text-align: center;
-}
-
-.card h3 {
-  margin: 0 0 10px 0;
-  color: #666;
-  font-size: 14px;
-  font-weight: 500;
-}
-
-.card .amount {
-  font-size: 24px;
-  font-weight: bold;
-  color: #333;
-}
-
-.total-amount .amount {
-  color: #28a745;
-}
-
-.drivers-list {
-  background: white;
-  border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-}
-
-.drivers-header {
+.stat {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 20px;
-  border-bottom: 1px solid #eee;
+  padding: 12px;
+  background: #f9fafb;
+  border-radius: 8px;
 }
 
-.btn-pay-all {
-  background: #28a745;
-  color: white;
-  border: none;
-  padding: 10px 20px;
-  border-radius: 4px;
-  cursor: pointer;
+.stat-label {
+  color: #6b7280;
   font-weight: 500;
 }
 
-.btn-pay-all:disabled {
-  background: #ccc;
-  cursor: not-allowed;
-}
-
-.table-container {
-  overflow-x: auto;
-}
-
-.drivers-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.drivers-table th,
-.drivers-table td {
-  padding: 15px;
-  text-align: left;
-  border-bottom: 1px solid #eee;
-}
-
-.drivers-table th {
-  background: #f8f9fa;
+.stat-value {
   font-weight: 600;
-  color: #555;
+  color: #1f2937;
+}
+
+.total-amount {
+  color: #059669;
+  font-size: 18px;
+}
+
+/* Loading */
+.loading-container {
+  text-align: center;
+  padding: 60px 20px;
+  color: #6b7280;
+}
+
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid #f3f4f6;
+  border-top: 4px solid #3b82f6;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin: 0 auto 16px;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Lista de Conductores */
+.drivers-list {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.driver-section {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+}
+
+.driver-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 24px;
+  background: #f8fafc;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.driver-info h3 {
+  margin: 0 0 8px 0;
+  color: #1f2937;
+  font-size: 18px;
+}
+
+.driver-stats {
+  display: flex;
+  gap: 16px;
+}
+
+.orders-count {
+  color: #6b7280;
+  font-size: 14px;
+}
+
+.total-payment {
+  color: #059669;
+  font-weight: 600;
+  font-size: 16px;
+}
+
+.toggle-btn {
+  background: #3b82f6;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.toggle-btn:hover {
+  background: #2563eb;
+}
+
+/* Tabla de Pedidos */
+.driver-orders {
+  padding: 24px;
+}
+
+.orders-table {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.table-header {
+  display: grid;
+  grid-template-columns: 2fr 1.5fr 1.5fr 1fr;
+  background: #f9fafb;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.table-row {
+  display: grid;
+  grid-template-columns: 2fr 1.5fr 1.5fr 1fr;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.table-row:last-child {
+  border-bottom: none;
+}
+
+.table-row:hover {
+  background: #f9fafb;
+}
+
+.col {
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+}
+
+.table-header .col {
+  font-weight: 600;
+  color: #374151;
+  background: #f9fafb;
+}
+
+.order-number {
+  color: #3b82f6;
+  font-weight: 500;
+}
+
+.commune {
+  color: #6b7280;
+}
+
+.date {
+  color: #4b5563;
+  font-size: 14px;
 }
 
 .amount {
+  color: #059669;
   font-weight: 600;
-  color: #28a745;
 }
 
-.actions {
-  display: flex;
-  gap: 10px;
+.driver-total {
+  text-align: right;
+  padding: 16px 0;
+  font-size: 16px;
+  color: #059669;
 }
 
-.btn-pay {
-  background: #007bff;
-  color: white;
-  border: none;
-  padding: 6px 12px;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 12px;
-}
-
-.btn-details {
-  background: #6c757d;
-  color: white;
-  border: none;
-  padding: 6px 12px;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 12px;
-}
-
-.loading, .no-data {
+/* Estado Vacío */
+.empty-state {
   text-align: center;
-  padding: 40px;
-  color: #666;
+  padding: 80px 20px;
+  color: #6b7280;
 }
 
-.modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: rgba(0,0,0,0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
+.empty-icon {
+  font-size: 64px;
+  margin-bottom: 16px;
 }
 
-.modal {
-  background: white;
-  padding: 30px;
-  border-radius: 8px;
-  max-width: 400px;
-  width: 90%;
+.empty-state h3 {
+  color: #374151;
+  margin-bottom: 8px;
 }
 
-.modal h3 {
-  margin: 0 0 15px 0;
-  color: #333;
-}
-
-.modal p {
-  margin: 0 0 20px 0;
-  color: #666;
-}
-
-.modal-actions {
-  display: flex;
-  gap: 10px;
-  justify-content: flex-end;
-}
-
-.btn-cancel {
-  background: #6c757d;
-  color: white;
-  border: none;
-  padding: 10px 20px;
-  border-radius: 4px;
-  cursor: pointer;
-}
-
-.btn-confirm {
-  background: #dc3545;
-  color: white;
-  border: none;
-  padding: 10px 20px;
-  border-radius: 4px;
-  cursor: pointer;
+/* Responsive */
+@media (max-width: 768px) {
+  .table-header,
+  .table-row {
+    grid-template-columns: 1fr;
+  }
+  
+  .col {
+    border-bottom: 1px solid #f3f4f6;
+  }
+  
+  .table-header .col {
+    display: none;
+  }
+  
+  .table-row .col:before {
+    content: attr(data-label);
+    font-weight: 600;
+    margin-right: 8px;
+  }
 }
 </style>

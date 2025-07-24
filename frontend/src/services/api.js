@@ -698,11 +698,25 @@ const drivers = {
   // Obtener conductores por empresa (si necesitas)
   getByCompany: (companyId) => api.get(`/companies/${companyId}/drivers`),
 
-    getMonthlyReport: (companyId, params) => 
-    api.get(`/driver-history/company/${companyId}/monthly-report`, { params }),
-  
-  payDriver: (driverId, companyId) => 
-    api.post(`/driver-history/driver/${driverId}/pay-all`, { companyId }),
+getDeliveredOrders: (params) => {
+      console.log('📦 API: Obteniendo pedidos entregados para pagos');
+      return api.get('/drivers/delivered-orders', { params });
+    },
+    
+    // NUEVO: Generar reporte de pagos
+    getPaymentReport: (params) => {
+      console.log('📊 API: Generando reporte de pagos');
+      return api.get('/drivers/payment-report', { params });
+    },
+    
+    // NUEVO: Exportar pagos a Excel
+    exportPaymentsToExcel: (params) => {
+      console.log('📊 API: Exportando pagos a Excel');
+      return api.get('/drivers/payment-report', { 
+        params: { ...params, format: 'excel' },
+        responseType: 'blob' // Importante para descargar archivos
+      });
+    }
 }
 // Servicios de Shipday
 const shipday = {

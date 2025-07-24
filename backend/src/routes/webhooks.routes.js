@@ -178,4 +178,40 @@ router.post('/webhooks/:channel_type/:channel_id', async (req, res) => {
     res.status(500).json({ error: 'Error procesando webhook' });
   }
 });
+
+router.post('/shipday-webhook', async (req, res) => {
+  try {
+    const { event, data } = req.body;
+    
+    if (event === 'order_delivered' || event === 'delivery_completed') {
+      const orderId = data.orderId;
+      
+      // Actualizar la orden local
+      const order = await Order.findOne({ shipday_order_id: orderId });
+      
+      if (order) {
+        order.status = 'delivered';
+        order.delivery_date = new Date();
+        
+        // Si viene info del conductor en el webhook, guardarla
+        if (data.carrier || data.driver) {
+          order.driver_info = {
+            name: data.carrier?.name || data.driver?.name || '',
+            email: data.carrier?.email || data.driver?.email || '',
+            phone: data.carrier?.phone || data.driver?.phone || ''
+          };
+        }
+        
+        await order.save();
+        console.log(`✅ Orden ${order.order_number} marcada como entregada para pagos`);
+      }
+    }
+    
+    res.status(200).json({ success: true });
+    
+  } catch (error) {
+    console.error('❌ Error en webhook:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
 module.exports = router;
