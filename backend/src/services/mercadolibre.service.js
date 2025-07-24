@@ -65,7 +65,7 @@ static getAuthorizationUrl(channelId) {
    * ✅ MEJORADO: Detecta el país automáticamente para usar el dominio correcto
    */
   static getAuthUrlForCountry(storeUrl, channelId) {
-    const redirectUri = `${process.env.FRONTEND_URL}/channels/mercadolibre/callback`;
+    const redirectUri = `${process.env.BACKEND_URL}/api/channels/mercadolibre/callback`;
     
     // Mapeo de dominios de tienda a dominios de auth
     const authDomains = {
