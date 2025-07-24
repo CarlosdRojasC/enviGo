@@ -16,6 +16,11 @@ const channelSchema = new mongoose.Schema({
       message: 'Tipo de canal no válido. Valores permitidos: {VALUE}'
     }
   },
+  settings: {
+    type: Object,
+    default: {} // ✅ ASEGURAR QUE TENGA DEFAULT
+  },
+  
   channel_name: { 
     type: String, 
     required: [true, 'El nombre del canal es obligatorio'],

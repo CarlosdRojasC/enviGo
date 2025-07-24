@@ -108,18 +108,17 @@ static async exchangeCodeForTokens(code, channelId) {
   
   const channel = await Channel.findById(channelId);
   if (!channel) {
-    console.error('❌ [ML Exchange] Canal no encontrado:', channelId);
     throw new Error('Canal no encontrado durante el intercambio de código.');
   }
 
   console.log('✅ [ML Exchange] Canal encontrado:', channel.channel_name);
+  console.log('🔍 [ML Exchange] Settings actuales:', channel.settings);
 
   const redirectUri = `${process.env.BACKEND_URL}/api/webhooks/mercadolibre/callback`;
   
   console.log('📤 [ML Exchange] Preparando petición a ML:', {
     redirectUri,
     codeLength: code.length,
-    channelId,
     appId: process.env.MERCADOLIBRE_APP_ID,
     hasSecret: !!process.env.MERCADOLIBRE_SECRET_KEY
   });
@@ -127,7 +126,7 @@ static async exchangeCodeForTokens(code, channelId) {
   try {
     console.log('🌐 [ML Exchange] Enviando petición a MercadoLibre...');
     
-    const { data } = await axios.post(`${this.API_BASE_URL}/oauth/token`, {
+    const response = await axios.post(`${this.API_BASE_URL}/oauth/token`, {
       grant_type: 'authorization_code',
       client_id: process.env.MERCADOLIBRE_APP_ID,
       client_secret: process.env.MERCADOLIBRE_SECRET_KEY,
@@ -142,23 +141,42 @@ static async exchangeCodeForTokens(code, channelId) {
     });
 
     console.log('✅ [ML Exchange] Respuesta exitosa de MercadoLibre');
-    console.log('📦 [ML Exchange] Datos recibidos:', {
+    console.log('📦 [ML Exchange] Response status:', response.status);
+    console.log('📦 [ML Exchange] Response data:', response.data);
+
+    const data = response.data;
+    
+    if (!data) {
+      throw new Error('No se recibieron datos de MercadoLibre');
+    }
+
+    console.log('📦 [ML Exchange] Datos procesados:', {
       hasAccessToken: !!data.access_token,
       hasRefreshToken: !!data.refresh_token,
       userId: data.user_id,
       expiresIn: data.expires_in
     });
 
-    // Guardamos los tokens y la información del usuario en el canal
+    // ✅ INICIALIZAR settings si está undefined o null
+    if (!channel.settings || channel.settings === null) {
+      channel.settings = {};
+      console.log('🔧 [ML Exchange] Inicializando settings vacío');
+    }
+
+    // Guardar tokens
     channel.api_key = data.access_token;
-    Object.assign(channel.settings, {
+    
+    // ✅ USAR SPREAD OPERATOR EN LUGAR DE Object.assign
+    channel.settings = {
+      ...channel.settings,
       access_token: data.access_token,
       refresh_token: data.refresh_token,
       expires_in: data.expires_in,
       user_id: data.user_id,
       updated_at: new Date(),
       oauth_configured: true
-    });
+    };
+    
     channel.sync_status = 'success';
     channel.markModified('settings');
     await channel.save();
@@ -172,7 +190,13 @@ static async exchangeCodeForTokens(code, channelId) {
       status: error.response?.status,
       statusText: error.response?.statusText,
       data: error.response?.data,
-      timeout: error.code === 'ECONNABORTED'
+      timeout: error.code === 'ECONNABORTED',
+      axiosError: !!error.response,
+      requestConfig: error.config ? {
+        url: error.config.url,
+        method: error.config.method,
+        timeout: error.config.timeout
+      } : null
     });
     
     throw new Error(`Error OAuth: ${error.response?.data?.message || error.message}`);
