@@ -334,6 +334,19 @@ static async syncOrders(channelId, options = {}) {
     throw error;
   }
 }
+  static async getValidAccessToken(channel) {
+    console.log('🔑 [ML Auth] Verificando access token...');
+    
+    if (!channel.settings?.access_token) {
+      throw new Error('Canal no tiene access token configurado');
+    }
+
+    // Por ahora usar el token actual (más adelante agregar lógica de refresh)
+    const accessToken = channel.settings.access_token;
+    
+    console.log('✅ [ML Auth] Access token obtenido');
+    return accessToken;
+  }
 
 static async processOrder(mlOrder, channel) {
   console.log(`📦 [ML Process] Procesando pedido ${mlOrder.id}`);
