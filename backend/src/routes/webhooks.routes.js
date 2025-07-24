@@ -30,49 +30,37 @@ router.get('/channels/mercadolibre/auth', authenticateToken, async (req, res) =>
 });
 
 router.get('/channels/mercadolibre/callback', async (req, res) => {
+  console.log('🚨 [ML CALLBACK] EJECUTADO - URL completa:', req.url);
+  console.log('🚨 [ML CALLBACK] Headers:', req.headers);
+  console.log('🚨 [ML CALLBACK] Query completa:', req.query);
+  
   try {
     const { code, state, error: oauthError } = req.query;
     
-    console.log('📥 [ML Callback] Parámetros recibidos:', { 
-      code: code ? 'presente' : 'ausente', 
-      state, 
-      error: oauthError 
-    });
-    
-    // Manejar errores de autorización
     if (oauthError) {
-      console.log(`❌ [ML Callback] Error OAuth: ${oauthError}`);
+      console.log(`❌ [ML Callback] Error OAuth recibido: ${oauthError}`);
       return res.redirect(`${process.env.FRONTEND_URL}/channels?error=oauth_denied&details=${oauthError}`);
     }
     
-    if (!code || !state) {
-      console.log('❌ [ML Callback] Faltan parámetros:', { code: !!code, state: !!state });
-      return res.redirect(`${process.env.FRONTEND_URL}/channels?error=missing_params`);
+    if (!code) {
+      console.log('❌ [ML Callback] NO SE RECIBIÓ CÓDIGO');
+      return res.redirect(`${process.env.FRONTEND_URL}/channels?error=no_code`);
     }
     
-    console.log(`🔄 [ML Callback] Procesando autorización para canal: ${state}`);
-    
-    const MercadoLibreService = require('../services/mercadolibre.service');
-    
-    try {
-      // ✅ INTERCAMBIAR CÓDIGO POR TOKENS
-      const channel = await MercadoLibreService.exchangeCodeForTokens(code, state);
-      
-      console.log(`✅ [ML Callback] Autorización exitosa para canal: ${channel.channel_name}`);
-      
-      // ✅ REDIRIGIR A LA RUTA PRINCIPAL DE CANALES CON ÉXITO
-      res.redirect(`${process.env.FRONTEND_URL}/channels?success=ml_connected&channel_name=${encodeURIComponent(channel.channel_name)}`);
-      
-    } catch (tokenError) {
-      console.error('❌ [ML Callback] Error intercambiando tokens:', tokenError.message);
-      res.redirect(`${process.env.FRONTEND_URL}/channels?error=validation_failed&details=${encodeURIComponent(tokenError.message)}`);
+    if (!state) {
+      console.log('❌ [ML Callback] NO SE RECIBIÓ STATE');
+      return res.redirect(`${process.env.FRONTEND_URL}/channels?error=no_state`);
     }
     
+    console.log(`🔄 [ML Callback] Procesando - Code: ${code.substring(0, 10)}..., State: ${state}`);
+    
+    // resto del código...
   } catch (error) {
-    console.error('❌ [ML Callback] Error procesando callback:', error);
-    res.redirect(`${process.env.FRONTEND_URL}/channels?error=processing_failed&details=${encodeURIComponent(error.message)}`);
+    console.error('❌ [ML Callback] Error:', error);
+    res.redirect(`${process.env.FRONTEND_URL}/channels?error=callback_error`);
   }
 });
+
 // ===== WEBHOOK GENÉRICO PARA MERCADOLIBRE =====
 router.post('/webhooks/mercadolibre', async (req, res) => {
   try {
