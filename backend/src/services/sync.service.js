@@ -617,25 +617,40 @@ class SyncSchedulerService {
   }
 
   // ✅ SYNC WOOCOMMERCE Y MERCADOLIBRE (conservadores)
-  async syncWooCommerceOrders(channel, params) {
-    // Implementación similar pero conservadora para WooCommerce
-    try {
-      const wooService = new WooCommerceService(channel);
-      return await wooService.syncOrders(channel);
-    } catch (error) {
-      throw error;
-    }
+async syncWooCommerceOrders(channel, params) {
+  try {
+    // ✅ VERIFICAR SI WooCommerceService TAMBIÉN ES ESTÁTICO
+    const result = await WooCommerceService.syncOrders(channel._id, {
+      dateFrom: params.dateFrom,
+      dateTo: new Date(),
+      limit: params.limit
+    });
+    
+    return result.syncedCount || 0;
+    
+  } catch (error) {
+    console.error(`❌ Error en syncWooCommerceOrders:`, error.message);
+    throw error;
   }
+}
 
   async syncMercadoLibreOrders(channel, params) {
-    // Implementación similar pero conservadora para MercadoLibre
-    try {
-      const mlService = new MercadoLibreService(channel);
-      return await mlService.syncOrders(channel);
-    } catch (error) {
-      throw error;
-    }
+  try {
+    // ✅ USAR MÉTODO ESTÁTICO DIRECTAMENTE
+    const result = await MercadoLibreService.syncOrders(channel._id, {
+      dateFrom: params.dateFrom,
+      dateTo: new Date(),
+      limit: params.limit
+    });
+    
+    // Extraer el número de pedidos sincronizados
+    return result.syncedCount || 0;
+    
+  } catch (error) {
+    console.error(`❌ Error en syncMercadoLibreOrders:`, error.message);
+    throw error;
   }
+}
 
   // ✅ MÉTODOS AUXILIARES EXISTENTES MEJORADOS
   extractCommune(orderData) {
