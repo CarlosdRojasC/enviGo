@@ -29,7 +29,7 @@ router.get('/channels/mercadolibre/auth', authenticateToken, async (req, res) =>
   }
 });
 
-router.get('/channels/mercadolibre/callback', async (req, res) => {
+router.get('/mercadolibre/callback', async (req, res) => {
   console.log('🚨 [ML CALLBACK] EJECUTADO - URL completa:', req.url);
   console.log('🚨 [ML CALLBACK] Headers:', req.headers);
   console.log('🚨 [ML CALLBACK] Query completa:', req.query);

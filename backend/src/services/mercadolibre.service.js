@@ -49,7 +49,7 @@ class MercadoLibreService {
    */
 static getAuthorizationUrl(channelId) {
   // ✅ DEBE apuntar al BACKEND (mismo que configuraste en MercadoLibre)
-  const redirectUri = `${process.env.BACKEND_URL}/api/channels/mercadolibre/callback`;
+  const redirectUri = `${process.env.BACKEND_URL}/api/webhooks/mercadolibre/callback`;
   
   const authUrl = new URL(`${this.AUTH_BASE_URL}/authorization`);
   authUrl.searchParams.append('response_type', 'code');
@@ -65,7 +65,7 @@ static getAuthorizationUrl(channelId) {
    * ✅ MEJORADO: Detecta el país automáticamente para usar el dominio correcto
    */
   static getAuthUrlForCountry(storeUrl, channelId) {
-    const redirectUri = `${process.env.BACKEND_URL}/api/channels/mercadolibre/callback`;
+    const redirectUri = `${process.env.BACKEND_URL}/api/webhooks/mercadolibre/callback`;
     
     // Mapeo de dominios de tienda a dominios de auth
     const authDomains = {
@@ -110,7 +110,7 @@ static async exchangeCodeForTokens(code, channelId) {
   }
 
   // ✅ CORRECCIÓN: Usar la ruta que coincide con tu router
-  const redirectUri = `${process.env.BACKEND_URL}/api/channels/mercadolibre/callback`;
+  const redirectUri = `${process.env.BACKEND_URL}/api/webhooks/mercadolibre/callback`;
 
   console.log('🔄 [ML Service] Intercambiando tokens...', {
     channelId,
