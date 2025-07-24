@@ -120,7 +120,11 @@
             <div class="empty-icon">📊</div>
             <p>No hay datos suficientes para mostrar el gráfico</p>
           </div>
-          
+          <OrdersTrendChart 
+            :data="chartData" 
+            :loading="loadingChart" 
+            :height="320"
+          />
         </div>
       </section>
 

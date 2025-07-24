@@ -1,131 +1,56 @@
 <template>
-  <div class="chart-container">
-    <div class="chart-header">
-      <div class="chart-title-section">
-        <h3 class="chart-title">{{ title }}</h3>
-        <p class="chart-subtitle" v-if="subtitle">{{ subtitle }}</p>
-      </div>
-      <div class="chart-controls" v-if="showControls">
-        <select v-model="selectedPeriod" @change="handlePeriodChange" class="period-selector">
-          <option value="7d">7 días</option>
-          <option value="30d">30 días</option>
-          <option value="90d">3 meses</option>
-          <option value="1y">1 año</option>
-        </select>
-      </div>
-    </div>
-    
+  <div class="trend-chart-container">
     <div class="chart-content">
       <div v-if="loading" class="chart-loading">
         <div class="loading-spinner"></div>
-        <p>Cargando datos...</p>
+        <p>Cargando datos del gráfico...</p>
       </div>
       
-      <div v-else-if="!chartData || chartData.length === 0" class="chart-empty">
+      <div v-else-if="!hasData" class="chart-empty">
         <div class="empty-icon">📊</div>
-        <p>No hay datos para mostrar</p>
+        <h4>No hay datos disponibles</h4>
+        <p>No se encontraron pedidos para el período seleccionado</p>
       </div>
       
       <div v-else class="chart-wrapper">
-        <!-- Aquí iría un gráfico real como Chart.js o similar -->
-        <!-- Por ahora simulo con SVG básico -->
-        <svg width="100%" height="300" class="chart-svg">
-          <!-- Grid lines -->
-          <defs>
-            <pattern id="grid" width="40" height="30" patternUnits="userSpaceOnUse">
-              <path d="M 40 0 L 0 0 0 30" fill="none" stroke="#f0f0f0" stroke-width="1"/>
-            </pattern>
-          </defs>
-          <rect width="100%" height="100%" fill="url(#grid)" />
-          
-          <!-- Chart area -->
-          <g class="chart-area">
-            <!-- Simulate line chart -->
-            <polyline
-              :points="linePoints"
-              fill="none"
-              stroke="#3b82f6"
-              stroke-width="3"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            />
-            
-            <!-- Data points -->
-            <circle
-              v-for="(point, index) in dataPoints"
-              :key="index"
-              :cx="point.x"
-              :cy="point.y"
-              r="4"
-              fill="#3b82f6"
-              stroke="white"
-              stroke-width="2"
-              class="data-point"
-              @mouseover="showTooltip(point, $event)"
-              @mouseout="hideTooltip"
-            />
-          </g>
-          
-          <!-- X-axis labels -->
-          <g class="x-axis">
-            <text
-              v-for="(point, index) in dataPoints"
-              :key="index"
-              :x="point.x"
-              y="290"
-              text-anchor="middle"
-              class="axis-label"
-            >
-              {{ formatDateForAxis(chartData[index]?.date) }}
-            </text>
-          </g>
-        </svg>
-        
-        <!-- Tooltip -->
-        <div 
-          v-if="tooltip.show" 
-          class="chart-tooltip"
-          :style="{ left: tooltip.x + 'px', top: tooltip.y + 'px' }"
-        >
-          <div class="tooltip-date">{{ tooltip.date }}</div>
-          <div class="tooltip-value">{{ tooltip.value }} pedidos</div>
-        </div>
+        <canvas 
+          ref="chartCanvas" 
+          :style="{ height: height + 'px' }"
+        ></canvas>
       </div>
     </div>
     
-    <!-- Chart Summary -->
-    <div class="chart-summary" v-if="summary">
+    <!-- Resumen de estadísticas -->
+    <div class="chart-summary" v-if="hasData && chartStats">
       <div class="summary-item">
-        <span class="summary-label">Total:</span>
-        <span class="summary-value">{{ summary.total }}</span>
+        <span class="summary-label">Total</span>
+        <span class="summary-value">{{ chartStats.total }}</span>
       </div>
       <div class="summary-item">
-        <span class="summary-label">Promedio:</span>
-        <span class="summary-value">{{ summary.average }}</span>
+        <span class="summary-label">Promedio</span>
+        <span class="summary-value">{{ chartStats.average }}</span>
       </div>
       <div class="summary-item">
-        <span class="summary-label">Tendencia:</span>
-        <span class="summary-value" :class="summary.trend.direction">
-          {{ summary.trend.direction === 'up' ? '↗️' : '↘️' }} 
-          {{ summary.trend.percentage }}%
+        <span class="summary-label">Tendencia</span>
+        <span class="summary-value" :class="chartStats.trend.direction">
+          {{ getTrendIcon(chartStats.trend.direction) }} {{ chartStats.trend.percentage }}%
         </span>
+      </div>
+      <div class="summary-item">
+        <span class="summary-label">Máximo</span>
+        <span class="summary-value">{{ chartStats.max }}</span>
       </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
+
+// Importación más básica de Chart.js
+import Chart from 'chart.js/auto'
 
 const props = defineProps({
-  title: {
-    type: String,
-    default: 'Tendencia de Pedidos'
-  },
-  subtitle: {
-    type: String,
-    default: ''
-  },
   data: {
     type: Array,
     default: () => []
@@ -134,189 +59,281 @@ const props = defineProps({
     type: Boolean,
     default: false
   },
-  showControls: {
-    type: Boolean,
-    default: true
-  },
-  initialPeriod: {
-    type: String,
-    default: '30d'
+  height: {
+    type: Number,
+    default: 300
   }
 })
 
-const emit = defineEmits(['period-change'])
+const chartCanvas = ref(null)
+const chartInstance = ref(null)
 
-const selectedPeriod = ref(props.initialPeriod)
-const tooltip = ref({
-  show: false,
-  x: 0,
-  y: 0,
-  date: '',
-  value: 0
+const hasData = computed(() => {
+  return props.data && props.data.length > 0
 })
 
-const chartData = computed(() => {
-  if (!props.data || props.data.length === 0) return []
+const processedData = computed(() => {
+  if (!hasData.value) return []
   
-  // Simular datos si no hay datos reales
-  if (props.data.length === 0) {
-    const mockData = []
-    const days = selectedPeriod.value === '7d' ? 7 : selectedPeriod.value === '30d' ? 30 : 90
+  console.log('📊 Procesando datos para el gráfico:', props.data)
+  
+  // Procesar datos para Chart.js
+  return props.data.map(item => {
+    // Manejar diferentes formatos de datos
+    let date, count
     
-    for (let i = 0; i < days; i++) {
-      const date = new Date()
-      date.setDate(date.getDate() - (days - i - 1))
-      mockData.push({
-        date: date.toISOString(),
-        orders: Math.floor(Math.random() * 50) + 10
-      })
+    if (item._id) {
+      // Formato de agregación de MongoDB
+      if (item._id.year && item._id.month && item._id.day) {
+        date = new Date(item._id.year, item._id.month - 1, item._id.day)
+      } else if (item._id.year && item._id.month) {
+        date = new Date(item._id.year, item._id.month - 1, 1)
+      } else {
+        date = new Date()
+      }
+      count = item.count || 0
+    } else {
+      // Formato simple
+      date = new Date(item.date || item.order_date)
+      count = item.orders || item.count || 0
     }
-    return mockData
-  }
-  
-  return props.data
+    
+    return {
+      date: date,
+      dateString: date.toLocaleDateString('es-ES'),
+      count: count
+    }
+  }).sort((a, b) => a.date - b.date)
 })
 
-const dataPoints = computed(() => {
-  if (!chartData.value || chartData.value.length === 0) return []
+const chartStats = computed(() => {
+  if (!hasData.value) return null
   
-  const width = 800 // SVG width
-  const height = 250 // Chart area height
-  const padding = 40
+  const counts = processedData.value.map(item => item.count)
+  const total = counts.reduce((sum, count) => sum + count, 0)
+  const average = Math.round(total / counts.length)
+  const max = Math.max(...counts)
   
-  const maxValue = Math.max(...chartData.value.map(d => d.orders || 0))
-  const minValue = Math.min(...chartData.value.map(d => d.orders || 0))
-  const valueRange = maxValue - minValue || 1
+  // Calcular tendencia comparando primera y segunda mitad
+  const midPoint = Math.floor(counts.length / 2)
+  const firstHalf = counts.slice(0, midPoint)
+  const secondHalf = counts.slice(midPoint)
   
-  return chartData.value.map((item, index) => ({
-    x: padding + (index * ((width - 2 * padding) / (chartData.value.length - 1 || 1))),
-    y: height - padding - ((item.orders - minValue) / valueRange) * (height - 2 * padding),
-    value: item.orders,
-    date: item.date
-  }))
-})
-
-const linePoints = computed(() => {
-  if (!dataPoints.value || dataPoints.value.length === 0) return ''
-  return dataPoints.value.map(point => `${point.x},${point.y}`).join(' ')
-})
-
-const summary = computed(() => {
-  if (!chartData.value || chartData.value.length === 0) return null
-  
-  const values = chartData.value.map(d => d.orders || 0)
-  const total = values.reduce((sum, val) => sum + val, 0)
-  const average = Math.round(total / values.length)
-  
-  // Calcular tendencia comparando primera y última mitad
-  const firstHalf = values.slice(0, Math.floor(values.length / 2))
-  const secondHalf = values.slice(Math.floor(values.length / 2))
   const firstAvg = firstHalf.reduce((sum, val) => sum + val, 0) / firstHalf.length
   const secondAvg = secondHalf.reduce((sum, val) => sum + val, 0) / secondHalf.length
   
-  const trendPercentage = Math.round(((secondAvg - firstAvg) / firstAvg) * 100)
+  const trendPercentage = firstAvg > 0 ? Math.round(((secondAvg - firstAvg) / firstAvg) * 100) : 0
   
   return {
     total,
     average,
+    max,
     trend: {
-      direction: trendPercentage >= 0 ? 'up' : 'down',
+      direction: trendPercentage > 0 ? 'up' : trendPercentage < 0 ? 'down' : 'neutral',
       percentage: Math.abs(trendPercentage)
     }
   }
 })
 
-const handlePeriodChange = () => {
-  emit('period-change', selectedPeriod.value)
-}
-
-const showTooltip = (point, event) => {
-  const rect = event.target.closest('.chart-container').getBoundingClientRect()
-  tooltip.value = {
-    show: true,
-    x: event.clientX - rect.left,
-    y: event.clientY - rect.top - 60,
-    date: formatDateForTooltip(point.date),
-    value: point.value
+function createChart() {
+  if (!chartCanvas.value) {
+    console.log('⚠️ Canvas no disponible')
+    return
+  }
+  
+  if (!hasData.value) {
+    console.log('⚠️ No hay datos')
+    return
+  }
+  
+  console.log('📊 Creando gráfico básico')
+  
+  // Destruir gráfico existente
+  if (chartInstance.value) {
+    try {
+      chartInstance.value.destroy()
+    } catch (error) {
+      console.warn('⚠️ Error destruyendo gráfico:', error)
+    }
+    chartInstance.value = null
+  }
+  
+  const ctx = chartCanvas.value.getContext('2d')
+  
+  if (!ctx) {
+    console.error('❌ No se pudo obtener contexto')
+    return
+  }
+  
+  const labels = processedData.value.map((item, index) => {
+    // Etiquetas simples
+    if (processedData.value.length <= 7) {
+      return item.date.toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric' })
+    } else if (processedData.value.length <= 31) {
+      return item.date.getDate().toString()
+    } else {
+      return item.date.toLocaleDateString('es-ES', { month: 'short' })
+    }
+  })
+  
+  const data = processedData.value.map(item => item.count)
+  
+  console.log('📊 Labels:', labels.length)
+  console.log('📊 Data points:', data.length)
+  
+  try {
+    chartInstance.value = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: labels,
+        datasets: [{
+          label: 'Pedidos',
+          data: data,
+          borderColor: '#3b82f6',
+          backgroundColor: 'rgba(59, 130, 246, 0.1)',
+          borderWidth: 2,
+          fill: true,
+          tension: 0.3,
+          pointBackgroundColor: '#3b82f6',
+          pointBorderColor: '#ffffff',
+          pointBorderWidth: 1,
+          pointRadius: 3
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            display: false
+          },
+          tooltip: {
+            enabled: true,
+            mode: 'index',
+            intersect: false,
+            backgroundColor: 'rgba(0, 0, 0, 0.8)',
+            titleColor: '#ffffff',
+            bodyColor: '#ffffff',
+            cornerRadius: 6,
+            displayColors: false
+          }
+        },
+        scales: {
+          y: {
+            beginAtZero: true,
+            ticks: {
+              stepSize: 1,
+              color: '#6b7280'
+            },
+            grid: {
+              color: 'rgba(107, 114, 128, 0.1)'
+            }
+          },
+          x: {
+            ticks: {
+              color: '#6b7280',
+              maxTicksLimit: 10
+            },
+            grid: {
+              display: false
+            }
+          }
+        },
+        interaction: {
+          intersect: false,
+          mode: 'index'
+        },
+        animation: {
+          duration: 600
+        }
+      }
+    })
+    
+    console.log('✅ Gráfico básico creado')
+  } catch (error) {
+    console.error('❌ Error creando gráfico:', error)
+    
+    // Limpiar en caso de error
+    if (chartInstance.value) {
+      try {
+        chartInstance.value.destroy()
+      } catch (destroyError) {
+        console.warn('⚠️ Error limpiando:', destroyError)
+      }
+      chartInstance.value = null
+    }
   }
 }
 
-const hideTooltip = () => {
-  tooltip.value.show = false
+function getTrendIcon(direction) {
+  switch(direction) {
+    case 'up': return '↗️'
+    case 'down': return '↘️'
+    case 'neutral': return '➡️'
+    default: return '➡️'
+  }
 }
 
-const formatDateForAxis = (dateStr) => {
-  if (!dateStr) return ''
-  const date = new Date(dateStr)
-  return date.toLocaleDateString('es-ES', { 
-    month: 'short', 
-    day: 'numeric' 
-  })
-}
+// Watchers simplificados
+watch(() => props.data, async (newData) => {
+  console.log('📊 Datos cambiaron, recreando gráfico')
+  
+  if (chartInstance.value) {
+    chartInstance.value.destroy()
+    chartInstance.value = null
+  }
+  
+  if (hasData.value) {
+    await nextTick()
+    setTimeout(createChart, 100) // Pequeño delay para asegurar que el DOM esté listo
+  }
+}, { deep: true })
 
-const formatDateForTooltip = (dateStr) => {
-  if (!dateStr) return ''
-  const date = new Date(dateStr)
-  return date.toLocaleDateString('es-ES', { 
-    year: 'numeric',
-    month: 'long', 
-    day: 'numeric' 
-  })
-}
+watch(() => props.loading, (isLoading) => {
+  if (isLoading && chartInstance.value) {
+    console.log('📊 Iniciando carga, destruyendo gráfico')
+    chartInstance.value.destroy()
+    chartInstance.value = null
+  }
+})
+
+// Lifecycle
+onMounted(() => {
+  console.log('📊 Componente montado')
+  if (hasData.value && !props.loading) {
+    nextTick(() => createChart())
+  }
+})
+
+onUnmounted(() => {
+  if (chartInstance.value) {
+    try {
+      chartInstance.value.destroy()
+    } catch (error) {
+      console.warn('⚠️ Error en cleanup:', error)
+    }
+  }
+})
 </script>
 
 <style scoped>
-.chart-container {
+.trend-chart-container {
   background: white;
   border-radius: 12px;
-  padding: 24px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-  border: 1px solid #e5e7eb;
-  position: relative;
-}
-
-.chart-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 20px;
-}
-
-.chart-title {
-  font-size: 18px;
-  font-weight: 600;
-  color: #1f2937;
-  margin: 0 0 4px 0;
-}
-
-.chart-subtitle {
-  font-size: 14px;
-  color: #6b7280;
-  margin: 0;
-}
-
-.period-selector {
-  padding: 6px 12px;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
-  background: white;
-  font-size: 14px;
-  color: #374151;
+  overflow: hidden;
 }
 
 .chart-content {
+  padding: 0 24px;
   position: relative;
-  min-height: 300px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
 }
 
 .chart-loading {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 16px;
+  justify-content: center;
+  height: 300px;
   color: #6b7280;
 }
 
@@ -327,6 +344,7 @@ const formatDateForTooltip = (dateStr) => {
   border-top: 3px solid #3b82f6;
   border-radius: 50%;
   animation: spin 1s linear infinite;
+  margin-bottom: 16px;
 }
 
 @keyframes spin {
@@ -338,67 +356,42 @@ const formatDateForTooltip = (dateStr) => {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12px;
+  justify-content: center;
+  height: 300px;
   color: #6b7280;
+  text-align: center;
 }
 
 .empty-icon {
   font-size: 48px;
   opacity: 0.5;
+  margin-bottom: 16px;
+}
+
+.chart-empty h4 {
+  font-size: 16px;
+  font-weight: 600;
+  color: #374151;
+  margin: 0 0 8px 0;
+}
+
+.chart-empty p {
+  font-size: 14px;
+  margin: 0;
 }
 
 .chart-wrapper {
-  width: 100%;
   position: relative;
-}
-
-.chart-svg {
   width: 100%;
-  height: 300px;
-}
-
-.data-point {
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.data-point:hover {
-  r: 6;
-  stroke-width: 3;
-}
-
-.axis-label {
-  font-size: 12px;
-  fill: #6b7280;
-}
-
-.chart-tooltip {
-  position: absolute;
-  background: #1f2937;
-  color: white;
-  padding: 8px 12px;
-  border-radius: 6px;
-  font-size: 12px;
-  pointer-events: none;
-  z-index: 10;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-}
-
-.tooltip-date {
-  font-weight: 500;
-  margin-bottom: 2px;
-}
-
-.tooltip-value {
-  color: #93c5fd;
 }
 
 .chart-summary {
-  display: flex;
-  justify-content: space-around;
-  padding-top: 20px;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  padding: 16px 24px;
   border-top: 1px solid #e5e7eb;
-  margin-top: 20px;
+  background: #f8fafc;
 }
 
 .summary-item {
@@ -410,12 +403,13 @@ const formatDateForTooltip = (dateStr) => {
   font-size: 12px;
   color: #6b7280;
   margin-bottom: 4px;
+  font-weight: 500;
 }
 
 .summary-value {
   display: block;
   font-size: 16px;
-  font-weight: 600;
+  font-weight: 700;
   color: #1f2937;
 }
 
@@ -427,31 +421,48 @@ const formatDateForTooltip = (dateStr) => {
   color: #ef4444;
 }
 
+.summary-value.neutral {
+  color: #6b7280;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
-  .chart-container {
-    padding: 16px;
-  }
-  
-  .chart-header {
-    flex-direction: column;
-    gap: 12px;
-  }
-  
   .chart-summary {
-    flex-direction: column;
+    grid-template-columns: repeat(2, 1fr);
     gap: 12px;
+    padding: 20px;
+  }
+  
+  .chart-content {
+    padding: 0 16px;
+  }
+}
+
+@media (max-width: 480px) {
+  .chart-summary {
+    grid-template-columns: 1fr;
   }
   
   .summary-item {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    padding: 8px 0;
+    border-bottom: 1px solid #e5e7eb;
+  }
+  
+  .summary-item:last-child {
+    border-bottom: none;
   }
   
   .summary-label,
   .summary-value {
     display: inline;
+    margin: 0;
+  }
+  
+  .summary-value {
+    font-size: 16px;
   }
 }
 </style>
