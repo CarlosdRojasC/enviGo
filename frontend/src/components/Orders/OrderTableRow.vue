@@ -71,61 +71,46 @@
 
     <!-- Tracking Column - Funcionalidad específica mantenida -->
     <td class="col-tracking">
-      <div class="tracking-container">
-        <!-- Delivered - Show Proof -->
-        <div v-if="order.status === 'delivered'" class="tracking-section delivered">
-          <button 
-            @click.stop="$emit('view-proof')" 
-            class="tracking-btn proof-btn"
-            title="Ver prueba de entrega"
-          >
-            📸 Prueba
-          </button>
-          <div class="tracking-status">
-            <span class="status-icon">✅</span>
-            <span class="status-text">Entregado</span>
-          </div>
-        </div>
-        
-        <!-- Live Tracking -->
-        <div v-else-if="hasLiveTracking" class="tracking-section live">
-          <button 
-            @click.stop="$emit('track-live')" 
-            class="tracking-btn live-btn"
-            title="Seguimiento en vivo"
-          >
-            📍 En Vivo
-          </button>
-          <div class="tracking-status">
-            <span class="live-dot"></span>
-            <span class="status-text">Activo</span>
-          </div>
-        </div>
-        
-        <!-- General Tracking -->
-        <div v-else-if="hasGeneralTracking" class="tracking-section general">
-          <button 
-            @click.stop="$emit('view-tracking')" 
-            class="tracking-btn general-btn"
-            title="Ver seguimiento"
-          >
-            🚚 Seguimiento
-          </button>
-          <div class="tracking-status">
-            <span class="status-icon">📦</span>
-            <span class="status-text">Disponible</span>
-          </div>
-        </div>
-        
-        <!-- No Tracking -->
-        <div v-else class="tracking-section none">
-          <div class="no-tracking">
-            <span class="no-tracking-icon">❓</span>
-            <span class="no-tracking-text">Sin info</span>
-          </div>
-        </div>
+  <div class="tracking-container">
+    <!-- Delivered - Show Proof -->
+    <div v-if="order.status === 'delivered'" class="tracking-section delivered">
+      <button 
+        @click.stop="$emit('view-proof')" 
+        class="tracking-btn proof-btn"
+        title="Ver prueba de entrega"
+      >
+        📸 Prueba
+      </button>
+      <div class="tracking-status">
+        <span class="status-icon">✅</span>
+        <span class="status-text">Entregado</span>
       </div>
-    </td>
+    </div>
+    
+    <!-- Tiene tracking disponible - Botón genérico "Seguimiento" -->
+    <div v-else-if="hasGeneralTracking || order.shipday_order_id" class="tracking-section general">
+      <button 
+        @click.stop="$emit('view-tracking')" 
+        class="tracking-btn general-btn"
+        title="Ver seguimiento del pedido"
+      >
+        📍 Seguimiento
+      </button>
+      <div class="tracking-status">
+        <span class="status-icon">📦</span>
+        <span class="status-text">Disponible</span>
+      </div>
+    </div>
+    
+    <!-- No Tracking -->
+    <div v-else class="tracking-section none">
+      <div class="no-tracking">
+        <span class="no-tracking-icon">❓</span>
+        <span class="no-tracking-text">Sin info</span>
+      </div>
+    </div>
+  </div>
+</td>
 
     <!-- Amount Column - Estilo AdminOrdersTable -->
     <td class="col-amount">
