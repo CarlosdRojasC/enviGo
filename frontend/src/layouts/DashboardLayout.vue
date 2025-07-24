@@ -23,5 +23,6 @@ import Sidebar from '../components/Sidebar.vue';
   flex-grow: 1;
   padding: 32px;
   overflow-y: auto;
+  height: 100vh; 
 }
 </style>
