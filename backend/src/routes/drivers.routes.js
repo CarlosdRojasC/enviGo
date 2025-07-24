@@ -55,6 +55,8 @@ router.get('/delivered-orders',
       const dateFromObj = new Date(date_from + 'T00:00:00.000Z');
       const dateToObj = new Date(date_to + 'T23:59:59.999Z');
       
+      console.log('📅 Fechas convertidas:', { dateFromObj, dateToObj });
+      
       // Buscar órdenes entregadas con conductor asignado
       const orders = await Order.find({
         status: 'delivered', // Solo pedidos entregados
@@ -72,15 +74,36 @@ router.get('/delivered-orders',
       
       console.log(`📦 Encontradas ${orders.length} órdenes entregadas`);
       
+      // Si no hay órdenes, devolver respuesta vacía pero exitosa
+      if (orders.length === 0) {
+        return res.json({
+          success: true,
+          orders: [],
+          stats: {
+            total_orders: 0,
+            total_amount: 0,
+            date_range: { date_from, date_to },
+            unique_drivers: 0
+          },
+          payment_per_delivery: 1700,
+          timestamp: new Date().toISOString(),
+          message: 'No se encontraron pedidos entregados en el rango de fechas especificado'
+        });
+      }
+      
       // Estadísticas
+      const uniqueDrivers = new Set(orders.map(o => 
+        o.driver_info?.name || o.shipday_driver_id || 'Sin conductor'
+      ));
+      
       const stats = {
         total_orders: orders.length,
         total_amount: orders.length * 1700, // $1.700 por entrega
         date_range: { date_from, date_to },
-        unique_drivers: new Set(orders.map(o => 
-          o.driver_info?.name || o.shipday_driver_id || 'Sin conductor'
-        )).size
+        unique_drivers: uniqueDrivers.size
       };
+      
+      console.log('📊 Estadísticas:', stats);
       
       res.json({
         success: true,
@@ -94,20 +117,22 @@ router.get('/delivered-orders',
       console.error('❌ Error obteniendo pedidos para pagos:', error);
       res.status(500).json({
         success: false,
-        error: error.message
+        error: error.message,
+        details: process.env.NODE_ENV === 'development' ? error.stack : undefined
       });
     }
   }
 );
-// Generar reporte de pagos por conductor (Excel)
-router.get('/payment-report', 
+
+// Generar reporte de pagos por conductor (CSV simple)
+router.get('/payment-report-csv', 
   authenticateToken, 
   isAdmin, 
   async (req, res) => {
     try {
-      const { date_from, date_to, format = 'json' } = req.query;
+      const { date_from, date_to } = req.query;
       
-      console.log('📊 Generando reporte de pagos de conductores');
+      console.log('📊 Generando reporte CSV de pagos de conductores');
       
       if (!date_from || !date_to) {
         return res.status(400).json({
@@ -134,85 +159,32 @@ router.get('/payment-report',
       .select('order_number customer_name shipping_address shipping_commune delivery_date driver_info shipday_driver_id')
       .lean();
       
-      // Agrupar por conductor
-      const driverPayments = {};
+      // Generar CSV
+      let csvContent = 'Conductor,N° Pedido,Cliente,Comuna,Fecha Entrega,Monto\n';
       
       orders.forEach(order => {
-        const driverName = order.driver_info?.name || 
-                          order.shipday_driver_id || 
-                          'Conductor Desconocido';
+        const driverName = order.driver_info?.name || order.shipday_driver_id || 'Sin conductor';
+        const orderNumber = order.order_number || '';
+        const customerName = (order.customer_name || '').replace(/,/g, ' ');
+        const commune = order.shipping_commune || 'Sin comuna';
+        const deliveryDate = order.delivery_date ? 
+          new Date(order.delivery_date).toLocaleDateString('es-CL') : '';
+        const amount = '1700';
         
-        if (!driverPayments[driverName]) {
-          driverPayments[driverName] = {
-            driver_name: driverName,
-            orders: [],
-            total_deliveries: 0,
-            total_payment: 0
-          };
-        }
-        
-        driverPayments[driverName].orders.push({
-          order_number: order.order_number,
-          customer_name: order.customer_name,
-          commune: order.shipping_commune || 'Sin comuna',
-          delivery_date: order.delivery_date,
-          payment: 1700
-        });
-        
-        driverPayments[driverName].total_deliveries++;
-        driverPayments[driverName].total_payment += 1700;
+        csvContent += `"${driverName}","${orderNumber}","${customerName}","${commune}","${deliveryDate}","${amount}"\n`;
       });
       
-      // Convertir a array y ordenar por total de pago descendente
-      const reportData = Object.values(driverPayments)
-        .sort((a, b) => b.total_payment - a.total_payment);
+      // Agregar resumen al final
+      csvContent += '\n';
+      csvContent += `RESUMEN,,,,Total Entregas,${orders.length}\n`;
+      csvContent += `,,,,Total a Pagar,$${(orders.length * 1700).toLocaleString('es-CL')}\n`;
       
-      const summary = {
-        period: { date_from, date_to },
-        total_drivers: reportData.length,
-        total_deliveries: orders.length,
-        total_amount_to_pay: orders.length * 1700,
-        payment_per_delivery: 1700,
-        generated_at: new Date().toISOString()
-      };
-      
-      if (format === 'excel') {
-        // Si quieren Excel, generar usando el servicio de Excel
-        const ExcelService = require('../services/excel.service');
-        
-        // Preparar datos para Excel
-        const excelData = [];
-        reportData.forEach(driver => {
-          driver.orders.forEach(order => {
-            excelData.push({
-              'Conductor': driver.driver_name,
-              'N° Pedido': order.order_number,
-              'Cliente': order.customer_name,
-              'Comuna': order.commune,
-              'Fecha Entrega': order.delivery_date ? new Date(order.delivery_date).toLocaleDateString('es-CL') : '',
-              'Monto': order.payment
-            });
-          });
-        });
-        
-        const buffer = await ExcelService.generateDriverPaymentReport(excelData, summary);
-        
-        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-        res.setHeader('Content-Disposition', `attachment; filename=pagos-conductores-${date_from}-${date_to}.xlsx`);
-        res.send(buffer);
-        
-      } else {
-        // Respuesta JSON normal
-        res.json({
-          success: true,
-          summary,
-          drivers: reportData,
-          timestamp: new Date().toISOString()
-        });
-      }
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename=pagos-conductores-${date_from}-${date_to}.csv`);
+      res.send('\ufeff' + csvContent); // BOM para UTF-8
       
     } catch (error) {
-      console.error('❌ Error generando reporte de pagos:', error);
+      console.error('❌ Error generando CSV:', error);
       res.status(500).json({
         success: false,
         error: error.message
