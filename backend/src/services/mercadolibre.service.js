@@ -103,7 +103,7 @@ static getAuthorizationUrl(channelId) {
   /**
    * Intercambia el código de autorización por un access_token y refresh_token.
    */
-  static async exchangeCodeForTokens(code, channelId) {
+static async exchangeCodeForTokens(code, channelId) {
   const channel = await Channel.findById(channelId);
   if (!channel) {
     throw new Error('Canal no encontrado durante el intercambio de código.');
