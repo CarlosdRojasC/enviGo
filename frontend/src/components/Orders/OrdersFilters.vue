@@ -52,14 +52,15 @@
               <button @click.stop="removeCommune(commune)" class="tag-remove">×</button>
             </span>
             <input
-              ref="communeInput"
-              type="text"
-              v-model="communeSearch"
-              @focus="showCommuneDropdown = true"
-              @blur="closeCommuneDropdown"
-              placeholder="Seleccionar comunas..."
-              class="multiselect-input"
-            />
+  ref="communeInput"
+  type="text"
+  v-model="communeSearch"
+  @focus="showCommuneDropdown = true"
+  @blur="closeCommuneDropdown"
+  @keydown.escape="showCommuneDropdown = false"
+  placeholder="Seleccionar comunas..."
+  class="multiselect-input"
+/>
           </div>
           <transition name="slide-down">
             <div v-if="showCommuneDropdown" class="multiselect-dropdown">
@@ -331,7 +332,11 @@ const emit = defineEmits([
 ])
 
 // Local reactive copies
-const localFilters = ref({ ...props.filters, shipping_commune: Array.isArray(props.filters.shipping_commune) ? [...props.filters.shipping_commune] : [] });const localAdvancedFilters = ref({ ...props.advancedFilters })
+const localFilters = ref({ 
+  ...props.filters, 
+  channel_id: props.filters.channel_id || '', // Asegurar que sea string vacío por defecto
+  shipping_commune: Array.isArray(props.filters.shipping_commune) ? [...props.filters.shipping_commune] : [] 
+});
 const searchTerm = ref(props.filters.search || '')
 
 const communeInput = ref(null);
@@ -347,9 +352,13 @@ const filteredCommunes = computed(() => {
 
 // Watch for external changes
 watch(() => props.filters, (newFilters) => {
-  localFilters.value = { ...newFilters }
-  searchTerm.value = newFilters.search || ''
-}, { deep: true })
+  localFilters.value = { 
+    ...newFilters, 
+    channel_id: newFilters.channel_id || '', // Asegurar string vacío
+    shipping_commune: Array.isArray(newFilters.shipping_commune) ? newFilters.shipping_commune : [] 
+  };
+  searchTerm.value = newFilters.search || '';
+}, { deep: true });
 
 watch(() => props.advancedFilters, (newFilters) => {
   localAdvancedFilters.value = { ...newFilters }
@@ -364,6 +373,8 @@ function addCommune(commune) {
     emit('filter-change', 'shipping_commune', newSelection);
   }
   communeSearch.value = '';
+  // AGREGAR esta línea para cerrar el dropdown:
+  showCommuneDropdown.value = false;
 }
 
 
@@ -372,14 +383,16 @@ function removeCommune(communeToRemove) {
   localFilters.value.shipping_commune = newSelection;
   emit('filter-change', 'shipping_commune', newSelection);
 }
-function focusInput() {
+function focusCommuneInput() {
   communeInput.value?.focus();
+  showCommuneDropdown.value = true;
 }
 
-function closeDropdown() {
-  setTimeout(() => { showCommuneDropdown.value = false; }, 200);
+function closeCommuneDropdown() {
+  setTimeout(() => { 
+    showCommuneDropdown.value = false; 
+  }, 150);
 }
-
 
 // Methods
 
@@ -433,6 +446,24 @@ function isPresetActive(preset) {
     return localFilters.value[key] === value
   })
 }
+function clearAllFilters() {
+  // Clear local filters
+  Object.keys(localFilters.value).forEach(key => {
+    if (key === 'shipping_commune') {
+      localFilters.value[key] = [];
+    } else {
+      localFilters.value[key] = '';
+    }
+  });
+  Object.keys(localAdvancedFilters.value).forEach(key => {
+    localAdvancedFilters.value[key] = '';
+  });
+  searchTerm.value = '';
+  communeSearch.value = ''; // AGREGAR esta línea
+  showCommuneDropdown.value = false; // AGREGAR esta línea
+  
+  emit('clear-all');
+}
 
 watch(() => props.filters, (newFilters) => {
   localFilters.value = { ...newFilters, shipping_commune: Array.isArray(newFilters.shipping_commune) ? newFilters.shipping_commune : [] };
@@ -446,6 +477,31 @@ watch(() => props.filters.search, (newSearchValue) => {
 </script>
 
 <style scoped>
+
+.multiselect-container:focus-within {
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+.multiselect-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  max-height: 200px;
+  overflow-y: auto;
+  z-index: 1000; /* Aumentar z-index */
+  margin-top: 4px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+.dropdown-item:last-child {
+  border-bottom: none;
+}
+
 .filters-container {
   background: white;
   border-radius: 16px;
