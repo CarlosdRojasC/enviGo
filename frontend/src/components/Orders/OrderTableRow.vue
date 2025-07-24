@@ -1,271 +1,310 @@
 <!-- frontend/src/components/Orders/OrderTableRow.vue -->
 <template>
-  <tr 
-    class="order-row" 
-    :class="rowClasses"
-    @click="handleRowClick"
-  >
-    <!-- Checkbox Column -->
-    <td class="col-checkbox" @click.stop>
-      <div class="checkbox-container">
-        <input 
-          type="checkbox"
-          :checked="selected"
-          :disabled="!selectable"
-          @change="$emit('toggle-selection')"
-          class="row-checkbox"
-          :class="{ 'disabled': !selectable }"
-        />
-      </div>
-    </td>
+  <div class="table-section">
+    <!-- SOLUCIÓN AL DOBLE SCROLL: Contenedor único sin overflow-x -->
+    <div class="table-container">
+      <table class="orders-table">
+        <!-- HEADER - Igual que AdminOrdersTable -->
+        <thead>
+          <tr>
+            <th class="col-checkbox">
+              <input 
+                type="checkbox" 
+                :checked="selectAllChecked"
+                :indeterminate="selectAllIndeterminate"
+                @change="$emit('toggle-select-all')"
+                class="select-all-checkbox"
+              />
+            </th>
+            <th class="col-order">Pedido</th>
+            <th class="col-customer">Cliente</th>
+            <th class="col-address">Dirección</th>
+            <th class="col-status">Estado</th>
+            <th class="col-tracking">Seguimiento</th>
+            <th class="col-amount">Monto</th>
+            <th class="col-date">Fechas</th>
+            <th class="col-actions">Acciones</th>
+          </tr>
+        </thead>
 
-    <!-- Order Number Column -->
-    <td class="col-order">
-      <div class="order-info">
-        <div class="order-number-wrapper">
-          <span class="order-number">#{{ order.order_number }}</span>
-          <div class="order-badges">
-            <span 
-              v-if="order.channel_id" 
-              class="channel-badge" 
-              :class="getChannelClass(order.channel_id.channel_type)"
-              :title="order.channel_id.channel_name"
-            >
-              {{ getChannelIcon(order.channel_id.channel_type) }}
-            </span>
-            <span 
-              v-if="order.priority && order.priority !== 'normal'" 
-              class="priority-badge" 
-              :class="order.priority"
-            >
-              {{ getPriorityIcon(order.priority) }}
-            </span>
-          </div>
-        </div>
-        <div v-if="order.external_order_id" class="external-id">
-          {{ order.external_order_id }}
-        </div>
-      </div>
-    </td>
+        <!-- BODY -->
+        <tbody>
+          <!-- LOADING STATE -->
+          <tr v-if="loading" class="loading-row">
+            <td colspan="9" class="loading-state">
+              <div class="loading-spinner"></div>
+              <span>Cargando pedidos...</span>
+            </td>
+          </tr>
 
-    <!-- Customer Column -->
-    <td class="col-customer">
-      <div class="customer-info">
-        <div class="customer-name" :title="order.customer_name">
-          {{ truncateText(order.customer_name, 20) }}
-        </div>
-        <div v-if="order.customer_phone" class="customer-contact">
-          <span class="contact-icon">📱</span>
-          <span class="phone-number">{{ formatPhone(order.customer_phone) }}</span>
-        </div>
-        <div v-if="order.customer_email" class="customer-email" :title="order.customer_email">
-          <span class="contact-icon">📧</span>
-          <span class="email">{{ truncateText(order.customer_email, 25) }}</span>
-        </div>
-      </div>
-    </td>
+          <!-- EMPTY STATE -->
+          <tr v-else-if="orders.length === 0" class="empty-row">
+            <td colspan="9" class="empty-state">
+              <div class="empty-icon">📦</div>
+              <p class="empty-title">No hay pedidos disponibles</p>
+              <p class="empty-subtitle">Crea tu primer pedido o sincroniza desde tus canales de venta</p>
+              <button 
+                v-if="showCreateButton" 
+                @click="$emit('create-order')" 
+                class="create-order-btn"
+              >
+                ➕ Crear Primer Pedido
+              </button>
+            </td>
+          </tr>
 
-    <!-- Address Column -->
-    <td class="col-address">
-      <div class="address-info">
-        <div class="address-text" :title="order.shipping_address">
-          {{ truncateText(order.shipping_address, 35) }}
-        </div>
-        <div class="address-details">
-          <span v-if="order.shipping_commune" class="commune-tag">
-            📍 {{ order.shipping_commune }}
-          </span>
-          <span v-if="order.shipping_city && order.shipping_city !== order.shipping_commune" class="city-text">
-            {{ order.shipping_city }}
-          </span>
-        </div>
-      </div>
-    </td>
+          <!-- ORDER ROWS - Con funcionalidades de empresa -->
+          <tr 
+            v-for="order in orders" 
+            :key="order._id"
+            class="order-row"
+            :class="{ 
+              'selected': isOrderSelected(order),
+              'in-transit': isInTransit(order),
+              'ready-for-pickup': order.status === 'ready_for_pickup'
+            }"
+          >
+            <!-- CHECKBOX -->
+            <td class="col-checkbox">
+              <input 
+                type="checkbox" 
+                :checked="isOrderSelected(order)"
+                @change="$emit('toggle-selection', order)"
+                :disabled="!isOrderSelectable(order)"
+                class="order-checkbox"
+              />
+            </td>
 
-    <!-- Status Column -->
-    <td class="col-status">
-      <div class="status-info">
-        <span class="status-badge" :class="getStatusClass(order.status)">
-          <span class="status-icon">{{ getStatusIcon(order.status) }}</span>
-          <span class="status-text">{{ getStatusName(order.status) }}</span>
+            <!-- ORDER NUMBER -->
+            <td class="col-order">
+              <div class="order-info">
+                <div class="order-number">{{ order.order_number }}</div>
+                <div class="order-id">ID: {{ order._id.slice(-6) }}</div>
+                <div v-if="order.external_order_id" class="external-id">
+                  Ext: {{ order.external_order_id.slice(-8) }}
+                </div>
+              </div>
+            </td>
+
+            <!-- CUSTOMER -->
+            <td class="col-customer">
+              <div class="customer-info">
+                <div class="customer-name">{{ order.customer_name }}</div>
+                <div class="customer-contact">
+                  <div v-if="order.customer_email" class="customer-email">
+                    <span class="contact-icon">📧</span> {{ order.customer_email }}
+                  </div>
+                  <div v-if="order.customer_phone" class="customer-phone">
+                    <span class="contact-icon">📱</span> {{ order.customer_phone }}
+                  </div>
+                </div>
+              </div>
+            </td>
+
+            <!-- ADDRESS -->
+            <td class="col-address">
+              <div class="address-info">
+                <div class="address-main">{{ order.shipping_address?.street }}</div>
+                <div class="address-details">
+                  <span class="commune">{{ order.shipping_address?.commune }}</span>
+                  <span v-if="order.shipping_address?.apartment" class="apartment">
+                    , {{ order.shipping_address.apartment }}
+                  </span>
+                </div>
+              </div>
+            </td>
+
+            <!-- STATUS - Con estados específicos de empresa -->
+            <td class="col-status">
+              <div class="status-container">
+                <span class="status-badge" :class="getStatusClass(order.status)">
+                  {{ getStatusText(order.status) }}
+                </span>
+                <div v-if="order.status_updated_at" class="status-time">
+                  {{ formatStatusTime(order.status_updated_at) }}
+                </div>
+              </div>
+            </td>
+
+            <!-- TRACKING - Funcionalidad específica de empresas -->
+            <td class="col-tracking">
+              <div class="tracking-container">
+                <!-- En tránsito con tracking -->
+                <div v-if="hasTrackingInfo(order)" class="tracking-active">
+                  <button 
+                    @click="$emit('track-live', order)" 
+                    class="track-live-btn"
+                    title="Ver ubicación en tiempo real"
+                  >
+                    📍 En vivo
+                  </button>
+                  <div class="tracking-info">
+                    <span class="driver-name">{{ order.driver_name }}</span>
+                    <span class="eta">ETA: {{ order.estimated_arrival }}</span>
+                  </div>
+                </div>
+                
+                <!-- Prueba de entrega disponible -->
+                <div v-else-if="hasProofOfDelivery(order)" class="proof-available">
+                  <button 
+                    @click="$emit('view-proof', order)" 
+                    class="proof-btn"
+                    title="Ver prueba de entrega"
+                  >
+                    📸 Prueba
+                  </button>
+                  <div class="delivery-info">
+                    <span class="delivery-time">{{ formatDeliveryTime(order.delivered_at) }}</span>
+                  </div>
+                </div>
+                
+                <!-- Sin tracking -->
+                <div v-else class="no-tracking">
+                  <span class="tracking-status">Sin seguimiento</span>
+                </div>
+              </div>
+            </td>
+
+            <!-- AMOUNT -->
+            <td class="col-amount">
+              <div class="amount-info">
+                <div class="total-amount">${{ formatAmount(order.total_amount) }}</div>
+                <div v-if="order.shipping_cost" class="shipping-cost">
+                  Envío: ${{ formatAmount(order.shipping_cost) }}
+                </div>
+              </div>
+            </td>
+
+            <!-- DATES -->
+            <td class="col-date">
+              <div class="date-info">
+                <div class="date-creation">
+                  <span class="date-label">Creado:</span>
+                  <span class="date-value">{{ formatDate(order.created_at) }}</span>
+                </div>
+                <div v-if="order.delivery_date" class="date-delivery">
+                  <span class="date-label">Entrega:</span>
+                  <span class="date-value">{{ formatDate(order.delivery_date) }}</span>
+                </div>
+              </div>
+            </td>
+
+            <!-- ACTIONS - Específicas de empresa -->
+            <td class="col-actions">
+              <div class="action-buttons">
+                <button 
+                  @click="$emit('view-details', order)" 
+                  class="btn-table-action view"
+                  title="Ver detalles"
+                >
+                  👁️
+                </button>
+                
+                <!-- Acción principal según estado -->
+                <button 
+                  v-if="getActionButton(order).show"
+                  @click="$emit('handle-action', { action: getActionButton(order).action, order })"
+                  :class="['btn-table-action', getActionButton(order).class]"
+                  :title="getActionButton(order).title"
+                >
+                  {{ getActionButton(order).icon }} {{ getActionButton(order).text }}
+                </button>
+
+                <!-- Dropdown de más acciones -->
+                <div class="action-dropdown">
+                  <button class="btn-table-action more" title="Más opciones">
+                    ⋮
+                  </button>
+                  <div class="dropdown-menu">
+                    <button @click="$emit('view-tracking', order)" class="dropdown-item">
+                      📍 Ver seguimiento
+                    </button>
+                    <button @click="$emit('contact-support', order)" class="dropdown-item">
+                      💬 Contactar soporte
+                    </button>
+                    <div class="dropdown-divider"></div>
+                    <button @click="duplicateOrder(order)" class="dropdown-item">
+                      📋 Duplicar
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- PAGINATION - Igual que AdminOrdersTable -->
+    <div v-if="pagination && pagination.totalPages > 1" class="pagination-section">
+      <div class="pagination-info">
+        <span>
+          Mostrando {{ ((pagination.page - 1) * pagination.limit) + 1 }} - 
+          {{ Math.min(pagination.page * pagination.limit, pagination.total) }} 
+          de {{ pagination.total }} pedidos
         </span>
         
-        <!-- Driver Info -->
-        <div v-if="order.driver_info?.name" class="driver-info">
-          <span class="driver-icon">👨‍💼</span>
-          <span class="driver-name">{{ order.driver_info.name }}</span>
+        <div class="page-size-selector">
+          <label>Mostrar:</label>
+          <select 
+            :value="pagination.limit" 
+            @change="$emit('change-page-size', $event.target.value)"
+          >
+            <option value="10">10</option>
+            <option value="20">20</option>
+            <option value="50">50</option>
+            <option value="100">100</option>
+          </select>
         </div>
       </div>
-    </td>
-
-    <!-- Tracking Column -->
-    <td class="col-tracking">
-      <div class="tracking-info">
-        <!-- Priority 1: Delivered - Show Proof of Delivery -->
-        <div v-if="order.status === 'delivered'" class="tracking-action delivered">
-          <button 
-            @click.stop="$emit('view-proof')" 
-            class="tracking-btn proof-btn"
-            title="Ver prueba de entrega"
+      
+      <div class="pagination-controls">
+        <button 
+          @click="$emit('go-to-page', 1)" 
+          :disabled="pagination.page <= 1"
+          class="page-btn"
+        >
+          ⏮️
+        </button>
+        
+        <button 
+          @click="$emit('go-to-page', pagination.page - 1)" 
+          :disabled="pagination.page <= 1"
+          class="page-btn"
+        >
+          ← Anterior
+        </button>
+        
+        <div class="page-numbers">
+          <button
+            v-for="page in getVisiblePages()"
+            :key="page"
+            @click="page !== '...' && $emit('go-to-page', page)"
+            :class="['page-btn', { active: page === pagination.page, disabled: page === '...' }]"
+            :disabled="page === '...'"
           >
-            <span class="btn-icon">📸</span>
-            <span class="btn-text">Prueba</span>
+            {{ page }}
           </button>
-          <div class="delivery-indicator">
-            <span class="delivery-icon">✅</span>
-            <span class="delivery-text">Entregado</span>
-          </div>
         </div>
         
+        <button 
+          @click="$emit('go-to-page', pagination.page + 1)" 
+          :disabled="pagination.page >= pagination.totalPages"
+          class="page-btn"
+        >
+          Siguiente →
+        </button>
         
-        <!-- Priority 3: General Tracking -->
-        <div v-else-if="hasGeneralTracking" class="tracking-action general">
-          <button 
-            @click.stop="$emit('view-tracking')" 
-            class="tracking-btn tracking-btn-general"
-            title="Ver seguimiento"
-          >
-            <span class="btn-icon">🚚</span>
-            <span class="btn-text">Seguimiento</span>
-          </button>
-          <div class="tracking-indicator">
-            <span class="tracking-icon">📦</span>
-            <span class="tracking-text">Disponible</span>
-          </div>
-        </div>
-        
-        <!-- Priority 4: No Tracking -->
-        <div v-else class="tracking-action none">
-          <div class="no-tracking">
-            <span class="no-tracking-icon">❓</span>
-            <span class="no-tracking-text">Sin info</span>
-          </div>
-        </div>
+        <button 
+          @click="$emit('go-to-page', pagination.totalPages)" 
+          :disabled="pagination.page >= pagination.totalPages"
+          class="page-btn"
+        >
+          ⏭️
+        </button>
       </div>
-    </td>
-
-    <!-- Amount Column -->
-    <td class="col-amount">
-      <div class="amount-info">
-        <div class="total-amount">
-          ${{ formatCurrency(order.total_amount || order.shipping_cost) }}
-        </div>
-        <div v-if="order.shipping_cost && order.total_amount" class="shipping-cost">
-          Envío: ${{ formatCurrency(order.shipping_cost) }}
-        </div>
-      </div>
-    </td>
-
-    <!-- Date Column -->
-    <td class="col-date">
-      <div class="date-info">
-        <div class="order-date">
-          <span class="date-icon">📅</span>
-          <span class="date-text">{{ formatDate(order.order_date) }}</span>
-        </div>
-        <div v-if="order.delivery_date" class="delivery-date">
-          <span class="delivery-date-icon">✅</span>
-          <span class="delivery-date-text">{{ formatDate(order.delivery_date) }}</span>
-        </div>
-        <div v-if="isUrgent" class="urgent-indicator">
-          <span class="urgent-icon">⚡</span>
-          <span class="urgent-text">Urgente</span>
-        </div>
-      </div>
-    </td>
-
-    <!-- Actions Column -->
-    <td class="col-actions" @click.stop>
-      <div class="actions-menu">
-        <!-- Primary Actions -->
-        <div class="primary-actions">
-          <!-- Mark as Ready (only for pending orders) -->
-          <button 
-            v-if="order.status === 'pending'" 
-            @click="$emit('mark-ready')" 
-            class="action-btn ready-btn"
-            title="Marcar como listo para retiro"
-          >
-            ✔️
-          </button>
-          
-          <!-- View Details -->
-          <button 
-            @click="$emit('view-details')" 
-            class="action-btn details-btn"
-            title="Ver detalles del pedido"
-          >
-            👁️
-          </button>
-        </div>
-
-        <!-- Secondary Actions Menu -->
-        <div class="secondary-actions">
-          <div class="dropdown">
-            <button class="dropdown-toggle" title="Más acciones">
-              ⋮
-            </button>
-            <div class="dropdown-menu">
-              <!-- Live Tracking -->
-              <button 
-                v-if="order.status === 'shipped'" 
-                @click="$emit('track-live')"
-                class="dropdown-item"
-              >
-                🚚 Tracking en Vivo
-              </button>
-              
-              <!-- General Tracking -->
-              <button 
-                v-if="hasGeneralTracking && order.status !== 'delivered'" 
-                @click="$emit('view-tracking')"
-                class="dropdown-item"
-              >
-                📍 Ver Seguimiento
-              </button>
-              
-              <!-- Proof of Delivery -->
-              <button 
-                v-if="hasProofOfDelivery" 
-                @click="$emit('view-proof')"
-                class="dropdown-item"
-              >
-                📸 Prueba de Entrega
-              </button>
-              
-              <!-- Contact Support -->
-              <button 
-                v-if="canContactSupport" 
-                @click="$emit('contact-support')"
-                class="dropdown-item"
-              >
-                💬 Contactar Soporte
-              </button>
-              
-              <!-- Divider -->
-              <div class="dropdown-divider"></div>
-              
-              <!-- Copy Order Number -->
-              <button 
-                @click="copyOrderNumber"
-                class="dropdown-item"
-              >
-                📋 Copiar #Pedido
-              </button>
-              
-              <!-- Share Order -->
-              <button 
-                @click="shareOrder"
-                class="dropdown-item"
-              >
-                📤 Compartir
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </td>
-  </tr>
+    </div>
+  </div>
 </template>
 
 <script setup>
