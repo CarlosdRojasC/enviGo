@@ -8,7 +8,7 @@ const rateLimit = require('express-rate-limit');
 const routes = require('./routes');
 const connectDB = require('./config/database');
 const WebSocketService = require('./services/websocket.service');
-const syncService = require('./services/sync.service'); // ✅ CORRECTO: Es una instancia
+const SyncSchedulerService = require('./services/sync.service'); // ✅ MANTENER COMO ESTABA
 const app = express();
 const server = http.createServer(app);
 const PORT = process.env.PORT || 3001;
@@ -46,13 +46,13 @@ const corsOptions = {
   credentials: true
 };
 
-// ✅ FUNCIÓN CORREGIDA
+// ✅ FUNCIÓN CORRECTA (YA FUNCIONABA)
 async function initializeSyncScheduler() {
   if (syncSchedulerInitialized) return;
   
   try {
     console.log('🚀 Inicializando Sync Scheduler...');
-    await syncService.initialize(); // ✅ CORREGIDO
+    await SyncSchedulerService.initialize(); // ✅ CORRECTO
     syncSchedulerInitialized = true;
     console.log('✅ Sync Scheduler inicializado correctamente');
   } catch (error) {
@@ -88,10 +88,10 @@ if (process.env.NODE_ENV === 'development') {
   });
 }
 
-// ✅ HEALTH CHECK CORREGIDO
+// ✅ HEALTH CHECK CORRECTO
 app.get('/health', async (req, res) => {
   try {
-    const syncStats = syncService.getStats(); // ✅ CORREGIDO
+    const syncStats = SyncSchedulerService.getStats(); // ✅ CORRECTO
     
     res.json({ 
       status: 'OK', 
@@ -215,8 +215,6 @@ app.post('/api/test-order-flow', (req, res) => {
       { type: 'proof_uploaded', delay: 9000 }
     ];
     
-    let totalSent = 0;
-    
     events.forEach((event, index) => {
       setTimeout(() => {
         const testData = {
@@ -241,7 +239,7 @@ app.post('/api/test-order-flow', (req, res) => {
           'proof_uploaded': `📸 Foto y firma confirmadas para #${orderNumber}`
         };
         
-        const sent = global.wsService.broadcast('order_status_changed', {
+        global.wsService.broadcast('order_status_changed', {
           ...testData,
           message: messages[event.type],
           icon: event.type === 'driver_assigned' ? '👨‍💼' : 
@@ -251,7 +249,6 @@ app.post('/api/test-order-flow', (req, res) => {
           priority: event.type === 'delivered' ? 'high' : 'medium'
         });
         
-        totalSent += sent;
         console.log(`📤 Flujo ${index + 1}/4: ${event.type} para #${orderNumber}`);
       }, event.delay);
     });
@@ -274,8 +271,6 @@ app.post('/api/test-multiple-orders', (req, res) => {
     const companies = ['TiendaOnline', 'EcommerceChile', 'VentasRápidas', 'MegaStore', 'SuperVentas'];
     const communes = ['Santiago', 'Las Condes', 'Providencia', 'Ñuñoa', 'San Miguel'];
     const events = ['driver_assigned', 'picked_up', 'delivered'];
-    
-    let sentCount = 0;
     
     for (let i = 0; i < count; i++) {
       setTimeout(() => {
@@ -301,7 +296,7 @@ app.post('/api/test-multiple-orders', (req, res) => {
           'delivered': `✅ Entrega exitosa #${orderNumber} en ${commune}`
         };
         
-        const sent = global.wsService.broadcast('order_status_changed', {
+        global.wsService.broadcast('order_status_changed', {
           ...testData,
           message: messages[eventType],
           icon: eventType === 'driver_assigned' ? '👨‍💼' : 
@@ -309,8 +304,6 @@ app.post('/api/test-multiple-orders', (req, res) => {
           type: eventType,
           priority: 'medium'
         });
-        
-        sentCount += sent;
       }, i * 1000);
     }
 
@@ -325,11 +318,11 @@ app.post('/api/test-multiple-orders', (req, res) => {
   }
 });
 
-// ✅ ENDPOINTS ADMIN CORREGIDOS
+// ✅ ENDPOINTS ADMIN (YA ESTABAN CORRECTOS)
 app.get('/api/admin/sync/status', async (req, res) => {
   try {
-    const stats = syncService.getStats(); // ✅ CORREGIDO
-    const upcomingSyncs = await syncService.getUpcomingSyncs(); // ✅ CORREGIDO
+    const stats = SyncSchedulerService.getStats();
+    const upcomingSyncs = await SyncSchedulerService.getUpcomingSyncs();
     
     res.json({
       scheduler: stats,
@@ -345,7 +338,7 @@ app.post('/api/admin/sync/force-all', async (req, res) => {
   try {
     console.log('🚀 Forzando sincronización de todos los canales...');
     
-    const results = await syncService.forceSyncAll(); // ✅ CORREGIDO
+    const results = await SyncSchedulerService.forceSyncAll();
     
     res.json({ 
       success: true, 
@@ -366,7 +359,8 @@ app.post('/api/admin/sync/force/:channelId', async (req, res) => {
     const { channelId } = req.params;
     console.log(`🚀 Forzando sincronización del canal ${channelId}...`);
     
-    const result = await syncService.syncChannelById(channelId); // ✅ CORREGIDO
+    // ⚠️ NECESITAS AGREGAR ESTE MÉTODO A TU sync.service.js
+    const result = await SyncSchedulerService.syncChannelById(channelId);
     
     res.json({ 
       success: true, 
@@ -386,7 +380,7 @@ app.post('/api/admin/sync/restart', async (req, res) => {
   try {
     console.log('🔄 Reiniciando Sync Scheduler...');
     
-    await syncService.restart(); // ✅ CORREGIDO
+    await SyncSchedulerService.restart();
     
     res.json({ 
       success: true, 
@@ -403,7 +397,7 @@ app.post('/api/admin/sync/restart', async (req, res) => {
 
 app.get('/api/admin/sync/upcoming', async (req, res) => {
   try {
-    const upcomingSyncs = await syncService.getUpcomingSyncs(); // ✅ CORREGIDO
+    const upcomingSyncs = await SyncSchedulerService.getUpcomingSyncs();
     
     res.json({ 
       success: true,
@@ -444,7 +438,7 @@ app.use((err, req, res, next) => {
   });
 });
 
-// ✅ FUNCIÓN STARTSERVER CORREGIDA
+// ✅ FUNCIÓN STARTSERVER (YA ESTABA CORRECTA)
 const startServer = async () => {
   try {
     await connectDB();
@@ -452,7 +446,7 @@ const startServer = async () => {
     console.log('🔄 Inicializando sistema de sincronización automática...');
     setTimeout(async () => {
       try {
-        await syncService.initialize(); // ✅ CORREGIDO
+        await SyncSchedulerService.initialize(); // ✅ CORRECTO
         console.log('✅ Sistema de sincronización automática iniciado');
       } catch (error) {
         console.error('❌ Error inicializando sync scheduler:', error);
