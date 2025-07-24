@@ -936,6 +936,45 @@ function getButtonText() {
   
   return 'Crear Canal'
 }
+function handleCallbackResponse() {
+  const urlParams = new URLSearchParams(window.location.search);
+  const success = urlParams.get('success');
+  const error = urlParams.get('error');
+  const details = urlParams.get('details');
+  const channelName = urlParams.get('channel_name');
+  
+  if (success === 'ml_connected') {
+    const message = channelName 
+      ? `¡Canal "${channelName}" conectado exitosamente con MercadoLibre!`
+      : '¡Conexión con MercadoLibre exitosa!';
+    toast.success(message);
+  } else if (error) {
+    let errorMessage = 'Error conectando con MercadoLibre';
+    
+    switch (error) {
+      case 'oauth_denied':
+        errorMessage = 'Autorización denegada por el usuario';
+        break;
+      case 'missing_params':
+        errorMessage = 'Faltan parámetros en la respuesta de MercadoLibre';
+        break;
+      case 'validation_failed':
+        errorMessage = `Error de validación: ${details || 'No se pudo validar la autorización'}`;
+        break;
+      case 'processing_failed':
+        errorMessage = `Error procesando la autorización: ${details || 'Error interno'}`;
+        break;
+    }
+    
+    toast.error(errorMessage);
+    console.error('❌ [ML Frontend] Error en callback:', { error, details });
+  }
+  
+  // ✅ LIMPIAR LA URL después de mostrar el mensaje
+  if (success || error) {
+    window.history.replaceState({}, document.title, window.location.pathname);
+  }
+}
 
 // ==================== LIFECYCLE ====================
 onMounted(async () => {
@@ -947,6 +986,7 @@ onMounted(async () => {
 })
   await fetchCompanies()
   await fetchChannels()
+  await handleCallbackResponse();
 })
 </script>
 

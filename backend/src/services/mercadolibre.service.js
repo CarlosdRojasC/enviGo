@@ -48,7 +48,7 @@ class MercadoLibreService {
    * ✅ CORREGIDO: Genera la URL de autorización con el dominio correcto
    */
 static getAuthorizationUrl(channelId) {
-  const redirectUri = `${process.env.FRONTEND_URL}/integrations/mercadolibre/callback`;
+  const redirectUri = `${process.env.FRONTEND_URL}/channels/mercadolibre/callback`;
   
   // ✅ USAR EL DOMINIO CORRECTO
   const authUrl = new URL('https://auth.mercadolibre.cl/authorization');
@@ -65,7 +65,7 @@ static getAuthorizationUrl(channelId) {
    * ✅ MEJORADO: Detecta el país automáticamente para usar el dominio correcto
    */
   static getAuthUrlForCountry(storeUrl, channelId) {
-    const redirectUri = `${process.env.FRONTEND_URL}/integrations/mercadolibre/callback`;
+    const redirectUri = `${process.env.FRONTEND_URL}/channels/mercadolibre/callback`;
     
     // Mapeo de dominios de tienda a dominios de auth
     const authDomains = {
@@ -104,44 +104,51 @@ static getAuthorizationUrl(channelId) {
    * Intercambia el código de autorización por un access_token y refresh_token.
    */
   static async exchangeCodeForTokens(code, channelId) {
-    const channel = await Channel.findById(channelId);
-    if (!channel) {
-      throw new Error('Canal no encontrado durante el intercambio de código.');
-    }
-
-    const redirectUri = `${process.env.FRONTEND_URL}/integrations/mercadolibre/callback`;
-
-    try {
-      const { data } = await axios.post(`${this.API_BASE_URL}/oauth/token`, {
-        grant_type: 'authorization_code',
-        client_id: process.env.MERCADOLIBRE_APP_ID,
-        client_secret: process.env.MERCADOLIBRE_SECRET_KEY,
-        code: code,
-        redirect_uri: redirectUri,
-      });
-
-      // Guardamos los tokens y la información del usuario en el canal
-      channel.api_key = data.access_token;
-      Object.assign(channel.settings, {
-        access_token: data.access_token,
-        refresh_token: data.refresh_token,
-        expires_in: data.expires_in,
-        user_id: data.user_id,
-        updated_at: new Date(),
-        oauth_configured: true
-      });
-      channel.sync_status = 'success'; // ✅ Actualizar estado
-      channel.markModified('settings');
-      await channel.save();
-
-      console.log(`✅ [ML Service] OAuth completado para canal ${channel.channel_name}`);
-
-      return channel;
-    } catch (error) {
-      console.error(`❌ [ML Service] Error intercambiando código por tokens:`, error.response?.data || error.message);
-      throw new Error(`Error en OAuth: ${error.response?.data?.message || error.message}`);
-    }
+  const channel = await Channel.findById(channelId);
+  if (!channel) {
+    throw new Error('Canal no encontrado durante el intercambio de código.');
   }
+
+  // ✅ CORRECCIÓN: Usar la ruta que coincide con tu router
+  const redirectUri = `${process.env.FRONTEND_URL}/channels/mercadolibre/callback`;
+
+  console.log('🔄 [ML Service] Intercambiando tokens...', {
+    channelId,
+    channelName: channel.channel_name,
+    redirectUri
+  });
+
+  try {
+    const { data } = await axios.post(`${this.API_BASE_URL}/oauth/token`, {
+      grant_type: 'authorization_code',
+      client_id: process.env.MERCADOLIBRE_APP_ID,
+      client_secret: process.env.MERCADOLIBRE_SECRET_KEY,
+      code: code,
+      redirect_uri: redirectUri,
+    });
+
+    // Guardamos los tokens y la información del usuario en el canal
+    channel.api_key = data.access_token;
+    Object.assign(channel.settings, {
+      access_token: data.access_token,
+      refresh_token: data.refresh_token,
+      expires_in: data.expires_in,
+      user_id: data.user_id,
+      updated_at: new Date(),
+      oauth_configured: true
+    });
+    channel.sync_status = 'success';
+    channel.markModified('settings');
+    await channel.save();
+
+    console.log(`✅ [ML Service] OAuth completado para canal ${channel.channel_name}`);
+    return channel;
+    
+  } catch (error) {
+    console.error(`❌ [ML Service] Error intercambiando código por tokens:`, error.response?.data || error.message);
+    throw new Error(`Error en OAuth: ${error.response?.data?.message || error.message}`);
+  }
+}
 
   /**
    * ✅ NUEVO: Método actualizado que usa el país detectado
