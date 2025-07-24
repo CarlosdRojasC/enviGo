@@ -4,6 +4,7 @@ const mongoose = require('mongoose');
 const Channel = require('../models/Channel');
 const { authenticateToken } = require('../middlewares/auth.middleware');
 const ShipdayService = require('../services/shipday.service');
+const shipdayController = require('../controllers/shipday.controller');
 
 // OAuth MercadoLibre
 router.get('/channels/mercadolibre/auth', authenticateToken, async (req, res) => {
@@ -214,4 +215,5 @@ router.post('/shipday-webhook', async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+router.post('/shipday', shipdayController.handleWebhook);
 module.exports = router;

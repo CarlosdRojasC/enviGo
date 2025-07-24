@@ -28,8 +28,6 @@ router.get('/orders/:id/tracking', authenticateToken, shipdayController.getOrder
 
 // ==================== WEBHOOKS ====================
 router.post('/webhooks/setup', authenticateToken, isAdmin, shipdayController.setupWebhook);
-router.post('/webhooks/shipday', shipdayController.handleWebhook);
-
 
 
 // ==================== DEBUG SHIPDAY ====================
