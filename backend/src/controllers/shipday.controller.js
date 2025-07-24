@@ -504,13 +504,65 @@ async handleWebhook(req, res) {
     break;
 
  case 'order_delivered':
-  case 'order_completed':
-    case 'ORDER_POD_UPLOAD':
+ case 'order_completed':
+ case 'ORDER_POD_UPLOAD':
   console.log('✅ Evento: Pedido Entregado.');
   order.status = 'delivered';
   order.delivery_date = webhookData.order?.delivery_time ? new Date(webhookData.order.delivery_time) : new Date();
   notificationEventType = 'delivered';
   orderUpdated = true;
+
+   console.log('📷 Procesando pruebas de entrega para proof_of_delivery...');
+
+  // 1. BUSCAR FOTOS en la estructura real del webhook
+  const photos = [];
+  
+  // Ubicación real según tu webhook: webhookData.order.podUrls
+  if (webhookData.order?.podUrls && Array.isArray(webhookData.order.podUrls)) {
+    photos.push(...webhookData.order.podUrls);
+    console.log(`📸 Fotos encontradas en order.podUrls: ${webhookData.order.podUrls.length}`, webhookData.order.podUrls);
+  }
+
+  // 2. BUSCAR FIRMA en la estructura real del webhook  
+  let signatureUrl = webhookData.order?.signatureUrl || null;
+  if (signatureUrl) {
+    console.log(`✍️ Firma encontrada:`, signatureUrl);
+  }
+
+  // 3. LIMPIAR Y VALIDAR FOTOS
+  const validPhotos = photos.filter(url => url && typeof url === 'string' && url.trim() !== '');
+
+  // 4. GUARDAR EN proof_of_delivery (estructura que busca tu frontend)
+  if (validPhotos.length > 0 || signatureUrl) {
+    
+    order.proof_of_delivery = {
+      photo_url: validPhotos[0] || null, // Primera foto como principal
+      signature_url: signatureUrl,
+      photos: validPhotos, // 🆕 Array completo de fotos
+      timestamp: new Date(),
+      notes: 'Entrega completada vía Shipday',
+      delivered_by: order.driver_info?.name || 'Conductor',
+      location: null // Puedes agregar ubicación si está disponible
+    };
+    
+    console.log('📸 ✅ PRUEBAS DE ENTREGA GUARDADAS EN proof_of_delivery:', {
+      evento: webhookData.event,
+      order_number: order.order_number,
+      fotos_count: validPhotos.length,
+      fotos_guardadas: validPhotos,
+      foto_principal: validPhotos[0] || null,
+      tiene_firma: !!signatureUrl,
+      firma_guardada: signatureUrl
+    });
+    
+  } else {
+    console.log('⚠️ No se encontraron pruebas de entrega en este webhook');
+    console.log('🔍 Debug webhook estructura:', {
+      tiene_order: !!webhookData.order,
+      order_podUrls: webhookData.order?.podUrls,
+      order_signatureUrl: webhookData.order?.signatureUrl
+    });
+  }
 
   // NUEVO: Registrar entrega en historial de conductores
   try {
