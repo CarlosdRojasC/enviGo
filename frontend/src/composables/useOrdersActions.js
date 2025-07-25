@@ -131,31 +131,26 @@ export function useOrdersActions(orders, newOrder, isCreatingOrder, fetchOrders)
       console.log('📦 Prepared order data:', orderData)
       
       // Create order
-   // 1. Crear la orden en la API
-      const response = await apiService.orders.create(orderData)
+   await apiService.orders.create(orderData);
       
-      // 2. La respuesta es la orden creada
-      const createdOrder = response.data
+      toast.success('✅ Pedido manual creado exitosamente. Actualizando lista...');
       
-      // 3. (IMPORTANTE) Añadir la nueva orden a la lista local
-      //    en lugar de llamar a fetchOrders(). Esto soluciona el error.
-      orders.value.unshift(createdOrder)
+      // 2. (LA CLAVE) Volver a pedir la lista completa de órdenes.
+      //    Esto asegura que la nueva orden venga con todos los datos poblados.
+      await fetchOrders();
       
-      toast.success(`✅ Pedido #${createdOrder.order_number} creado exitosamente`)
-      
-      // La función para resetear el formulario se debe llamar desde el componente
-      // que lo define, usualmente el de modales. Aquí devolvemos éxito.
-      return true // Indica que la creación fue exitosa
+      // 3. Devolver 'true' para que el componente sepa que debe cerrar el modal.
+      return true;
 
-    }catch (error) {
-      console.error('❌ Error creating order:', error)
-      const errorMessage = error.response?.data?.error || 'No se pudo crear el pedido.'
-      toast.error(errorMessage)
-      return false // Indica que falló
+    } catch (error) {
+      console.error('❌ Error creating order:', error);
+      const errorMessage = error.response?.data?.error || 'No se pudo crear el pedido.';
+      toast.error(errorMessage);
+      return false;
     } finally {
-      isCreatingOrder.value = false
+      isCreatingOrder.value = false;
     }
-  }
+  };
 
   /**
    * Handle order status update
