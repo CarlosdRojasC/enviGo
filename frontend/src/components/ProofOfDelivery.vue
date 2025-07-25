@@ -1,3 +1,4 @@
+// frontend/src/components/ProofOfDelivery.vue - COMPONENTE CORREGIDO
 
 <template>
   <div class="proof-container">
