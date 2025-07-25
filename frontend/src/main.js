@@ -5,6 +5,7 @@ import pinia from './store'
 import Toast, { useToast } from 'vue-toastification';
 import 'vue-toastification/dist/index.css';
 import wsManager from './services/websocket.service'
+import './assets/css/variables.css'
 
 // Importar tu store de auth
 import { useAuthStore } from './store/auth'

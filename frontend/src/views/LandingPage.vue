@@ -1,12 +1,13 @@
-<!-- frontend/src/views/LandingPage.vue -->
+<!-- frontend/src/views/LandingPage.vue - VERSIÓN CORREGIDA -->
 <template>
   <div class="landing-page">
     <!-- Navigation -->
     <nav class="navbar" :class="{ scrolled: isScrolled }">
       <div class="nav-container">
         <div class="logo">
-          <span>enviGo</span>
-          <span class="logo-subtitle">LOGISTICS</span>
+      <h2 class="logo">
+        <img class="imagelogo" src="../assets/favicon.png" alt="" srcset="">
+      </h2>
         </div>
         <ul class="nav-links">
           <li><a href="#inicio" @click="scrollTo('inicio')">Inicio</a></li>
@@ -29,12 +30,10 @@
           <p>Conecta tu e-commerce, automatiza entregas y optimiza tu operación logística con la plataforma todo-en-uno más completa de Chile. Gestión inteligente con conductores especializados.</p>
           <div class="hero-buttons">
             <a href="#contacto" class="btn-primary" @click="scrollTo('contacto')">
-              <i class="fas fa-motorcycle"></i>
-              Comenzar Gratis
+              🏍️ Comenzar Gratis
             </a>
             <a href="#funcionalidades" class="btn-secondary" @click="scrollTo('funcionalidades')">
-              <i class="fas fa-play"></i>
-              Ver Demo
+              ▶️ Ver Demo
             </a>
           </div>
         </div>
@@ -74,10 +73,9 @@
             class="feature-card" 
             v-for="feature in features" 
             :key="feature.title"
-            :class="{ 'fade-in-up': feature.visible }"
           >
             <div class="feature-icon">
-              <i :class="feature.icon"></i>
+              {{ feature.emoji }}
             </div>
             <h3 class="feature-title">{{ feature.title }}</h3>
             <p class="feature-description">{{ feature.description }}</p>
@@ -103,7 +101,7 @@
             :key="integration.name"
           >
             <div class="integration-logo">
-              <i :class="integration.icon"></i>
+              {{ integration.emoji }}
             </div>
             <div class="integration-name">{{ integration.name }}</div>
             <div class="integration-status" :class="integration.statusClass">
@@ -122,12 +120,10 @@
           <p>Únete a las empresas que ya están optimizando sus entregas con enviGo. Comienza con una demo gratuita y descubre el potencial de tu operación.</p>
           <div class="hero-buttons">
             <a href="mailto:contacto@envigo.cl" class="btn-primary">
-              <i class="fas fa-motorcycle"></i>
-              Solicitar Demo Gratuita
+              🏍️ Solicitar Demo Gratuita
             </a>
             <a href="tel:+56912345678" class="btn-secondary">
-              <i class="fas fa-phone"></i>
-              Llamar Ahora
+              📞 Llamar Ahora
             </a>
           </div>
         </div>
@@ -187,60 +183,54 @@ const demoStats = ref([
   { value: '2.3h', label: 'Tiempo Promedio' }
 ])
 
-// Datos de funcionalidades
+// Datos de funcionalidades usando emojis en lugar de FontAwesome
 const features = ref([
   {
-    icon: 'fas fa-sync-alt',
+    emoji: '🔄',
     title: 'Sincronización Automática',
     description: 'Conecta tu Shopify, WooCommerce o Mercado Libre y sincroniza pedidos automáticamente. Sin intervención manual, sin errores.',
-    tags: ['Shopify', 'WooCommerce', 'Mercado Libre'],
-    visible: false
+    tags: ['Shopify', 'WooCommerce', 'Mercado Libre']
   },
   {
-    icon: 'fas fa-route',
+    emoji: '🗺️',
     title: 'Gestión Inteligente de Rutas',
     description: 'Optimización automática de rutas para tus conductores. Reduce tiempos de entrega y costos operacionales hasta en un 40%.',
-    tags: ['Optimización IA', 'GPS Real-time', 'Multi-zona'],
-    visible: false
+    tags: ['Optimización IA', 'GPS Real-time', 'Multi-zona']
   },
   {
-    icon: 'fas fa-mobile-alt',
+    emoji: '📱',
     title: 'Seguimiento en Tiempo Real',
     description: 'Tus clientes reciben notificaciones automáticas y pueden seguir sus pedidos en tiempo real. Mejora la experiencia de entrega.',
-    tags: ['SMS/WhatsApp', 'Tracking Link', 'Notificaciones'],
-    visible: false
+    tags: ['SMS/WhatsApp', 'Tracking Link', 'Notificaciones']
   },
   {
-    icon: 'fas fa-camera',
+    emoji: '📷',
     title: 'Prueba de Entrega Digital',
     description: 'Fotos, firmas digitales y coordenadas GPS de cada entrega. Protección total contra reclamos y disputas.',
-    tags: ['Foto + Firma', 'Geolocalización', 'Timestamp'],
-    visible: false
+    tags: ['Foto + Firma', 'Geolocalización', 'Timestamp']
   },
   {
-    icon: 'fas fa-chart-line',
+    emoji: '📊',
     title: 'Analytics y Reportes',
     description: 'Dashboard completo con métricas de rendimiento, costos por entrega, y análisis de zonas más rentables.',
-    tags: ['KPIs Logísticos', 'Costos', 'Exportación'],
-    visible: false
+    tags: ['KPIs Logísticos', 'Costos', 'Exportación']
   },
   {
-    icon: 'fas fa-users',
+    emoji: '👥',
     title: 'Gestión Multi-empresa',
     description: 'Administra múltiples empresas desde una sola cuenta. Facturación separada, usuarios independientes y control total.',
-    tags: ['Multi-tenant', 'Roles', 'Facturación'],
-    visible: false
+    tags: ['Multi-tenant', 'Roles', 'Facturación']
   }
 ])
 
-// Datos de integraciones
+// Datos de integraciones usando emojis
 const integrations = ref([
-  { name: 'Shopify', icon: 'fab fa-shopify', status: '✅ Integración Completa', statusClass: 'available' },
-  { name: 'WooCommerce', icon: 'fab fa-wordpress', status: '✅ Integración Completa', statusClass: 'available' },
-  { name: 'Mercado Libre', icon: 'fas fa-shopping-cart', status: '🚀 Próximamente', statusClass: 'coming-soon' },
-  { name: 'Shipday', icon: 'fas fa-truck', status: '✅ API Integrada', statusClass: 'available' },
-  { name: 'Excel/CSV', icon: 'fas fa-file-excel', status: '✅ Importación Masiva', statusClass: 'available' },
-  { name: 'WhatsApp API', icon: 'fas fa-bell', status: '🚀 Próximamente', statusClass: 'coming-soon' }
+  { name: 'Shopify', emoji: '🛒', status: '✅ Integración Completa', statusClass: 'available' },
+  { name: 'WooCommerce', emoji: '🌐', status: '✅ Integración Completa', statusClass: 'available' },
+  { name: 'Mercado Libre', emoji: '🛍️', status: '🚀 Próximamente', statusClass: 'coming-soon' },
+  { name: 'Shipday', emoji: '🚚', status: '✅ API Integrada', statusClass: 'available' },
+  { name: 'Excel/CSV', emoji: '📄', status: '✅ Importación Masiva', statusClass: 'available' },
+  { name: 'WhatsApp API', emoji: '💬', status: '🚀 Próximamente', statusClass: 'coming-soon' }
 ])
 
 // Métodos
@@ -255,37 +245,9 @@ const handleScroll = () => {
   isScrolled.value = window.scrollY > 50
 }
 
-// Intersection Observer para animaciones
-const setupIntersectionObserver = () => {
-  const observer = new IntersectionObserver((entries) => {
-    entries.forEach(entry => {
-      if (entry.isIntersecting) {
-        entry.target.classList.add('fade-in-up')
-      }
-    })
-  }, { threshold: 0.1 })
-
-  // Observar elementos para animación
-  setTimeout(() => {
-    document.querySelectorAll('.feature-card, .integration-card').forEach(el => {
-      observer.observe(el)
-    })
-  }, 100)
-}
-
 // Lifecycle hooks
 onMounted(() => {
   window.addEventListener('scroll', handleScroll)
-  setupIntersectionObserver()
-  
-  // Actualizar estadísticas cada 5 segundos
-  const interval = setInterval(() => {
-    demoStats.value[0].value = (Math.floor(Math.random() * 100) + 1200).toLocaleString()
-  }, 5000)
-  
-  onUnmounted(() => {
-    clearInterval(interval)
-  })
 })
 
 onUnmounted(() => {
@@ -294,10 +256,21 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-/* Importar todos los estilos del HTML anterior */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
-@import url('https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css');
+/* Reset y Variables */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
 
+.landing-page {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  line-height: 1.6;
+  color: #2C2C2C;
+  overflow-x: hidden;
+}
+
+/* Variables CSS */
 :root {
   --primary: #8BC53F;
   --primary-dark: #7AB32E;
@@ -308,24 +281,6 @@ onUnmounted(() => {
   --gray: #64748B;
   --gray-light: #F1F5F9;
   --white: #FFFFFF;
-  --gradient: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
-  --gradient-dark: linear-gradient(135deg, var(--accent) 0%, var(--primary-dark) 100%);
-  --shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
-  --shadow-hover: 0 20px 40px rgba(0, 0, 0, 0.15);
-  --shadow-green: 0 10px 25px rgba(139, 197, 63, 0.2);
-}
-
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
-
-.landing-page {
-  font-family: 'Inter', sans-serif;
-  line-height: 1.6;
-  color: var(--dark);
-  overflow-x: hidden;
 }
 
 /* Navigation */
@@ -342,7 +297,7 @@ onUnmounted(() => {
 
 .navbar.scrolled {
   background: rgba(255, 255, 255, 0.98);
-  box-shadow: var(--shadow);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
 .nav-container {
@@ -355,21 +310,18 @@ onUnmounted(() => {
 }
 
 .logo {
-  font-size: 1.8rem;
-  font-weight: 800;
-  color: var(--primary);
   display: flex;
-  align-items: center;
-  gap: 0.5rem;
   flex-direction: column;
+  align-items: center;
   line-height: 1;
 }
 
-.logo-subtitle {
-  font-size: 0.8rem;
-  color: var(--gray);
-  font-weight: 400;
+.imagelogo {
+  width: 160px;
+  height: auto;
+  filter: drop-shadow(0 0 4px rgba(0, 255, 128, 0.2));
 }
+
 
 .nav-links {
   display: flex;
@@ -407,19 +359,19 @@ onUnmounted(() => {
 }
 
 .cta-button {
-  background: var(--gradient);
+  background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
   color: white;
   padding: 0.75rem 1.5rem;
   border-radius: 50px;
   text-decoration: none;
   font-weight: 600;
   transition: all 0.3s ease;
-  box-shadow: var(--shadow);
+  box-shadow: 0 4px 12px rgba(139, 197, 63, 0.3);
 }
 
 .cta-button:hover {
   transform: translateY(-2px);
-  box-shadow: var(--shadow-hover);
+  box-shadow: 0 8px 20px rgba(139, 197, 63, 0.4);
 }
 
 /* Hero Section */
@@ -430,6 +382,18 @@ onUnmounted(() => {
   align-items: center;
   position: relative;
   overflow: hidden;
+  padding-top: 80px;
+}
+
+.hero::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: radial-gradient(circle at 20% 20%, rgba(139, 197, 63, 0.1) 0%, transparent 50%),
+              radial-gradient(circle at 80% 80%, rgba(164, 214, 94, 0.1) 0%, transparent 50%);
 }
 
 .hero-container {
@@ -453,7 +417,7 @@ onUnmounted(() => {
 }
 
 .hero-content .highlight {
-  background: var(--gradient);
+  background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -473,14 +437,14 @@ onUnmounted(() => {
 }
 
 .btn-primary {
-  background: var(--gradient);
+  background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
   color: white;
   padding: 1rem 2rem;
   border-radius: 50px;
   text-decoration: none;
   font-weight: 600;
   transition: all 0.3s ease;
-  box-shadow: var(--shadow);
+  box-shadow: 0 4px 12px rgba(139, 197, 63, 0.3);
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
@@ -488,7 +452,7 @@ onUnmounted(() => {
 
 .btn-primary:hover {
   transform: translateY(-3px);
-  box-shadow: var(--shadow-green);
+  box-shadow: 0 8px 20px rgba(139, 197, 63, 0.4);
 }
 
 .btn-secondary {
@@ -560,10 +524,10 @@ onUnmounted(() => {
 }
 
 .stat-card {
-  background: rgba(139, 197, 63, 0.1);
+  background: rgba(139, 197, 63, 0.15);
   padding: 1rem;
   border-radius: 8px;
-  border: 1px solid rgba(139, 197, 63, 0.2);
+  border: 1px solid rgba(139, 197, 63, 0.3);
 }
 
 .stat-number {
@@ -578,10 +542,10 @@ onUnmounted(() => {
 }
 
 .sync-status {
-  background: rgba(139, 197, 63, 0.1);
+  background: rgba(139, 197, 63, 0.15);
   padding: 1rem;
   border-radius: 8px;
-  border-left: 3px solid #8BC53F;
+  border-left: 3px solid var(--primary);
 }
 
 /* Features Section */
@@ -625,7 +589,7 @@ onUnmounted(() => {
   background: white;
   padding: 2.5rem;
   border-radius: 20px;
-  box-shadow: var(--shadow);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
   transition: all 0.3s ease;
   border: 1px solid #F1F5F9;
   position: relative;
@@ -639,24 +603,23 @@ onUnmounted(() => {
   left: 0;
   right: 0;
   height: 4px;
-  background: var(--gradient);
+  background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
 }
 
 .feature-card:hover {
   transform: translateY(-10px);
-  box-shadow: var(--shadow-hover);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
 }
 
 .feature-icon {
   width: 60px;
   height: 60px;
-  background: var(--gradient);
+  background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
   border-radius: 15px;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 1.5rem;
-  color: white;
   margin-bottom: 1.5rem;
 }
 
@@ -706,26 +669,25 @@ onUnmounted(() => {
   padding: 2rem;
   border-radius: 15px;
   text-align: center;
-  box-shadow: var(--shadow);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
   transition: all 0.3s ease;
   border: 1px solid #E2E8F0;
 }
 
 .integration-card:hover {
   transform: translateY(-5px);
-  box-shadow: var(--shadow-hover);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
 }
 
 .integration-logo {
   width: 60px;
   height: 60px;
-  background: var(--gradient);
+  background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
   border-radius: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 1.5rem;
-  color: white;
   margin: 0 auto 1rem;
 }
 
@@ -754,6 +716,17 @@ onUnmounted(() => {
   background: var(--dark);
   position: relative;
   overflow: hidden;
+}
+
+.cta-section::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: radial-gradient(circle at 10% 80%, rgba(139, 197, 63, 0.1) 0%, transparent 50%),
+              radial-gradient(circle at 90% 20%, rgba(164, 214, 94, 0.1) 0%, transparent 50%);
 }
 
 .cta-content {
@@ -812,6 +785,11 @@ onUnmounted(() => {
   color: var(--primary);
 }
 
+.footer-section p {
+  color: #94A3B8;
+  line-height: 1.6;
+}
+
 .footer-bottom {
   text-align: center;
   padding-top: 2rem;
@@ -850,6 +828,14 @@ onUnmounted(() => {
     display: none;
   }
 
+  .nav-container {
+    justify-content: center;
+  }
+
+  .hero {
+    padding-top: 100px;
+  }
+
   .hero-container {
     grid-template-columns: 1fr;
     gap: 2rem;
@@ -872,10 +858,6 @@ onUnmounted(() => {
     grid-template-columns: 1fr;
   }
 
-  .nav-container {
-    justify-content: center;
-  }
-
   .cta-content h2 {
     font-size: 2rem;
   }
@@ -883,5 +865,132 @@ onUnmounted(() => {
   .section-title {
     font-size: 2rem;
   }
+
+  .container {
+    padding: 0 1rem;
+  }
+
+  .logo {
+    flex-direction: row;
+    gap: 0.5rem;
+    align-items: center;
+  }
+
+  .logo-main {
+    font-size: 1.5rem;
+  }
+
+  .logo-subtitle {
+    font-size: 0.6rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .hero-content h1 {
+    font-size: 2rem;
+  }
+
+  .hero-content p {
+    font-size: 1rem;
+  }
+
+  .btn-primary,
+  .btn-secondary {
+    padding: 0.75rem 1.5rem;
+    font-size: 0.9rem;
+  }
+
+  .feature-card {
+    padding: 2rem;
+  }
+
+  .section-title {
+    font-size: 1.75rem;
+  }
+
+  .cta-content h2 {
+    font-size: 1.75rem;
+  }
+
+  .dashboard-preview {
+    padding: 1.5rem;
+  }
+
+  .stat-card {
+    padding: 0.75rem;
+  }
+
+  .stat-number {
+    font-size: 1.25rem;
+  }
+}
+
+/* Importar Google Fonts */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+/* Asegurar que los estilos tomen precedencia */
+.landing-page * {
+  box-sizing: border-box;
+}
+
+/* Fix para Safari */
+@supports (-webkit-backdrop-filter: blur(20px)) {
+  .navbar {
+    -webkit-backdrop-filter: blur(20px);
+  }
+  
+  .dashboard-preview {
+    -webkit-backdrop-filter: blur(20px);
+  }
+}
+
+/* Mejora de contraste para accesibilidad */
+.nav-links a:focus,
+.cta-button:focus,
+.btn-primary:focus,
+.btn-secondary:focus {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+/* Asegurar que los gradientes funcionen en todos los navegadores */
+.highlight {
+  background: linear-gradient(135deg, #8BC53F 0%, #A4D65E 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  /* Fallback para navegadores que no soportan background-clip */
+  color: #8BC53F;
+}
+
+/* Fix específico para elementos que no cargan colores */
+.feature-icon,
+.integration-logo,
+.btn-primary,
+.cta-button {
+  background: #8BC53F !important;
+  background: linear-gradient(135deg, #8BC53F 0%, #A4D65E 100%) !important;
+}
+
+/* Asegurar que los hover effects funcionen */
+.feature-card:hover,
+.integration-card:hover,
+.btn-primary:hover,
+.cta-button:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 8px 25px rgba(139, 197, 63, 0.3);
+}
+
+/* Fix para el logo */
+.logo-main {
+  color: #8BC53F !important;
+}
+
+/* Asegurar que el texto sea legible */
+.hero-content h1,
+.hero-content p,
+.cta-content h2,
+.cta-content p {
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 </style>
