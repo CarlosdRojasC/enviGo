@@ -20,9 +20,9 @@
   :filters="filters"
   :advanced-filters="advancedFilters"
   :filters-u-i="filtersUI"
+  :companies="[]"
   :channels="channels"
   :available-communes="availableCommunes"
-  :filtered-communes="filteredCommunes"
   :filter-presets="filterPresets"
   :active-filters-count="activeFiltersCount"
   :is-admin="false"
@@ -917,7 +917,7 @@ onMounted(async () => {
     // El backend ya debería saber qué pedidos mostrar basado en el token del usuario.
     await fetchOrders();
     lastUpdate.value = Date.now();
-
+await fetchAvailableCommunes();
     // 2. Configuramos los listeners de tiempo real.
     // No dependen de que los canales o comunas estén cargados.
     window.addEventListener('orderUpdated', handleOrderUpdate);
