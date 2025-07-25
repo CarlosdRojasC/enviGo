@@ -529,18 +529,22 @@ function selectSearchResult(result) {
   searchFocused.value = false;
   searchQuery.value = '';
   searchResults.value = [];
-  
-  // Si el resultado tiene un ID, emitimos un evento para abrir el modal.
-  if (result && result.id) {
-    console.log(`Event emitted: open-order-details with ID: ${result.id}`);
-    emitter.emit('open-order-details', result.id);
+
+  // Si el resultado es un pedido con un ID
+  if (result && result.type === 'orders' && result.id) {
+    console.log(`🚀 Navegando a órdenes y solicitando modal para ID: ${result.id}`);
+
+    // Navegamos a la página de órdenes y añadimos un query param
+    router.push({
+      path: '/app/admin/orders',
+      query: { open_order: result.id } // <-- Parámetro clave
+    });
+
+  } else if (result && result.route) {
+    // Si es otro tipo de resultado (ej. empresa), usamos la navegación normal
+    router.push(result.route);
   } else {
-    // Si no tiene ID (ej. es una empresa), usamos la navegación normal.
-    if (result && result.route) {
-        router.push(result.route);
-    } else {
-        console.warn('El resultado no tiene ID ni ruta para la acción.', result);
-    }
+    console.warn('⚠️ El resultado no tiene ID ni ruta para la acción.', result);
   }
 }
 
