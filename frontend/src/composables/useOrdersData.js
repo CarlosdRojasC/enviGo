@@ -3,6 +3,7 @@ import { ref, computed } from 'vue'
 import { useToast } from 'vue-toastification'
 import { apiService } from '../services/api'
 import { useAuthStore } from '../store/auth'
+import { logger } from '../services/logger.service'
 
 export function useOrdersData() {
   const toast = useToast()
@@ -79,7 +80,7 @@ export function useOrdersData() {
       if (key === 'company_id' || key === 'channel_id') {
         const objectIdRegex = /^[0-9a-fA-F]{24}$/
         if (!objectIdRegex.test(value)) {
-          console.error(`❌ ${key} inválido ignorado:`, value)
+          logger.error(`❌ ${key} inválido ignorado:`, value)
           return // Skip este filtro inválido
         }
       }
@@ -88,7 +89,7 @@ export function useOrdersData() {
       if (key === 'date_from' || key === 'date_to') {
         const date = new Date(value)
         if (isNaN(date.getTime())) {
-          console.error(`❌ ${key} fecha inválida ignorada:`, value)
+          logger.error(`❌ ${key} fecha inválida ignorada:`, value)
           return // Skip fecha inválida
         }
       }
@@ -116,7 +117,7 @@ export function useOrdersData() {
       cleaned[key] = value
     })
     
-    console.log('🧹 Filtros limpiados:', cleaned)
+    logger.debug('🧹 Filtros limpiados:', logger.sanitize(cleaned))
     return cleaned
   }
 
@@ -129,9 +130,9 @@ export function useOrdersData() {
     try {
       const { data } = await apiService.companies.getAll()
       companies.value = data || []
-      console.log('🏢 Empresas cargadas:', companies.value.length)
+      logger.success('🏢 Empresas cargadas:', companies.value.length)
     } catch (error) {
-      console.error('❌ Error fetching companies:', error)
+      logger.error('❌ Error fetching companies:', error.message)
       toast.error('Error al cargar las empresas')
       companies.value = []
     }
@@ -154,7 +155,7 @@ export function useOrdersData() {
         ...cleanedFilters
       }
       
-      console.log('📊 Fetching orders with cleaned params:', params)
+      logger.debug('📊 Fetching orders with cleaned params:', logger.sanitize(params))
       
       const { data } = await apiService.orders.getAll(params)
 
@@ -188,7 +189,7 @@ export function useOrdersData() {
       // ✅ CALCULAR ESTADÍSTICAS
       calculateAdditionalStats()
       
-      console.log('✅ Orders loaded:', {
+      logger.success('✅ Orders loaded:', {
         count: orders.value.length,
         total: pagination.value.total,
         page: pagination.value.page,
@@ -196,11 +197,11 @@ export function useOrdersData() {
       })
       
     } catch (error) {
-      console.error('❌ Error fetching orders:', error)
+      logger.error('❌ Error fetching orders:', error.message)
       
       // Debug del error específico
       if (error.response?.data?.details) {
-        console.error('Error details:', error.response.data.details)
+        logger.debug('Error details:', error.response.data.details)
       }
       
       toast.error('Error al cargar los pedidos: ' + (error.response?.data?.error || error.message))
@@ -219,19 +220,19 @@ export function useOrdersData() {
   async function fetchChannels() {
     try {
       if (!companyId.value) {
-        console.warn('⚠️ No company ID available for fetching channels')
+        logger.warn('⚠️ No company ID available for fetching channels')
         return
       }
 
-      console.log('🏪 Fetching channels for company:', companyId.value)
+      logger.dev('🏪 Fetching channels for company:', companyId.value)
       
       const { data } = await apiService.channels.getByCompany(companyId.value)
       channels.value = data || []
       
-      console.log(`✅ Loaded ${channels.value.length} channels`)
+      logger.success(`✅ Loaded ${channels.value.length} channels`)
       
     } catch (err) {
-      console.error('❌ Error fetching channels:', err)
+      logger.error('❌ Error fetching channels:', err.message)
       // No mostramos toast aquí porque es información secundaria
       channels.value = []
     }
@@ -244,7 +245,7 @@ export function useOrdersData() {
     if (page >= 1 && page <= pagination.value.totalPages) {
       pagination.value.page = page
       fetchOrders(dataCache.value.lastFilters || {})
-      console.log('📄 Changed to page:', page)
+      logger.dev('📄 Changed to page:', page)
     }
   }
 
@@ -255,7 +256,7 @@ export function useOrdersData() {
     pagination.value.limit = parseInt(newLimit)
     pagination.value.page = 1 // Reset to first page
     fetchOrders(dataCache.value.lastFilters || {})
-    console.log('📏 Changed page size to:', newLimit)
+    logger.dev('📏 Changed page size to:', newLimit)
   }
 
   /**
@@ -294,7 +295,7 @@ export function useOrdersData() {
     const index = orders.value.findIndex(o => o._id === updatedOrder._id)
     if (index !== -1) {
       orders.value[index] = { ...orders.value[index], ...updatedOrder }
-      console.log('✅ Orden actualizada localmente:', updatedOrder.order_number)
+      logger.dev('✅ Orden actualizada localmente:', updatedOrder.order_number)
     }
   }
 
@@ -306,7 +307,7 @@ export function useOrdersData() {
     if (index !== -1) {
       orders.value.splice(index, 1)
       pagination.value.total = Math.max(0, pagination.value.total - 1)
-      console.log('🗑️ Order removed locally:', orderId)
+      logger.dev('🗑️ Order removed locally:', orderId)
     }
   }
 
@@ -316,7 +317,7 @@ export function useOrdersData() {
   function addOrderLocally(order) {
     orders.value.unshift(order) // Add to beginning
     pagination.value.total += 1
-    console.log('➕ Order added locally:', order._id)
+    logger.dev('➕ Order added locally:', order._id)
   }
 
   /**
@@ -392,7 +393,7 @@ export function useOrdersData() {
       await apiService.orders.exportForDashboard(filters)
       toast.success('Export iniciado')
     } catch (error) {
-      console.error('Error exporting orders:', error)
+      logger.error('Error exporting orders:', error.message)
       toast.error('Error al exportar pedidos')
     } finally {
       loadingStates.value.exporting = false
@@ -414,7 +415,7 @@ export function useOrdersData() {
       
       toast.success(`${orderIds.length} pedidos marcados como listos`)
     } catch (error) {
-      console.error('Error marking multiple as ready:', error)
+      logger.error('Error marking multiple as ready:', error.message)
       toast.error('Error al marcar pedidos como listos')
     } finally {
       loadingStates.value.updating = false
@@ -439,7 +440,7 @@ export function useOrdersData() {
       toast.success(`🏭 Pedido #${order.order_number} marcado como listo`)
       return response.data
     } catch (error) {
-      console.error('Error marking as ready:', error)
+      logger.error('Error marking as ready:', error.message)
       toast.error('❌ Error al marcar como listo')
       throw error
     } finally {
@@ -465,7 +466,7 @@ export function useOrdersData() {
       toast.success(`📦 Pedido #${order.order_number} recibido en bodega`)
       return response.data
     } catch (error) {
-      console.error('Error marking as warehouse received:', error)
+      logger.error('Error marking as warehouse received:', error.message)
       toast.error('❌ Error al marcar como recibido')
       throw error
     } finally {
@@ -491,7 +492,7 @@ export function useOrdersData() {
       toast.success(`🚚 Pedido #${order.order_number} salió para entrega`)
       return response.data
     } catch (error) {
-      console.error('Error marcando como enviado:', error)
+      logger.error('Error marcando como enviado:', error.message)
       toast.error('❌ Error al enviar pedido')
       throw error
     } finally {

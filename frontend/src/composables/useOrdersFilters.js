@@ -2,6 +2,7 @@
 import { ref, computed, watch } from 'vue'
 import { useToast } from 'vue-toastification'
 import { apiService } from '../services/api'
+import { logger } from '../services/logger.service'
 
 export function useOrdersFilters(orders, fetchOrders, options = {}) {
   const toast = useToast()
@@ -138,7 +139,7 @@ export function useOrdersFilters(orders, fetchOrders, options = {}) {
   async function fetchAvailableCommunes(companyId = null) {
     try {
       loadingCommunes.value = true
-      console.log('🏘️ Fetching available communes for company:', companyId)
+      logger.dev('🏘️ Fetching available communes for company:', companyId)
       
       const params = {}
       if (companyId) {
@@ -147,18 +148,18 @@ export function useOrdersFilters(orders, fetchOrders, options = {}) {
       
       const response = await apiService.orders.getAvailableCommunes(params)
       
-      console.log('📡 Communes API response:', response)
+      logger.debug('📡 Communes API response:', response)
       
       if (response.data && response.data.communes) {
         availableCommunes.value = response.data.communes
-        console.log('✅ Communes loaded:', availableCommunes.value.length)
+        logger.success('✅ Communes loaded:', availableCommunes.value.length)
       } else {
         availableCommunes.value = []
-        console.warn('⚠️ No communes data received:', response.data)
+        logger.warn('⚠️ No communes data received:', response.data)
       }
       
     } catch (error) {
-      console.error('❌ Error fetching communes:', error)
+      logger.error('❌ Error fetching communes:', error)
       availableCommunes.value = []
       
       // Mostrar toast solo si es un error crítico
@@ -174,13 +175,13 @@ export function useOrdersFilters(orders, fetchOrders, options = {}) {
    * ✅ HANDLE FILTER CHANGE CON VALIDACIÓN
    */
   const handleFilterChange = async (key, value) => {
-    console.log(`🔄 handleFilterChange: ${key} = ${value} (tipo: ${typeof value})`)
+    logger.dev(`🔄 handleFilterChange: ${key} = ${value} (tipo: ${typeof value})`)
     
     // ✅ VALIDAR ObjectIds antes de aplicar
     if ((key === 'company_id' || key === 'channel_id') && value && value !== '') {
       const objectIdRegex = /^[0-9a-fA-F]{24}$/
       if (!objectIdRegex.test(value)) {
-        console.error(`❌ ${key} inválido:`, value)
+        logger.error(`❌ ${key} inválido:`, value)
         toast.error(`ID de ${key === 'company_id' ? 'empresa' : 'canal'} inválido`)
         return
       }
@@ -202,12 +203,12 @@ export function useOrdersFilters(orders, fetchOrders, options = {}) {
     
     // ✅ SI CAMBIA LA EMPRESA, RECARGAR COMUNAS
     if (key === 'company_id') {
-      console.log('🏢 Company filter changed, reloading communes...')
+      logger.dev('🏢 Company filter changed, reloading communes...')
       await fetchAvailableCommunes(cleanValue || null)
     }
     
     // ✅ DEBUG
-    console.log('🧹 Filtros después del cambio:', filters.value)
+    logger.debug('🧹 Filtros después del cambio:', filters.value)
     
     // ✅ APLICAR FILTROS
     applyFilters()
@@ -217,7 +218,7 @@ export function useOrdersFilters(orders, fetchOrders, options = {}) {
    * Apply filters with debounce for search
    */
   function applyFilters() {
-    console.log('🎯 Applying filters:', filters.value)
+    logger.debug('🎯 Applying filters:', filters.value)
     
     const cleanFilters = {}
     
@@ -232,7 +233,7 @@ export function useOrdersFilters(orders, fetchOrders, options = {}) {
       }
     })
     
-    console.log('📡 Sending filters to backend:', cleanFilters)
+    logger.debug('📡 Sending filters to backend:', cleanFilters)
     
     // Llamar fetchOrders con los filtros limpios
     if (fetchOrders) {
@@ -244,7 +245,7 @@ export function useOrdersFilters(orders, fetchOrders, options = {}) {
    * ✅ RESET FILTERS MEJORADO
    */
   const resetFilters = async () => {
-    console.log('🧹 Limpiando todos los filtros...')
+    logger.dev('🧹 Limpiando todos los filtros...')
     
     // Limpiar filtros básicos
     Object.keys(filters.value).forEach(key => {
@@ -260,7 +261,7 @@ export function useOrdersFilters(orders, fetchOrders, options = {}) {
       advancedFilters.value[key] = ''
     })
     
-    console.log('✅ Filtros limpiados:', filters.value)
+    logger.dev('✅ Filtros limpiados:', filters.value)
     
     applyFilters()
     toast.success('Filtros limpiados correctamente')
@@ -295,7 +296,7 @@ export function useOrdersFilters(orders, fetchOrders, options = {}) {
    */
   function toggleAdvancedFilters() {
     filtersUI.value.showAdvanced = !filtersUI.value.showAdvanced
-    console.log('🔧 Advanced filters toggled:', filtersUI.value.showAdvanced)
+    logger.debug('🔧 Advanced filters toggled:', filtersUI.value.showAdvanced)
   }
 
   /**
@@ -315,7 +316,7 @@ export function useOrdersFilters(orders, fetchOrders, options = {}) {
     const preset = filterPresets.value.find(p => p.id === presetId)
     if (!preset) return
     
-    console.log('🎯 Applying preset:', preset.name)
+    logger.dev('🎯 Applying preset:', preset.name)
     
     // Resetear filtros
     resetFilters()
@@ -363,14 +364,14 @@ export function useOrdersFilters(orders, fetchOrders, options = {}) {
    * ✅ Agregar comuna al filtro
    */
   function addCommune(commune) {
-    console.log('🏘️ Agregando comuna:', commune)
+    logger.dev('🏘️ Agregando comuna:', commune)
     
     if (!filters.value.shipping_commune.includes(commune)) {
       filters.value.shipping_commune.push(commune)
-      console.log('✅ Comunas actuales:', filters.value.shipping_commune)
+      logger.debug('✅ Comunas actuales:', filters.value.shipping_commune)
       applyFilters()
     } else {
-      console.log('⚠️ Comuna ya existe:', commune)
+      logger.debug('⚠️ Comuna ya existe:', commune)
     }
   }
 
@@ -378,13 +379,13 @@ export function useOrdersFilters(orders, fetchOrders, options = {}) {
    * ✅ Remover comuna del filtro
    */
   function removeCommune(communeToRemove) {
-    console.log('❌ Removiendo comuna:', communeToRemove)
+    logger.dev('❌ Removiendo comuna:', communeToRemove)
     
     filters.value.shipping_commune = filters.value.shipping_commune.filter(
       commune => commune !== communeToRemove
     )
     
-    console.log('📊 Comunas restantes:', filters.value.shipping_commune)
+    logger.debug('📊 Comunas restantes:', filters.value.shipping_commune)
     applyFilters()
   }
 
@@ -407,7 +408,7 @@ export function useOrdersFilters(orders, fetchOrders, options = {}) {
     () => filters.value.company_id,
     (newCompanyId) => {
       if (newCompanyId) {
-        console.log('🏢 Company filter changed, refreshing communes')
+        logger.dev('🏢 Company filter changed, refreshing communes')
         fetchAvailableCommunes(newCompanyId)
       }
     }
@@ -418,7 +419,7 @@ export function useOrdersFilters(orders, fetchOrders, options = {}) {
     [() => filters.value.date_from, () => filters.value.date_to],
     () => {
       if (!validateDateRange()) {
-        console.warn('⚠️ Invalid date range detected')
+        logger.warn('⚠️ Invalid date range detected')
       }
     }
   )
