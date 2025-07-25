@@ -870,23 +870,27 @@ function getChannelSyncStatus(channel) {
   }
 }
 const isFormValid = computed(() => {
+  // Validaciones básicas siempre requeridas
   if (!channelData.value.channel_type) return false
   if (!channelData.value.channel_name?.trim()) return false
-  if (!channelData.value.store_url?.trim()) return false
   
   // Para admin, también validar empresa
   if (isAdmin.value && !channelData.value.company_id) return false
-
+  
+  // ✅ PRIMERO: Verificar Tienda General (solo necesita nombre y tipo)
   if (channelData.value.channel_type === 'general_store') {
-    return true
+    return true // Ya validamos tipo, nombre y empresa (si es admin)
   }
   
-  // Para canales que NO son MercadoLibre, validar credenciales
-  if (channelData.value.channel_type !== 'mercadolibre' ) {
-    if (!channelData.value.api_key?.trim()) return false
-    if (!channelData.value.api_secret?.trim()) return false
+  // ✅ SEGUNDO: Para MercadoLibre (necesita store_url pero no credenciales)
+  if (channelData.value.channel_type === 'mercadolibre') {
+    return !!channelData.value.store_url?.trim()
   }
-
+  
+  // ✅ TERCERO: Para otros canales (Shopify, WooCommerce) - necesitan todo
+  if (!channelData.value.store_url?.trim()) return false
+  if (!channelData.value.api_key?.trim()) return false
+  if (!channelData.value.api_secret?.trim()) return false
   
   return true
 })
