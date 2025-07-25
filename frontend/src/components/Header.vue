@@ -1,74 +1,212 @@
-<!-- frontend/src/components/Header.vue -->
+<!-- frontend/src/components/Header.vue - VERSIÓN OPTIMIZADA -->
 <template>
-  <header class="header">
+  <header class="header" :class="{ 'header-scrolled': isScrolled }">
     <div class="header-content">
-      <!-- Título dinámico basado en la ruta actual -->
+      <!-- Left Section - Breadcrumbs y título dinámico -->
       <div class="header-left">
-        <h1 class="page-title">{{ pageTitle }}</h1>
-        <div class="breadcrumb" v-if="breadcrumbs.length > 0">
-          <span v-for="(crumb, index) in breadcrumbs" :key="index">
-            <router-link v-if="crumb.path" :to="crumb.path" class="breadcrumb-link">
-              {{ crumb.name }}
-            </router-link>
-            <span v-else class="breadcrumb-current">{{ crumb.name }}</span>
-            <span v-if="index < breadcrumbs.length - 1" class="breadcrumb-separator">/</span>
-          </span>
+        <div class="page-info">
+          <h1 class="page-title">{{ pageTitle }}</h1>
+          <div class="breadcrumb" v-if="breadcrumbs.length > 0">
+            <span v-for="(crumb, index) in breadcrumbs" :key="index">
+              <router-link v-if="crumb.path" :to="crumb.path" class="breadcrumb-link">
+                {{ crumb.name }}
+              </router-link>
+              <span v-else class="breadcrumb-current">{{ crumb.name }}</span>
+              <span v-if="index < breadcrumbs.length - 1" class="breadcrumb-separator">/</span>
+            </span>
+          </div>
+        </div>
+        
+        <!-- Estadísticas rápidas dinámicas -->
+        <div class="quick-stats" v-if="quickStats.length > 0">
+          <div 
+            v-for="stat in quickStats" 
+            :key="stat.key" 
+            class="quick-stat-item"
+            :class="{ updated: stat.updated }"
+          >
+            <span class="stat-icon">{{ stat.icon }}</span>
+            <span class="stat-value">{{ stat.value }}</span>
+            <span class="stat-label">{{ stat.label }}</span>
+          </div>
         </div>
       </div>
 
-      <!-- Acciones del header -->
-      <div class="header-right">
-        <!-- Notificaciones -->
-        <div class="header-item notifications" @click="toggleNotifications">
-          <div class="notification-icon">
-            <i class="fas fa-bell"></i>
-            <span v-if="unreadCount > 0" class="notification-badge">{{ unreadCount }}</span>
+      <!-- Center Section - Barra de búsqueda global -->
+      <div class="header-center">
+        <div class="global-search" v-if="showSearch">
+          <div class="search-input-container">
+            <i class="search-icon">🔍</i>
+            <input
+              v-model="searchQuery"
+              @input="debouncedSearch"
+              @focus="searchFocused = true"
+              @blur="handleSearchBlur"
+              class="search-input"
+              placeholder="Buscar pedidos, canales, clientes..."
+              autocomplete="off"
+            />
+            <button v-if="searchQuery" @click="clearSearch" class="clear-search">×</button>
           </div>
           
-          <!-- Dropdown de notificaciones -->
-          <div v-if="showNotifications" class="notifications-dropdown">
-            <div class="notifications-header">
-              <h3>Notificaciones</h3>
-              <button @click="markAllAsRead" class="mark-all-read">Marcar todas como leídas</button>
-            </div>
-            <div class="notifications-list">
+          <!-- Resultados de búsqueda -->
+          <div v-if="searchResults.length > 0 && searchFocused" class="search-results">
+            <div class="search-category" v-for="category in groupedResults" :key="category.type">
+              <div class="category-header">{{ category.label }}</div>
               <div 
-                v-for="notification in notifications" 
-                :key="notification.id"
-                class="notification-item"
-                :class="{ unread: !notification.read }"
+                v-for="result in category.items" 
+                :key="result.id"
+                @click="selectSearchResult(result)"
+                class="search-result-item"
               >
-                <div class="notification-icon-small">
-                  <i :class="getNotificationIcon(notification.type)"></i>
+                <span class="result-icon">{{ result.icon }}</span>
+                <div class="result-content">
+                  <div class="result-title">{{ result.title }}</div>
+                  <div class="result-subtitle">{{ result.subtitle }}</div>
                 </div>
-                <div class="notification-content">
-                  <p class="notification-message">{{ notification.message }}</p>
-                  <span class="notification-time">{{ formatTime(notification.createdAt) }}</span>
-                </div>
-              </div>
-              
-              <div v-if="notifications.length === 0" class="no-notifications">
-                <i class="fas fa-bell-slash"></i>
-                <p>No hay notificaciones</p>
+                <span class="result-action">→</span>
               </div>
             </div>
           </div>
         </div>
+      </div>
 
-        <!-- Información del usuario -->
-        <div class="header-item user-info">
-          <div class="user-avatar">
+      <!-- Right Section - Notificaciones y usuario -->
+      <div class="header-right">
+        <!-- Estado de conexión en tiempo real -->
+        <div class="connection-status" :class="connectionStatusClass">
+          <div class="status-dot" :class="{ pulsing: isConnected }"></div>
+          <span class="status-text">{{ connectionStatusText }}</span>
+        </div>
+
+        <!-- Notificaciones -->
+        <div class="notifications-container">
+          <button 
+            @click="toggleNotifications" 
+            class="notifications-trigger"
+            :class="{ active: showNotifications }"
+          >
+            <div class="notification-icon">
+              <i class="icon">🔔</i>
+              <span v-if="unreadCount > 0" class="notification-badge" :class="{ pulse: hasNewNotifications }">
+                {{ unreadCount > 99 ? '99+' : unreadCount }}
+              </span>
+            </div>
+          </button>
+
+          <!-- Panel de notificaciones -->
+          <teleport to="body">
+            <div 
+              v-if="showNotifications" 
+              class="notifications-panel-overlay"
+              @click="showNotifications = false"
+            >
+              <div class="notifications-panel" @click.stop>
+                <div class="notifications-header">
+                  <h3>Notificaciones</h3>
+                  <div class="header-actions">
+                    <button @click="markAllAsRead" class="mark-all-read" :disabled="unreadCount === 0">
+                      Marcar todas como leídas
+                    </button>
+                    <button @click="showNotifications = false" class="close-panel">×</button>
+                  </div>
+                </div>
+                
+                <div class="notifications-content">
+                  <div v-if="loading" class="notifications-loading">
+                    <div class="loading-spinner"></div>
+                    <span>Cargando notificaciones...</span>
+                  </div>
+                  
+                  <div v-else-if="notifications.length === 0" class="no-notifications">
+                    <i class="empty-icon">🔕</i>
+                    <p>No hay notificaciones</p>
+                  </div>
+                  
+                  <div v-else class="notifications-list">
+                    <div 
+                      v-for="notification in displayNotifications" 
+                      :key="notification.id"
+                      class="notification-item"
+                      :class="{ 
+                        unread: !notification.read, 
+                        [notification.type]: true,
+                        new: notification.isNew 
+                      }"
+                      @click="handleNotificationClick(notification)"
+                    >
+                      <div class="notification-icon-container">
+                        <span class="notification-type-icon">{{ getNotificationIcon(notification.type) }}</span>
+                      </div>
+                      
+                      <div class="notification-content">
+                        <div class="notification-title">{{ notification.title }}</div>
+                        <div class="notification-message">{{ notification.message }}</div>
+                        <div class="notification-meta">
+                          <span class="notification-time">{{ formatNotificationTime(notification.created_at) }}</span>
+                          <span v-if="notification.order_number" class="notification-order">
+                            #{{ notification.order_number }}
+                          </span>
+                        </div>
+                      </div>
+                      
+                      <div class="notification-actions">
+                        <button 
+                          v-if="!notification.read" 
+                          @click.stop="markAsRead(notification.id)"
+                          class="mark-read-btn"
+                          title="Marcar como leída"
+                        >
+                          ✓
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div v-if="hasMoreNotifications" class="notifications-footer">
+                    <button @click="loadMoreNotifications" class="load-more-btn" :disabled="loadingMore">
+                      {{ loadingMore ? 'Cargando...' : 'Ver más notificaciones' }}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </teleport>
+        </div>
+
+        <!-- Perfil de usuario -->
+        <div class="user-profile" @click="toggleUserMenu" ref="userMenuRef">
+          <div class="user-avatar" :class="{ online: isConnected }">
             {{ auth.user?.full_name?.charAt(0).toUpperCase() }}
+            <div class="user-status-dot" :class="{ online: isConnected }"></div>
           </div>
-          <div class="user-details">
+          <div class="user-info">
             <span class="user-name">{{ auth.user?.full_name }}</span>
             <span class="user-role">{{ formatRole(auth.user?.role) }}</span>
+          </div>
+          <div class="user-dropdown-arrow">⌄</div>
+          
+          <!-- User Menu Dropdown -->
+          <div v-if="showUserMenu" class="user-menu-dropdown">
+            <div class="user-menu-item" @click="goToProfile">
+              <i class="menu-icon">👤</i>
+              <span>Mi Perfil</span>
+            </div>
+            <div class="user-menu-item" @click="goToSettings">
+              <i class="menu-icon">⚙️</i>
+              <span>Configuración</span>
+            </div>
+            <hr class="menu-divider">
+            <div class="user-menu-item logout" @click="handleLogout">
+              <i class="menu-icon">🚪</i>
+              <span>Cerrar Sesión</span>
+            </div>
           </div>
         </div>
 
         <!-- Botón de menú móvil -->
-        <button class="mobile-menu-btn" @click="toggleMobileMenu">
-          <i class="fas fa-bars"></i>
+        <button class="mobile-menu-btn" @click="$emit('toggle-mobile-menu')">
+          <i class="hamburger-icon">☰</i>
         </button>
       </div>
     </div>
@@ -76,70 +214,88 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { useRoute } from 'vue-router'
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../store/auth'
+import { apiService } from '../services/api'
+import { useEnvigoToast } from '../services/toast.service'
+import wsManager from '../services/websocket.service'
+import { debounce } from 'lodash-es' // Asegurar que tienes lodash instalado
 
-// Props y emits
+// ==================== SETUP ====================
 const emit = defineEmits(['toggle-mobile-menu'])
-
-// State
-const auth = useAuthStore()
 const route = useRoute()
-const showNotifications = ref(false)
-const notifications = ref([
-  {
-    id: 1,
-    type: 'order',
-    message: 'Nuevo pedido recibido desde Shopify',
-    createdAt: new Date(Date.now() - 1000 * 60 * 5), // 5 minutos atrás
-    read: false
-  },
-  {
-    id: 2,
-    type: 'delivery',
-    message: 'Entrega completada en Las Condes',
-    createdAt: new Date(Date.now() - 1000 * 60 * 30), // 30 minutos atrás
-    read: false
-  },
-  {
-    id: 3,
-    type: 'alert',
-    message: 'Conductor reportó problema en entrega',
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 2), // 2 horas atrás
-    read: true
-  }
-])
+const router = useRouter()
+const auth = useAuthStore()
+const toast = useEnvigoToast()
 
-// Computed
+// ==================== REFS ====================
+const userMenuRef = ref(null)
+
+// ==================== ESTADO REACTIVO ====================
+const isScrolled = ref(false)
+const showNotifications = ref(false)
+const showUserMenu = ref(false)
+const notifications = ref([])
+const loading = ref(true)
+const loadingMore = ref(false)
+const hasMoreNotifications = ref(true)
+const hasNewNotifications = ref(false)
+const currentPage = ref(1)
+
+// Búsqueda global
+const showSearch = ref(true)
+const searchQuery = ref('')
+const searchFocused = ref(false)
+const searchResults = ref([])
+const searchLoading = ref(false)
+
+// Stats dinámicas en header
+const quickStats = ref([])
+
+// Connection status
+const isConnected = ref(false)
+const lastPingTime = ref(null)
+
+// Cache para evitar requests repetidos
+const notificationsCache = new Map()
+const statsCache = new Map()
+
+// ==================== DEBOUNCED FUNCTIONS ====================
+const debouncedSearch = debounce(async () => {
+  await handleSearch()
+}, 300)
+
+// ==================== COMPUTED ====================
 const pageTitle = computed(() => {
   const routeNames = {
     'Dashboard': 'Dashboard',
-    'AdminDashboard': 'Dashboard Administrativo',
-    'Orders': 'Gestión de Pedidos',
-    'AdminOrders': 'Pedidos Globales',
+    'AdminDashboard': 'Panel Administrativo',
+    'Orders': 'Mis Pedidos',
+    'AdminOrders': 'Gestión Global de Pedidos',
     'Channels': 'Canales de Venta',
-    'AdminChannels': 'Canales Globales',
+    'AdminChannels': 'Todos los Canales',
     'Billing': 'Facturación',
     'AdminBilling': 'Facturación Global',
     'AdminCompanies': 'Gestión de Empresas',
     'AdminDrivers': 'Gestión de Conductores',
-    'AdminDriverPayments': 'Pagos a Conductores',
     'AdminCommunes': 'Gestión de Comunas'
   }
   
-  return routeNames[route.name] || 'enviGo Logistics'
+  return routeNames[route.name] || 'enviGo'
 })
 
 const breadcrumbs = computed(() => {
   const crumbs = []
   
+  // Breadcrumb base según rol
   if (auth.isAdmin) {
     crumbs.push({ name: 'Admin', path: '/app/admin/dashboard' })
   } else {
     crumbs.push({ name: 'Inicio', path: '/app/dashboard' })
   }
   
+  // Breadcrumb específico de la página actual
   if (route.name !== 'Dashboard' && route.name !== 'AdminDashboard') {
     crumbs.push({ name: pageTitle.value, path: null })
   }
@@ -151,22 +307,463 @@ const unreadCount = computed(() => {
   return notifications.value.filter(n => !n.read).length
 })
 
-// Methods
-const toggleNotifications = () => {
-  showNotifications.value = !showNotifications.value
+const displayNotifications = computed(() => {
+  return notifications.value.slice(0, currentPage.value * 10)
+})
+
+const groupedResults = computed(() => {
+  const groups = {}
+  
+  searchResults.value.forEach(result => {
+    if (!groups[result.type]) {
+      groups[result.type] = {
+        type: result.type,
+        label: getSearchCategoryLabel(result.type),
+        items: []
+      }
+    }
+    groups[result.type].items.push(result)
+  })
+  
+  return Object.values(groups)
+})
+
+const connectionStatusClass = computed(() => ({
+  connected: isConnected.value,
+  disconnected: !isConnected.value,
+  warning: isConnected.value && lastPingTime.value && (Date.now() - lastPingTime.value) > 60000
+}))
+
+const connectionStatusText = computed(() => {
+  if (!isConnected.value) return 'Desconectado'
+  if (lastPingTime.value && (Date.now() - lastPingTime.value) > 60000) return 'Reconectando...'
+  return 'En línea'
+})
+
+// ==================== MÉTODOS MEJORADOS ====================
+
+/**
+ * Cargar notificaciones con cache y gestión de errores mejorada
+ */
+async function loadNotifications(page = 1, useCache = true) {
+  const cacheKey = `notifications_${page}`
+  
+  // Verificar cache primero
+  if (useCache && notificationsCache.has(cacheKey)) {
+    const cached = notificationsCache.get(cacheKey)
+    if (Date.now() - cached.timestamp < 30000) { // Cache por 30 segundos
+      notifications.value = cached.data
+      return
+    }
+  }
+
+  try {
+    loading.value = page === 1
+    loadingMore.value = page > 1
+    
+    const response = await apiService.get('/notifications', {
+      params: {
+        page,
+        limit: 10,
+        include_read: true
+      },
+      timeout: 5000 // 5 segundos timeout
+    })
+    
+    const newNotifications = response.data.notifications || []
+    
+    if (page === 1) {
+      notifications.value = newNotifications
+    } else {
+      notifications.value.push(...newNotifications)
+    }
+    
+    hasMoreNotifications.value = response.data.hasMore || false
+    currentPage.value = page
+    
+    // Guardar en cache
+    notificationsCache.set(cacheKey, {
+      data: notifications.value,
+      timestamp: Date.now()
+    })
+    
+    console.log(`📬 Notificaciones cargadas: ${newNotifications.length} (página ${page})`)
+    
+  } catch (error) {
+    console.error('❌ Error cargando notificaciones:', error)
+    
+    if (page === 1) {
+      // Si es la primera carga y falla, usar datos de ejemplo
+      notifications.value = getExampleNotifications()
+    }
+    
+    // Mostrar toast de error solo si no es un timeout
+    if (error.code !== 'ECONNABORTED') {
+      toast.error('Error al cargar notificaciones')
+    }
+  } finally {
+    loading.value = false
+    loadingMore.value = false
+  }
 }
 
-const toggleMobileMenu = () => {
-  emit('toggle-mobile-menu')
+/**
+ * Búsqueda global mejorada con cache y loading
+ */
+async function handleSearch() {
+  if (searchQuery.value.trim().length < 2) {
+    searchResults.value = []
+    return
+  }
+
+  const query = searchQuery.value.trim()
+  
+  try {
+    searchLoading.value = true
+    
+    const response = await apiService.get('/search/global', {
+      params: { q: query, limit: 10 },
+      timeout: 3000
+    })
+    
+    searchResults.value = response.data.results || []
+    
+  } catch (error) {
+    console.error('❌ Error en búsqueda global:', error)
+    searchResults.value = []
+    
+    if (error.code !== 'ECONNABORTED') {
+      toast.error('Error en la búsqueda')
+    }
+  } finally {
+    searchLoading.value = false
+  }
 }
 
-const markAllAsRead = () => {
-  notifications.value.forEach(notification => {
-    notification.read = true
+/**
+ * Cargar stats con cache y gestión de errores
+ */
+async function loadQuickStats() {
+  if (!['Dashboard', 'Orders'].includes(route.name)) {
+    quickStats.value = []
+    return
+  }
+
+  const cacheKey = `stats_${route.name}`
+  
+  // Verificar cache
+  if (statsCache.has(cacheKey)) {
+    const cached = statsCache.get(cacheKey)
+    if (Date.now() - cached.timestamp < 60000) { // Cache por 1 minuto
+      quickStats.value = cached.data
+      return
+    }
+  }
+
+  try {
+    const response = await apiService.dashboard.getStats()
+    const stats = response.data
+    
+    const newStats = [
+      {
+        key: 'today',
+        icon: '📦',
+        value: stats.ordersToday || 0,
+        label: 'Hoy',
+        updated: false
+      },
+      {
+        key: 'month',
+        icon: '📅',
+        value: stats.monthlyOrders || 0,
+        label: 'Este mes',
+        updated: false
+      },
+      {
+        key: 'delivered',
+        icon: '✅',
+        value: stats.deliveredTotal || 0,
+        label: 'Entregados',
+        updated: false
+      }
+    ]
+    
+    quickStats.value = newStats
+    
+    // Guardar en cache
+    statsCache.set(cacheKey, {
+      data: newStats,
+      timestamp: Date.now()
+    })
+    
+  } catch (error) {
+    console.error('❌ Error cargando stats rápidas:', error)
+    quickStats.value = []
+  }
+}
+
+/**
+ * Marcar notificación como leída con optimistic update
+ */
+async function markAsRead(notificationId) {
+  try {
+    // Optimistic update
+    const notification = notifications.value.find(n => n.id === notificationId)
+    if (notification) {
+      notification.read = true
+      notification.isNew = false
+    }
+    
+    await apiService.post(`/notifications/${notificationId}/read`)
+    
+    // Limpiar cache para recargar datos frescos
+    notificationsCache.clear()
+    
+    console.log(`✅ Notificación marcada como leída: ${notificationId}`)
+    
+  } catch (error) {
+    console.error('❌ Error marcando notificación como leída:', error)
+    
+    // Revertir optimistic update
+    const notification = notifications.value.find(n => n.id === notificationId)
+    if (notification) {
+      notification.read = false
+    }
+    
+    toast.error('Error al marcar notificación como leída')
+  }
+}
+
+/**
+ * Marcar todas como leídas con optimistic update
+ */
+async function markAllAsRead() {
+  try {
+    // Optimistic update
+    const unreadNotifications = notifications.value.filter(n => !n.read)
+    unreadNotifications.forEach(notification => {
+      notification.read = true
+      notification.isNew = false
+    })
+    
+    await apiService.post('/notifications/mark-all-read')
+    
+    // Limpiar cache
+    notificationsCache.clear()
+    
+    toast.success('✅ Todas las notificaciones marcadas como leídas')
+    
+  } catch (error) {
+    console.error('❌ Error marcando todas como leídas:', error)
+    
+    // Revertir optimistic update
+    unreadNotifications.forEach(notification => {
+      notification.read = false
+    })
+    
+    toast.error('Error al marcar todas como leídas')
+  }
+}
+
+/**
+ * Configurar WebSocket con manejo de reconexión
+ */
+function setupWebSocket() {
+  // Estado de conexión
+  wsManager.on('connected', () => {
+    isConnected.value = true
+    lastPingTime.value = Date.now()
+    console.log('🔔 Header: WebSocket conectado')
+  })
+  
+  wsManager.on('disconnected', () => {
+    isConnected.value = false
+    console.log('🔔 Header: WebSocket desconectado')
+  })
+  
+  wsManager.on('error', (error) => {
+    console.error('🔔 Header: Error WebSocket:', error)
+    isConnected.value = false
+  })
+  
+  wsManager.on('pong', () => {
+    lastPingTime.value = Date.now()
+  })
+  
+  // Notificaciones en tiempo real
+  wsManager.on('order_notification', (data) => {
+    addRealTimeNotification({
+      id: `rt_${Date.now()}_${Math.random()}`,
+      type: 'order',
+      title: data.title,
+      message: data.message,
+      order_id: data.data?.order_id,
+      order_number: data.data?.order_number,
+      created_at: new Date(),
+      read: false,
+      isNew: true
+    })
+    
+    hasNewNotifications.value = true
+    notificationsCache.clear() // Limpiar cache
+  })
+  
+  wsManager.on('new_order_notification', (data) => {
+    addRealTimeNotification({
+      id: `rt_${Date.now()}_${Math.random()}`,
+      type: 'new_order',
+      title: data.title,
+      message: data.message,
+      order_id: data.data?.order_id,
+      order_number: data.data?.order_number,
+      created_at: new Date(),
+      read: false,
+      isNew: true
+    })
+    
+    hasNewNotifications.value = true
+    notificationsCache.clear() // Limpiar cache
+  })
+
+  // Stats updates en tiempo real
+  wsManager.on('stats_update', (data) => {
+    updateQuickStats(data)
   })
 }
 
-const formatRole = (role) => {
+/**
+ * Actualizar stats en tiempo real
+ */
+function updateQuickStats(data) {
+  quickStats.value.forEach(stat => {
+    if (data[stat.key] !== undefined && data[stat.key] !== stat.value) {
+      stat.value = data[stat.key]
+      stat.updated = true
+      
+      // Quitar animación después de un tiempo
+      setTimeout(() => {
+        stat.updated = false
+      }, 2000)
+    }
+  })
+  
+  // Limpiar cache de stats
+  statsCache.clear()
+}
+
+/**
+ * User menu methods
+ */
+function toggleUserMenu() {
+  showUserMenu.value = !showUserMenu.value
+}
+
+function goToProfile() {
+  router.push('/app/profile')
+  showUserMenu.value = false
+}
+
+function goToSettings() {
+  router.push('/app/settings')
+  showUserMenu.value = false
+}
+
+async function handleLogout() {
+  try {
+    await auth.logout()
+    router.push('/login')
+    toast.success('Sesión cerrada correctamente')
+  } catch (error) {
+    console.error('Error al cerrar sesión:', error)
+    toast.error('Error al cerrar sesión')
+  }
+}
+
+/**
+ * Métodos auxiliares sin cambios significativos
+ */
+function loadMoreNotifications() {
+  if (!loadingMore.value && hasMoreNotifications.value) {
+    loadNotifications(currentPage.value + 1, false) // No usar cache para nuevas páginas
+  }
+}
+
+function toggleNotifications() {
+  showNotifications.value = !showNotifications.value
+  
+  if (showNotifications.value) {
+    loadNotifications(1, false) // Recargar sin cache
+    hasNewNotifications.value = false
+  }
+}
+
+function handleNotificationClick(notification) {
+  if (!notification.read) {
+    markAsRead(notification.id)
+  }
+  
+  if (notification.order_id) {
+    router.push(`/app/orders?search=${notification.order_number}`)
+    showNotifications.value = false
+  } else if (notification.channel_id) {
+    router.push(`/app/channels`)
+    showNotifications.value = false
+  }
+}
+
+function selectSearchResult(result) {
+  searchFocused.value = false
+  searchQuery.value = result.title
+  
+  if (result.route) {
+    router.push(result.route)
+  }
+  
+  setTimeout(() => {
+    searchQuery.value = ''
+    searchResults.value = []
+  }, 100)
+}
+
+function clearSearch() {
+  searchQuery.value = ''
+  searchResults.value = []
+}
+
+function handleSearchBlur() {
+  setTimeout(() => {
+    searchFocused.value = false
+  }, 200)
+}
+
+function addRealTimeNotification(notification) {
+  notifications.value.unshift(notification)
+  
+  setTimeout(() => {
+    const notif = notifications.value.find(n => n.id === notification.id)
+    if (notif) notif.isNew = false
+  }, 3000)
+  
+  if (notifications.value.length > 50) {
+    notifications.value = notifications.value.slice(0, 50)
+  }
+}
+
+function handleScroll() {
+  isScrolled.value = window.scrollY > 10
+}
+
+function handleClickOutside(event) {
+  if (!event.target.closest('.notifications-container') && 
+      !event.target.closest('.notifications-panel-overlay')) {
+    showNotifications.value = false
+  }
+  if (!event.target.closest('.user-profile')) {
+    showUserMenu.value = false
+  }
+}
+
+function formatRole(role) {
   const roles = {
     'admin': 'Administrador',
     'company_owner': 'Propietario',
@@ -175,20 +772,24 @@ const formatRole = (role) => {
   return roles[role] || role
 }
 
-const getNotificationIcon = (type) => {
+function getNotificationIcon(type) {
   const icons = {
-    'order': 'fas fa-shopping-cart',
-    'delivery': 'fas fa-truck',
-    'alert': 'fas fa-exclamation-triangle',
-    'success': 'fas fa-check-circle',
-    'info': 'fas fa-info-circle'
+    'order': '📦',
+    'new_order': '🆕',
+    'delivery': '🚚',
+    'error': '❌',
+    'success': '✅',
+    'warning': '⚠️',
+    'info': 'ℹ️',
+    'sync': '🔄'
   }
-  return icons[type] || 'fas fa-bell'
+  return icons[type] || '📬'
 }
 
-const formatTime = (date) => {
+function formatNotificationTime(date) {
   const now = new Date()
-  const diff = now - date
+  const notificationDate = new Date(date)
+  const diff = now - notificationDate
   const minutes = Math.floor(diff / (1000 * 60))
   const hours = Math.floor(diff / (1000 * 60 * 60))
   const days = Math.floor(diff / (1000 * 60 * 60 * 24))
@@ -196,49 +797,148 @@ const formatTime = (date) => {
   if (minutes < 1) return 'Ahora'
   if (minutes < 60) return `${minutes}m`
   if (hours < 24) return `${hours}h`
-  return `${days}d`
+  if (days < 7) return `${days}d`
+  
+  return notificationDate.toLocaleDateString('es-ES')
 }
 
-// Click outside para cerrar notificaciones
-const handleClickOutside = (event) => {
-  if (!event.target.closest('.notifications')) {
-    showNotifications.value = false
+function getSearchCategoryLabel(type) {
+  const labels = {
+    'orders': 'Pedidos',
+    'customers': 'Clientes',
+    'channels': 'Canales',
+    'companies': 'Empresas'
   }
+  return labels[type] || type
 }
 
-// Lifecycle
-onMounted(() => {
+function getExampleNotifications() {
+  return [
+    {
+      id: '1',
+      type: 'order',
+      title: 'Pedido Entregado',
+      message: 'El pedido #ORD-001 ha sido entregado exitosamente',
+      order_number: 'ORD-001',
+      created_at: new Date(Date.now() - 1000 * 60 * 15),
+      read: false,
+      isNew: false
+    },
+    {
+      id: '2',
+      type: 'new_order',
+      title: 'Nuevo Pedido',
+      message: 'Nuevo pedido recibido desde Shopify',
+      order_number: 'ORD-002',
+      created_at: new Date(Date.now() - 1000 * 60 * 60),
+      read: false,
+      isNew: false
+    }
+  ]
+}
+
+// ==================== WATCHERS ====================
+watch(() => route.name, () => {
+  loadQuickStats()
+})
+
+// Cleanup cuando se cambia de usuario
+watch(() => auth.user?.id, () => {
+  notificationsCache.clear()
+  statsCache.clear()
+  notifications.value = []
+  quickStats.value = []
+  
+  if (auth.user?.id) {
+    loadNotifications()
+    loadQuickStats()
+  }
+})
+
+// ==================== LIFECYCLE ====================
+onMounted(async () => {
+  console.log('🔔 Header dinámico montado')
+  
+  // Configurar eventos
+  window.addEventListener('scroll', handleScroll, { passive: true })
   document.addEventListener('click', handleClickOutside)
+  
+  // Cargar datos iniciales
+  await nextTick()
+  loadNotifications()
+  loadQuickStats()
+  
+  // Configurar WebSocket
+  setupWebSocket()
+  
+  // Auto-refresh stats cada 5 minutos
+  const statsInterval = setInterval(() => {
+    loadQuickStats()
+  }, 5 * 60 * 1000)
+  
+  // Auto-refresh notifications cada 2 minutos
+  const notificationsInterval = setInterval(() => {
+    if (!showNotifications.value) {
+      loadNotifications(1, false)
+    }
+  }, 2 * 60 * 1000)
+  
+  onUnmounted(() => {
+    clearInterval(statsInterval)
+    clearInterval(notificationsInterval)
+  })
 })
 
 onUnmounted(() => {
+  window.removeEventListener('scroll', handleScroll)
   document.removeEventListener('click', handleClickOutside)
+  
+  // Limpiar caches
+  notificationsCache.clear()
+  statsCache.clear()
+  
+  console.log('🔔 Header dinámico desmontado')
 })
 </script>
 
 <style scoped>
+/* Header base */
 .header {
-  background: white;
-  border-bottom: 1px solid #e5e7eb;
-  padding: 0 2rem;
-  height: 64px;
-  display: flex;
-  align-items: center;
   position: sticky;
   top: 0;
-  z-index: 100;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  z-index: 1000;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(20px);
+  border-bottom: 1px solid #e5e7eb;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.header-scrolled {
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  border-bottom-color: #d1d5db;
 }
 
 .header-content {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  width: 100%;
+  padding: 1rem 2rem;
+  max-width: 1400px;
+  margin: 0 auto;
+  gap: 2rem;
 }
 
 /* Header Left */
 .header-left {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.page-info {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
@@ -249,6 +949,7 @@ onUnmounted(() => {
   font-weight: 700;
   color: #1f2937;
   margin: 0;
+  line-height: 1.2;
 }
 
 .breadcrumb {
@@ -262,6 +963,7 @@ onUnmounted(() => {
 .breadcrumb-link {
   color: #8BC53F;
   text-decoration: none;
+  font-weight: 500;
   transition: color 0.2s ease;
 }
 
@@ -279,48 +981,268 @@ onUnmounted(() => {
   margin: 0 0.25rem;
 }
 
+/* Quick Stats */
+.quick-stats {
+  display: flex;
+  gap: 1.5rem;
+  align-items: center;
+}
+
+.quick-stat-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: rgba(139, 197, 63, 0.1);
+  border-radius: 8px;
+  border: 1px solid rgba(139, 197, 63, 0.2);
+  transition: all 0.3s ease;
+}
+
+.quick-stat-item.updated {
+  animation: statUpdate 0.6s ease-out;
+}
+
+@keyframes statUpdate {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.05); background: rgba(139, 197, 63, 0.2); }
+  100% { transform: scale(1); }
+}
+
+.stat-icon {
+  font-size: 1rem;
+}
+
+.stat-value {
+  font-weight: 700;
+  color: #1f2937;
+  font-size: 0.875rem;
+}
+
+.stat-label {
+  font-size: 0.75rem;
+  color: #6b7280;
+  font-weight: 500;
+}
+
+/* Header Center - Search */
+.header-center {
+  flex: 1;
+  max-width: 400px;
+  position: relative;
+}
+
+.global-search {
+  position: relative;
+  width: 100%;
+}
+
+.search-input-container {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.search-icon {
+  position: absolute;
+  left: 1rem;
+  color: #9ca3af;
+  font-size: 1rem;
+  z-index: 1;
+}
+
+.search-input {
+  width: 100%;
+  padding: 0.75rem 1rem 0.75rem 2.5rem;
+  border: 1px solid #d1d5db;
+  border-radius: 12px;
+  background: white;
+  font-size: 0.875rem;
+  transition: all 0.2s ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: #8BC53F;
+  box-shadow: 0 0 0 3px rgba(139, 197, 63, 0.1);
+}
+
+.clear-search {
+  position: absolute;
+  right: 0.75rem;
+  background: none;
+  border: none;
+  color: #9ca3af;
+  font-size: 1.25rem;
+  cursor: pointer;
+  padding: 0.25rem;
+  border-radius: 4px;
+  transition: color 0.2s ease;
+}
+
+.clear-search:hover {
+  color: #6b7280;
+}
+
+/* Search Results */
+.search-results {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: white;
+  border: 1px solid #d1d5db;
+  border-top: none;
+  border-radius: 0 0 12px 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+  max-height: 400px;
+  overflow-y: auto;
+  z-index: 50;
+}
+
+.search-category {
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.search-category:last-child {
+  border-bottom: none;
+}
+
+.category-header {
+  padding: 0.75rem 1rem 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.search-result-item {
+  display: flex;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.search-result-item:hover {
+  background: #f9fafb;
+}
+
+.result-icon {
+  margin-right: 0.75rem;
+  font-size: 1rem;
+}
+
+.result-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.result-title {
+  font-weight: 500;
+  color: #1f2937;
+  font-size: 0.875rem;
+}
+
+.result-subtitle {
+  font-size: 0.75rem;
+  color: #6b7280;
+  margin-top: 0.125rem;
+}
+
+.result-action {
+  color: #8BC53F;
+  font-weight: 600;
+}
+
 /* Header Right */
 .header-right {
   display: flex;
   align-items: center;
-  gap: 1.5rem;
+  gap: 1rem;
 }
 
-.header-item {
+/* Connection Status */
+.connection-status {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 8px;
+  font-size: 0.75rem;
+  font-weight: 500;
 }
 
-/* Notificaciones */
-.notifications {
+.connection-status.connected {
+  background: rgba(34, 197, 94, 0.1);
+  color: #15803d;
+}
+
+.connection-status.disconnected {
+  background: rgba(239, 68, 68, 0.1);
+  color: #dc2626;
+}
+
+.connection-status.warning {
+  background: rgba(245, 158, 11, 0.1);
+  color: #d97706;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #dc2626;
+}
+
+.status-dot.pulsing {
+  background: #22c55e;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* Notifications */
+.notifications-container {
   position: relative;
+}
+
+.notifications-trigger {
+  position: relative;
+  background: none;
+  border: none;
+  padding: 0.5rem;
+  border-radius: 8px;
   cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.notifications-trigger:hover {
+  background: #f3f4f6;
+}
+
+.notifications-trigger.active {
+  background: #8BC53F;
+  color: white;
 }
 
 .notification-icon {
   position: relative;
-  padding: 0.5rem;
-  border-radius: 8px;
-  transition: background-color 0.2s ease;
-}
-
-.notification-icon:hover {
-  background-color: #f3f4f6;
-}
-
-.notification-icon i {
   font-size: 1.25rem;
-  color: #6b7280;
 }
 
 .notification-badge {
   position: absolute;
-  top: 0;
-  right: 0;
+  top: -8px;
+  right: -8px;
   background: #ef4444;
   color: white;
-  font-size: 0.75rem;
+  font-size: 0.625rem;
   font-weight: 600;
   padding: 0.125rem 0.375rem;
   border-radius: 10px;
@@ -329,215 +1251,523 @@ onUnmounted(() => {
   line-height: 1;
 }
 
-/* Dropdown de notificaciones */
-.notifications-dropdown {
-  position: absolute;
-  top: 100%;
+.notification-badge.pulse {
+  animation: badgePulse 1s ease-in-out infinite;
+}
+
+@keyframes badgePulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.1); }
+}
+
+/* Notifications Panel Overlay */
+.notifications-panel-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
   right: 0;
-  width: 320px;
+  bottom: 0;
+  z-index: 1001;
+  background: rgba(0, 0, 0, 0.1);
+  display: flex;
+  justify-content: flex-end;
+  align-items: flex-start;
+  padding: 80px 20px 20px;
+}
+
+.notifications-panel {
+  width: 400px;
+  max-width: 90vw;
+  max-height: 80vh;
   background: white;
+  border-radius: 12px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
   border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
-  z-index: 1000;
-  margin-top: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  animation: slideInRight 0.3s ease-out;
+}
+
+@keyframes slideInRight {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
 }
 
 .notifications-header {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  padding: 1rem;
+  justify-content: space-between;
+  padding: 1rem 1.5rem;
   border-bottom: 1px solid #e5e7eb;
 }
 
 .notifications-header h3 {
-  font-size: 1rem;
+  margin: 0;
+  font-size: 1.125rem;
   font-weight: 600;
   color: #1f2937;
-  margin: 0;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 .mark-all-read {
   background: none;
   border: none;
   color: #8BC53F;
-  font-size: 0.875rem;
+  font-size: 0.75rem;
   font-weight: 500;
   cursor: pointer;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  transition: background-color 0.2s ease;
+}
+
+.mark-all-read:hover:not(:disabled) {
+  background: rgba(139, 197, 63, 0.1);
+}
+
+.mark-all-read:disabled {
+  color: #9ca3af;
+  cursor: not-allowed;
+}
+
+.close-panel {
+  background: none;
+  border: none;
+  font-size: 1.25rem;
+  color: #6b7280;
+  cursor: pointer;
+  padding: 0.25rem;
+  border-radius: 4px;
   transition: color 0.2s ease;
 }
 
-.mark-all-read:hover {
-  color: #7AB32E;
+.close-panel:hover {
+  color: #374151;
+}
+
+.notifications-content {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.notifications-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: 2rem;
+  color: #6b7280;
+}
+
+.loading-spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid #e5e7eb;
+  border-top: 2px solid #8BC53F;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.no-notifications {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  color: #6b7280;
+  text-align: center;
+}
+
+.empty-icon {
+  font-size: 2rem;
+  margin-bottom: 0.5rem;
 }
 
 .notifications-list {
-  max-height: 300px;
+  max-height: 60vh;
   overflow-y: auto;
 }
 
 .notification-item {
   display: flex;
   align-items: flex-start;
-  gap: 0.75rem;
-  padding: 0.75rem 1rem;
+  padding: 1rem 1.5rem;
   border-bottom: 1px solid #f3f4f6;
-  transition: background-color 0.2s ease;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
 }
 
 .notification-item:hover {
-  background-color: #f9fafb;
+  background: #f9fafb;
 }
 
 .notification-item.unread {
-  background-color: #f0f9ff;
+  background: rgba(139, 197, 63, 0.05);
   border-left: 3px solid #8BC53F;
 }
 
-.notification-icon-small {
-  width: 32px;
-  height: 32px;
-  border-radius: 6px;
-  background: #f3f4f6;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
+.notification-item.new {
+  animation: notificationNew 0.5s ease-out;
 }
 
-.notification-icon-small i {
-  font-size: 0.875rem;
-  color: #6b7280;
+@keyframes notificationNew {
+  0% {
+    background: rgba(139, 197, 63, 0.2);
+    transform: translateX(-10px);
+  }
+  100% {
+    background: rgba(139, 197, 63, 0.05);
+    transform: translateX(0);
+  }
+}
+
+.notification-icon-container {
+  margin-right: 0.75rem;
+  margin-top: 0.125rem;
+}
+
+.notification-type-icon {
+  font-size: 1.125rem;
 }
 
 .notification-content {
   flex: 1;
+  min-width: 0;
+}
+
+.notification-title {
+  font-weight: 600;
+  color: #1f2937;
+  font-size: 0.875rem;
+  margin-bottom: 0.25rem;
 }
 
 .notification-message {
-  font-size: 0.875rem;
-  color: #374151;
-  margin: 0 0 0.25rem 0;
+  color: #6b7280;
+  font-size: 0.8125rem;
   line-height: 1.4;
+  margin-bottom: 0.5rem;
 }
 
-.notification-time {
+.notification-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
   font-size: 0.75rem;
   color: #9ca3af;
 }
 
-.no-notifications {
-  text-align: center;
-  padding: 2rem;
-  color: #9ca3af;
+.notification-order {
+  background: rgba(139, 197, 63, 0.1);
+  color: #8BC53F;
+  padding: 0.125rem 0.375rem;
+  border-radius: 4px;
+  font-weight: 500;
 }
 
-.no-notifications i {
-  font-size: 2rem;
-  margin-bottom: 0.5rem;
-  display: block;
+.notification-actions {
+  margin-left: 0.5rem;
 }
 
-/* Usuario */
-.user-info {
-  padding: 0.5rem;
-  border-radius: 8px;
+.mark-read-btn {
+  background: #8BC53F;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+  cursor: pointer;
   transition: background-color 0.2s ease;
 }
 
-.user-info:hover {
-  background-color: #f9fafb;
+.mark-read-btn:hover {
+  background: #7AB32E;
+}
+
+.notifications-footer {
+  padding: 1rem 1.5rem;
+  border-top: 1px solid #e5e7eb;
+}
+
+.load-more-btn {
+  width: 100%;
+  background: none;
+  border: 1px solid #d1d5db;
+  color: #6b7280;
+  padding: 0.75rem;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.875rem;
+  transition: all 0.2s ease;
+}
+
+.load-more-btn:hover:not(:disabled) {
+  background: #f9fafb;
+  border-color: #8BC53F;
+  color: #8BC53F;
+}
+
+.load-more-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* User Profile */
+.user-profile {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.user-profile:hover {
+  background: #f3f4f6;
 }
 
 .user-avatar {
+  position: relative;
   width: 40px;
   height: 40px;
-  background: linear-gradient(135deg, #8BC53F 0%, #A4D65E 100%);
   border-radius: 50%;
+  background: #8BC53F;
+  color: white;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-weight: 700;
-  color: white;
-  font-size: 1rem;
+  font-weight: 600;
+  font-size: 0.875rem;
 }
 
-.user-details {
+.user-avatar.online {
+  border: 2px solid #22c55e;
+}
+
+.user-status-dot {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #dc2626;
+  border: 2px solid white;
+}
+
+.user-status-dot.online {
+  background: #22c55e;
+}
+
+.user-info {
   display: flex;
   flex-direction: column;
-  line-height: 1.2;
+  gap: 0.125rem;
 }
 
 .user-name {
-  font-size: 0.875rem;
   font-weight: 600;
   color: #1f2937;
+  font-size: 0.875rem;
 }
 
 .user-role {
   font-size: 0.75rem;
-  color: #8BC53F;
-  font-weight: 500;
+  color: #6b7280;
 }
 
-/* Botón menú móvil */
+.user-dropdown-arrow {
+  color: #9ca3af;
+  font-size: 0.875rem;
+  transform: rotate(0deg);
+  transition: transform 0.2s ease;
+}
+
+.user-profile:hover .user-dropdown-arrow {
+  transform: rotate(180deg);
+}
+
+/* User Menu Dropdown */
+.user-menu-dropdown {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 0.5rem;
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+  z-index: 50;
+  min-width: 200px;
+  overflow: hidden;
+  animation: slideInDown 0.2s ease-out;
+}
+
+@keyframes slideInDown {
+  from {
+    transform: translateY(-10px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.user-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+  font-size: 0.875rem;
+  color: #374151;
+}
+
+.user-menu-item:hover {
+  background: #f3f4f6;
+}
+
+.user-menu-item.logout {
+  color: #dc2626;
+}
+
+.user-menu-item.logout:hover {
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.menu-icon {
+  font-size: 1rem;
+}
+
+.menu-divider {
+  border: none;
+  border-top: 1px solid #e5e7eb;
+  margin: 0;
+}
+
+/* Mobile Menu Button */
 .mobile-menu-btn {
   display: none;
   background: none;
   border: none;
-  font-size: 1.25rem;
+  font-size: 1.5rem;
   color: #6b7280;
   cursor: pointer;
   padding: 0.5rem;
-  border-radius: 6px;
-  transition: background-color 0.2s ease;
+  border-radius: 8px;
+  transition: all 0.2s ease;
 }
 
 .mobile-menu-btn:hover {
-  background-color: #f3f4f6;
+  background: #f3f4f6;
+  color: #374151;
 }
 
-/* Responsive */
-@media (max-width: 768px) {
-  .header {
-    padding: 0 1rem;
+/* Responsive Design */
+@media (max-width: 1024px) {
+  .header-content {
+    padding: 1rem 1.5rem;
+    gap: 1.5rem;
   }
+  
+  .header-center {
+    max-width: 300px;
+  }
+  
+  .quick-stats {
+    gap: 1rem;
+  }
+  
+  .quick-stat-item {
+    padding: 0.375rem 0.5rem;
+  }
+  
+  .stat-value, .stat-label {
+    font-size: 0.75rem;
+  }
+}
 
+@media (max-width: 768px) {
+  .header-content {
+    padding: 1rem;
+    gap: 1rem;
+  }
+  
   .page-title {
     font-size: 1.25rem;
   }
-
-  .breadcrumb {
+  
+  .header-center {
     display: none;
   }
-
-  .user-details {
+  
+  .quick-stats {
     display: none;
   }
-
+  
+  .user-info {
+    display: none;
+  }
+  
+  .connection-status .status-text {
+    display: none;
+  }
+  
   .mobile-menu-btn {
     display: block;
   }
-
-  .notifications-dropdown {
-    width: 280px;
-    right: -1rem;
+  
+  .notifications-panel {
+    width: 100%;
+    max-width: none;
+    margin: 0 10px;
+  }
+  
+  .notifications-panel-overlay {
+    padding: 60px 10px 10px;
   }
 }
 
 @media (max-width: 480px) {
+  .header-content {
+    padding: 0.75rem;
+  }
+  
+  .page-title {
+    font-size: 1.125rem;
+  }
+  
+  .breadcrumb {
+    font-size: 0.75rem;
+  }
+  
   .header-right {
-    gap: 0.75rem;
+    gap: 0.5rem;
   }
-
-  .user-info {
-    padding: 0.25rem;
-  }
-
-  .notifications-dropdown {
-    width: calc(100vw - 2rem);
-    right: -1rem;
+  
+  .notifications-panel-overlay {
+    padding: 50px 5px 5px;
   }
 }
 </style>
