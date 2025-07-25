@@ -26,7 +26,6 @@
       :filtered-communes="filteredCommunes"
       :filter-presets="filterPresets"
       :active-filters-count="activeFiltersCount"
-      :is-admin="auth.isAdmin"
       :loading="loadingOrders"
       @filter-change="handleFilterChange"
       @advanced-filter-change="updateAdvancedFilter"
