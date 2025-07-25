@@ -1,4 +1,4 @@
-<!-- frontend/src/components/Header.vue - VERSIÓN OPTIMIZADA -->
+<!-- frontend/src/components/Header.vue - VERSIÓN FINAL OPTIMIZADA -->
 <template>
   <header class="header" :class="{ 'header-scrolled': isScrolled }">
     <div class="header-content">
@@ -26,7 +26,7 @@
             :class="{ updated: stat.updated }"
           >
             <span class="stat-icon">{{ stat.icon }}</span>
-            <span class="stat-value">{{ stat.value }}</span>
+            <span class="stat-value">{{ utils.formatNumber(stat.value) }}</span>
             <span class="stat-label">{{ stat.label }}</span>
           </div>
         </div>
@@ -39,14 +39,17 @@
             <i class="search-icon">🔍</i>
             <input
               v-model="searchQuery"
-              @input="debouncedSearch"
+              @input="handleSearchInput"
               @focus="searchFocused = true"
               @blur="handleSearchBlur"
               class="search-input"
               placeholder="Buscar pedidos, canales, clientes..."
               autocomplete="off"
             />
-            <button v-if="searchQuery" @click="clearSearch" class="clear-search">×</button>
+            <div v-if="searchLoading" class="search-loading">
+              <div class="loading-spinner"></div>
+            </div>
+            <button v-else-if="searchQuery" @click="clearSearch" class="clear-search">×</button>
           </div>
           
           <!-- Resultados de búsqueda -->
@@ -143,7 +146,7 @@
                         <div class="notification-title">{{ notification.title }}</div>
                         <div class="notification-message">{{ notification.message }}</div>
                         <div class="notification-meta">
-                          <span class="notification-time">{{ formatNotificationTime(notification.created_at) }}</span>
+                          <span class="notification-time">{{ utils.formatRelativeDate(notification.created_at) }}</span>
                           <span v-if="notification.order_number" class="notification-order">
                             #{{ notification.order_number }}
                           </span>
@@ -220,7 +223,7 @@ import { useAuthStore } from '../store/auth'
 import { apiService } from '../services/api'
 import { useEnvigoToast } from '../services/toast.service'
 import wsManager from '../services/websocket.service'
-import { debounce } from 'lodash-es' // Asegurar que tienes lodash instalado
+import UtilsService, { useDebouncedSearch, useCache } from '../services/utils.service'
 
 // ==================== SETUP ====================
 const emit = defineEmits(['toggle-mobile-menu'])
@@ -228,6 +231,7 @@ const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
 const toast = useEnvigoToast()
+const utils = UtilsService
 
 // ==================== REFS ====================
 const userMenuRef = ref(null)
@@ -257,12 +261,13 @@ const quickStats = ref([])
 const isConnected = ref(false)
 const lastPingTime = ref(null)
 
-// Cache para evitar requests repetidos
-const notificationsCache = new Map()
-const statsCache = new Map()
+// ==================== CACHE INSTANCES ====================
+const notificationsCache = useCache(30000) // 30 segundos
+const statsCache = useCache(60000) // 1 minuto
+const searchCache = useCache(180000) // 3 minutos
 
 // ==================== DEBOUNCED FUNCTIONS ====================
-const debouncedSearch = debounce(async () => {
+const { search: debouncedSearch } = useDebouncedSearch(async () => {
   await handleSearch()
 }, 300)
 
@@ -288,14 +293,12 @@ const pageTitle = computed(() => {
 const breadcrumbs = computed(() => {
   const crumbs = []
   
-  // Breadcrumb base según rol
   if (auth.isAdmin) {
     crumbs.push({ name: 'Admin', path: '/app/admin/dashboard' })
   } else {
     crumbs.push({ name: 'Inicio', path: '/app/dashboard' })
   }
   
-  // Breadcrumb específico de la página actual
   if (route.name !== 'Dashboard' && route.name !== 'AdminDashboard') {
     crumbs.push({ name: pageTitle.value, path: null })
   }
@@ -312,20 +315,13 @@ const displayNotifications = computed(() => {
 })
 
 const groupedResults = computed(() => {
-  const groups = {}
+  const groups = utils.groupOrdersBy(searchResults.value, 'type')
   
-  searchResults.value.forEach(result => {
-    if (!groups[result.type]) {
-      groups[result.type] = {
-        type: result.type,
-        label: getSearchCategoryLabel(result.type),
-        items: []
-      }
-    }
-    groups[result.type].items.push(result)
-  })
-  
-  return Object.values(groups)
+  return Object.entries(groups).map(([type, items]) => ({
+    type,
+    label: getSearchCategoryLabel(type),
+    items
+  }))
 })
 
 const connectionStatusClass = computed(() => ({
@@ -343,32 +339,40 @@ const connectionStatusText = computed(() => {
 // ==================== MÉTODOS MEJORADOS ====================
 
 /**
- * Cargar notificaciones con cache y gestión de errores mejorada
+ * Cargar notificaciones con cache y retry automático
  */
 async function loadNotifications(page = 1, useCache = true) {
   const cacheKey = `notifications_${page}`
   
   // Verificar cache primero
-  if (useCache && notificationsCache.has(cacheKey)) {
+  if (useCache) {
     const cached = notificationsCache.get(cacheKey)
-    if (Date.now() - cached.timestamp < 30000) { // Cache por 30 segundos
-      notifications.value = cached.data
+    if (cached) {
+      notifications.value = cached
       return
     }
   }
+
+  const [error, response] = await utils.safeAsync(
+    utils.retry(async () => {
+      return await apiService.get('/notifications', {
+        params: {
+          page,
+          limit: 10,
+          include_read: true
+        },
+        timeout: 5000
+      })
+    }, 2, 1000)
+  )
 
   try {
     loading.value = page === 1
     loadingMore.value = page > 1
     
-    const response = await apiService.get('/notifications', {
-      params: {
-        page,
-        limit: 10,
-        include_read: true
-      },
-      timeout: 5000 // 5 segundos timeout
-    })
+    if (error) {
+      throw error
+    }
     
     const newNotifications = response.data.notifications || []
     
@@ -382,10 +386,7 @@ async function loadNotifications(page = 1, useCache = true) {
     currentPage.value = page
     
     // Guardar en cache
-    notificationsCache.set(cacheKey, {
-      data: notifications.value,
-      timestamp: Date.now()
-    })
+    notificationsCache.set(cacheKey, notifications.value)
     
     console.log(`📬 Notificaciones cargadas: ${newNotifications.length} (página ${page})`)
     
@@ -408,7 +409,7 @@ async function loadNotifications(page = 1, useCache = true) {
 }
 
 /**
- * Búsqueda global mejorada con cache y loading
+ * Búsqueda global mejorada con cache
  */
 async function handleSearch() {
   if (searchQuery.value.trim().length < 2) {
@@ -417,16 +418,34 @@ async function handleSearch() {
   }
 
   const query = searchQuery.value.trim()
+  const cacheKey = `search_${query}`
   
-  try {
-    searchLoading.value = true
-    
-    const response = await apiService.get('/search/global', {
+  // Verificar cache
+  const cached = searchCache.get(cacheKey)
+  if (cached) {
+    searchResults.value = cached
+    return
+  }
+
+  const [error, response] = await utils.safeAsync(
+    apiService.get('/search/global', {
       params: { q: query, limit: 10 },
       timeout: 3000
     })
+  )
+
+  try {
+    searchLoading.value = true
     
-    searchResults.value = response.data.results || []
+    if (error) {
+      throw error
+    }
+    
+    const results = response.data.results || []
+    searchResults.value = results
+    
+    // Guardar en cache
+    searchCache.set(cacheKey, results)
     
   } catch (error) {
     console.error('❌ Error en búsqueda global:', error)
@@ -441,7 +460,21 @@ async function handleSearch() {
 }
 
 /**
- * Cargar stats con cache y gestión de errores
+ * Manejar input de búsqueda
+ */
+function handleSearchInput() {
+  if (searchQuery.value.trim().length < 2) {
+    searchResults.value = []
+    searchLoading.value = false
+    return
+  }
+  
+  searchLoading.value = true
+  debouncedSearch()
+}
+
+/**
+ * Cargar stats con cache y performance monitoring
  */
 async function loadQuickStats() {
   if (!['Dashboard', 'Orders'].includes(route.name)) {
@@ -452,16 +485,25 @@ async function loadQuickStats() {
   const cacheKey = `stats_${route.name}`
   
   // Verificar cache
-  if (statsCache.has(cacheKey)) {
-    const cached = statsCache.get(cacheKey)
-    if (Date.now() - cached.timestamp < 60000) { // Cache por 1 minuto
-      quickStats.value = cached.data
-      return
-    }
+  const cached = statsCache.get(cacheKey)
+  if (cached) {
+    quickStats.value = cached
+    return
   }
 
+  const perf = utils.createPerformanceObserver('loadQuickStats')
+
+  const [error, response] = await utils.safeAsync(
+    utils.retry(async () => {
+      return await apiService.dashboard.getStats()
+    }, 2, 1000)
+  )
+
   try {
-    const response = await apiService.dashboard.getStats()
+    if (error) {
+      throw error
+    }
+    
     const stats = response.data
     
     const newStats = [
@@ -491,10 +533,9 @@ async function loadQuickStats() {
     quickStats.value = newStats
     
     // Guardar en cache
-    statsCache.set(cacheKey, {
-      data: newStats,
-      timestamp: Date.now()
-    })
+    statsCache.set(cacheKey, newStats)
+    
+    perf.end()
     
   } catch (error) {
     console.error('❌ Error cargando stats rápidas:', error)
@@ -506,31 +547,30 @@ async function loadQuickStats() {
  * Marcar notificación como leída con optimistic update
  */
 async function markAsRead(notificationId) {
-  try {
-    // Optimistic update
-    const notification = notifications.value.find(n => n.id === notificationId)
-    if (notification) {
-      notification.read = true
-      notification.isNew = false
-    }
-    
-    await apiService.post(`/notifications/${notificationId}/read`)
-    
-    // Limpiar cache para recargar datos frescos
-    notificationsCache.clear()
-    
-    console.log(`✅ Notificación marcada como leída: ${notificationId}`)
-    
-  } catch (error) {
+  const notification = notifications.value.find(n => n.id === notificationId)
+  if (!notification) return
+  
+  // Optimistic update
+  const originalState = { read: notification.read, isNew: notification.isNew }
+  notification.read = true
+  notification.isNew = false
+  
+  const [error] = await utils.safeAsync(
+    apiService.post(`/notifications/${notificationId}/read`)
+  )
+  
+  if (error) {
     console.error('❌ Error marcando notificación como leída:', error)
     
     // Revertir optimistic update
-    const notification = notifications.value.find(n => n.id === notificationId)
-    if (notification) {
-      notification.read = false
-    }
+    notification.read = originalState.read
+    notification.isNew = originalState.isNew
     
     toast.error('Error al marcar notificación como leída')
+  } else {
+    // Limpiar cache para recargar datos frescos
+    notificationsCache.clear()
+    console.log(`✅ Notificación marcada como leída: ${notificationId}`)
   }
 }
 
@@ -538,35 +578,47 @@ async function markAsRead(notificationId) {
  * Marcar todas como leídas con optimistic update
  */
 async function markAllAsRead() {
-  try {
-    // Optimistic update
-    const unreadNotifications = notifications.value.filter(n => !n.read)
-    unreadNotifications.forEach(notification => {
-      notification.read = true
-      notification.isNew = false
-    })
-    
-    await apiService.post('/notifications/mark-all-read')
-    
-    // Limpiar cache
-    notificationsCache.clear()
-    
-    toast.success('✅ Todas las notificaciones marcadas como leídas')
-    
-  } catch (error) {
+  const unreadNotifications = notifications.value.filter(n => !n.read)
+  if (unreadNotifications.length === 0) return
+  
+  // Optimistic update
+  const originalStates = unreadNotifications.map(n => ({
+    id: n.id,
+    read: n.read,
+    isNew: n.isNew
+  }))
+  
+  unreadNotifications.forEach(notification => {
+    notification.read = true
+    notification.isNew = false
+  })
+  
+  const [error] = await utils.safeAsync(
+    apiService.post('/notifications/mark-all-read')
+  )
+  
+  if (error) {
     console.error('❌ Error marcando todas como leídas:', error)
     
     // Revertir optimistic update
-    unreadNotifications.forEach(notification => {
-      notification.read = false
+    originalStates.forEach(({ id, read, isNew }) => {
+      const notification = notifications.value.find(n => n.id === id)
+      if (notification) {
+        notification.read = read
+        notification.isNew = isNew
+      }
     })
     
     toast.error('Error al marcar todas como leídas')
+  } else {
+    // Limpiar cache
+    notificationsCache.clear()
+    toast.success('✅ Todas las notificaciones marcadas como leídas')
   }
 }
 
 /**
- * Configurar WebSocket con manejo de reconexión
+ * Configurar WebSocket con manejo de reconexión mejorado
  */
 function setupWebSocket() {
   // Estado de conexión
@@ -605,7 +657,7 @@ function setupWebSocket() {
     })
     
     hasNewNotifications.value = true
-    notificationsCache.clear() // Limpiar cache
+    notificationsCache.clear()
   })
   
   wsManager.on('new_order_notification', (data) => {
@@ -622,7 +674,7 @@ function setupWebSocket() {
     })
     
     hasNewNotifications.value = true
-    notificationsCache.clear() // Limpiar cache
+    notificationsCache.clear()
   })
 
   // Stats updates en tiempo real
@@ -632,13 +684,16 @@ function setupWebSocket() {
 }
 
 /**
- * Actualizar stats en tiempo real
+ * Actualizar stats en tiempo real con animaciones
  */
 function updateQuickStats(data) {
+  let hasUpdates = false
+  
   quickStats.value.forEach(stat => {
     if (data[stat.key] !== undefined && data[stat.key] !== stat.value) {
       stat.value = data[stat.key]
       stat.updated = true
+      hasUpdates = true
       
       // Quitar animación después de un tiempo
       setTimeout(() => {
@@ -647,8 +702,10 @@ function updateQuickStats(data) {
     }
   })
   
-  // Limpiar cache de stats
-  statsCache.clear()
+  if (hasUpdates) {
+    // Limpiar cache de stats para que se actualicen
+    statsCache.clear()
+  }
 }
 
 /**
@@ -671,6 +728,12 @@ function goToSettings() {
 async function handleLogout() {
   try {
     await auth.logout()
+    
+    // Limpiar todos los caches
+    notificationsCache.clear()
+    statsCache.clear()
+    searchCache.clear()
+    
     router.push('/login')
     toast.success('Sesión cerrada correctamente')
   } catch (error) {
@@ -680,11 +743,11 @@ async function handleLogout() {
 }
 
 /**
- * Métodos auxiliares sin cambios significativos
+ * Métodos auxiliares optimizados
  */
 function loadMoreNotifications() {
   if (!loadingMore.value && hasMoreNotifications.value) {
-    loadNotifications(currentPage.value + 1, false) // No usar cache para nuevas páginas
+    loadNotifications(currentPage.value + 1, false)
   }
 }
 
@@ -692,7 +755,7 @@ function toggleNotifications() {
   showNotifications.value = !showNotifications.value
   
   if (showNotifications.value) {
-    loadNotifications(1, false) // Recargar sin cache
+    loadNotifications(1, false)
     hasNewNotifications.value = false
   }
 }
@@ -728,6 +791,7 @@ function selectSearchResult(result) {
 function clearSearch() {
   searchQuery.value = ''
   searchResults.value = []
+  searchLoading.value = false
 }
 
 function handleSearchBlur() {
@@ -744,14 +808,16 @@ function addRealTimeNotification(notification) {
     if (notif) notif.isNew = false
   }, 3000)
   
+  // Limitar a 50 notificaciones en memoria
   if (notifications.value.length > 50) {
     notifications.value = notifications.value.slice(0, 50)
   }
 }
 
-function handleScroll() {
+// Throttled scroll handler para mejor performance
+const handleScroll = utils.createThrottledHandler(() => {
   isScrolled.value = window.scrollY > 10
-}
+}, 100)
 
 function handleClickOutside(event) {
   if (!event.target.closest('.notifications-container') && 
@@ -784,22 +850,6 @@ function getNotificationIcon(type) {
     'sync': '🔄'
   }
   return icons[type] || '📬'
-}
-
-function formatNotificationTime(date) {
-  const now = new Date()
-  const notificationDate = new Date(date)
-  const diff = now - notificationDate
-  const minutes = Math.floor(diff / (1000 * 60))
-  const hours = Math.floor(diff / (1000 * 60 * 60))
-  const days = Math.floor(diff / (1000 * 60 * 60 * 24))
-  
-  if (minutes < 1) return 'Ahora'
-  if (minutes < 60) return `${minutes}m`
-  if (hours < 24) return `${hours}h`
-  if (days < 7) return `${days}d`
-  
-  return notificationDate.toLocaleDateString('es-ES')
 }
 
 function getSearchCategoryLabel(type) {
@@ -846,12 +896,15 @@ watch(() => route.name, () => {
 watch(() => auth.user?.id, () => {
   notificationsCache.clear()
   statsCache.clear()
+  searchCache.clear()
   notifications.value = []
   quickStats.value = []
   
   if (auth.user?.id) {
-    loadNotifications()
-    loadQuickStats()
+    nextTick(() => {
+      loadNotifications()
+      loadQuickStats()
+    })
   }
 })
 
@@ -859,7 +912,7 @@ watch(() => auth.user?.id, () => {
 onMounted(async () => {
   console.log('🔔 Header dinámico montado')
   
-  // Configurar eventos
+  // Configurar eventos con throttling
   window.addEventListener('scroll', handleScroll, { passive: true })
   document.addEventListener('click', handleClickOutside)
   
@@ -871,21 +924,34 @@ onMounted(async () => {
   // Configurar WebSocket
   setupWebSocket()
   
-  // Auto-refresh stats cada 5 minutos
+  // Auto-refresh con intervalos más inteligentes
   const statsInterval = setInterval(() => {
-    loadQuickStats()
-  }, 5 * 60 * 1000)
+    if (document.visibilityState === 'visible') {
+      loadQuickStats()
+    }
+  }, 5 * 60 * 1000) // 5 minutos
   
-  // Auto-refresh notifications cada 2 minutos
   const notificationsInterval = setInterval(() => {
-    if (!showNotifications.value) {
+    if (document.visibilityState === 'visible' && !showNotifications.value) {
       loadNotifications(1, false)
     }
-  }, 2 * 60 * 1000)
+  }, 2 * 60 * 1000) // 2 minutos
+  
+  // Listener para visibility change (optimización)
+  const handleVisibilityChange = () => {
+    if (document.visibilityState === 'visible') {
+      // Refrescar datos cuando la tab vuelve a estar visible
+      loadNotifications(1, false)
+      loadQuickStats()
+    }
+  }
+  
+  document.addEventListener('visibilitychange', handleVisibilityChange)
   
   onUnmounted(() => {
     clearInterval(statsInterval)
     clearInterval(notificationsInterval)
+    document.removeEventListener('visibilitychange', handleVisibilityChange)
   })
 })
 
@@ -896,6 +962,7 @@ onUnmounted(() => {
   // Limpiar caches
   notificationsCache.clear()
   statsCache.clear()
+  searchCache.clear()
   
   console.log('🔔 Header dinámico desmontado')
 })
@@ -1770,4 +1837,20 @@ onUnmounted(() => {
     padding: 50px 5px 5px;
   }
 }
+.search-loading {
+  position: absolute;
+  right: 0.75rem;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.search-loading .loading-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid #e5e7eb;
+  border-top: 2px solid #8BC53F;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
 </style>
