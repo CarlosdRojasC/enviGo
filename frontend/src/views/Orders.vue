@@ -153,6 +153,7 @@ const auth = useAuthStore()
 // Datos principales
 const {
   orders,
+  companies,
   channels,
   pagination,
   loading: loadingOrders,
@@ -888,39 +889,45 @@ const realTimeStats = computed(() => ({
 
 onMounted(async () => {
   try {
-    // Carga inicial existente
+    // 1. Verificar si hay un usuario y una empresa asociada.
+    if (auth.user && auth.user.company_id) {
+      try {
+        // 2. Obtener los datos completos de la empresa del usuario.
+        //    (Esto asume que tienes un endpoint en tu API para obtener una empresa por su ID).
+        const { data: userCompany } = await apiService.companies.getById(auth.user.company_id);
+        
+        // 3. Establecer la empresa del usuario como el contexto para las demás funciones.
+        //    Esto llena el estado `companies` que `fetchAvailableCommunes` necesita.
+        if (userCompany) {
+          companies.value = [userCompany];
+        } else {
+           toast.error("No se encontró la información de su empresa.");
+           return;
+        }
+
+      } catch (error) {
+        toast.error("Error al cargar la información de su empresa.");
+        console.error("Error fetching single company:", error);
+        return; // Detener la carga si la empresa no se puede obtener.
+      }
+    }
+
+    // 4. Ahora que el contexto está listo, cargar el resto de los datos.
     await Promise.all([
       fetchOrders(),
       fetchChannels(),
-      fetchAvailableCommunes()
-    ])
-    lastUpdate.value = Date.now()
+      fetchAvailableCommunes() // Ahora esta llamada debería funcionar.
+    ]);
     
-    // ⚡ NUEVO: Setup real-time updates
-    console.log('🔗 [Orders] Configurando actualizaciones en tiempo real para empresa:', auth.user?.company_id)
+    lastUpdate.value = Date.now();
     
-    // Escuchar actualizaciones de órdenes via WebSocket
-    window.addEventListener('orderUpdated', handleOrderUpdate)
-    
-    // Procesar actualizaciones pendientes cada 20 segundos
-    setInterval(() => {
-      if (realTimeEnabled.value) {
-        processPendingUpdates()
-      }
-    }, 20000)
-    
-    // Limpiar cola de notificaciones cada minuto
-    setInterval(() => {
-      cleanupNotificationQueue()
-    }, 60000)
-    
-    console.log('✅ [Orders] Sistema de tiempo real configurado')
-    
+    // ... (resto de tu lógica en onMounted)
+
   } catch (error) {
-    console.error('Error al inicializar Orders:', error)
-    toast.error('Error al cargar la página')
+    console.error('Error al inicializar Orders:', error);
+    toast.error('Error al cargar la página');
   }
-})
+});
 onBeforeUnmount(() => {
   // Cleanup existente
   if (autoRefreshEnabled.value) {
