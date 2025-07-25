@@ -16,21 +16,25 @@
     />
 
     <!-- Filtros modernos -->
-<OrdersFilters
-      :filters="filters"
-      :advanced-filters="advancedFilters"
-      :channels="channels"
-      :available-communes="availableCommunes"
-      :presets="filterPresets"
-      :show-advanced="filtersUI?.showAdvanced || false"
-      :active-count="activeFiltersCount"
-      @filter-change="handleFilterChange"
-      @advanced-change="updateAdvancedFilter"
-      @apply-preset="applyPreset"
-      @toggle-advanced="toggleAdvancedFilters"
-      @search="handleSearchEvent"
-      @clear-all="resetFilters"
-    />
+<UnifiedOrdersFilters
+  :filters="filters"
+  :advanced-filters="advancedFilters"
+  :filters-u-i="filtersUI"
+  :channels="channels"
+  :available-communes="availableCommunes"
+  :filtered-communes="filteredCommunes"
+  :filter-presets="filterPresets"
+  :active-filters-count="activeFiltersCount"
+  :is-admin="false"
+  :loading="loadingOrders"
+  @filter-change="handleFilterChange"
+  @advanced-filter-change="updateAdvancedFilter"
+  @reset-filters="resetFilters"
+  @toggle-advanced="toggleAdvancedFilters"
+  @apply-preset="applyPreset"
+  @add-commune="addCommune"
+  @remove-commune="removeCommune"
+/>
 
     <!-- Tabla moderna -->
     <OrdersTable
@@ -128,8 +132,9 @@ import ProofOfDelivery from '../components/ProofOfDelivery.vue'
 
 // Nuevos componentes modernos
 import OrdersHeader from '../components/Orders/OrdersHeader.vue'
-import OrdersFilters from '../components/Orders/OrdersFilters.vue'
 import OrdersTable from '../components/Orders/OrdersTable.vue'
+import UnifiedOrdersFilters from '../components/UnifiedOrdersFilters.vue'
+
 
 // Composables (asumiendo que ya los extendiste)
 import { useOrdersData } from '../composables/useOrdersData'

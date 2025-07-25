@@ -13,14 +13,26 @@
     />
 
     <!-- Filtros avanzados -->
-    <AdminOrdersFilters
-      v-model:filters="filters"
-      :companies="companies"
-      :available-communes="availableCommunes"
-      :loading="loadingOrders"
-      @filter-changed="handleFilterChange"
-      @reset-filters="resetFilters"
-    />
+<UnifiedOrdersFilters
+  :filters="filters"
+  :advanced-filters="advancedFilters"
+  :filters-u-i="filtersUI"
+  :companies="companies"
+  :channels="channels"
+  :available-communes="availableCommunes"
+  :filtered-communes="filteredCommunes"
+  :filter-presets="filterPresets"
+  :active-filters-count="activeFiltersCount"
+  :is-admin="true"
+  :loading="loadingOrders"
+  @filter-change="handleFilterChange"
+  @advanced-filter-change="updateAdvancedFilter"
+  @reset-filters="resetFilters"
+  @toggle-advanced="toggleAdvancedFilters"
+  @apply-preset="applyPreset"
+  @add-commune="addCommune"
+  @remove-commune="removeCommune"
+/>
 
     <!-- Acciones masivas -->
     <AdminOrdersBulkActions
@@ -127,6 +139,7 @@ import AdminOrdersFilters from '../components/AdminOrders/AdminOrdersFilters.vue
 import AdminOrdersBulkActions from '../components/AdminOrders/AdminOrdersBulkActions.vue'
 import AdminOrdersTable from '../components/AdminOrders/AdminOrdersTable.vue'
 import AdminOrdersModals from '../components/AdminOrders/AdminOrdersModals.vue'
+import UnifiedOrdersFilters from '../components/UnifiedOrdersFilters.vue'
 
 // ==================== SETUP ====================
 const route = useRoute()
