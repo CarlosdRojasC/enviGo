@@ -139,6 +139,7 @@ import AdminOrdersFilters from '../components/AdminOrders/AdminOrdersFilters.vue
 import AdminOrdersBulkActions from '../components/AdminOrders/AdminOrdersBulkActions.vue'
 import AdminOrdersTable from '../components/AdminOrders/AdminOrdersTable.vue'
 import AdminOrdersModals from '../components/AdminOrders/AdminOrdersModals.vue'
+import { apiService } from '../services/api'
 import UnifiedOrdersFilters from '../components/UnifiedOrdersFilters.vue'
 
 // ==================== SETUP ====================
@@ -152,9 +153,11 @@ const toast = useToast()
 const {
   orders,
   companies,
+  channels,
   pagination,
   loadingOrders,
   fetchOrders,
+  fetchChannels,
   fetchCompanies,
   goToPage,
   changePageSize,
@@ -703,15 +706,33 @@ function handleOpenAssignModal(order) {
   fetchAvailableDrivers(); // Carga los conductores
   openAssignModal(order);  // Abre el modal con el pedido correcto
 }
+async function fetchChannelsManual() {
+  try {
+    console.log('🏪 [AdminOrders] Fetching all channels for admin...')
+    
+    // Admin obtiene todos los canales
+    const { data } = await apiService.channels.getAll ? 
+      await apiService.channels.getAll() :
+      await apiService.get('/channels')
+    
+    channels.value = data?.data || data || []
+    console.log(`✅ [AdminOrders] Channels loaded: ${channels.value.length}`)
+    
+  } catch (error) {
+    console.error('❌ [AdminOrders] Error fetching channels:', error)
+    channels.value = []
+  }
+}
 // ==================== LIFECYCLE ====================
 
 onMounted(async () => {
   try {
     // Load initial data
-    await Promise.all([
-      fetchCompanies(),
-      fetchOrders()
-    ])
+ await Promise.all([
+  fetchCompanies(),
+  fetchChannels(),   // ← AGREGAR
+  fetchOrders()
+])
     
     // Setup additional features
     startPeriodicRefresh()
