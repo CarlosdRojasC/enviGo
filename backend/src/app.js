@@ -30,6 +30,8 @@ const allowedOrigins = [
   'http://127.0.0.1:5173',
   'http://127.0.0.1:3000',
   'https://envigo-frontend-production.up.railway.app',
+  'https://envigo.cl',
+  'https://www.envigo.cl',
   process.env.FRONTEND_URL,
   null
 ];
