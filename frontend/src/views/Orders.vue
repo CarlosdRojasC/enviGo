@@ -889,39 +889,37 @@ const realTimeStats = computed(() => ({
 
 onMounted(async () => {
   try {
-    // 1. Verificar si hay un usuario y una empresa asociada.
-    if (auth.user && auth.user.company_id) {
-      try {
-        // 2. Obtener los datos completos de la empresa del usuario.
-        //    (Esto asume que tienes un endpoint en tu API para obtener una empresa por su ID).
-        const { data: userCompany } = await apiService.companies.getById(auth.user.company_id);
-        
-        // 3. Establecer la empresa del usuario como el contexto para las demás funciones.
-        //    Esto llena el estado `companies` que `fetchAvailableCommunes` necesita.
-        if (userCompany) {
-          companies.value = [userCompany];
-        } else {
-           toast.error("No se encontró la información de su empresa.");
-           return;
-        }
+    // 1. Obtén el ID de la empresa del usuario autenticado.
+    const companyId = auth.user?.company_id;
 
-      } catch (error) {
-        toast.error("Error al cargar la información de su empresa.");
-        console.error("Error fetching single company:", error);
-        return; // Detener la carga si la empresa no se puede obtener.
-      }
+    // 2. Valida que el ID exista antes de continuar.
+    if (!companyId) {
+      toast.error("No se pudo identificar la empresa del usuario.");
+      return;
     }
 
-    // 4. Ahora que el contexto está listo, cargar el resto de los datos.
+    // 3. Llama a las funciones de carga en paralelo.
+    //    ¡Aquí está el cambio clave! Le pasamos 'companyId' a la función.
     await Promise.all([
-      fetchOrders(),
-      fetchChannels(),
-      fetchAvailableCommunes() // Ahora esta llamada debería funcionar.
+      fetchOrders(),       // Esta función ya debería estar filtrando por empresa internamente.
+      fetchChannels(),     // Esta también debería usar el contexto del usuario.
+      fetchAvailableCommunes(companyId) // <--- ¡LA SOLUCIÓN ESTÁ AQUÍ!
     ]);
-    
+
     lastUpdate.value = Date.now();
-    
-    // ... (resto de tu lógica en onMounted)
+
+    // Setup de actualizaciones en tiempo real (código existente)
+    console.log('🔗 [Orders] Configurando actualizaciones en tiempo real para empresa:', companyId);
+    window.addEventListener('orderUpdated', handleOrderUpdate);
+    setInterval(() => {
+      if (realTimeEnabled.value) {
+        processPendingUpdates();
+      }
+    }, 20000);
+    setInterval(() => {
+      cleanupNotificationQueue();
+    }, 60000);
+    console.log('✅ [Orders] Sistema de tiempo real configurado');
 
   } catch (error) {
     console.error('Error al inicializar Orders:', error);
