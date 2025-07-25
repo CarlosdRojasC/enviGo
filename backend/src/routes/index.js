@@ -39,7 +39,7 @@ router.use('/billing', billingRoutes);
 // Webhooks (sin autenticación)
 router.use('/webhooks', webhookRoutes);
 
-app.use('/api/notifications', notificationRoutes);
+router.use('/api/notifications', notificationRoutes);
 
 // Dashboard y estadísticas
 router.use('/', dashboardRoutes);
