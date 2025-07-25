@@ -882,6 +882,13 @@ const isFormValid = computed(() => {
     if (!channelData.value.api_key?.trim()) return false
     if (!channelData.value.api_secret?.trim()) return false
   }
+   if (channelData.value.channel_type === 'general_store') {
+     if (!channelData.value.channel_type) return false
+  if (!channelData.value.channel_name?.trim()) return false
+  if (!channelData.value.store_url?.trim()) return false
+      if (!channelData.value.api_key?.trim()) return false
+    if (!channelData.value.api_secret?.trim()) return false
+  }
   
   return true
 })
