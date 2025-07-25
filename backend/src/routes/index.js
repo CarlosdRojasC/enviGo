@@ -18,7 +18,7 @@ const dashboardRoutes = require('./dashboard.routes');
 const shipdayRoutes = require('./shipday.routes');
 const comunasRoutes = require('./comunas.routes');
 const channelRoutes = require('./channels.routes');
-const notificationRoutes = require('./routes/notifications');
+const notificationRoutes = require('./notifications.routes');
 
 router.use('/auth', authRoutes);
 
