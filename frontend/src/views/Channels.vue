@@ -251,6 +251,7 @@
         <option value="shopify">Shopify</option>
         <option value="woocommerce">WooCommerce</option>
         <option value="mercadolibre">MercadoLibre</option>
+        <option value="general_store">Tienda General</option>
       </select>
     </div>
     
