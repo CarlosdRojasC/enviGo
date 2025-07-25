@@ -6,7 +6,7 @@
       <div class="nav-container">
         <div class="logo">
       <h2 class="logo">
-        <img class="imagelogo" src="../assets/favicon.png" alt="" srcset="">
+        <img class="imagelogo" src="../assets/envigoLogo.png" alt="" srcset="">
       </h2>
         </div>
         <ul class="nav-links">
@@ -227,8 +227,7 @@ const features = ref([
 const integrations = ref([
   { name: 'Shopify', emoji: '🛒', status: '✅ Integración Completa', statusClass: 'available' },
   { name: 'WooCommerce', emoji: '🌐', status: '✅ Integración Completa', statusClass: 'available' },
-  { name: 'Mercado Libre', emoji: '🛍️', status: '🚀 Próximamente', statusClass: 'coming-soon' },
-  { name: 'Shipday', emoji: '🚚', status: '✅ API Integrada', statusClass: 'available' },
+  { name: 'Mercado Libre', emoji: '🛍️', status: '✅ Integración Completa', statusClass: 'available' },
   { name: 'Excel/CSV', emoji: '📄', status: '✅ Importación Masiva', statusClass: 'available' },
   { name: 'WhatsApp API', emoji: '💬', status: '🚀 Próximamente', statusClass: 'coming-soon' }
 ])
@@ -317,7 +316,6 @@ onUnmounted(() => {
 }
 
 .imagelogo {
-  width: 160px;
   height: auto;
   filter: drop-shadow(0 0 4px rgba(0, 255, 128, 0.2));
 }
