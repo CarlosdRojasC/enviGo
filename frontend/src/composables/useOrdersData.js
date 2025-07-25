@@ -1,501 +1,645 @@
-// composables/useOrdersData.js
-import { ref, computed } from 'vue'
+// frontend/src/composables/useOrdersData.js - VERSIÓN UNIFICADA Y OPTIMIZADA
+import { ref, computed, watch, onUnmounted } from 'vue'
 import { useToast } from 'vue-toastification'
 import { apiService } from '../services/api'
 import { useAuthStore } from '../store/auth'
 
-export function useOrdersData() {
+/**
+ * 🔧 COMPOSABLE UNIFICADO PARA DATOS DE PEDIDOS
+ * Funciona tanto para AdminOrders como para Orders normales
+ * 
+ * @param {Object} options - Configuración del composable
+ * @param {String} options.mode - 'admin' | 'company' (auto-detectado si no se proporciona)
+ * @param {String} options.companyId - ID de empresa específica (solo para admin)
+ * @returns {Object} - API del composable
+ */
+export function useOrdersData(options = {}) {
   const toast = useToast()
-  const auth = useAuthStore() // ← AGREGAR ESTO
-  // ==================== STATE ====================
+  const auth = useAuthStore()
+
+  // ==================== CONFIGURACIÓN AUTOMÁTICA ====================
+  const mode = options.mode || (auth.user?.role === 'admin' ? 'admin' : 'company')
+  const companyId = computed(() => {
+    if (mode === 'admin') {
+      return options.companyId || null // Admin puede filtrar por empresa específica
+    }
+    return auth.user?.company_id || auth.user?.company?._id
+  })
+
+  // ==================== ESTADO REACTIVO ====================
   const orders = ref([])
+  const companies = ref([]) // Solo para admin
   const channels = ref([])
-  const companies = ref([])
-  const loadingOrders = ref(true)
+  const drivers = ref([]) // Para asignación
+  
+  // Estados de carga
+  const loadingStates = ref({
+    orders: true,
+    companies: false,
+    channels: false,
+    drivers: false,
+    refreshing: false,
+    updating: false,
+    exporting: false
+  })
+
+  // Paginación unificada
   const pagination = ref({ 
     page: 1, 
-    limit: 15, 
+    limit: mode === 'admin' ? 25 : 15, // Admin ve más pedidos por página
     total: 0, 
     totalPages: 1 
   })
-  const loadingStates = ref({
-  fetching: false,
-  refreshing: false,
-  updating: false,
-  exporting: false
-})
 
-// Cache y auto-refresh
-const dataCache = ref({
-  lastFetch: null,
-  lastFilters: null,
-  autoRefreshInterval: null
-})
+  // Cache inteligente
+  const cache = ref({
+    lastFetch: null,
+    lastFilters: null,
+    autoRefreshInterval: null,
+    data: new Map() // Cache por filtros
+  })
 
-// Estadísticas adicionales
-const additionalStats = ref({
-  totalRevenue: 0,
-  averageOrderValue: 0,
-  deliveryRate: 0,
-  pendingRate: 0
-})
+  // Estadísticas calculadas
+  const stats = ref({
+    total: 0,
+    pending: 0,
+    processing: 0,
+    ready_for_pickup: 0,
+    assigned: 0,
+    shipped: 0,
+    delivered: 0,
+    cancelled: 0,
+    totalRevenue: 0,
+    averageOrderValue: 0,
+    deliveryRate: 0
+  })
 
-// ==================== COMPUTED ====================
+  // ==================== COMPUTED PROPERTIES ====================
 
-/**
- * Usuario actual para permisos
- */
-const user = computed(() => auth.user)
-
-/**
- * ID de empresa del usuario
- */
-const companyId = computed(() => {
-  return user.value?.company_id || user.value?.company?._id
-})
-
-  // ==================== METHODS ====================
-  
   /**
-   * Fetch all companies
+   * Indica si estamos en modo administrador
    */
-  async function fetchCompanies() {
-    try {
-      const { data } = await apiService.companies.getAll()
-      companies.value = data || []
-      console.log('🏢 Empresas cargadas:', companies.value.length)
-    } catch (error) {
-      console.error('❌ Error fetching companies:', error)
-      toast.error('Error al cargar las empresas')
-      companies.value = []
-    }
-  }
+  const isAdmin = computed(() => mode === 'admin')
 
   /**
-   * Fetch orders with filters and pagination
+   * Loading principal (para compatibilidad)
+   */
+  const loadingOrders = computed(() => loadingStates.value.orders)
+  const loading = computed(() => loadingStates.value.orders)
+  const refreshing = computed(() => loadingStates.value.refreshing)
+
+  /**
+   * Estadísticas para el header
+   */
+  const orderStats = computed(() => ({
+    total: stats.value.total,
+    pending: stats.value.pending,
+    processing: stats.value.processing,
+    delivered: stats.value.delivered,
+    cancelled: stats.value.cancelled
+  }))
+
+  /**
+   * Estadísticas adicionales
+   */
+  const additionalStats = computed(() => ({
+    totalRevenue: stats.value.totalRevenue,
+    averageOrderValue: stats.value.averageOrderValue,
+    deliveryRate: stats.value.deliveryRate,
+    pendingRate: stats.value.total > 0 ? Math.round((stats.value.pending / stats.value.total) * 100) : 0,
+    shipdayOrders: orders.value.filter(order => order.shipday_order_id).length
+  }))
+
+  /**
+   * Identificador único de usuario para permisos
+   */
+  const user = computed(() => auth.user)
+
+  // ==================== CORE METHODS ====================
+
+  /**
+   * 📊 Obtener pedidos con filtros y paginación
    */
   async function fetchOrders(filters = {}) {
     try {
-      loadingOrders.value = true
+      loadingStates.value.orders = true
+      const cacheKey = generateCacheKey(filters, pagination.value)
+      
+      // Verificar cache (solo si han pasado menos de 30 segundos)
+      if (shouldUseCache(cacheKey)) {
+        const cachedData = cache.value.data.get(cacheKey)
+        if (cachedData) {
+          orders.value = cachedData.orders
+          pagination.value = cachedData.pagination
+          calculateStats()
+          loadingStates.value.orders = false
+          console.log('📦 [Cache Hit] Orders loaded from cache')
+          return
+        }
+      }
       
       const params = {
         page: pagination.value.page,
         limit: pagination.value.limit,
         ...filters
       }
-      
-      
-      console.log('📊 Fetching orders with params:', params)
-      
-      const { data } = await apiService.orders.getAll(params)
 
-        dataCache.value.lastFetch = Date.now()
-        dataCache.value.lastFilters = { ...params }
-        
-        // Calcular stats
-        calculateAdditionalStats()
-        
-        console.log(`✅ Loaded ${orders.value.length} orders`)
-      // Handle different API response formats
-      if (data.orders) {
-        // Format: { orders: [...], pagination: {...} }
-        orders.value = data.orders
-        pagination.value = {
-          ...pagination.value,
-          ...data.pagination
-        }
-      } else if (Array.isArray(data)) {
-        // Format: [orders...] (simple array)
-        orders.value = data
-        pagination.value.total = data.length
-        pagination.value.totalPages = Math.ceil(data.length / pagination.value.limit)
-      } else {
-        // Other formats
-        orders.value = data.data || []
-        pagination.value = {
-          ...pagination.value,
-          total: data.total || 0,
-          totalPages: Math.ceil((data.total || 0) / pagination.value.limit)
-        }
+      // En modo company, siempre filtrar por la empresa del usuario
+      if (mode === 'company' && companyId.value) {
+        params.company_id = companyId.value
       }
       
-      console.log('✅ Orders loaded:', {
+      console.log(`📊 [${mode.toUpperCase()}] Fetching orders:`, params)
+      
+      const { data } = await apiService.orders.getAll(params)
+      
+      // Manejar diferentes formatos de respuesta de la API
+      handleApiResponse(data)
+      
+      // Guardar en cache
+      cache.value.data.set(cacheKey, {
+        orders: [...orders.value],
+        pagination: { ...pagination.value },
+        timestamp: Date.now()
+      })
+      
+      // Calcular estadísticas
+      calculateStats()
+      
+      // Actualizar metadata del cache
+      cache.value.lastFetch = Date.now()
+      cache.value.lastFilters = { ...params }
+      
+      console.log(`✅ [${mode.toUpperCase()}] Orders loaded:`, {
         count: orders.value.length,
         total: pagination.value.total,
-        page: pagination.value.page,
-        totalPages: pagination.value.totalPages
+        page: pagination.value.page
       })
       
     } catch (error) {
-      console.error('❌ Error fetching orders:', error)
-      toast.error('Error al cargar los pedidos')
+      handleError(error, 'Error al cargar pedidos')
       orders.value = []
       pagination.value.total = 0
       pagination.value.totalPages = 1
     } finally {
-      loadingOrders.value = false
-      loadingStates.value.fetching = false
+      loadingStates.value.orders = false
     }
   }
-async function fetchChannels() {
-  try {
-    if (!companyId.value) {
-      console.warn('⚠️ No company ID available for fetching channels')
-      return
-    }
 
-    console.log('🏪 Fetching channels for company:', companyId.value)
-    
-    const { data } = await apiService.channels.getByCompany(companyId.value)
-    channels.value = data || []
-    
-    console.log(`✅ Loaded ${channels.value.length} channels`)
-    
-  } catch (err) {
-    console.error('❌ Error fetching channels:', err)
-    // No mostramos toast aquí porque es información secundaria
-    channels.value = []
-  }
-}
   /**
-   * Change page
+   * 🏢 Obtener empresas (solo para admin)
+   */
+  async function fetchCompanies() {
+    if (mode !== 'admin') return
+
+    try {
+      loadingStates.value.companies = true
+      console.log('🏢 [ADMIN] Fetching companies...')
+      
+      const { data } = await apiService.companies.getAll()
+      companies.value = data || []
+      
+      console.log(`✅ [ADMIN] Companies loaded: ${companies.value.length}`)
+    } catch (error) {
+      handleError(error, 'Error al cargar empresas')
+      companies.value = []
+    } finally {
+      loadingStates.value.companies = false
+    }
+  }
+
+  /**
+   * 🏪 Obtener canales de venta
+   */
+  async function fetchChannels() {
+    try {
+      loadingStates.value.channels = true
+      
+      let channelsData = []
+      
+      if (mode === 'admin') {
+        // Admin obtiene todos los canales
+        const { data } = await apiService.channels.getAll()
+        channelsData = data || []
+      } else if (companyId.value) {
+        // Company obtiene solo sus canales
+        const { data } = await apiService.channels.getByCompany(companyId.value)
+        channelsData = data?.data || data || []
+      }
+      
+      channels.value = channelsData
+      console.log(`🏪 [${mode.toUpperCase()}] Channels loaded: ${channels.value.length}`)
+      
+    } catch (error) {
+      handleError(error, 'Error al cargar canales')
+      channels.value = []
+    } finally {
+      loadingStates.value.channels = false
+    }
+  }
+
+  /**
+   * 🚚 Obtener conductores disponibles (solo para admin)
+   */
+  async function fetchDrivers() {
+    if (mode !== 'admin') return
+
+    try {
+      loadingStates.value.drivers = true
+      const { data } = await apiService.drivers.getAvailable()
+      drivers.value = data || []
+      console.log(`🚚 [ADMIN] Drivers loaded: ${drivers.value.length}`)
+    } catch (error) {
+      handleError(error, 'Error al cargar conductores')
+      drivers.value = []
+    } finally {
+      loadingStates.value.drivers = false
+    }
+  }
+
+  // ==================== PAGINATION METHODS ====================
+
+  /**
+   * 📄 Ir a página específica
    */
   function goToPage(page) {
     if (page >= 1 && page <= pagination.value.totalPages) {
       pagination.value.page = page
-      fetchOrders()
-      console.log('📄 Changed to page:', page)
+      // fetchOrders se llamará automáticamente por el watcher
     }
   }
 
   /**
-   * Change page size
+   * 📊 Cambiar tamaño de página
    */
   function changePageSize(newLimit) {
     pagination.value.limit = parseInt(newLimit)
-    pagination.value.page = 1 // Reset to first page
-    fetchOrders()
-    console.log('📏 Changed page size to:', newLimit)
+    pagination.value.page = 1 // Reset a primera página
+    // fetchOrders se llamará automáticamente por el watcher
   }
 
-  /**
-   * Refresh current page
-   */
-  function refreshOrders() {
-    return fetchOrders()
-  }
+  // ==================== ORDER ACTIONS ====================
 
   /**
-   * Get company name by ID
+   * 🔄 Refrescar pedidos
    */
-  function getCompanyName(companyId) {
-    if (!companyId) return 'Sin empresa'
+  async function refreshOrders() {
+    loadingStates.value.refreshing = true
+    cache.value.data.clear() // Limpiar cache para forzar refresh
     
-    // Handle both string ID and populated object
-    if (typeof companyId === 'object' && companyId.name) {
-      return companyId.name
+    try {
+      await fetchOrders(cache.value.lastFilters || {})
+    } finally {
+      loadingStates.value.refreshing = false
     }
-    
-    const company = companies.value.find(c => c._id === companyId)
-    return company?.name || 'Empresa no encontrada'
   }
 
   /**
-   * Get order by ID
+   * ✅ Marcar pedido como listo
+   */
+  async function markOrderAsReady(order) {
+    try {
+      loadingStates.value.updating = true
+      
+      const response = await apiService.orders.updateStatus(order._id, 'ready_for_pickup')
+      
+      // Actualización optimista
+      updateOrderLocally({
+        _id: order._id,
+        status: 'ready_for_pickup',
+        updated_at: new Date().toISOString()
+      })
+      
+      toast.success(`✅ Pedido #${order.order_number} marcado como listo`)
+      return response.data
+      
+    } catch (error) {
+      handleError(error, 'Error al marcar pedido como listo')
+      throw error
+    } finally {
+      loadingStates.value.updating = false
+    }
+  }
+
+  /**
+   * ✅ Marcar múltiples pedidos como listos
+   */
+  async function markMultipleAsReady(orderIds) {
+    try {
+      loadingStates.value.updating = true
+      
+      const promises = orderIds.map(id => 
+        apiService.orders.updateStatus(id, 'ready_for_pickup')
+      )
+      
+      await Promise.all(promises)
+      
+      // Actualización optimista de todos los pedidos
+      orderIds.forEach(id => {
+        updateOrderLocally({
+          _id: id,
+          status: 'ready_for_pickup',
+          updated_at: new Date().toISOString()
+        })
+      })
+      
+      toast.success(`✅ ${orderIds.length} pedidos marcados como listos`)
+      
+    } catch (error) {
+      handleError(error, 'Error al marcar pedidos como listos')
+      throw error
+    } finally {
+      loadingStates.value.updating = false
+    }
+  }
+
+  /**
+   * 📊 Exportar pedidos
+   */
+  async function exportOrders(format = 'excel', filters = {}) {
+    try {
+      loadingStates.value.exporting = true
+      console.log(`📊 [${mode.toUpperCase()}] Exporting orders:`, { format, filters })
+      
+      // En modo company, siempre incluir company_id
+      if (mode === 'company' && companyId.value) {
+        filters.company_id = companyId.value
+      }
+      
+      const response = await apiService.orders.export(format, filters)
+      
+      // Crear y descargar archivo
+      const blob = new Blob([response.data], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      })
+      
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `pedidos_${Date.now()}.xlsx`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
+      
+      toast.success('📊 Exportación completada')
+      
+    } catch (error) {
+      handleError(error, 'Error al exportar pedidos')
+      throw error
+    } finally {
+      loadingStates.value.exporting = false
+    }
+  }
+
+  // ==================== UTILITY METHODS ====================
+
+  /**
+   * 🔄 Actualizar pedido localmente (sin API call)
+   */
+  function updateOrderLocally(updatedOrder) {
+    const index = orders.value.findIndex(order => order._id === updatedOrder._id)
+    if (index !== -1) {
+      // Merge con datos existentes
+      orders.value[index] = { ...orders.value[index], ...updatedOrder }
+      calculateStats() // Recalcular estadísticas
+      console.log(`🔄 Order ${updatedOrder._id} updated locally`)
+    }
+  }
+
+  /**
+   * ➕ Añadir pedido localmente
+   */
+  function addOrderLocally(newOrder) {
+    orders.value.unshift(newOrder)
+    pagination.value.total += 1
+    calculateStats()
+    console.log(`➕ Order ${newOrder._id} added locally`)
+  }
+
+  /**
+   * ➖ Remover pedido localmente
+   */
+  function removeOrderLocally(orderId) {
+    const index = orders.value.findIndex(order => order._id === orderId)
+    if (index !== -1) {
+      orders.value.splice(index, 1)
+      pagination.value.total -= 1
+      calculateStats()
+      console.log(`➖ Order ${orderId} removed locally`)
+    }
+  }
+
+  /**
+   * 🔍 Obtener pedido por ID
    */
   function getOrderById(orderId) {
     return orders.value.find(order => order._id === orderId)
   }
 
   /**
-   * Update order in local state (optimistic update)
+   * 🏢 Obtener nombre de empresa (para admin)
    */
-function updateOrderLocally(updatedOrder) {
-  const index = orders.value.findIndex(o => o._id === updatedOrder._id)
-  if (index !== -1) {
-    orders.value[index] = { ...orders.value[index], ...updatedOrder }
-    console.log('✅ Orden actualizada localmente:', updatedOrder.order_number)
+  function getCompanyName(companyId) {
+    if (mode !== 'admin') return 'Mi Empresa'
+    
+    const company = companies.value.find(c => c._id === companyId)
+    return company?.name || 'Empresa Desconocida'
   }
-}
+
+  // ==================== AUTO-REFRESH ====================
 
   /**
-   * Remove order from local state
+   * ▶️ Iniciar actualización automática
    */
-  function removeOrderLocally(orderId) {
-    const index = orders.value.findIndex(order => order._id === orderId)
-    if (index !== -1) {
-      orders.value.splice(index, 1)
-      pagination.value.total = Math.max(0, pagination.value.total - 1)
-      console.log('🗑️ Order removed locally:', orderId)
-    }
+  function startAutoRefresh(intervalMs = 60000) { // 1 minuto por defecto
+    stopAutoRefresh() // Limpiar intervalo existente
+    
+    cache.value.autoRefreshInterval = setInterval(() => {
+      if (!document.hidden && orders.value.length > 0) {
+        console.log('🔄 Auto-refreshing orders...')
+        refreshOrders()
+      }
+    }, intervalMs)
+    
+    console.log(`▶️ Auto-refresh started (${intervalMs}ms interval)`)
   }
 
   /**
-   * Add order to local state
+   * ⏹️ Detener actualización automática
    */
-  function addOrderLocally(order) {
-    orders.value.unshift(order) // Add to beginning
-    pagination.value.total += 1
-    console.log('➕ Order added locally:', order._id)
+  function stopAutoRefresh() {
+    if (cache.value.autoRefreshInterval) {
+      clearInterval(cache.value.autoRefreshInterval)
+      cache.value.autoRefreshInterval = null
+      console.log('⏹️ Auto-refresh stopped')
+    }
   }
 
-  // ==================== COMPUTED HELPERS ====================
-  
+  // ==================== HELPER FUNCTIONS ====================
+
   /**
-   * Get statistics from current orders
+   * Manejar respuesta de la API
    */
-  function getOrdersStats() {
-    const total = orders.value.length
-  const pending = orders.value.filter(o => o.status === 'pending').length
-  const ready_for_pickup = orders.value.filter(o => o.status === 'ready_for_pickup').length
-  const warehouse_received = orders.value.filter(o => o.status === 'warehouse_received').length
-  const shipped = orders.value.filter(o => o.status === 'shipped').length
-  const delivered = orders.value.filter(o => o.status === 'delivered').length
-  const cancelled = orders.value.filter(o => o.status === 'cancelled').length
-    
-    return {
-       total,
-    pending,
-    ready_for_pickup,
-    warehouse_received,
-    shipped,
-    delivered,
-    cancelled
-    }
-  }
-
-  function startAutoRefresh(intervalMinutes = 5) {
-  stopAutoRefresh()
-  dataCache.value.autoRefreshInterval = setInterval(() => {
-    if (!loadingStates.value.fetching) {
-      refreshOrders()
-    }
-  }, intervalMinutes * 60 * 1000)
-}
-
-function stopAutoRefresh() {
-  if (dataCache.value.autoRefreshInterval) {
-    clearInterval(dataCache.value.autoRefreshInterval)
-    dataCache.value.autoRefreshInterval = null
-  }
-}
-
-// Calcular estadísticas adicionales
-function calculateAdditionalStats() {
-  const total = orders.value.length
-  if (total === 0) return
-  
-  const totalRevenue = orders.value.reduce((sum, order) => sum + (order.total_amount || 0), 0)
-  const delivered = orders.value.filter(o => o.status === 'delivered').length
-  const pending = orders.value.filter(o => o.status === 'pending').length
-  
-  additionalStats.value = {
-    totalRevenue,
-    averageOrderValue: totalRevenue / total,
-    deliveryRate: (delivered / total) * 100,
-    pendingRate: (pending / total) * 100
-  }
-}
-
-// Exportar datos
-async function exportOrders(format = 'excel', filters = {}) {
-  loadingStates.value.exporting = true
-  try {
-    console.log('📤 Exportando pedidos para dashboard con filtros:', filters)
-    
-    // ✅ USAR LA NUEVA FUNCIÓN DE DASHBOARD
-    const response = await apiService.orders.exportForDashboard(filters)
-    
-    if (!response || !response.data) {
-      throw new Error('Respuesta vacía del servidor')
-    }
-    
-    // Crear y descargar archivo
-    const blob = new Blob([response.data], { 
-      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
-    })
-    
-    const url = window.URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    
-    // Nombre del archivo más descriptivo
-    const timestamp = new Date().toISOString().split('T')[0]
-    const totalOrders = orders.value.length
-    link.download = `pedidos_envigo_${timestamp}_${totalOrders}_pedidos.xlsx`
-    
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    window.URL.revokeObjectURL(url)
-    
-    console.log('✅ Exportación de dashboard completada')
-    toast.success(`✅ Exportación completada: ${totalOrders} pedidos descargados`)
-    return response
-    
-  } catch (error) {
-    console.error('❌ Error exportando pedidos:', error)
-    
-    // Manejo de errores más específico
-    if (error.response?.status === 404) {
-      toast.warning('No se encontraron pedidos para exportar con los filtros aplicados')
-    } else if (error.response?.status === 403) {
-      toast.error('No tienes permisos para exportar pedidos')
-    } else if (error.response?.status === 500) {
-      toast.error('Error interno del servidor. Contacta al soporte.')
-    } else if (error.message?.includes('Network Error')) {
-      toast.error('Error de conexión. Verifica tu internet.')
+  function handleApiResponse(data) {
+    if (data.orders) {
+      // Formato: { orders: [...], pagination: {...} }
+      orders.value = data.orders
+      if (data.pagination) {
+        pagination.value = { ...pagination.value, ...data.pagination }
+      }
+    } else if (Array.isArray(data)) {
+      // Formato: [orders...] (array simple)
+      orders.value = data
+      pagination.value.total = data.length
+      pagination.value.totalPages = Math.ceil(data.length / pagination.value.limit)
     } else {
-      toast.error('Error al exportar pedidos: ' + (error.message || 'Error desconocido'))
+      // Otros formatos
+      orders.value = data.data || []
+      pagination.value = {
+        ...pagination.value,
+        total: data.total || 0,
+        totalPages: Math.ceil((data.total || 0) / pagination.value.limit)
+      }
+    }
+  }
+
+  /**
+   * Calcular estadísticas de los pedidos
+   */
+  function calculateStats() {
+    const statusCounts = orders.value.reduce((acc, order) => {
+      acc[order.status] = (acc[order.status] || 0) + 1
+      acc.totalRevenue += order.total_amount || 0
+      return acc
+    }, { totalRevenue: 0 })
+
+    stats.value = {
+      total: orders.value.length,
+      pending: statusCounts.pending || 0,
+      processing: statusCounts.processing || 0,
+      ready_for_pickup: statusCounts.ready_for_pickup || 0,
+      assigned: statusCounts.assigned || 0,
+      shipped: statusCounts.shipped || 0,
+      delivered: statusCounts.delivered || 0,
+      cancelled: statusCounts.cancelled || 0,
+      totalRevenue: statusCounts.totalRevenue,
+      averageOrderValue: orders.value.length > 0 ? statusCounts.totalRevenue / orders.value.length : 0,
+      deliveryRate: orders.value.length > 0 ? Math.round(((statusCounts.delivered || 0) / orders.value.length) * 100) : 0
+    }
+  }
+
+  /**
+   * Generar clave de cache
+   */
+  function generateCacheKey(filters, pagination) {
+    return `${JSON.stringify(filters)}_${pagination.page}_${pagination.limit}`
+  }
+
+  /**
+   * Verificar si debe usar cache
+   */
+  function shouldUseCache(cacheKey) {
+    const cached = cache.value.data.get(cacheKey)
+    if (!cached) return false
+    
+    const now = Date.now()
+    const cacheAge = now - cached.timestamp
+    return cacheAge < 30000 // 30 segundos
+  }
+
+  /**
+   * Manejo unificado de errores
+   */
+  function handleError(error, defaultMessage = 'Error en operación') {
+    console.error(`❌ [${mode.toUpperCase()}] ${defaultMessage}:`, error)
+    
+    let message = defaultMessage
+    
+    if (error.response?.data?.message) {
+      message = error.response.data.message
+    } else if (error.message) {
+      message = error.message
     }
     
-    throw error
-  } finally {
-    loadingStates.value.exporting = false
+    toast.error(message)
   }
-}
 
-// Obtener tendencias
-async function getOrdersTrend(period = '30d') {
-  try {
-    const { data } = await apiService.orders.getTrend({ period })
-    return data
-  } catch (error) {
-    console.error('Error fetching trend:', error)
-    return []
-  }
-}
+  // ==================== WATCHERS ====================
 
+  // Auto-refetch cuando cambia la paginación
+  watch(
+    [() => pagination.value.page, () => pagination.value.limit],
+    () => {
+      if (cache.value.lastFetch) {
+        fetchOrders(cache.value.lastFilters || {})
+      }
+    }
+  )
 
-/**
- * Marcar múltiples pedidos como listos para retiro
- */
-async function markMultipleAsReady(orderIds) {
-  try {
-    console.log('📦 Marcando múltiples pedidos como listos:', orderIds);
-    
-    const response = await apiService.orders.markMultipleAsReady(orderIds);
-    
-    // Actualizar estado local de cada pedido
-    orderIds.forEach(orderId => {
-      updateOrderLocally(orderId, { status: 'ready_for_pickup' });
-    });
-    
-    console.log(`✅ ${orderIds.length} pedidos marcados como listos`);
-    toast.success(`${orderIds.length} pedidos marcados como listos para retiro`);
-    
-    return response;
-    
-  } catch (error) {
-    console.error('❌ Error marcando múltiples pedidos como listos:', error);
-    toast.error('Error al marcar pedidos como listos');
-    throw error;
-  }
-}
+  // ==================== LIFECYCLE ====================
 
-/**
- * Marcar un pedido individual como listo
- */
-async function markOrderAsReady(order) {
-  try {
-    console.log('📦 Marcando pedido como listo:', order.order_number);
-    
-    await apiService.orders.markAsReady(order._id);
-    
-    // Actualizar estado local
-    updateOrderLocally(order._id, { status: 'ready_for_pickup' });
-    
-    toast.success(`Pedido #${order.order_number} marcado como listo para retiro`);
-    
-  } catch (error) {
-    console.error('❌ Error marcando pedido como listo:', error);
-    toast.error('No se pudo actualizar el estado del pedido');
-    throw error;
-  }
-}
-// 📦 Marcar como recepcionado en bodega
-const markAsWarehouseReceived = async (order) => {
-  try {
-    loadingOrders.value = true;
-    
-    const response = await apiService.orders.updateStatus(order._id, 'warehouse_received');
-    
-    updateOrderLocally({
-      _id: order._id,
-      status: 'warehouse_received',
-      updated_at: new Date().toISOString()
-    });
-    
-    toast.success(`📦 Pedido #${order.order_number} recepcionado en bodega`);
-    return response.data;
-  } catch (error) {
-    console.error('Error marcando como recepcionado:', error);
-    toast.error('❌ Error al recepcionar pedido');
-    throw error;
-  } finally {
-    loadingOrders.value = false;
-  }
-};
+  // Limpiar al desmontar
+  onUnmounted(() => {
+    stopAutoRefresh()
+    cache.value.data.clear()
+  })
 
-// 🚚 Marcar como enviado
-const markAsShipped = async (order) => {
-  try {
-    loadingOrders.value = true;
-    
-    const response = await apiService.orders.updateStatus(order._id, 'shipped');
-    
-    updateOrderLocally({
-      _id: order._id,
-      status: 'shipped',
-      updated_at: new Date().toISOString()
-    });
-    
-    toast.success(`🚚 Pedido #${order.order_number} salió para entrega`);
-    return response.data;
-  } catch (error) {
-    console.error('Error marcando como enviado:', error);
-    toast.error('❌ Error al enviar pedido');
-    throw error;
-  } finally {
-    loadingOrders.value = false;
-  }
-};
-  // ==================== RETURN ====================
+  // ==================== RETURN API ====================
   return {
-    // State
+    // Estado principal
     orders,
     companies,
-    loadingOrders,
-    pagination,
-    loadingStates,
-    additionalStats,
     channels,
-  
-     // Computed
-        user,           
-        companyId, 
-
-    // Methods
+    drivers,
+    pagination,
+    stats,
+    
+    // Estados de carga
+    loadingOrders,
+    loading,
+    refreshing,
+    loadingStates,
+    
+    // Computed
+    isAdmin,
+    user,
+    companyId,
+    orderStats,
+    additionalStats,
+    
+    // Métodos principales
     fetchOrders,
-    fetchChannels,
     fetchCompanies,
+    fetchChannels,
+    fetchDrivers,
+    refreshOrders,
+    
+    // Paginación
     goToPage,
     changePageSize,
-    refreshOrders,
-    getCompanyName,
-    getOrderById,
+    
+    // Acciones de pedidos
+    markOrderAsReady,
+    markMultipleAsReady,
+    exportOrders,
+    
+    // Utilidades
     updateOrderLocally,
-    removeOrderLocally,
     addOrderLocally,
-    getOrdersStats,
+    removeOrderLocally,
+    getOrderById,
+    getCompanyName,
+    
+    // Auto-refresh
     startAutoRefresh,
     stopAutoRefresh,
-    exportOrders,
-    getOrdersTrend,
-    calculateAdditionalStats,
-    markMultipleAsReady,
-    markOrderAsReady,
-    markAsWarehouseReceived,
-    markAsShipped
+    
+    // Legacy methods (para compatibilidad con código existente)
+    getOrdersStats: () => orderStats.value,
+    calculateAdditionalStats: calculateStats,
+    markAsWarehouseReceived: (order) => markOrderAsReady(order), // Alias
+    markAsAssigned: (order) => markOrderAsReady(order), // Alias
+    markAsShipped: (order) => markOrderAsReady(order) // Alias
   }
 }
