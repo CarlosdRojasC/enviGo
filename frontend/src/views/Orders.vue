@@ -26,6 +26,7 @@
   :filter-presets="filterPresets"
   :active-filters-count="activeFiltersCount"
   :is-admin="false"
+  :company-id="companyId" 
   :loading="loadingOrders"
   @filter-change="handleFilterChange"
   @advanced-filter-change="updateAdvancedFilter"
@@ -159,6 +160,7 @@ const {
   refreshing,
   additionalStats,
   loadingStates,
+  companyId,
   fetchOrders,
   fetchChannels,
   goToPage,
@@ -187,7 +189,10 @@ const {
   applySearch,
   resetFilters,
   handleFilterChange,  // NUEVA FUNCIÓN
-  clearAllFilters
+  clearAllFilters,
+  fetchAvailableCommunes, // ✨ NECESITAMOS ESTA FUNCIÓN
+  addCommune,
+  removeCommune,
 } = useOrdersFilters(orders, fetchOrders)
 
 // Selección múltiple
@@ -887,6 +892,9 @@ onMounted(async () => {
       fetchOrders(),
       fetchChannels()
     ])
+    if (companyId.value) {
+      await fetchAvailableCommunes(companyId.value);
+    }
     lastUpdate.value = Date.now()
     
     // ⚡ NUEVO: Setup real-time updates

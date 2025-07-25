@@ -425,6 +425,10 @@ const props = defineProps({
   loading: {
     type: Boolean,
     default: false
+  },
+   companyId: {
+    type: String,
+    default: null
   }
 })
 
@@ -564,9 +568,21 @@ function formatDate(dateString) {
   return new Date(dateString).toLocaleDateString('es-CL')
 }
 
+// Observador que reacciona cuando la prop `companyId` se recibe o cambia.
+watch(() => props.companyId, (newId) => {
+  if (newId) {
+    // Si se recibe un ID de compañía, se lo pasamos al filtro interno.
+    // Esto asegura que todas las búsquedas futuras incluyan este ID.
+    updateFilter('company_id', newId);
+  }
+}, { immediate: true }); // `immediate: true` hace que se ejecute al montar el componente.
+
 // ==================== LIFECYCLE ====================
 onMounted(() => {
   document.addEventListener('click', handleClickOutside)
+   if (!props.isAdmin && props.companyId) {
+     updateFilter('company_id', props.companyId);
+  }
 })
 
 onUnmounted(() => {
