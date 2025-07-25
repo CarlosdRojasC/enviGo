@@ -110,6 +110,7 @@
 import { ref, computed, onMounted, watch, nextTick, onBeforeUnmount,onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useToast } from 'vue-toastification'
+import { emitter } from '../services/eventBus.service'
 
 // Composables
 import { useOrdersData } from '../composables/useOrdersData'
@@ -342,6 +343,24 @@ watch(orders, () => {
 
 // ==================== METHODS ====================
 
+
+const handleOpenModalFromGlobalSearch = async (orderId) => {
+  if (!orderId) return;
+  
+  console.log(`Event received: open-order-details with ID: ${orderId}`);
+  
+  try {
+    // Podrías poner un spinner aquí si quisieras
+    const response = await apiService.orders.getById(orderId);
+    
+    // Usamos la función del composable para abrir el modal con los datos recibidos
+    openOrderDetailsModal(response.data);
+
+  } catch (error) {
+    console.error('Error buscando detalles del pedido desde el header:', error);
+    toast.error('No se pudo encontrar el pedido seleccionado.');
+  }
+};
 /**
  * Handle quick actions from header
  */
@@ -691,7 +710,9 @@ onMounted(async () => {
       }
     }, 30000)
     
-    isInitialLoad.value = false
+    isInitialLoad.value = false 
+     
+    emitter.on('open-order-details', handleOpenModalFromGlobalSearch);
     
   } catch (error) {
     handleError(error, 'Carga inicial')
@@ -699,12 +720,12 @@ onMounted(async () => {
 })
 
 // Cleanup
-onBeforeUnmount(() => {
-  document.removeEventListener('keydown', handleKeyboardShortcuts)
-
+onUnmounted(() => {
+  document.removeEventListener('keydown', handleKeyboardShortcuts);
   // ⚡ NUEVO: Cleanup real-time listeners
-  console.log('🧹 [AdminOrders] Limpiando listeners de tiempo real')
-  window.removeEventListener('orderUpdated', handleOrderUpdate)
+  console.log('🧹 [AdminOrders] Limpiando listeners de tiempo real');
+  window.removeEventListener('orderUpdated', handleOrderUpdate);
+  emitter.off('open-order-details', handleOpenModalFromGlobalSearch);
 })
 </script>
 

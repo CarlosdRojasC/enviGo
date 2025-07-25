@@ -7,7 +7,7 @@ import { apiService } from '../services/api'
 import { useEnvigoToast } from '../services/toast.service'
 import wsManager from '../services/websocket.service'
 import UtilsService, { useDebouncedSearch, useCache } from '../services/utils.service'
-
+import { emitter } from '../services/eventBus.service';
 // ==================== SETUP ====================
 const emit = defineEmits(['toggle-mobile-menu'])
 const route = useRoute()
@@ -525,21 +525,22 @@ function handleNotificationClick(notification) {
 }
 
 function selectSearchResult(result) {
-  // Ocultar los resultados y limpiar la búsqueda
+  // Ocultar y limpiar la búsqueda
   searchFocused.value = false;
   searchQuery.value = '';
   searchResults.value = [];
   
-  // --- 👇 ESTA ES LA LÓGICA CORREGIDA 👇 ---
-  // 1. Verificar si el resultado tiene una propiedad 'route'.
-  if (result && result.route) {
-    console.log(`🚀 Navegando a: ${result.route}`);
-    
-    // 2. Usar el router de Vue para navegar a la ruta especificada.
-    router.push(result.route);
-    
+  // Si el resultado tiene un ID, emitimos un evento para abrir el modal.
+  if (result && result.id) {
+    console.log(`Event emitted: open-order-details with ID: ${result.id}`);
+    emitter.emit('open-order-details', result.id);
   } else {
-    console.warn('⚠️ El resultado de búsqueda no tiene una ruta a la cual navegar.', result);
+    // Si no tiene ID (ej. es una empresa), usamos la navegación normal.
+    if (result && result.route) {
+        router.push(result.route);
+    } else {
+        console.warn('El resultado no tiene ID ni ruta para la acción.', result);
+    }
   }
 }
 
