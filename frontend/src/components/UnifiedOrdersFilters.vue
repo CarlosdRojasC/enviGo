@@ -452,6 +452,14 @@ const showCommuneDropdown = ref(false)
 const showAdvancedFilters = computed(() => props.filtersUI.showAdvanced)
 const activePreset = computed(() => props.filtersUI.activePreset)
 
+const filteredCommunes = computed(() => {
+  if (!communeSearch.value) {
+    return props.availableCommunes
+  }
+  return props.availableCommunes.filter(commune => 
+    commune.toLowerCase().includes(communeSearch.value.toLowerCase())
+  )
+})
 // ==================== METHODS ====================
 
 /**
