@@ -1,5 +1,5 @@
 // composables/useOrdersData.js
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useToast } from 'vue-toastification'
 import { apiService } from '../services/api'
 import { useAuthStore } from '../store/auth'
@@ -54,9 +54,14 @@ export function useOrdersData() {
    * ID de empresa del usuario
    */
   const companyId = computed(() => {
-    return user.value?.company_id || user.value?.company?._id
+    if (auth.user && auth.user.company_id) {
+      return auth.user.company_id
+    }
+    if (auth.user && auth.user.company && auth.user.company._id) {
+      return auth.user.company._id
+    }
+    return null // Devuelve null si no se encuentra, en lugar de undefined
   })
-
   // ==================== HELPER FUNCTIONS ====================
   
   /**
@@ -217,23 +222,23 @@ export function useOrdersData() {
   /**
    * Fetch channels for company
    */
-  async function fetchChannels() {
-    try {
-      if (!companyId.value) {
-        logger.warn('⚠️ No company ID available for fetching channels')
-        return
-      }
+ async function fetchChannels() {
+    // Esta función ahora será llamada solo cuando companyId.value tenga un valor.
+    if (!companyId.value) {
+      logger.warn('⚠️ No hay ID de compañía aún, esperando para cargar canales.')
+      return
+    }
 
-      logger.dev('🏪 Fetching channels for company:', companyId.value)
+    try {
+      logger.dev('🏪 Cargando canales para la compañía:', companyId.value)
       
       const { data } = await apiService.channels.getByCompany(companyId.value)
-      channels.value = data || []
+      channels.value = data?.data || data || [] // Manejo mejorado de la respuesta
       
-      logger.success(`✅ Loaded ${channels.value.length} channels`)
+      logger.success(`✅ Canales cargados: ${channels.value.length}`)
       
     } catch (err) {
-      logger.error('❌ Error fetching channels:', err.message)
-      // No mostramos toast aquí porque es información secundaria
+      logger.error('❌ Error cargando canales:', err.message)
       channels.value = []
     }
   }

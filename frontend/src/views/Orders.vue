@@ -883,45 +883,50 @@ const realTimeStats = computed(() => ({
   recentNotifications: orderUpdateQueue.value.length,
   connectionTime: lastUpdate.value
 }))
+
+
+
+// ==================== ✨ LÓGICA DE CARGA CORREGIDA ✨ ====================
+
+// Este 'watch' es ahora el ÚNICO responsable de cargar datos
+// que dependen del ID de la compañía.
+watch(companyId, (newId, oldId) => {
+  // Solo actuamos si el nuevo ID es válido y diferente al anterior (o si el anterior era nulo)
+  if (newId && newId !== oldId) {
+    console.log(`✅ ID de Compañía detectado: ${newId}. Cargando datos dependientes...`);
+
+    // 1. Cargar canales para la compañía
+    fetchChannels();
+    
+    // 2. Cargar las comunas disponibles para esa compañía
+    fetchAvailableCommunes(newId);
+  }
+}, {
+  immediate: true // Intenta ejecutar el watch en cuanto el componente se monta.
+                  // Si el ID ya está en el store de auth, se ejecuta al instante.
+                  // Si no, esperará hasta que el ID aparezca.
+});
+
 // ==================== LIFECYCLE ====================
 
 onMounted(async () => {
+  console.log('🚀 Orders.vue montado. Esperando ID de compañía para cargas secundarias...');
+
   try {
-    // Carga inicial existente
-    await Promise.all([
-      fetchOrders(),
-      fetchChannels()
-    ])
-    if (companyId.value) {
-      await fetchAvailableCommunes(companyId.value);
-    }
-    lastUpdate.value = Date.now()
-    
-    // ⚡ NUEVO: Setup real-time updates
-    console.log('🔗 [Orders] Configurando actualizaciones en tiempo real para empresa:', auth.user?.company_id)
-    
-    // Escuchar actualizaciones de órdenes via WebSocket
-    window.addEventListener('orderUpdated', handleOrderUpdate)
-    
-    // Procesar actualizaciones pendientes cada 20 segundos
-    setInterval(() => {
-      if (realTimeEnabled.value) {
-        processPendingUpdates()
-      }
-    }, 20000)
-    
-    // Limpiar cola de notificaciones cada minuto
-    setInterval(() => {
-      cleanupNotificationQueue()
-    }, 60000)
-    
-    console.log('✅ [Orders] Sistema de tiempo real configurado')
-    
+    // 1. Cargamos ÚNICAMENTE la lista de pedidos.
+    // El backend ya debería saber qué pedidos mostrar basado en el token del usuario.
+    await fetchOrders();
+    lastUpdate.value = Date.now();
+
+    // 2. Configuramos los listeners de tiempo real.
+    // No dependen de que los canales o comunas estén cargados.
+    window.addEventListener('orderUpdated', handleOrderUpdate);
+
   } catch (error) {
-    console.error('Error al inicializar Orders:', error)
-    toast.error('Error al cargar la página')
+    console.error('❌ Error en la carga inicial de pedidos:', error);
+    toast.error('Error al cargar la lista de pedidos.');
   }
-})
+});
 onBeforeUnmount(() => {
   // Cleanup existente
   if (autoRefreshEnabled.value) {
