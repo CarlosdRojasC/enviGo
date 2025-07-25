@@ -139,41 +139,14 @@ async function loadNotifications(page = 1, useCacheFlag = true) {
     loading.value = page === 1;
     loadingMore.value = page > 1;
 
-    // --- INICIO DE LA DEPURACIÓN ---
-    // Este bloque nos ayudará a entender qué está pasando con apiService.
-    if (!apiService) {
-      console.error('❌ ERROR CRÍTICO: apiService no está definido o no se pudo importar.');
-      throw new Error('apiService is not available');
-    }
-
-    // Imprimimos el objeto apiService para ver su estructura real.
-    console.log('🤔 Inspeccionando apiService:', apiService);
-    // --- FIN DE LA DEPURACIÓN ---
-
-    let response;
-
-    // Intento 1: Verificar si apiService.get es una función (como en el código original).
-    if (typeof apiService.get === 'function') {
-      console.log('✅ Intentando con apiService.get()');
-      response = await utils.retry(() =>
-        apiService.get('/notifications', {
-          params: { page, limit: 10, include_read: true }
-        })
-      );
-    }
-    // Intento 2: Verificar si la estructura anidada es la correcta.
-    else if (typeof apiService.notifications?.getAll === 'function') {
-      console.log('✅ Intentando con apiService.notifications.getAll()');
-      response = await utils.retry(() =>
-        apiService.notifications.getAll({ page, limit: 10, include_read: true })
-      );
-    }
-    // Si ninguna funciona, el problema es la estructura del servicio.
-    else {
-      console.error('❌ No se encontró un método de API válido en apiService.');
-      console.error('👉 REVISA TU ARCHIVO `services/api.js`. La estructura de `apiService` no es la esperada.');
-      throw new Error('No valid API method found on apiService.');
-    }
+    // ✅ Llamada correcta al nuevo servicio que acabamos de crear
+    const response = await utils.retry(() =>
+      apiService.notifications.getAll({
+        page,
+        limit: 10,
+        include_read: true
+      })
+    );
 
     const newNotifications = response.data.notifications || response.data.data || response.data || [];
 
@@ -191,7 +164,7 @@ async function loadNotifications(page = 1, useCacheFlag = true) {
     }
 
   } catch (error) {
-    console.error('❌ Error final en loadNotifications:', error);
+    console.error('❌ Error cargando notificaciones:', error);
     if (page === 1) {
       notifications.value = getExampleNotifications();
     }
