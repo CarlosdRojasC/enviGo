@@ -20,7 +20,7 @@ const channelSchema = new mongoose.Schema({
     type: Object,
     default: {} // ✅ ASEGURAR QUE TENGA DEFAULT
   },
-  
+
   channel_name: { 
     type: String, 
     required: [true, 'El nombre del canal es obligatorio'],
@@ -35,15 +35,30 @@ const channelSchema = new mongoose.Schema({
     type: String,
     trim: true
   },
-  store_url: { 
+ store_url: { 
     type: String,
     trim: true,
     validate: {
       validator: function(v) {
-        if (!v) return true;
+        // ✅ Si no hay valor, permitir (excepto para canales que lo requieren)
+        if (!v) {
+          // Para general_store, el store_url es opcional
+          if (this.channel_type === 'general_store') {
+            return true;
+          }
+          // Para otros canales, verificar si es requerido
+          return !['shopify', 'woocommerce', 'mercadolibre'].includes(this.channel_type);
+        }
+        
+        // ✅ Si hay valor, debe ser una URL válida
         return /^https?:\/\/.+/.test(v);
       },
-      message: 'La URL de la tienda debe ser válida'
+      message: function(props) {
+        if (!props.value) {
+          return `La URL de la tienda es requerida para ${this.channel_type}`;
+        }
+        return 'La URL de la tienda debe ser válida (debe comenzar con http:// o https://)';
+      }
     }
   },
   webhook_secret: { 
