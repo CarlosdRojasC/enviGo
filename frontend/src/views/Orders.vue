@@ -17,25 +17,24 @@
 
     <!-- Filtros modernos -->
 <UnifiedOrdersFilters
-      :filters="filters"
-      :advanced-filters="advancedFilters"
-      :filters-u-i="filtersUI"
-      :companies="companies"
-      :channels="channels"
-      :available-communes="availableCommunes"
-      :filtered-communes="filteredCommunes"
-      :filter-presets="filterPresets"
-      :active-filters-count="activeFiltersCount"
-      :loading="loadingOrders"
-      @filter-change="handleFilterChange"
-      @advanced-filter-change="updateAdvancedFilter"
-      @reset-filters="resetFilters"
-      @toggle-advanced="toggleAdvancedFilters"
-      @apply-preset="applyPreset"
-      @add-commune="addCommune"
-      @remove-commune="removeCommune"
-    />
-
+  :filters="filters"
+  :advanced-filters="advancedFilters"
+  :filters-u-i="filtersUI"
+  :channels="channels"
+  :available-communes="availableCommunes"
+  :filtered-communes="filteredCommunes"
+  :filter-presets="filterPresets"
+  :active-filters-count="activeFiltersCount"
+  :is-admin="false"
+  :loading="loadingOrders"
+  @filter-change="handleFilterChange"
+  @advanced-filter-change="updateAdvancedFilter"
+  @reset-filters="resetFilters"
+  @toggle-advanced="toggleAdvancedFilters"
+  @apply-preset="applyPreset"
+  @add-commune="addCommune"
+  @remove-commune="removeCommune"
+/>
 
     <!-- Tabla moderna -->
     <OrdersTable
@@ -119,37 +118,41 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onBeforeUnmount } from 'vue';
-import { useRouter } from 'vue-router';
-import { useAuthStore } from '../store/auth';
-import { apiService } from '../services/api';
-import { useToast } from 'vue-toastification';
+import { ref, onMounted, computed, onBeforeUnmount } from 'vue'
+import { useRouter } from 'vue-router'
+import { useAuthStore } from '../store/auth'
+import { apiService } from '../services/api'
+import { useToast } from 'vue-toastification'
 
-// Componentes
-import Modal from '../components/Modal.vue';
-import OrderDetails from '../components/OrderDetails.vue';
-import OrderTracking from '../components/OrderTracking.vue';
-import ProofOfDelivery from '../components/ProofOfDelivery.vue';
-import OrdersHeader from '../components/Orders/OrdersHeader.vue';
-import OrdersTable from '../components/Orders/OrdersTable.vue';
-import UnifiedOrdersFilters from '../components/UnifiedOrdersFilters.vue';
+// Componentes importados
+import Modal from '../components/Modal.vue'
+import OrderDetails from '../components/OrderDetails.vue'
+import OrderTracking from '../components/OrderTracking.vue'
+import ProofOfDelivery from '../components/ProofOfDelivery.vue'
 
-// Composables
-import { useOrdersData } from '../composables/useOrdersData';
-import { useOrdersFilters } from '../composables/useOrdersFilters';
-import { useOrdersSelection } from '../composables/useOrdersSelection';
+// Nuevos componentes modernos
+import OrdersHeader from '../components/Orders/OrdersHeader.vue'
+import OrdersFilters from '../components/Orders/OrdersFilters.vue'
+import OrdersTable from '../components/Orders/OrdersTable.vue'
 
-// --- SETUP INICIAL ---
-const toast = useToast();
-const router = useRouter();
-const auth = useAuthStore();
+
+// Composables (asumiendo que ya los extendiste)
+import { useOrdersData } from '../composables/useOrdersData'
+import { useOrdersFilters } from '../composables/useOrdersFilters'
+import { useOrdersSelection } from '../composables/useOrdersSelection'
+import ExportDropdown from '../components/Orders/ExportDropdown.vue'
+import UnifiedOrdersFilters from '../components/UnifiedOrdersFilters.vue'
+
+
+const toast = useToast()
+const router = useRouter()
+const auth = useAuthStore()
 
 // ==================== COMPOSABLES ====================
 
 // Datos principales
 const {
   orders,
-  companies,
   channels,
   pagination,
   loading: loadingOrders,
@@ -167,8 +170,9 @@ const {
   startAutoRefresh,
   stopAutoRefresh,
   updateOrderLocally
-} = useOrdersData();
+} = useOrdersData()
 
+// Filtros
 const {
   filters,
   advancedFilters,
@@ -177,19 +181,16 @@ const {
   allFilters,
   activeFiltersCount,
   availableCommunes,
-  filteredCommunes, // Añadido para que coincida con tu template
   applyPreset,
   toggleAdvancedFilters,
   updateAdvancedFilter,
   applySearch,
   resetFilters,
-  handleFilterChange,
-  clearAllFilters,
-  addCommune,
-  removeCommune,
-  fetchAvailableCommunes
-} = useOrdersFilters(orders, fetchOrders, { mode: 'company' });
+  handleFilterChange,  // NUEVA FUNCIÓN
+  clearAllFilters
+} = useOrdersFilters(orders, fetchOrders)
 
+// Selección múltiple
 const {
   selectedOrders,
   selectAllChecked,
@@ -199,24 +200,25 @@ const {
   toggleOrderSelection,
   toggleSelectAll,
   clearSelection
-} = useOrdersSelection(orders);
-
+} = useOrdersSelection(orders)
 
 // ==================== ESTADO LOCAL ====================
 
-const lastUpdate = ref(Date.now());
-const autoRefreshEnabled = ref(false);
-const loadingOrderDetails = ref(false);
-const orderTrackingRef = ref(null);
-const selectedOrder = ref(null);
-const showOrderDetailsModal = ref(false);
-const selectedTrackingOrder = ref(null);
-const showTrackingModal = ref(false);
-const selectedProofOrder = ref(null);
-const showProofModal = ref(false);
-const supportOrder = ref(null);
-const showSupportModal = ref(false);
-const hasInitialDataLoaded = ref(false); // Flag de control
+const user = computed(() => auth.user)
+const lastUpdate = ref(Date.now())
+const autoRefreshEnabled = ref(false)
+const loadingOrderDetails = ref(false)
+const orderTrackingRef = ref(null)
+
+// Estados de modales (mantener los existentes)
+const selectedOrder = ref(null)
+const showOrderDetailsModal = ref(false)
+const selectedTrackingOrder = ref(null)
+const showTrackingModal = ref(false)
+const selectedProofOrder = ref(null)
+const showProofModal = ref(false)
+const supportOrder = ref(null)
+const showSupportModal = ref(false)
 
 // ⚡ TIEMPO REAL: Estado para actualización automática
 const realTimeEnabled = ref(true)
@@ -230,57 +232,17 @@ const orderUpdateQueue = ref([]) // Cola de notificaciones para mostrar
  * Estadísticas para el header
  */
 const orderStats = computed(() => ({
-  total: orders.value.length,
+ total: orders.value.length,
   pending: orders.value.filter(o => o.status === 'pending').length,
   ready_for_pickup: orders.value.filter(o => o.status === 'ready_for_pickup').length,
-  warehouse_received: orders.value.filter(o => o.status === 'warehouse_received').length,
+  warehouse_received: orders.value.filter(o => o.status === 'warehouse_received').length, // 🆕
   processing: orders.value.filter(o => o.status === 'processing').length,
   shipped: orders.value.filter(o => o.status === 'shipped').length,
   delivered: orders.value.filter(o => o.status === 'delivered').length,
   cancelled: orders.value.filter(o => o.status === 'cancelled').length
-}));
+}))
 
 // ==================== MÉTODOS DEL HEADER ====================
-
-
-async function loadInitialData(companyId) {
-  if (hasInitialDataLoaded.value) return; // Si ya se cargaron los datos, no hacer nada.
-  hasInitialDataLoaded.value = true; // Marcar que la carga ha comenzado.
-  
-  console.log(`🚀 Iniciando carga de datos para la empresa: ${companyId}`);
-  toast.info('Cargando datos de pedidos...');
-
-  try {
-    await Promise.all([
-      fetchOrders(),
-      fetchChannels(),
-      fetchAvailableCommunes(companyId) // ¡Aquí pasamos el ID!
-    ]);
-
-    lastUpdate.value = Date.now();
-    console.log('✅ Datos iniciales cargados exitosamente.');
-    
-    // Configurar listeners de tiempo real DESPUÉS de cargar los datos.
-    window.addEventListener('orderUpdated', handleOrderUpdate);
-
-  } catch (error) {
-    console.error('❌ Error fatal durante la carga inicial:', error);
-    toast.error('No se pudieron cargar los datos de la página.');
-    hasInitialDataLoaded.value = false; // Permitir un reintento si algo falla.
-  }
-}
-
-// Este WATCH es el único responsable de disparar la carga de datos.
-watch(() => auth.user?.company_id, (newCompanyId) => {
-  console.log(`[WATCH] El company_id del usuario ahora es: ${newCompanyId}`);
-  
-  // Si tenemos un nuevo ID de empresa y los datos aún no se han cargado...
-  if (newCompanyId && !hasInitialDataLoaded.value) {
-    loadInitialData(newCompanyId);
-  }
-}, {
-  immediate: true // Ejecutar inmediatamente al crear el componente.
-});
 
 async function handleRefresh() {
   try {
@@ -918,51 +880,54 @@ const realTimeStats = computed(() => ({
 }))
 // ==================== LIFECYCLE ====================
 
-watch(() => auth.user, async (newUser, oldUser) => {
-  // Nos aseguramos de que el nuevo usuario tenga un company_id y que no hayamos cargado los datos antes.
-  if (newUser?.company_id && !hasInitialDataLoaded.value) {
+onMounted(async () => {
+  try {
+    // Carga inicial existente
+    await Promise.all([
+      fetchOrders(),
+      fetchChannels()
+    ])
+    lastUpdate.value = Date.now()
     
-    // Marcamos que la carga inicial va a comenzar para que no se ejecute dos veces.
-    hasInitialDataLoaded.value = true;
-    const companyId = newUser.company_id;
-
-    console.log(`✅ Usuario identificado. Iniciando carga de datos para la empresa: ${companyId}`);
-
-    try {
-      // Ahora sí, ejecutamos toda la lógica de carga sabiendo que tenemos el companyId.
-      await Promise.all([
-        fetchOrders(),
-        fetchChannels(),
-        fetchAvailableCommunes(companyId) // Pasamos el ID directamente.
-      ]);
-
-      lastUpdate.value = Date.now();
-      
-      // ... (aquí puedes poner el resto de tu lógica que estaba en onMounted, como los listeners de WebSocket)
-      console.log('🔗 [Orders] Configurando actualizaciones en tiempo real...');
-      window.addEventListener('orderUpdated', handleOrderUpdate);
-
-    } catch (error) {
-      console.error('Error al inicializar los datos de Orders:', error);
-      toast.error('Error al cargar los datos de la página.');
-      // Si falla, reseteamos el flag para permitir un reintento si el usuario navega y vuelve.
-      hasInitialDataLoaded.value = false;
-    }
+    // ⚡ NUEVO: Setup real-time updates
+    console.log('🔗 [Orders] Configurando actualizaciones en tiempo real para empresa:', auth.user?.company_id)
+    
+    // Escuchar actualizaciones de órdenes via WebSocket
+    window.addEventListener('orderUpdated', handleOrderUpdate)
+    
+    // Procesar actualizaciones pendientes cada 20 segundos
+    setInterval(() => {
+      if (realTimeEnabled.value) {
+        processPendingUpdates()
+      }
+    }, 20000)
+    
+    // Limpiar cola de notificaciones cada minuto
+    setInterval(() => {
+      cleanupNotificationQueue()
+    }, 60000)
+    
+    console.log('✅ [Orders] Sistema de tiempo real configurado')
+    
+  } catch (error) {
+    console.error('Error al inicializar Orders:', error)
+    toast.error('Error al cargar la página')
   }
-}, {
-  immediate: true, // Esto hace que el watcher se ejecute una vez al inicio.
-  deep: true       // Vigila cambios dentro del objeto de usuario.
-});
-
-
-
+})
 onBeforeUnmount(() => {
+  // Cleanup existente
   if (autoRefreshEnabled.value) {
-    stopAutoRefresh();
+    stopAutoRefresh()
   }
-  console.log('🧹 Limpiando listeners de tiempo real...');
-  window.removeEventListener('orderUpdated', handleOrderUpdate);
-});
+  
+  // ⚡ NUEVO: Cleanup real-time listeners
+  console.log('🧹 [Orders] Limpiando listeners de tiempo real')
+  window.removeEventListener('orderUpdated', handleOrderUpdate)
+  
+  // Limpiar estado
+  pendingOrderUpdates.value.clear()
+  orderUpdateQueue.value = []
+})
 </script>
 
 <style scoped>
