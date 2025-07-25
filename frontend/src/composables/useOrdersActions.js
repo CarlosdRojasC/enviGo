@@ -147,24 +147,11 @@ export function useOrdersActions(orders, newOrder, isCreatingOrder, fetchOrders)
       // que lo define, usualmente el de modales. Aquí devolvemos éxito.
       return true // Indica que la creación fue exitosa
 
-    } catch (error) {
+    }catch (error) {
       console.error('❌ Error creating order:', error)
-      
-      let errorMessage = 'No se pudo crear el pedido'
-      
-      if (error.response?.data?.errors?.[0]?.msg) {
-        errorMessage = error.response.data.errors[0].msg
-      } else if (error.response?.data?.error) {
-        errorMessage = error.response.data.error
-      } else if (error.response?.data?.message) {
-        errorMessage = error.response.data.message
-      } else if (error.message) {
-        errorMessage = error.message
-      }
-      
-      toast.error(`Error al crear pedido: ${errorMessage}`)
-      return false
-      
+      const errorMessage = error.response?.data?.error || 'No se pudo crear el pedido.'
+      toast.error(errorMessage)
+      return false // Indica que falló
     } finally {
       isCreatingOrder.value = false
     }
