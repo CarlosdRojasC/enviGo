@@ -525,17 +525,22 @@ function handleNotificationClick(notification) {
 }
 
 function selectSearchResult(result) {
-  searchFocused.value = false
-  searchQuery.value = result.title
+  // Ocultar los resultados y limpiar la búsqueda
+  searchFocused.value = false;
+  searchQuery.value = '';
+  searchResults.value = [];
   
-  if (result.route) {
-    router.push(result.route)
+  // --- 👇 ESTA ES LA LÓGICA CORREGIDA 👇 ---
+  // 1. Verificar si el resultado tiene una propiedad 'route'.
+  if (result && result.route) {
+    console.log(`🚀 Navegando a: ${result.route}`);
+    
+    // 2. Usar el router de Vue para navegar a la ruta especificada.
+    router.push(result.route);
+    
+  } else {
+    console.warn('⚠️ El resultado de búsqueda no tiene una ruta a la cual navegar.', result);
   }
-  
-  setTimeout(() => {
-    searchQuery.value = ''
-    searchResults.value = []
-  }, 100)
 }
 
 function clearSearch() {
