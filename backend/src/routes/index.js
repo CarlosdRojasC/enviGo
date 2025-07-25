@@ -18,6 +18,7 @@ const dashboardRoutes = require('./dashboard.routes');
 const shipdayRoutes = require('./shipday.routes');
 const comunasRoutes = require('./comunas.routes');
 const channelRoutes = require('./channels.routes');
+const notificationRoutes = require('./routes/notifications');
 
 router.use('/auth', authRoutes);
 
@@ -37,6 +38,8 @@ router.use('/billing', billingRoutes);
 
 // Webhooks (sin autenticación)
 router.use('/webhooks', webhookRoutes);
+
+app.use('/api/notifications', notificationRoutes);
 
 // Dashboard y estadísticas
 router.use('/', dashboardRoutes);
