@@ -127,12 +127,10 @@ const connectionStatusText = computed(() => {
 async function loadNotifications(page = 1, useCacheFlag = true) {
   const cacheKey = `notifications_${page}`;
 
-  // Verificar cache primero
   if (useCacheFlag) {
     const cached = notificationsCache.get(cacheKey);
     if (cached) {
       notifications.value = cached;
-      console.log(`📬 Notificaciones cargadas desde cache (página ${page})`);
       return;
     }
   }
@@ -141,17 +139,42 @@ async function loadNotifications(page = 1, useCacheFlag = true) {
     loading.value = page === 1;
     loadingMore.value = page > 1;
 
-    // CORRECTO: Usar el método específico del servicio de notificaciones
-    const response = await utils.retry(async () => {
-      // Pasamos los parámetros al método getAll
-      return await apiService.notifications.getAll({
-        page,
-        limit: 10,
-        include_read: true
-      });
-    }, 2, 1000);
+    // --- INICIO DE LA DEPURACIÓN ---
+    // Este bloque nos ayudará a entender qué está pasando con apiService.
+    if (!apiService) {
+      console.error('❌ ERROR CRÍTICO: apiService no está definido o no se pudo importar.');
+      throw new Error('apiService is not available');
+    }
 
-    // La estructura de respuesta de tu API anida los datos
+    // Imprimimos el objeto apiService para ver su estructura real.
+    console.log('🤔 Inspeccionando apiService:', apiService);
+    // --- FIN DE LA DEPURACIÓN ---
+
+    let response;
+
+    // Intento 1: Verificar si apiService.get es una función (como en el código original).
+    if (typeof apiService.get === 'function') {
+      console.log('✅ Intentando con apiService.get()');
+      response = await utils.retry(() =>
+        apiService.get('/notifications', {
+          params: { page, limit: 10, include_read: true }
+        })
+      );
+    }
+    // Intento 2: Verificar si la estructura anidada es la correcta.
+    else if (typeof apiService.notifications?.getAll === 'function') {
+      console.log('✅ Intentando con apiService.notifications.getAll()');
+      response = await utils.retry(() =>
+        apiService.notifications.getAll({ page, limit: 10, include_read: true })
+      );
+    }
+    // Si ninguna funciona, el problema es la estructura del servicio.
+    else {
+      console.error('❌ No se encontró un método de API válido en apiService.');
+      console.error('👉 REVISA TU ARCHIVO `services/api.js`. La estructura de `apiService` no es la esperada.');
+      throw new Error('No valid API method found on apiService.');
+    }
+
     const newNotifications = response.data.notifications || response.data.data || response.data || [];
 
     if (page === 1) {
@@ -163,23 +186,16 @@ async function loadNotifications(page = 1, useCacheFlag = true) {
     hasMoreNotifications.value = response.data.hasMore || response.data.has_more || false;
     currentPage.value = page;
 
-    // Guardar en cache solo si hay notificaciones
     if (newNotifications.length > 0) {
       notificationsCache.set(cacheKey, notifications.value);
     }
 
-    console.log(`📬 Notificaciones cargadas: ${newNotifications.length} (página ${page})`);
-
   } catch (error) {
-    console.error('❌ Error cargando notificaciones:', error);
-
+    console.error('❌ Error final en loadNotifications:', error);
     if (page === 1) {
       notifications.value = getExampleNotifications();
     }
-
-    if (!error.response || error.response.status !== 404) {
-      toast.error('Error al cargar notificaciones. Usando datos de ejemplo.');
-    }
+    toast.error('No se pudieron cargar las notificaciones.');
   } finally {
     loading.value = false;
     loadingMore.value = false;

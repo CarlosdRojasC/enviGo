@@ -374,7 +374,27 @@ getAllForAdmin: () => api.get('/channels/admin/all'),
     testCommune: (channelId, data) => api.post(`/channels/${channelId}/communes/test`, data),
     syncWithCommunes: (channelId, data) => api.post(`/channels/${channelId}/sync-with-communes`, data)
 }
+const notifications = {
+  /**
+   * Obtener todas las notificaciones con paginación
+   * @param {object} params - Parámetros como page, limit, include_read
+   * @returns {Promise}
+   */
+  getAll: (params = {}) => api.get('/notifications', { params }),
 
+  /**
+   * Marcar una notificación como leída
+   * @param {string} id - ID de la notificación
+   * @returns {Promise}
+   */
+  markAsRead: (id) => api.post(`/notifications/${id}/read`),
+
+  /**
+   * Marcar todas las notificaciones como leídas
+   * @returns {Promise}
+   */
+  markAllAsRead: () => api.post('/notifications/mark-all-read')
+};
 // Servicios de facturación
 const billing = {
   // Obtener resumen financiero para admin dashboard
@@ -764,7 +784,8 @@ export const apiService = {
   billing,
   dashboard,
   users,
-  shipday
+  shipday,
+  notifications
 }
 
 // Exportar instancia de axios para casos especiales
