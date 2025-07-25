@@ -1,9 +1,9 @@
-<!-- frontend/src/components/Header.vue - VERSIÓN CORREGIDA -->
+<!-- frontend/src/components/Header.vue - CORRECCIÓN INMEDIATA -->
 <script setup>
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../store/auth'
-import { apiService } from '../services/api' // ← Importación corregida
+import { apiService } from '../services/api.service'
 import { useEnvigoToast } from '../services/toast.service'
 import wsManager from '../services/websocket.service'
 import UtilsService, { useDebouncedSearch, useCache } from '../services/utils.service'
@@ -119,10 +119,10 @@ const connectionStatusText = computed(() => {
   return 'En línea'
 })
 
-// ==================== MÉTODOS MEJORADOS ====================
+// ==================== MÉTODOS CORREGIDOS ====================
 
 /**
- * Cargar notificaciones con manejo de errores mejorado
+ * Cargar notificaciones - VERSIÓN SIMPLIFICADA Y SEGURA
  */
 async function loadNotifications(page = 1, useCache = true) {
   const cacheKey = `notifications_${page}`
@@ -140,16 +140,18 @@ async function loadNotifications(page = 1, useCache = true) {
     loading.value = page === 1
     loadingMore.value = page > 1
     
-    // Usar el nuevo método del apiService
+    // USAR DIRECTAMENTE apiService.get en lugar de apiService.notifications.getAll
     const response = await utils.retry(async () => {
-      return await apiService.notifications.getAll({
-        page,
-        limit: 10,
-        include_read: true
+      return await apiService.get('/notifications', {
+        params: {
+          page,
+          limit: 10,
+          include_read: true
+        }
       })
     }, 2, 1000)
     
-    const newNotifications = response.data.notifications || response.data.data || []
+    const newNotifications = response.data.notifications || response.data.data || response.data || []
     
     if (page === 1) {
       notifications.value = newNotifications
@@ -173,9 +175,9 @@ async function loadNotifications(page = 1, useCache = true) {
       notifications.value = getExampleNotifications()
     }
     
-    // Solo mostrar toast si no es un error de red conocido
+    // Solo mostrar toast si no es un error 404 (endpoint no existe)
     if (!error.response || error.response.status !== 404) {
-      toast.error('Error al cargar notificaciones')
+      toast.error('Error al cargar notificaciones. Usando datos de ejemplo.')
     }
   } finally {
     loading.value = false
@@ -184,7 +186,7 @@ async function loadNotifications(page = 1, useCache = true) {
 }
 
 /**
- * Búsqueda global mejorada
+ * Búsqueda global - VERSIÓN SIMPLIFICADA
  */
 async function handleSearch() {
   if (searchQuery.value.trim().length < 2) {
@@ -205,10 +207,12 @@ async function handleSearch() {
   try {
     searchLoading.value = true
     
-    // Usar el nuevo método del apiService
-    const response = await apiService.search.global(query, { limit: 10 })
+    // USAR DIRECTAMENTE apiService.get
+    const response = await apiService.get('/search/global', {
+      params: { q: query, limit: 10 }
+    })
     
-    const results = response.data.results || response.data.data || []
+    const results = response.data.results || response.data.data || response.data || []
     searchResults.value = results
     
     // Guardar en cache
@@ -218,30 +222,14 @@ async function handleSearch() {
     console.error('❌ Error en búsqueda global:', error)
     searchResults.value = []
     
-    if (!error.response || error.response.status !== 404) {
-      toast.error('Error en la búsqueda')
-    }
+    // No mostrar error toast para búsqueda, es menos crítico
   } finally {
     searchLoading.value = false
   }
 }
 
 /**
- * Manejar input de búsqueda
- */
-function handleSearchInput() {
-  if (searchQuery.value.trim().length < 2) {
-    searchResults.value = []
-    searchLoading.value = false
-    return
-  }
-  
-  searchLoading.value = true
-  debouncedSearch()
-}
-
-/**
- * Cargar stats del dashboard
+ * Cargar stats del dashboard - VERSIÓN SIMPLIFICADA
  */
 async function loadQuickStats() {
   if (!['Dashboard', 'Orders'].includes(route.name)) {
@@ -259,8 +247,9 @@ async function loadQuickStats() {
   }
 
   try {
+    // USAR DIRECTAMENTE apiService.get
     const response = await utils.retry(async () => {
-      return await apiService.dashboard.getStats()
+      return await apiService.get('/dashboard/stats')
     }, 2, 1000)
     
     const stats = response.data
@@ -298,12 +287,12 @@ async function loadQuickStats() {
     console.error('❌ Error cargando stats rápidas:', error)
     quickStats.value = []
     
-    // No mostrar toast para este error, es secundario
+    // No mostrar toast para stats, es información secundaria
   }
 }
 
 /**
- * Marcar notificación como leída
+ * Marcar notificación como leída - VERSIÓN SIMPLIFICADA
  */
 async function markAsRead(notificationId) {
   const notification = notifications.value.find(n => n.id === notificationId)
@@ -315,7 +304,8 @@ async function markAsRead(notificationId) {
   notification.isNew = false
   
   try {
-    await apiService.notifications.markAsRead(notificationId)
+    // USAR DIRECTAMENTE apiService.post
+    await apiService.post(`/notifications/${notificationId}/read`)
     
     // Limpiar cache para recargar datos frescos
     notificationsCache.clear()
@@ -333,7 +323,7 @@ async function markAsRead(notificationId) {
 }
 
 /**
- * Marcar todas como leídas
+ * Marcar todas como leídas - VERSIÓN SIMPLIFICADA
  */
 async function markAllAsRead() {
   const unreadNotifications = notifications.value.filter(n => !n.read)
@@ -352,7 +342,8 @@ async function markAllAsRead() {
   })
   
   try {
-    await apiService.notifications.markAllAsRead()
+    // USAR DIRECTAMENTE apiService.post
+    await apiService.post('/notifications/mark-all-read')
     
     // Limpiar cache
     notificationsCache.clear()
@@ -375,79 +366,99 @@ async function markAllAsRead() {
 }
 
 /**
- * Configurar WebSocket
+ * Manejar input de búsqueda
  */
-function setupWebSocket() {
-  // Solo configurar si wsManager está disponible
-  if (!wsManager) {
-    console.warn('⚠️ WebSocket manager no disponible')
+function handleSearchInput() {
+  if (searchQuery.value.trim().length < 2) {
+    searchResults.value = []
+    searchLoading.value = false
     return
   }
-
-  // Estado de conexión
-  wsManager.on('connected', () => {
-    isConnected.value = true
-    lastPingTime.value = Date.now()
-    console.log('🔔 Header: WebSocket conectado')
-  })
   
-  wsManager.on('disconnected', () => {
-    isConnected.value = false
-    console.log('🔔 Header: WebSocket desconectado')
-  })
-  
-  wsManager.on('error', (error) => {
-    console.error('🔔 Header: Error WebSocket:', error)
-    isConnected.value = false
-  })
-  
-  wsManager.on('pong', () => {
-    lastPingTime.value = Date.now()
-  })
-  
-  // Notificaciones en tiempo real
-  wsManager.on('order_notification', (data) => {
-    addRealTimeNotification({
-      id: `rt_${Date.now()}_${Math.random()}`,
-      type: 'order',
-      title: data.title,
-      message: data.message,
-      order_id: data.data?.order_id,
-      order_number: data.data?.order_number,
-      created_at: new Date(),
-      read: false,
-      isNew: true
-    })
-    
-    hasNewNotifications.value = true
-    notificationsCache.clear()
-  })
-  
-  wsManager.on('new_order_notification', (data) => {
-    addRealTimeNotification({
-      id: `rt_${Date.now()}_${Math.random()}`,
-      type: 'new_order',
-      title: data.title,
-      message: data.message,
-      order_id: data.data?.order_id,
-      order_number: data.data?.order_number,
-      created_at: new Date(),
-      read: false,
-      isNew: true
-    })
-    
-    hasNewNotifications.value = true
-    notificationsCache.clear()
-  })
-
-  // Stats updates en tiempo real
-  wsManager.on('stats_update', (data) => {
-    updateQuickStats(data)
-  })
+  searchLoading.value = true
+  debouncedSearch()
 }
 
 /**
- * Resto de métodos permanecen igual...
+ * Configurar WebSocket de forma segura
+ */
+function setupWebSocket() {
+  // Solo configurar si wsManager está disponible
+  if (typeof wsManager === 'undefined' || !wsManager) {
+    console.warn('⚠️ WebSocket manager no disponible')
+    isConnected.value = false
+    return
+  }
+
+  try {
+    // Estado de conexión
+    wsManager.on('connected', () => {
+      isConnected.value = true
+      lastPingTime.value = Date.now()
+      console.log('🔔 Header: WebSocket conectado')
+    })
+    
+    wsManager.on('disconnected', () => {
+      isConnected.value = false
+      console.log('🔔 Header: WebSocket desconectado')
+    })
+    
+    wsManager.on('error', (error) => {
+      console.error('🔔 Header: Error WebSocket:', error)
+      isConnected.value = false
+    })
+    
+    wsManager.on('pong', () => {
+      lastPingTime.value = Date.now()
+    })
+    
+    // Notificaciones en tiempo real
+    wsManager.on('order_notification', (data) => {
+      addRealTimeNotification({
+        id: `rt_${Date.now()}_${Math.random()}`,
+        type: 'order',
+        title: data.title,
+        message: data.message,
+        order_id: data.data?.order_id,
+        order_number: data.data?.order_number,
+        created_at: new Date(),
+        read: false,
+        isNew: true
+      })
+      
+      hasNewNotifications.value = true
+      notificationsCache.clear()
+    })
+    
+    wsManager.on('new_order_notification', (data) => {
+      addRealTimeNotification({
+        id: `rt_${Date.now()}_${Math.random()}`,
+        type: 'new_order',
+        title: data.title,
+        message: data.message,
+        order_id: data.data?.order_id,
+        order_number: data.data?.order_number,
+        created_at: new Date(),
+        read: false,
+        isNew: true
+      })
+      
+      hasNewNotifications.value = true
+      notificationsCache.clear()
+    })
+
+    // Stats updates en tiempo real
+    wsManager.on('stats_update', (data) => {
+      updateQuickStats(data)
+    })
+  } catch (error) {
+    console.error('❌ Error configurando WebSocket:', error)
+    isConnected.value = false
+  }
+}
+
+/**
+ * Resto de métodos auxiliares
  */
 function updateQuickStats(data) {
   let hasUpdates = false
@@ -646,6 +657,16 @@ function getExampleNotifications() {
       created_at: new Date(Date.now() - 1000 * 60 * 60 * 2),
       read: true,
       isNew: false
+    },
+    {
+      id: '4',
+      type: 'delivery',
+      title: 'Entrega en Progreso',
+      message: 'El conductor está en camino a Las Condes',
+      order_number: 'ORD-003',
+      created_at: new Date(Date.now() - 1000 * 60 * 30),
+      read: false,
+      isNew: false
     }
   ]
 }
@@ -674,6 +695,8 @@ watch(() => auth.user?.id, () => {
 // ==================== LIFECYCLE ====================
 onMounted(async () => {
   console.log('🔔 Header dinámico montado')
+  console.log('🔧 DEBUG - apiService:', apiService)
+  console.log('🔧 DEBUG - apiService.get:', typeof apiService?.get)
   
   // Configurar eventos con throttling
   window.addEventListener('scroll', handleScroll, { passive: true })
@@ -686,6 +709,9 @@ onMounted(async () => {
   if (auth.user?.id) {
     loadNotifications()
     loadQuickStats()
+  } else {
+    console.warn('⚠️ Usuario no autenticado, cargando datos de ejemplo')
+    notifications.value = getExampleNotifications()
   }
   
   // Configurar WebSocket
@@ -735,11 +761,11 @@ onUnmounted(() => {
 })
 </script>
 
-<!-- El template permanece igual que en la versión anterior -->
+<!-- El template permanece exactamente igual -->
 <template>
   <header class="header" :class="{ 'header-scrolled': isScrolled }">
     <div class="header-content">
-      <!-- Left Section - Breadcrumbs y título dinámico -->
+      <!-- Left Section -->
       <div class="header-left">
         <div class="page-info">
           <h1 class="page-title">{{ pageTitle }}</h1>
@@ -754,7 +780,6 @@ onUnmounted(() => {
           </div>
         </div>
         
-        <!-- Estadísticas rápidas dinámicas -->
         <div class="quick-stats" v-if="quickStats.length > 0">
           <div 
             v-for="stat in quickStats" 
@@ -769,7 +794,7 @@ onUnmounted(() => {
         </div>
       </div>
 
-      <!-- Center Section - Barra de búsqueda global -->
+      <!-- Center Section -->
       <div class="header-center">
         <div class="global-search" v-if="showSearch">
           <div class="search-input-container">
@@ -789,7 +814,6 @@ onUnmounted(() => {
             <button v-else-if="searchQuery" @click="clearSearch" class="clear-search">×</button>
           </div>
           
-          <!-- Resultados de búsqueda -->
           <div v-if="searchResults.length > 0 && searchFocused" class="search-results">
             <div class="search-category" v-for="category in groupedResults" :key="category.type">
               <div class="category-header">{{ category.label }}</div>
@@ -811,15 +835,13 @@ onUnmounted(() => {
         </div>
       </div>
 
-      <!-- Right Section - Notificaciones y usuario -->
+      <!-- Right Section -->
       <div class="header-right">
-        <!-- Estado de conexión en tiempo real -->
         <div class="connection-status" :class="connectionStatusClass">
           <div class="status-dot" :class="{ pulsing: isConnected }"></div>
           <span class="status-text">{{ connectionStatusText }}</span>
         </div>
 
-        <!-- Notificaciones -->
         <div class="notifications-container">
           <button 
             @click="toggleNotifications" 
@@ -834,7 +856,6 @@ onUnmounted(() => {
             </div>
           </button>
 
-          <!-- Panel de notificaciones -->
           <teleport to="body">
             <div 
               v-if="showNotifications" 
@@ -914,7 +935,6 @@ onUnmounted(() => {
           </teleport>
         </div>
 
-        <!-- Perfil de usuario -->
         <div class="user-profile" @click="toggleUserMenu" ref="userMenuRef">
           <div class="user-avatar" :class="{ online: isConnected }">
             {{ auth.user?.full_name?.charAt(0).toUpperCase() }}
@@ -926,7 +946,6 @@ onUnmounted(() => {
           </div>
           <div class="user-dropdown-arrow">⌄</div>
           
-          <!-- User Menu Dropdown -->
           <div v-if="showUserMenu" class="user-menu-dropdown">
             <div class="user-menu-item" @click="goToProfile">
               <i class="menu-icon">👤</i>
@@ -944,7 +963,6 @@ onUnmounted(() => {
           </div>
         </div>
 
-        <!-- Botón de menú móvil -->
         <button class="mobile-menu-btn" @click="$emit('toggle-mobile-menu')">
           <i class="hamburger-icon">☰</i>
         </button>
@@ -952,7 +970,6 @@ onUnmounted(() => {
     </div>
   </header>
 </template>
-
 
 <style scoped>
 /* Header base */
