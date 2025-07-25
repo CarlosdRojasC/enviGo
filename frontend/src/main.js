@@ -6,7 +6,7 @@ import Toast, { useToast } from 'vue-toastification';
 import 'vue-toastification/dist/index.css';
 import wsManager from './services/websocket.service'
 import './assets/css/variables.css'
-
+import './assets/css/toast-styles.css'
 // Importar tu store de auth
 import { useAuthStore } from './store/auth'
 
@@ -15,10 +15,28 @@ const app = createApp(App)
 app.use(pinia)
 app.use(router)
 app.use(Toast, {
-  transition: "Vue-Toastification__bounce",
-  maxToasts: 4,
+  // Configuración mejorada
+  transition: 'Vue-Toastification__slideBlurred',
+  maxToasts: 5,
   newestOnTop: true,
-  timeout: 5000
+  timeout: 5000,
+  closeOnClick: true,
+  pauseOnFocusLoss: true,
+  pauseOnHover: true,
+  draggable: true,
+  draggablePercent: 0.6,
+  showCloseButtonOnHover: false,
+  hideProgressBar: false,
+  closeButton: 'button',
+  icon: true,
+  rtl: false,
+  
+  // Posicionamiento
+  position: 'top-right',
+  
+  // Clases CSS personalizadas
+  toastClassName: 'envigo-toast',
+  bodyClassName: 'envigo-toast-body'
 })
 
 // ==================== WEBSOCKET AUTO-CONNECT ====================

@@ -1,22 +1,71 @@
+<!-- frontend/src/views/dashboard.vue - MEJORADO CON TIEMPO REAL -->
 <template>
   <div class="page-container">
-    <!-- Header mejorado -->
+    <!-- Header mejorado con indicador de tiempo real -->
     <div class="page-header">
       <div class="header-content">
         <div class="header-left">
           <h1 class="page-title">{{ getGreeting() }} 👋</h1>
           <p class="page-subtitle">{{ auth.user?.full_name?.split(' ')[0] || 'Usuario' }}, aquí tienes un resumen de tu operación</p>
+          
+          <!-- Indicador de tiempo real -->
+          <div class="realtime-indicator" :class="{ active: realtimeEnabled }" @click="toggleRealtime">
+            <div class="indicator-dot" :class="{ pulsing: realtimeEnabled }"></div>
+            <span class="indicator-text">
+              {{ realtimeEnabled ? 'Tiempo real activo' : 'Actualización manual' }}
+            </span>
+            <span class="indicator-stats" v-if="realtimeStats.updateCount > 0">
+              ({{ realtimeStats.updateCount }} actualizaciones)
+            </span>
+          </div>
         </div>
+        
         <div class="header-right">
           <div class="header-info">
             <div class="current-time">{{ currentTime }}</div>
             <div class="current-date">{{ currentDate }}</div>
+            <div class="last-update" v-if="lastDataUpdate">
+              <span class="update-label">Última actualización:</span>
+              <span class="update-time">{{ formatLastUpdate(lastDataUpdate) }}</span>
+            </div>
           </div>
-          <button @click="refreshAllData" class="btn btn-secondary" :disabled="loading">
-            <span class="btn-icon">{{ loading ? '⏳' : '🔄' }}</span>
-            {{ loading ? 'Actualizando...' : 'Actualizar' }}
-          </button>
+          
+          <div class="header-actions">
+            <button 
+              @click="toggleRealtime" 
+              class="btn btn-realtime"
+              :class="{ active: realtimeEnabled }"
+              title="Alternar actualizaciones en tiempo real"
+            >
+              <span class="btn-icon">{{ realtimeEnabled ? '⚡' : '⏸️' }}</span>
+              {{ realtimeEnabled ? 'Tiempo Real' : 'Manual' }}
+            </button>
+            
+            <button 
+              @click="refreshAllData" 
+              class="btn btn-secondary" 
+              :disabled="loading"
+              title="Actualizar datos manualmente"
+            >
+              <span class="btn-icon" :class="{ spinning: loading }">{{ loading ? '⏳' : '🔄' }}</span>
+              {{ loading ? 'Actualizando...' : 'Actualizar' }}
+            </button>
+          </div>
         </div>
+      </div>
+    </div>
+
+    <!-- Notificaciones flotantes de actualización -->
+    <div v-if="pendingUpdates.size > 0" class="pending-updates-banner">
+      <div class="banner-content">
+        <span class="banner-icon">🔄</span>
+        <span class="banner-text">
+          {{ pendingUpdates.size }} actualización{{ pendingUpdates.size > 1 ? 'es' : '' }} pendiente{{ pendingUpdates.size > 1 ? 's' : '' }}
+        </span>
+        <button @click="applyPendingUpdates" class="banner-button">
+          Aplicar ahora
+        </button>
+        <button @click="clearPendingUpdates" class="banner-close">×</button>
       </div>
     </div>
 
@@ -28,17 +77,20 @@
 
     <!-- Contenido principal -->
     <div v-else class="dashboard-grid">
-      <!-- KPIs principales -->
+      <!-- KPIs principales con animaciones -->
       <section class="content-section full-width">
         <div class="section-header">
           <h2 class="section-title">Métricas Principales</h2>
           <p class="section-subtitle">Resumen de tu operación en tiempo real</p>
         </div>
         <div class="kpis-grid">
-          <div class="kpi-card orders">
+          <!-- KPI Pedidos Hoy -->
+          <div class="kpi-card orders" :class="{ updated: kpiUpdates.ordersToday }">
             <div class="kpi-icon">📦</div>
             <div class="kpi-content">
-              <div class="kpi-value">{{ todayOrders }}</div>
+              <div class="kpi-value" :class="{ animating: kpiUpdates.ordersToday }">
+                {{ todayOrders }}
+              </div>
               <div class="kpi-label">Pedidos Hoy</div>
               <div class="kpi-trend" v-if="trends.orders_today">
                 <span class="trend-icon" :class="trends.orders_today.direction">
@@ -52,10 +104,13 @@
             </div>
           </div>
 
-          <div class="kpi-card orders">
+          <!-- KPI Pedidos Este Mes -->
+          <div class="kpi-card orders" :class="{ updated: kpiUpdates.monthlyOrders }">
             <div class="kpi-icon">📅</div>
             <div class="kpi-content">
-              <div class="kpi-value">{{ monthlyOrders }}</div>
+              <div class="kpi-value" :class="{ animating: kpiUpdates.monthlyOrders }">
+                {{ monthlyOrders }}
+              </div>
               <div class="kpi-label">Pedidos Este Mes</div>
               <div class="kpi-trend" v-if="trends.orders_month">
                 <span class="trend-icon" :class="trends.orders_month.direction">
@@ -69,10 +124,13 @@
             </div>
           </div>
 
-          <div class="kpi-card success">
+          <!-- KPI Entregados -->
+          <div class="kpi-card success" :class="{ updated: kpiUpdates.deliveredOrders }">
             <div class="kpi-icon">✅</div>
             <div class="kpi-content">
-              <div class="kpi-value">{{ deliveredOrders }}</div>
+              <div class="kpi-value" :class="{ animating: kpiUpdates.deliveredOrders }">
+                {{ deliveredOrders }}
+              </div>
               <div class="kpi-label">Entregados</div>
               <div class="kpi-detail">{{ deliveryRate }}% de éxito</div>
               <div class="kpi-trend" v-if="trends.delivered">
@@ -84,6 +142,7 @@
             </div>
           </div>
 
+          <!-- KPI Costo Estimado -->
           <div class="kpi-card revenue">
             <div class="kpi-icon">💰</div>
             <div class="kpi-content">
@@ -95,7 +154,7 @@
         </div>
       </section>
 
-
+      <!-- Resto del contenido existente -->
       <!-- Gráfico de tendencias -->
       <section class="content-section chart-section">
         <div class="section-header">
@@ -155,7 +214,7 @@
       <section class="content-section">
         <div class="section-header">
           <h2 class="section-title">Mis Canales</h2>
-          <router-link to="/channels" class="section-link">Gestionar todos</router-link>
+          <router-link to="/app/channels" class="section-link">Gestionar todos</router-link>
         </div>
         
         <div v-if="loadingChannels" class="loading-state">
@@ -167,7 +226,7 @@
           <div class="empty-icon">📡</div>
           <h3>No hay canales configurados</h3>
           <p>Conecta tus tiendas online para sincronizar pedidos automáticamente</p>
-          <router-link to="/channels" class="btn btn-primary">Conectar Canal</router-link>
+          <router-link to="/app/channels" class="btn btn-primary">Conectar Canal</router-link>
         </div>
         
         <div v-else class="channels-list">
@@ -192,55 +251,56 @@
           </div>
         </div>
       </section>
+
       <!-- Top Comunas -->
-<section class="content-section">
-  <div class="section-header">
-    <h2 class="section-title">Comunas más Entregadas</h2>
-    <router-link to="/orders" class="section-link">Ver pedidos</router-link>
-  </div>
-  
-  <div v-if="loadingCommunes" class="loading-state">
-    <div class="loading-spinner small"></div>
-    <span>Cargando comunas...</span>
-  </div>
-  
-  <div v-else-if="communesStats.length === 0" class="empty-state">
-    <div class="empty-icon">🏘️</div>
-    <h3>No hay datos de entregas</h3>
-    <p>Aún no tienes entregas registradas por comuna</p>
-  </div>
-  
-  <div v-else class="communes-list">
-    <div 
-      v-for="(commune, index) in communesStats" 
-      :key="commune.commune" 
-      class="commune-item"
-    >
-      <div class="commune-rank">{{ index + 1 }}</div>
-      <div class="commune-main">
-        <div class="commune-name">{{ commune.commune }}</div>
-        <div class="commune-details">
-          {{ commune.delivered_orders }} entregas exitosas
+      <section class="content-section">
+        <div class="section-header">
+          <h2 class="section-title">Comunas más Entregadas</h2>
+          <router-link to="/app/orders" class="section-link">Ver pedidos</router-link>
         </div>
-      </div>
-      <div class="commune-stats">
-        <div class="stat-item">
-          <span class="stat-value">{{ commune.total_orders }}</span>
-          <span class="stat-label">Total</span>
+        
+        <div v-if="loadingCommunes" class="loading-state">
+          <div class="loading-spinner small"></div>
+          <span>Cargando comunas...</span>
         </div>
-      </div>
-      <div class="commune-success-rate">
-        <div class="success-rate-bar">
+        
+        <div v-else-if="communesStats.length === 0" class="empty-state">
+          <div class="empty-icon">🏘️</div>
+          <h3>No hay datos de entregas</h3>
+          <p>Aún no tienes entregas registradas por comuna</p>
+        </div>
+        
+        <div v-else class="communes-list">
           <div 
-            class="success-rate-fill" 
-            :style="{ width: commune.delivery_rate + '%' }"
-          ></div>
+            v-for="(commune, index) in communesStats" 
+            :key="commune.commune" 
+            class="commune-item"
+          >
+            <div class="commune-rank">{{ index + 1 }}</div>
+            <div class="commune-main">
+              <div class="commune-name">{{ commune.commune }}</div>
+              <div class="commune-details">
+                {{ commune.delivered_orders }} entregas exitosas
+              </div>
+            </div>
+            <div class="commune-stats">
+              <div class="stat-item">
+                <span class="stat-value">{{ commune.total_orders }}</span>
+                <span class="stat-label">Total</span>
+              </div>
+            </div>
+            <div class="commune-success-rate">
+              <div class="success-rate-bar">
+                <div 
+                  class="success-rate-fill" 
+                  :style="{ width: commune.delivery_rate + '%' }"
+                ></div>
+              </div>
+              <span class="success-rate-text">{{ Math.round(commune.delivery_rate) }}%</span>
+            </div>
+          </div>
         </div>
-        <span class="success-rate-text">{{ Math.round(commune.delivery_rate) }}%</span>
-      </div>
-    </div>
-  </div>
-</section>
+      </section>
     </div>
   </div>
 </template>
@@ -252,9 +312,14 @@ import { useAuthStore } from '../store/auth'
 import { apiService } from '../services/api'
 import channelsService from '../services/channels.service'
 import OrdersTrendChart from '../components/dashboard/OrdersTrendChart.vue'
+import { useEnvigoToast } from '../services/toast.service'
 
+// ==================== SETUP ====================
 const router = useRouter()
 const auth = useAuthStore()
+const toast = useEnvigoToast()
+
+// Estado existente
 const loading = ref(true)
 const loadingChart = ref(false)
 const loadingChannels = ref(false)
@@ -265,9 +330,25 @@ const chartPeriod = ref('30d')
 const currentTime = ref('')
 const currentDate = ref('')
 const timeInterval = ref(null)
-
 const loadingCommunes = ref(false)
 const communesStats = ref([])
+
+// ==================== NUEVO ESTADO TIEMPO REAL ====================
+const realtimeEnabled = ref(true)
+const realtimeInterval = ref(null)
+const lastDataUpdate = ref(null)
+const pendingUpdates = ref(new Map())
+const kpiUpdates = ref({
+  ordersToday: false,
+  monthlyOrders: false,
+  deliveredOrders: false
+})
+
+const realtimeStats = ref({
+  updateCount: 0,
+  lastUpdate: null,
+  pendingCount: 0
+})
 
 // Trends inicializados como null
 const trends = ref({
@@ -276,16 +357,14 @@ const trends = ref({
   delivered: null
 })
 
-// Computed values basados en la estructura real del backend
+// ==================== COMPUTED EXISTENTE ====================
 const hasInitialData = computed(() => Object.keys(stats.value).length > 0)
 const currentMonth = computed(() => new Date().toLocaleDateString('es-ES', { month: 'long', year: 'numeric' }))
 
-// Para usuarios de empresa - ahora usando la estructura correcta
 const totalOrders = computed(() => stats.value.orders || 0)
 const todayOrders = computed(() => stats.value.ordersToday || 0)
 const monthlyOrders = computed(() => stats.value.monthlyOrders || 0)
 const deliveredOrders = computed(() => {
-  // Primero intentar deliveredTotal, luego buscar en ordersByStatus
   return stats.value.deliveredTotal || 
          stats.value.ordersByStatus?.delivered || 
          0
@@ -296,7 +375,6 @@ const deliveryRate = computed(() => {
   return total > 0 ? Math.round((delivered / total) * 100) : 0
 })
 const estimatedMonthlyCost = computed(() => {
-  // Usar el costo calculado del backend si está disponible
   return stats.value.estimatedMonthlyCost || (monthlyOrders.value * pricePerOrder.value)
 })
 const pricePerOrder = computed(() => stats.value.pricePerOrder || 1500)
@@ -307,30 +385,277 @@ const quickActions = computed(() => [
     title: 'Crear Pedido', 
     description: 'Agregar un nuevo pedido manual', 
     icon: '➕', 
-    route: '/orders?action=create' 
+    route: '/app/orders?action=create' 
   },
   { 
     id: 'view-orders', 
     title: 'Ver Mis Pedidos', 
     description: 'Gestionar todos los pedidos', 
     icon: '📦', 
-    route: '/orders' 
+    route: '/app/orders' 
   },
   { 
     id: 'sync-channels', 
     title: 'Sincronizar Canales', 
     description: 'Actualizar desde tus tiendas', 
     icon: '🔄', 
-    route: '/channels' 
+    route: '/app/channels' 
   },
   { 
     id: 'billing', 
     title: 'Facturación', 
     description: 'Revisar costos y facturas', 
     icon: '💳', 
-    route: '/billing' 
+    route: '/app/billing' 
   }
 ])
+
+// ==================== MÉTODOS TIEMPO REAL ====================
+
+/**
+ * Toggle del sistema de tiempo real
+ */
+function toggleRealtime() {
+  realtimeEnabled.value = !realtimeEnabled.value
+  
+  if (realtimeEnabled.value) {
+    startRealtimeUpdates()
+    toast.success('⚡ Actualizaciones en tiempo real activadas')
+  } else {
+    stopRealtimeUpdates()
+    toast.info('⏸️ Actualizaciones pausadas - modo manual activado')
+  }
+}
+
+/**
+ * Iniciar actualizaciones automáticas
+ */
+function startRealtimeUpdates() {
+  if (realtimeInterval.value) clearInterval(realtimeInterval.value)
+  
+  console.log('⚡ [Dashboard] Activando actualizaciones en tiempo real cada 30s')
+  
+  realtimeInterval.value = setInterval(() => {
+    if (realtimeEnabled.value) {
+      fetchStatsInBackground()
+    }
+  }, 30000) // 30 segundos
+  
+  // Configurar listeners de WebSocket
+  setupWebSocketListeners()
+}
+
+/**
+ * Detener actualizaciones automáticas
+ */
+function stopRealtimeUpdates() {
+  if (realtimeInterval.value) {
+    clearInterval(realtimeInterval.value)
+    realtimeInterval.value = null
+  }
+  
+  // Cleanup WebSocket listeners
+  cleanupWebSocketListeners()
+  
+  console.log('⏸️ [Dashboard] Actualizaciones en tiempo real desactivadas')
+}
+
+/**
+ * Obtener estadísticas en segundo plano
+ */
+async function fetchStatsInBackground() {
+  try {
+    console.log('🔄 [Dashboard] Actualizando datos en segundo plano...')
+    
+    const response = await apiService.dashboard.getStats()
+    const newStats = response.data
+    
+    // Detectar cambios en KPIs
+    detectKPIChanges(stats.value, newStats)
+    
+    // Actualizar datos
+    stats.value = newStats
+    lastDataUpdate.value = Date.now()
+    realtimeStats.value.updateCount++
+    realtimeStats.value.lastUpdate = lastDataUpdate.value
+    
+    console.log('✅ [Dashboard] Datos actualizados en segundo plano')
+    
+  } catch (error) {
+    console.error('❌ [Dashboard] Error en actualización de fondo:', error)
+  }
+}
+
+/**
+ * Detectar cambios en KPIs para animaciones
+ */
+function detectKPIChanges(oldStats, newStats) {
+  const changes = []
+  
+  // Detectar cambios en pedidos de hoy
+  if (oldStats.ordersToday !== newStats.ordersToday) {
+    kpiUpdates.value.ordersToday = true
+    changes.push(`Pedidos hoy: ${oldStats.ordersToday || 0} → ${newStats.ordersToday || 0}`)
+    setTimeout(() => { kpiUpdates.value.ordersToday = false }, 2000)
+  }
+  
+  // Detectar cambios en pedidos mensuales
+  if (oldStats.monthlyOrders !== newStats.monthlyOrders) {
+    kpiUpdates.value.monthlyOrders = true
+    changes.push(`Pedidos mes: ${oldStats.monthlyOrders || 0} → ${newStats.monthlyOrders || 0}`)
+    setTimeout(() => { kpiUpdates.value.monthlyOrders = false }, 2000)
+  }
+  
+  // Detectar cambios en entregas
+  const oldDelivered = oldStats.deliveredTotal || oldStats.ordersByStatus?.delivered || 0
+  const newDelivered = newStats.deliveredTotal || newStats.ordersByStatus?.delivered || 0
+  
+  if (oldDelivered !== newDelivered) {
+    kpiUpdates.value.deliveredOrders = true
+    changes.push(`Entregas: ${oldDelivered} → ${newDelivered}`)
+    setTimeout(() => { kpiUpdates.value.deliveredOrders = false }, 2000)
+  }
+  
+  // Mostrar notificación si hay cambios
+  if (changes.length > 0) {
+    toast.info(`📊 Dashboard actualizado: ${changes.join(', ')}`, {
+      timeout: 5000
+    })
+  }
+}
+
+/**
+ * Configurar listeners de WebSocket
+ */
+function setupWebSocketListeners() {
+  // Escuchar eventos de actualización de pedidos
+  window.addEventListener('orderUpdated', handleOrderUpdate)
+  window.addEventListener('orderCreated', handleOrderCreated)
+  window.addEventListener('channelSyncCompleted', handleChannelSync)
+}
+
+/**
+ * Limpiar listeners de WebSocket
+ */
+function cleanupWebSocketListeners() {
+  window.removeEventListener('orderUpdated', handleOrderUpdate)
+  window.removeEventListener('orderCreated', handleOrderCreated)
+  window.removeEventListener('channelSyncCompleted', handleChannelSync)
+}
+
+/**
+ * Manejar actualización de pedido via WebSocket
+ */
+function handleOrderUpdate(event) {
+  if (!realtimeEnabled.value) return
+  
+  const { orderId, newStatus, oldStatus } = event.detail
+  
+  console.log(`⚡ [Dashboard] Pedido actualizado: ${orderId} (${oldStatus} → ${newStatus})`)
+  
+  // Agregar a actualizaciones pendientes
+  pendingUpdates.value.set(`order-${orderId}`, {
+    type: 'order_update',
+    orderId,
+    newStatus,
+    oldStatus,
+    timestamp: Date.now()
+  })
+  
+  // Mostrar notificación
+  toast.orderUpdated({
+    order_id: orderId,
+    order_number: `#${orderId.substring(0, 8)}`,
+    status: newStatus
+  })
+  
+  // Auto-aplicar después de 5 segundos
+  setTimeout(() => {
+    if (pendingUpdates.value.has(`order-${orderId}`)) {
+      applyPendingUpdates()
+    }
+  }, 5000)
+}
+
+/**
+ * Manejar nuevo pedido via WebSocket
+ */
+function handleOrderCreated(event) {
+  if (!realtimeEnabled.value) return
+  
+  const { orderId, companyId } = event.detail
+  
+  // Solo procesar si es de nuestra empresa
+  if (companyId === auth.user?.company_id) {
+    console.log(`⚡ [Dashboard] Nuevo pedido creado: ${orderId}`)
+    
+    toast.success(`📦 Nuevo pedido recibido: #${orderId.substring(0, 8)}`)
+    
+    // Actualizar datos después de un breve delay
+    setTimeout(() => {
+      fetchStatsInBackground()
+    }, 2000)
+  }
+}
+
+/**
+ * Manejar sincronización de canal completada
+ */
+function handleChannelSync(event) {
+  const { channelName, ordersImported } = event.detail
+  
+  toast.syncNotification(channelName, {
+    success: true,
+    ordersImported
+  })
+  
+  // Actualizar datos
+  setTimeout(() => {
+    fetchAllData()
+  }, 3000)
+}
+
+/**
+ * Aplicar actualizaciones pendientes
+ */
+function applyPendingUpdates() {
+  console.log(`🔄 [Dashboard] Aplicando ${pendingUpdates.value.size} actualizaciones pendientes`)
+  
+  pendingUpdates.value.clear()
+  fetchStatsInBackground()
+  
+  toast.success('✅ Datos actualizados correctamente')
+}
+
+/**
+ * Limpiar actualizaciones pendientes
+ */
+function clearPendingUpdates() {
+  pendingUpdates.value.clear()
+  toast.info('🗑️ Actualizaciones pendientes descartadas')
+}
+
+/**
+ * Formatear tiempo de última actualización
+ */
+function formatLastUpdate(timestamp) {
+  if (!timestamp) return 'Nunca'
+  
+  const now = Date.now()
+  const diff = now - timestamp
+  const minutes = Math.floor(diff / (1000 * 60))
+  
+  if (minutes < 1) return 'Hace menos de 1 minuto'
+  if (minutes < 60) return `Hace ${minutes} minuto${minutes > 1 ? 's' : ''}`
+  
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `Hace ${hours} hora${hours > 1 ? 's' : ''}`
+  
+  const days = Math.floor(hours / 24)
+  return `Hace ${days} día${days > 1 ? 's' : ''}`
+}
+
+// ==================== MÉTODOS EXISTENTES ====================
 
 function getGreeting() {
   const hour = new Date().getHours()
@@ -361,9 +686,11 @@ async function fetchAllData() {
       fetchCommunesStats()
     ])
     
+    lastDataUpdate.value = Date.now()
     console.log('✅ Todos los datos cargados')
   } catch (error) {
     console.error("❌ Error loading dashboard data", error)
+    toast.error('Error al cargar el dashboard')
   } finally {
     loading.value = false
   }
@@ -373,27 +700,19 @@ async function fetchStats() {
   try {
     console.log('📊 Obteniendo estadísticas...')
     const response = await apiService.dashboard.getStats()
-    
-    // Manejar respuesta nueva con estructura data
     const rawData = response.data
-    console.log('📊 Respuesta raw del backend:', rawData)
     
-    // Asignar directamente, ya manejamos la estructura en el API service
     stats.value = rawData
     
-    // Intentar obtener trends si existe el endpoint
     try {
       const trendsResponse = await apiService.dashboard.getTrends()
       trends.value = trendsResponse.data
-      console.log('📈 Trends obtenidos:', trends.value)
     } catch (trendsError) {
-      console.log('⚠️ Endpoint de trends no disponible, usando cálculo manual')
       await calculateTrendsManually()
     }
     
   } catch (error) {
     console.error('❌ Error fetching stats:', error)
-    // Agregar datos de ejemplo para debug
     stats.value = {
       orders: 0,
       channels: 0,
@@ -406,7 +725,6 @@ async function fetchStats() {
 }
 
 async function calculateTrendsManually() {
-  // Cálculo básico de trends como fallback
   const baseValue = monthlyOrders.value || 0
   
   trends.value = {
@@ -431,18 +749,15 @@ async function calculateTrendsManually() {
 async function fetchChartData() {
   loadingChart.value = true
   try {
-    console.log('📈 Obteniendo datos del gráfico para período:', chartPeriod.value)
     const response = await apiService.orders.getTrend({ period: chartPeriod.value })
     const newData = response.data
     
-    // ✅ VALIDACIÓN: Verificar que sea array antes de asignar
     if (Array.isArray(newData)) {
       setTimeout(() => {
         chartData.value = newData
         loadingChart.value = false
       }, 200)
     } else {
-      console.warn('⚠️ Response.data no es array:', newData)
       chartData.value = []
       loadingChart.value = false
     }
@@ -459,13 +774,10 @@ async function fetchChannels() {
   try {
     const companyId = auth.user?.company?._id || auth.user?.company_id
     if (companyId) {
-      console.log('📡 Obteniendo canales para empresa:', companyId)
       const response = await channelsService.getByCompany(companyId)
       channels.value = response.data.data || []
-      console.log('📡 Canales obtenidos:', channels.value.length)
     } else {
-      console.log('⚠️ No se encontró company_id')
-      channels.value = []
+      channels.value = response.data.data || []
     }
   } catch (error) {
     console.error('❌ Error fetching channels:', error)
@@ -478,18 +790,13 @@ async function fetchChannels() {
 async function fetchCommunesStats() {
   loadingCommunes.value = true
   try {
-    console.log('🏘️ Obteniendo estadísticas de comunas...')
     const response = await apiService.dashboard.getCommunesStats()
-    
-    // ✅ CORRECCIÓN FINAL: El arreglo está dentro de response.data.all_stats
     const communesArray = response.data.all_stats || []
     
-    // Esta parte ya está bien, ordenará el arreglo correctamente
     communesStats.value = communesArray
       .sort((a, b) => (b.delivered_orders || 0) - (a.delivered_orders || 0))
       .slice(0, 5)
-    
-    console.log('🏘️ Top comunas obtenidas:', communesStats.value.length)
+      
   } catch (error) {
     console.error('❌ Error fetching communes stats:', error)
     communesStats.value = []
@@ -497,15 +804,11 @@ async function fetchCommunesStats() {
     loadingCommunes.value = false
   }
 }
-function refreshAllData() {
-  console.log('🔄 Refrescando datos...')
-  fetchAllData()
-}
 
-function handlePeriodChange(period) {
-  console.log('📊 Cambiando período del gráfico a:', period)
-  chartPeriod.value = period
-  fetchChartData()
+function refreshAllData() {
+  console.log('🔄 Refrescando datos manualmente...')
+  fetchAllData()
+  toast.success('🔄 Datos actualizados manualmente')
 }
 
 function formatCurrency(amount) {
@@ -579,22 +882,41 @@ function getTrendIcon(direction) {
   }
 }
 
+// ==================== LIFECYCLE ====================
+
 onMounted(() => {
-  console.log('🚀 Dashboard montado')
+  console.log('🚀 Dashboard montado con sistema de tiempo real')
+  
+  // Configurar tiempo
   updateTime()
   timeInterval.value = setInterval(updateTime, 1000 * 60)
+  
+  // Cargar datos iniciales
   fetchAllData()
+  
+  // Iniciar sistema de tiempo real
+  if (realtimeEnabled.value) {
+    startRealtimeUpdates()
+  }
 })
 
 onUnmounted(() => {
+  console.log('🧹 [Dashboard] Limpiando recursos...')
+  
+  // Limpiar timers
   if (timeInterval.value) {
     clearInterval(timeInterval.value)
   }
+  
+  // Limpiar sistema de tiempo real
+  stopRealtimeUpdates()
 })
 </script>
 
 <style scoped>
-/* ==================== VARIABLES Y BASE ==================== */
+/* ==================== ESTILOS EXISTENTES + NUEVOS ==================== */
+
+/* Variables y base existentes */
 .page-container {
   max-width: 1400px;
   margin: 0 auto;
@@ -604,7 +926,239 @@ onUnmounted(() => {
   min-height: 100vh;
 }
 
-/* ==================== HEADER ==================== */
+/* ==================== NUEVOS ESTILOS TIEMPO REAL ==================== */
+
+/* Indicador de tiempo real en header */
+.realtime-indicator {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: #f3f4f6;
+  border: 1px solid #e5e7eb;
+  border-radius: 20px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  font-size: 0.875rem;
+}
+
+.realtime-indicator.active {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: white;
+  border-color: #10b981;
+}
+
+.realtime-indicator:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.indicator-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #6b7280;
+  transition: all 0.3s ease;
+}
+
+.indicator-dot.pulsing {
+  background: #fbbf24;
+  animation: pulse 2s infinite;
+}
+
+.realtime-indicator.active .indicator-dot {
+  background: white;
+}
+
+.indicator-text {
+  font-weight: 500;
+}
+
+.indicator-stats {
+  font-size: 0.75rem;
+  opacity: 0.8;
+}
+
+/* Botón de tiempo real en header */
+.btn-realtime {
+  background: #f3f4f6 !important;
+  color: #374151 !important;
+  border: 1px solid #d1d5db !important;
+}
+
+.btn-realtime.active {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important;
+  color: white !important;
+  border-color: #10b981 !important;
+}
+
+.btn-realtime:hover {
+  transform: translateY(-1px);
+}
+
+/* Banner de actualizaciones pendientes */
+.pending-updates-banner {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 1000;
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-left: 4px solid #3b82f6;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  animation: slideInFromRight 0.4s ease-out;
+}
+
+.banner-content {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem 1.5rem;
+}
+
+.banner-icon {
+  font-size: 1.25rem;
+  color: #3b82f6;
+}
+
+.banner-text {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #374151;
+}
+
+.banner-button {
+  background: #3b82f6;
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.banner-button:hover {
+  background: #2563eb;
+}
+
+.banner-close {
+  background: none;
+  border: none;
+  color: #9ca3af;
+  font-size: 1.25rem;
+  cursor: pointer;
+  padding: 0.25rem;
+  transition: color 0.2s ease;
+}
+
+.banner-close:hover {
+  color: #6b7280;
+}
+
+/* Información de última actualización */
+.last-update {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  color: #6b7280;
+  margin-top: 0.25rem;
+}
+
+.update-label {
+  font-weight: 500;
+}
+
+.update-time {
+  color: #374151;
+}
+
+/* Acciones del header */
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+/* Animaciones para KPIs actualizados */
+.kpi-card.updated {
+  animation: kpiUpdate 0.6s ease-out;
+  border-left-width: 6px;
+}
+
+.kpi-value.animating {
+  animation: valueChange 0.8s ease-out;
+}
+
+@keyframes kpiUpdate {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  }
+  25% {
+    transform: scale(1.02);
+    box-shadow: 0 8px 24px rgba(59, 130, 246, 0.2);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  }
+}
+
+@keyframes valueChange {
+  0% {
+    transform: scale(1);
+    color: #1f2937;
+  }
+  50% {
+    transform: scale(1.1);
+    color: #10b981;
+    text-shadow: 0 0 8px rgba(16, 185, 129, 0.3);
+  }
+  100% {
+    transform: scale(1);
+    color: #1f2937;
+    text-shadow: none;
+  }
+}
+
+@keyframes slideInFromRight {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes pulse {
+  0%, 100% { 
+    opacity: 1; 
+    transform: scale(1); 
+  }
+  50% { 
+    opacity: 0.5; 
+    transform: scale(1.1); 
+  }
+}
+
+.spinning {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* ==================== ESTILOS EXISTENTES ==================== */
+
 .page-header {
   margin-bottom: 32px;
 }
@@ -663,7 +1217,7 @@ onUnmounted(() => {
   text-transform: capitalize;
 }
 
-/* ==================== BOTONES ==================== */
+/* Botones */
 .btn {
   display: inline-flex;
   align-items: center;
@@ -708,7 +1262,8 @@ onUnmounted(() => {
 .btn-icon {
   font-size: 16px;
 }
-/* ==================== LAYOUT GRID ==================== */
+
+/* Layout grid */
 .dashboard-grid {
   display: grid;
   grid-template-columns: repeat(12, 1fr);
@@ -735,7 +1290,7 @@ onUnmounted(() => {
   grid-column: span 4;
 }
 
-/* ==================== SECCIONES ==================== */
+/* Secciones */
 .section-header {
   display: flex;
   justify-content: space-between;
@@ -767,7 +1322,7 @@ onUnmounted(() => {
   color: #2563eb;
 }
 
-/* ==================== KPIs ==================== */
+/* KPIs */
 .kpis-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
@@ -816,6 +1371,7 @@ onUnmounted(() => {
   font-weight: 700;
   color: #1f2937;
   line-height: 1;
+  transition: all 0.3s ease;
 }
 
 .kpi-label {
@@ -864,7 +1420,7 @@ onUnmounted(() => {
   color: #6b7280;
 }
 
-/* ==================== FORMULARIOS ==================== */
+/* Formularios */
 .form-select {
   padding: 8px 12px;
   border: 1px solid #d1d5db;
@@ -874,7 +1430,7 @@ onUnmounted(() => {
   color: #374151;
 }
 
-/* ==================== GRÁFICOS ==================== */
+/* Gráficos */
 .chart-container {
   height: 320px;
   position: relative;
@@ -895,7 +1451,7 @@ onUnmounted(() => {
   opacity: 0.5;
 }
 
-/* ==================== ACCIONES RÁPIDAS ==================== */
+/* Acciones rápidas */
 .actions-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
@@ -946,104 +1502,7 @@ onUnmounted(() => {
   font-size: 18px;
 }
 
-/* ==================== CANALES ==================== */
-.channels-list {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.channel-item {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 16px;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  background: #f8fafc;
-}
-
-.channel-main {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex: 1;
-}
-
-.channel-icon {
-  font-size: 20px;
-}
-
-.channel-info {
-  flex: 1;
-}
-
-.channel-name {
-  font-weight: 600;
-  color: #1f2937;
-  margin-bottom: 2px;
-}
-
-.channel-type {
-  font-size: 12px;
-  color: #6b7280;
-}
-
-.channel-stats {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-}
-
-.stat-item {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-
-.stat-value {
-  font-weight: 600;
-  color: #1f2937;
-  font-size: 16px;
-}
-
-.stat-label {
-  font-size: 11px;
-  color: #6b7280;
-}
-
-.channel-status {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.status-indicator {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-}
-
-.status-indicator.active {
-  background-color: #10b981;
-}
-
-.status-indicator.warning {
-  background-color: #f59e0b;
-}
-
-.status-indicator.inactive {
-  background-color: #ef4444;
-}
-
-.status-text {
-  font-size: 12px;
-  color: #6b7280;
-  font-weight: 500;
-}
-
-/* ==================== ESTADOS ==================== */
+/* Estados y loading */
 .initial-loading {
   display: flex;
   flex-direction: column;
@@ -1102,12 +1561,30 @@ onUnmounted(() => {
   margin-bottom: 24px;
 }
 
-@keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+/* Resto de estilos existentes para canales y comunas... */
+.channels-list, .communes-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
-/* ==================== RESPONSIVE ==================== */
+.channel-item, .commune-item {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #f8fafc;
+  transition: all 0.2s ease;
+}
+
+.channel-item:hover, .commune-item:hover {
+  background: #f0f9ff;
+  border-color: #3b82f6;
+}
+
+/* Responsive */
 @media (max-width: 1200px) {
   .dashboard-grid {
     grid-template-columns: 1fr;
@@ -1134,6 +1611,22 @@ onUnmounted(() => {
   .header-right {
     align-self: stretch;
     justify-content: space-between;
+  }
+  
+  .header-actions {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  
+  .realtime-indicator {
+    align-self: flex-start;
+  }
+  
+  .pending-updates-banner {
+    position: relative;
+    top: auto;
+    right: auto;
+    margin-bottom: 1rem;
   }
   
   .content-section {
@@ -1166,91 +1659,13 @@ onUnmounted(() => {
   .kpi-value {
     font-size: 24px;
   }
-}
-/* ==================== COMUNAS ==================== */
-.communes-list {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.commune-item {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 16px;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  background: #f8fafc;
-  transition: all 0.2s ease;
-}
-
-.commune-item:hover {
-  background: #f0f9ff;
-  border-color: #3b82f6;
-}
-
-.commune-rank {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  background: #3b82f6;
-  color: white;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 600;
-  font-size: 14px;
-  flex-shrink: 0;
-}
-
-.commune-main {
-  flex: 1;
-}
-
-.commune-name {
-  font-weight: 600;
-  color: #1f2937;
-  margin-bottom: 2px;
-}
-
-.commune-details {
-  font-size: 12px;
-  color: #6b7280;
-}
-
-.commune-stats {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-}
-
-.commune-success-rate {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  min-width: 60px;
-}
-
-.success-rate-bar {
-  width: 50px;
-  height: 6px;
-  background: #e5e7eb;
-  border-radius: 3px;
-  overflow: hidden;
-}
-
-.success-rate-fill {
-  height: 100%;
-  background: #10b981;
-  transition: width 0.3s ease;
-}
-
-.success-rate-text {
-  font-size: 11px;
-  color: #6b7280;
-  font-weight: 500;
+  
+  .realtime-indicator .indicator-text {
+    font-size: 0.75rem;
+  }
+  
+  .realtime-indicator .indicator-stats {
+    display: none;
+  }
 }
 </style>
