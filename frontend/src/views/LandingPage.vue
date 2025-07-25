@@ -316,6 +316,7 @@ onUnmounted(() => {
 }
 
 .imagelogo {
+  width: 150px;
   height: auto;
   filter: drop-shadow(0 0 4px rgba(0, 255, 128, 0.2));
 }
