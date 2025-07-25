@@ -124,64 +124,65 @@ const connectionStatusText = computed(() => {
 /**
  * Cargar notificaciones - VERSIÓN SIMPLIFICADA Y SEGURA
  */
-async function loadNotifications(page = 1, useCache = true) {
-  const cacheKey = `notifications_${page}`
-  
+async function loadNotifications(page = 1, useCacheFlag = true) {
+  const cacheKey = `notifications_${page}`;
+
   // Verificar cache primero
-  if (useCache) {
-    const cached = notificationsCache.get(cacheKey)
+  if (useCacheFlag) {
+    const cached = notificationsCache.get(cacheKey);
     if (cached) {
-      notifications.value = cached
-      return
+      notifications.value = cached;
+      console.log(`📬 Notificaciones cargadas desde cache (página ${page})`);
+      return;
     }
   }
 
   try {
-    loading.value = page === 1
-    loadingMore.value = page > 1
-    
-    // USAR DIRECTAMENTE apiService.get en lugar de apiService.notifications.getAll
+    loading.value = page === 1;
+    loadingMore.value = page > 1;
+
+    // CORRECTO: Usar el método específico del servicio de notificaciones
     const response = await utils.retry(async () => {
-      return await apiService.get('/notifications', {
-        params: {
-          page,
-          limit: 10,
-          include_read: true
-        }
-      })
-    }, 2, 1000)
-    
-    const newNotifications = response.data.notifications || response.data.data || response.data || []
-    
+      // Pasamos los parámetros al método getAll
+      return await apiService.notifications.getAll({
+        page,
+        limit: 10,
+        include_read: true
+      });
+    }, 2, 1000);
+
+    // La estructura de respuesta de tu API anida los datos
+    const newNotifications = response.data.notifications || response.data.data || response.data || [];
+
     if (page === 1) {
-      notifications.value = newNotifications
+      notifications.value = newNotifications;
     } else {
-      notifications.value.push(...newNotifications)
+      notifications.value.push(...newNotifications);
     }
-    
-    hasMoreNotifications.value = response.data.hasMore || response.data.has_more || false
-    currentPage.value = page
-    
-    // Guardar en cache
-    notificationsCache.set(cacheKey, notifications.value)
-    
-    console.log(`📬 Notificaciones cargadas: ${newNotifications.length} (página ${page})`)
-    
+
+    hasMoreNotifications.value = response.data.hasMore || response.data.has_more || false;
+    currentPage.value = page;
+
+    // Guardar en cache solo si hay notificaciones
+    if (newNotifications.length > 0) {
+      notificationsCache.set(cacheKey, notifications.value);
+    }
+
+    console.log(`📬 Notificaciones cargadas: ${newNotifications.length} (página ${page})`);
+
   } catch (error) {
-    console.error('❌ Error cargando notificaciones:', error)
-    
+    console.error('❌ Error cargando notificaciones:', error);
+
     if (page === 1) {
-      // Si es la primera carga y falla, usar datos de ejemplo
-      notifications.value = getExampleNotifications()
+      notifications.value = getExampleNotifications();
     }
-    
-    // Solo mostrar toast si no es un error 404 (endpoint no existe)
+
     if (!error.response || error.response.status !== 404) {
-      toast.error('Error al cargar notificaciones. Usando datos de ejemplo.')
+      toast.error('Error al cargar notificaciones. Usando datos de ejemplo.');
     }
   } finally {
-    loading.value = false
-    loadingMore.value = false
+    loading.value = false;
+    loadingMore.value = false;
   }
 }
 
