@@ -131,19 +131,24 @@ export function useOrdersActions(newOrder, isCreatingOrder, fetchOrders) {
       console.log('📦 Prepared order data:', orderData)
       
       // Create order
-      const response = await apiService.orders.create(orderData)
+      const response = await apiService.orders.create(orderData);
+      const createdOrder = response.data;
+
+      toast.success(`✅ Pedido #${createdOrder.order_number} creado exitosamente`);
+      console.log('✅ Order created:', createdOrder);
       
-      toast.success('✅ Pedido manual creado exitosamente')
-      console.log('✅ Order created:', response.data)
-      
-      // Refresh orders list
-      await fetchOrders()
-      
-      // Reset form
-      resetNewOrderForm()
-      
-      return true
-      
+      if (orders && orders.value) {
+       orders.value.unshift(createdOrder);
+    } else {
+        // Si no tienes 'orders.value', llama a fetchOrders como plan B.
+        await fetchOrders();
+    }
+    
+    // 4. Resetear el formulario (esto está bien)
+    resetNewOrderForm();
+    
+    return true;
+
     } catch (error) {
       console.error('❌ Error creating order:', error)
       
