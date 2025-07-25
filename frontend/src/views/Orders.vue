@@ -17,24 +17,24 @@
 
     <!-- Filtros modernos -->
 <UnifiedOrdersFilters
-  :filters="filters"
-  :advanced-filters="advancedFilters"
-  :filters-u-i="filtersUI"
-  :channels="channels"
-  :available-communes="availableCommunes"
-  :filtered-communes="filteredCommunes"
-  :filter-presets="filterPresets"
-  :active-filters-count="activeFiltersCount"
-  :is-admin="false"
-  :loading="loadingOrders"
-  @filter-change="handleFilterChange"
-  @advanced-filter-change="updateAdvancedFilter"
-  @reset-filters="resetFilters"
-  @toggle-advanced="toggleAdvancedFilters"
-  @apply-preset="applyPreset"
-  @add-commune="addCommune"
-  @remove-commune="removeCommune"
-/>
+      :filters="filters"
+      :advanced-filters="advancedFilters"
+      :filters-u-i="filtersUI"
+      :companies="companies"
+      :channels="channels"
+      :available-communes="availableCommunes"
+      :filter-presets="filterPresets"
+      :active-filters-count="activeFiltersCount"
+      :is-admin="false"
+      :loading="loadingOrders"
+      @filter-change="handleFilterChange"
+      @advanced-filter-change="updateAdvancedFilter"
+      @reset-filters="resetFilters"
+      @toggle-advanced="toggleAdvancedFilters"
+      @apply-preset="applyPreset"
+      @add-commune="addCommune"
+      @remove-commune="removeCommune"
+    />
 
     <!-- Tabla moderna -->
     <OrdersTable
@@ -186,8 +186,11 @@ const {
   applySearch,
   resetFilters,
   handleFilterChange,  // NUEVA FUNCIÓN
-  clearAllFilters
-} = useOrdersFilters(orders, fetchOrders)
+  clearAllFilters,
+  addCommune,           // ✅ AGREGAR
+  removeCommune,        // ✅ AGREGAR
+  fetchAvailableCommunes // ✅ AGREGAR
+} = useOrdersFilters(orders, fetchOrders, { mode: 'company' })
 
 // Selección múltiple
 const {
@@ -218,6 +221,9 @@ const selectedProofOrder = ref(null)
 const showProofModal = ref(false)
 const supportOrder = ref(null)
 const showSupportModal = ref(false)
+const selectedStatuses = ref([]);
+const searchTerm = ref("");
+const dateRange = ref({ start: null, end: null });
 
 // ⚡ TIEMPO REAL: Estado para actualización automática
 const realTimeEnabled = ref(true)
