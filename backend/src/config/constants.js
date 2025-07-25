@@ -89,49 +89,5 @@ PENDING: 'pending',
     ORDERS: '/orders',
     TRACKING: '/tracking',
     WEBHOOKS: '/webhooks'
-  },
-
-  CHANNEL_CONFIG: {
-  [CHANNEL_TYPES.SHOPIFY]: {
-    name: 'Shopify',
-    icon: '🛍️',
-    requiresCredentials: true,
-    requiresUrl: true,
-    supportsWebhooks: true,
-    supportsAutoSync: true
-  },
-  [CHANNEL_TYPES.WOOCOMMERCE]: {
-    name: 'WooCommerce',
-    icon: '🛒',
-    requiresCredentials: true,
-    requiresUrl: true,
-    supportsWebhooks: true,
-    supportsAutoSync: true
-  },
-  [CHANNEL_TYPES.MERCADOLIBRE]: {
-    name: 'MercadoLibre',
-    icon: '🏪',
-    requiresCredentials: false, // Usa OAuth
-    requiresUrl: true,
-    supportsWebhooks: false,
-    supportsAutoSync: true
-  },
-  [CHANNEL_TYPES.GENERAL_STORE]: {
-    name: 'Tienda General',
-    icon: '📱',
-    requiresCredentials: false,
-    requiresUrl: false,
-    supportsWebhooks: false,
-    supportsAutoSync: false,
-    description: 'Para ventas por Instagram, Facebook, WhatsApp o teléfono'
-  },
-  [CHANNEL_TYPES.MANUAL]: {
-    name: 'Manual',
-    icon: '✏️',
-    requiresCredentials: false,
-    requiresUrl: false,
-    supportsWebhooks: false,
-    supportsAutoSync: false
   }
-}
 };
