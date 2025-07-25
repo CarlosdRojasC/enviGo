@@ -3,7 +3,7 @@
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../store/auth'
-import { apiService } from '../services/api.service'
+import { apiService } from '../services/api'
 import { useEnvigoToast } from '../services/toast.service'
 import wsManager from '../services/websocket.service'
 import UtilsService, { useDebouncedSearch, useCache } from '../services/utils.service'
