@@ -442,7 +442,32 @@ const resetFilters = async () => {
     }
     return true
   }
-
+  async function fetchAvailableCommunes() {
+  try {
+    console.log('🏘️ Fetching available communes...')
+    
+    const params = {}
+    
+    // Si hay filtro de empresa activo, aplicarlo
+    if (filters.value.company_id) {
+      params.company_id = filters.value.company_id
+    }
+    
+    const { data } = await apiService.orders.getAvailableCommunes(params)
+    
+    if (data && data.communes) {
+      availableCommunes.value = data.communes
+      console.log('✅ Communes loaded:', availableCommunes.value.length)
+    } else {
+      availableCommunes.value = []
+      console.warn('⚠️ No communes data received')
+    }
+    
+  } catch (error) {
+    console.error('❌ Error fetching communes:', error)
+    availableCommunes.value = []
+  }
+}
   // ==================== WATCHERS ====================
 
   watch(
@@ -509,6 +534,7 @@ const resetFilters = async () => {
     validateDateRange,
     getStatusDisplayName,
     formatDate,
+    fetchAvailableCommunes,
     
     // Legacy methods (compatibilidad)
     setFilter: (key, value) => handleFilterChange(key, value),
@@ -520,8 +546,5 @@ const resetFilters = async () => {
         handleFilterChange(key, value)
       })
     },
-    fetchAvailableCommunes: () => {
-      console.log('🏘️ Available communes updated from orders')
-    }
   }
 }

@@ -14,25 +14,25 @@
 
     <!-- Filtros avanzados -->
 <UnifiedOrdersFilters
-  :filters="filters"
-  :advanced-filters="advancedFilters"
-  :filters-u-i="filtersUI"
-  :companies="companies"
-  :channels="channels"
-  :available-communes="availableCommunes"
-  :filtered-communes="filteredCommunes"
-  :filter-presets="filterPresets"
-  :active-filters-count="activeFiltersCount"
-  :is-admin="true"
-  :loading="loadingOrders"
-  @filter-change="handleFilterChange"
-  @advanced-filter-change="updateAdvancedFilter"
-  @reset-filters="resetFilters"
-  @toggle-advanced="toggleAdvancedFilters"
-  @apply-preset="applyPreset"
-  @add-commune="addCommune"
-  @remove-commune="removeCommune"
-/>
+      :filters="filters"
+      :advanced-filters="advancedFilters"
+      :filters-u-i="filtersUI"
+      :companies="companies"
+      :channels="channels"
+      :available-communes="availableCommunes"
+      :filtered-communes="filteredCommunes"
+      :filter-presets="filterPresets"
+      :active-filters-count="activeFiltersCount"
+      :is-admin="auth.isAdmin"
+      :loading="loadingOrders"
+      @filter-change="handleFilterChange"
+      @advanced-filter-change="updateAdvancedFilter"
+      @reset-filters="resetFilters"
+      @toggle-advanced="toggleAdvancedFilters"
+      @apply-preset="applyPreset"
+      @add-commune="addCommune"
+      @remove-commune="removeCommune"
+    />
 
     <!-- Acciones masivas -->
     <AdminOrdersBulkActions
@@ -123,7 +123,7 @@ import { ref, computed, onMounted, watch, nextTick, onBeforeUnmount,onUnmounted 
 import { useRoute, useRouter } from 'vue-router'
 import { useToast } from 'vue-toastification'
 import { emitter } from '../services/eventBus.service'
-
+import { useAuthStore } from '../store/auth'
 // Composables
 import { useOrdersData } from '../composables/useOrdersData'
 import { useOrdersFilters } from '../composables/useOrdersFilters'
@@ -146,6 +146,7 @@ import UnifiedOrdersFilters from '../components/UnifiedOrdersFilters.vue'
 const route = useRoute()
 const router = useRouter()
 const toast = useToast()
+const auth = useAuthStore()
 
 // ==================== COMPOSABLES ====================
 
@@ -185,6 +186,7 @@ const {
   addCommune,           // ← NUEVO
   removeCommune,        // ← NUEVO
   setFilter,
+  fetchAvailableCommunes,
   exportFilters,
   hasActiveFilters
 } = useOrdersFilters(orders, fetchOrders, { mode: 'admin' }) // ← NUEVO
@@ -330,6 +332,84 @@ const selectionSummary = computed(() => {
   }
 })
 
+// ✅ COMPUTED PROPERTIES PARA EL UNIFIED FILTER
+/**
+ * Filtros avanzados para el componente unificado
+ */
+const advancedFilters = computed(() => {
+  return {
+    amount_min: filters.value.amount_min || '',
+    amount_max: filters.value.amount_max || '',
+    priority: filters.value.priority || '',
+    shipday_status: filters.value.shipday_status || '',
+    customer_email: filters.value.customer_email || '',
+    order_number: filters.value.order_number || '',
+    has_tracking: filters.value.has_tracking || ''
+  }
+})
+
+/**
+ * UI de filtros para el componente unificado
+ */
+const filtersUI = computed(() => {
+  return {
+    showAdvanced: showAdvancedFilters.value,
+    activePreset: activePreset.value
+  }
+})
+
+/**
+ * Comunas filtradas para el dropdown
+ */
+const filteredCommunes = computed(() => {
+  const currentSelection = Array.isArray(filters.value.shipping_commune) 
+    ? filters.value.shipping_commune 
+    : []
+  
+  return availableCommunes.value.filter(commune =>
+    !currentSelection.includes(commune)
+  ).sort()
+})
+
+/**
+ * Presets de filtros
+ */
+const filterPresets = computed(() => [
+  {
+    id: 'pending',
+    name: 'Pendientes',
+    icon: '⏳',
+    description: 'Pedidos pendientes de procesar',
+    filters: { status: 'pending' }
+  },
+  {
+    id: 'ready',
+    name: 'Listos',
+    icon: '📦',
+    description: 'Listos para recoger',
+    filters: { status: 'ready_for_pickup' }
+  },
+  {
+    id: 'unassigned',
+    name: 'Sin Asignar',
+    icon: '🚚',
+    description: 'No asignados a Shipday',
+    filters: { shipday_status: 'not_assigned' }
+  },
+  {
+    id: 'this_week',
+    name: 'Esta Semana',
+    icon: '📊',
+    description: 'Pedidos de esta semana',
+    filters: {
+      date_from: getWeekStart(),
+      date_to: getWeekEnd()
+    }
+  }
+])
+const showAdvancedFilters = ref(false)
+const activePreset = ref(null)
+
 // ==================== WATCHERS ====================
 
 /**
@@ -367,7 +447,79 @@ watch(orders, () => {
 })
 
 // ==================== METHODS ====================
+function getWeekStart() {
+  const now = new Date()
+  const startOfWeek = new Date(now.setDate(now.getDate() - now.getDay()))
+  return startOfWeek.toISOString().split('T')[0]
+}
 
+/**
+ * Obtener fin de semana
+ */
+function getWeekEnd() {
+  const now = new Date()
+  const endOfWeek = new Date(now.setDate(now.getDate() - now.getDay() + 6))
+  return endOfWeek.toISOString().split('T')[0]
+}
+
+/**
+ * Toggle filtros avanzados
+ */
+function toggleAdvancedFilters() {
+  showAdvancedFilters.value = !showAdvancedFilters.value
+}
+
+/**
+ * Aplicar preset
+ */
+function applyPreset(presetId) {
+  const preset = filterPresets.value.find(p => p.id === presetId)
+  if (!preset) return
+  
+  // Aplicar filtros del preset
+  Object.entries(preset.filters).forEach(([key, value]) => {
+    handleFilterChange(key, value)
+  })
+  
+  activePreset.value = presetId
+  
+  // Limpiar preset después de 3 segundos
+  setTimeout(() => {
+    activePreset.value = null
+  }, 3000)
+}
+
+/**
+ * Actualizar filtro avanzado
+ */
+function updateAdvancedFilter(key, value) {
+  handleFilterChange(key, value)
+}
+
+/**
+ * Agregar comuna
+ */
+function addCommune(commune) {
+  const currentCommunes = Array.isArray(filters.value.shipping_commune) 
+    ? [...filters.value.shipping_commune] 
+    : []
+  
+  if (!currentCommunes.includes(commune)) {
+    currentCommunes.push(commune)
+    handleFilterChange('shipping_commune', currentCommunes)
+  }
+}
+
+/**
+ * Remover comuna
+ */
+function removeCommune(commune) {
+  const currentCommunes = Array.isArray(filters.value.shipping_commune) 
+    ? filters.value.shipping_commune.filter(c => c !== commune)
+    : []
+  
+  handleFilterChange('shipping_commune', currentCommunes)
+}
 
 const handleOpenModalFromGlobalSearch = async (orderId) => {
   if (!orderId) return;
@@ -723,42 +875,74 @@ async function fetchChannelsManual() {
     channels.value = []
   }
 }
+async function loadAllChannels() {
+  try {
+    console.log('🏪 Loading all channels for admin...')
+    
+    const allChannels = []
+    
+    // Cargar canales de todas las empresas
+    for (const company of companies.value) {
+      try {
+        const { data } = await apiService.channels.getByCompany(company._id)
+        
+        if (data && Array.isArray(data)) {
+          allChannels.push(...data)
+        } else if (data && data.data && Array.isArray(data.data)) {
+          allChannels.push(...data.data)
+        }
+      } catch (error) {
+        console.warn(`⚠️ Error loading channels for company ${company.name}:`, error)
+      }
+    }
+    
+    channels.value = allChannels
+    console.log(`✅ Loaded ${channels.value.length} total channels`)
+    
+  } catch (error) {
+    console.error('❌ Error loading all channels:', error)
+    channels.value = []
+  }
+}
+
 // ==================== LIFECYCLE ====================
 
 onMounted(async () => {
+  console.log('🚀 AdminOrders mounted, loading initial data...')
+  
   try {
-    // Load initial data
- await Promise.all([
-  fetchCompanies(),
-  fetchChannels(),   // ← AGREGAR
-  fetchOrders()
-])
+    isInitialLoad.value = true
     
-    // Setup additional features
-    startPeriodicRefresh()
+    // ✅ CARGAR TODOS LOS DATOS NECESARIOS
+    await Promise.all([
+      fetchCompanies(),
+      fetchOrders()
+    ])
     
-    // Add keyboard shortcuts
-    document.addEventListener('keydown', handleKeyboardShortcuts)
-
-     // ⚡ NUEVO: Setup real-time updates
-    console.log('🔗 [AdminOrders] Configurando actualizaciones en tiempo real')
+    // ✅ CARGAR COMUNAS DESPUÉS DE LAS EMPRESAS
+    await fetchAvailableCommunes()
     
-    // Escuchar actualizaciones de órdenes via WebSocket
-    window.addEventListener('orderUpdated', handleOrderUpdate)
+    // ✅ CARGAR CANALES PARA TODAS LAS EMPRESAS (admin)
+    if (auth.isAdmin) {
+      // Para admin, cargar todos los canales
+      await loadAllChannels()
+    } else {
+      // Para empresa, cargar solo sus canales
+      await fetchChannels()
+    }
     
-    // Refrescar actualizaciones pendientes cada 30 segundos
-    setInterval(() => {
-      if (autoRefreshEnabled.value) {
-        refreshPendingUpdates()
-      }
-    }, 30000)
-    
-    isInitialLoad.value = false 
-     
-    emitter.on('open-order-details', handleOpenModalFromGlobalSearch);
+    console.log('✅ Initial data loaded:', {
+      companies: companies.value.length,
+      channels: channels.value.length,
+      orders: orders.value.length,
+      communes: availableCommunes.value.length
+    })
     
   } catch (error) {
-    handleError(error, 'Carga inicial')
+    console.error('❌ Error loading initial data:', error)
+    toast.error('Error cargando datos iniciales')
+  } finally {
+    isInitialLoad.value = false
   }
 })
 
