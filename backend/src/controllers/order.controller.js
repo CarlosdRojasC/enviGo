@@ -11,97 +11,157 @@ const XLSX = require('xlsx'); // <--- Añade esta línea aquí
 const shippingZone = require('../config/ShippingZone');
 
 class OrderController {
-  async getAll(req, res) {
-    try {
-      const { 
-        status, date_from, date_to, company_id, channel_id,
-        search, shipping_commune, page = 1, limit = 50 
-      } = req.query;
+async getAll(req, res) {
+  try {
+    const { 
+      status, date_from, date_to, company_id, channel_id,
+      search, shipping_commune, page = 1, limit = 50 
+    } = req.query;
 
-      const filters = {};
+    console.log('🔍 Parámetros recibidos:', { status, date_from, date_to, company_id, channel_id, search, shipping_commune });
 
-      if (req.user.role === 'admin') {
-        if (company_id) {
-            filters.company_id = new mongoose.Types.ObjectId(company_id);
+    const filters = {};
+
+    // ✅ VALIDACIÓN Y APLICACIÓN DE FILTROS
+    if (req.user.role === 'admin') {
+      if (company_id && company_id !== '' && company_id !== 'undefined' && company_id !== 'null') {
+        // ✅ VALIDAR QUE SEA UN OBJECTID VÁLIDO
+        if (!mongoose.Types.ObjectId.isValid(company_id)) {
+          console.error('❌ company_id inválido:', company_id);
+          return res.status(400).json({ 
+            error: 'ID de empresa inválido',
+            details: `El company_id "${company_id}" no es válido`
+          });
         }
-        // --> INICIO DE LA NUEVA LÓGICA <--
-        // Si el admin no está filtrando por un estado específico,
-        // ocultamos los pedidos que están 'pendientes'.
-        if (status) {
-          filters.status = status;
-        }
-      } else {
-        if (req.user.company_id) {
-          filters.company_id = new mongoose.Types.ObjectId(req.user.company_id);
-        }
-      }
-
-      if (status) filters.status = status;
-      if (channel_id) filters.channel_id = new mongoose.Types.ObjectId(channel_id);
-
-      if (date_from || date_to) {
-        filters.order_date = {};
-        if (date_from) filters.order_date.$gte = new Date(date_from);
-        if (date_to) filters.order_date.$lte = new Date(date_to);
-      }
-
-   if (shipping_commune) {
-        // Log para ver qué llega desde el frontend
-        console.log('📍 Filtro de comuna recibido:', shipping_commune);
-
-        // Si es un string (lo será), lo separamos por comas
-        const communeArray = shipping_commune.split(',').map(c => c.trim()).filter(c => c);
-
-        if (communeArray.length > 1) {
-          // Si hay más de una comuna, usamos el operador $in de MongoDB
-          filters.shipping_commune = { $in: communeArray.map(c => new RegExp(c, 'i')) };
-        } else if (communeArray.length === 1) {
-          // Si solo hay una, usamos una búsqueda flexible (insensible a mayúsculas)
-          filters.shipping_commune = new RegExp(communeArray[0], 'i');
-        }
-      }
-      if (search) {
-        const searchRegex = new RegExp(search, 'i');
-        filters.$or = [
-          { order_number: searchRegex },
-          { customer_name: searchRegex },
-          { customer_email: searchRegex },
-          { external_order_id: searchRegex }
-        ];
+        filters.company_id = new mongoose.Types.ObjectId(company_id);
       }
       
-
-      const skip = (page - 1) * limit;
-
-      console.log('Filtros finales aplicados:', JSON.stringify(filters, null, 2));
-
-const [orders, totalCount] = await Promise.all([
-  Order.find(filters)
-    .populate('company_id', 'name price_per_order')
-    .populate('channel_id', 'channel_type channel_name')
-    .sort({ order_date: -1 })
-    .skip(skip)
-    .limit(parseInt(limit))
-    .lean(),
-  Order.countDocuments(filters)
-]);
-
-
-
-res.json({
-  orders, // ← Usar los pedidos enriquecidos
-  pagination: {
-    page: parseInt(page),
-    limit: parseInt(limit),
-    total: totalCount,
-    totalPages: Math.ceil(totalCount / limit)
-  }
-});
-    } catch (error) {
-      console.error('Error obteniendo pedidos:', error);
-      res.status(500).json({ error: ERRORS.SERVER_ERROR });
+      // Si el admin no está filtrando por un estado específico,
+      // se pueden aplicar lógicas adicionales aquí
+      if (status) {
+        filters.status = status;
+      }
+    } else {
+      // Para usuarios no admin, usar su company_id
+      if (req.user.company_id) {
+        if (!mongoose.Types.ObjectId.isValid(req.user.company_id)) {
+          console.error('❌ company_id del usuario inválido:', req.user.company_id);
+          return res.status(500).json({ 
+            error: 'Error de configuración del usuario'
+          });
+        }
+        filters.company_id = new mongoose.Types.ObjectId(req.user.company_id);
+      }
     }
+
+    // ✅ VALIDAR Y APLICAR FILTRO DE STATUS
+    if (status && status !== '' && status !== 'undefined' && status !== 'null') {
+      filters.status = status;
+    }
+
+    // ✅ VALIDAR Y APLICAR FILTRO DE CHANNEL
+    if (channel_id && channel_id !== '' && channel_id !== 'undefined' && channel_id !== 'null') {
+      if (!mongoose.Types.ObjectId.isValid(channel_id)) {
+        console.error('❌ channel_id inválido:', channel_id);
+        return res.status(400).json({ 
+          error: 'ID de canal inválido',
+          details: `El channel_id "${channel_id}" no es válido`
+        });
+      }
+      filters.channel_id = new mongoose.Types.ObjectId(channel_id);
+    }
+
+    // ✅ FILTRO DE FECHAS CON VALIDACIÓN
+    if (date_from || date_to) {
+      filters.order_date = {};
+      
+      if (date_from && date_from !== '' && date_from !== 'undefined') {
+        const fromDate = new Date(date_from);
+        if (isNaN(fromDate.getTime())) {
+          return res.status(400).json({ error: 'Fecha de inicio inválida' });
+        }
+        filters.order_date.$gte = fromDate;
+      }
+      
+      if (date_to && date_to !== '' && date_to !== 'undefined') {
+        const toDate = new Date(date_to);
+        if (isNaN(toDate.getTime())) {
+          return res.status(400).json({ error: 'Fecha de fin inválida' });
+        }
+        filters.order_date.$lte = toDate;
+      }
+    }
+
+    // ✅ FILTRO DE COMUNA
+    if (shipping_commune && shipping_commune !== '' && shipping_commune !== 'undefined') {
+      console.log('📍 Filtro de comuna recibido:', shipping_commune);
+
+      const communeArray = shipping_commune.split(',').map(c => c.trim()).filter(c => c);
+
+      if (communeArray.length > 1) {
+        filters.shipping_commune = { $in: communeArray.map(c => new RegExp(c, 'i')) };
+      } else if (communeArray.length === 1) {
+        filters.shipping_commune = new RegExp(communeArray[0], 'i');
+      }
+    }
+
+    // ✅ FILTRO DE BÚSQUEDA
+    if (search && search !== '' && search !== 'undefined') {
+      const searchRegex = new RegExp(search, 'i');
+      filters.$or = [
+        { order_number: searchRegex },
+        { customer_name: searchRegex },
+        { customer_email: searchRegex },
+        { external_order_id: searchRegex }
+      ];
+    }
+
+    // ✅ VALIDAR PAGINACIÓN
+    const pageNum = Math.max(1, parseInt(page) || 1);
+    const limitNum = Math.min(100, Math.max(1, parseInt(limit) || 50));
+    const skip = (pageNum - 1) * limitNum;
+
+    console.log('Filtros finales aplicados:', JSON.stringify(filters, null, 2));
+
+    // ✅ CONSULTA CON PROMESAS PARALELAS
+    const [orders, totalCount] = await Promise.all([
+      Order.find(filters)
+        .populate('company_id', 'name price_per_order')
+        .populate('channel_id', 'channel_type channel_name')
+        .sort({ order_date: -1 })
+        .skip(skip)
+        .limit(limitNum)
+        .lean(),
+      Order.countDocuments(filters)
+    ]);
+
+    console.log(`✅ Encontrados ${orders.length} pedidos de ${totalCount} total`);
+
+    // ✅ RESPUESTA CONSISTENTE
+    res.json({
+      orders,
+      pagination: {
+        page: pageNum,
+        limit: limitNum,
+        total: totalCount,
+        totalPages: Math.ceil(totalCount / limitNum),
+        hasNextPage: pageNum < Math.ceil(totalCount / limitNum),
+        hasPrevPage: pageNum > 1
+      },
+      appliedFilters: {
+        count: Object.keys(filters).length,
+        details: filters
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Error obteniendo pedidos:', error);
+    res.status(500).json({ 
+      error: 'Error interno del servidor',
+      details: process.env.NODE_ENV === 'development' ? error.message : 'Error procesando la solicitud'
+    });
   }
+}
 
 async getById(req, res) {
   try {

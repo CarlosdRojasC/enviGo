@@ -120,71 +120,197 @@ export function useOrdersData(options = {}) {
   /**
    * 📊 Obtener pedidos con filtros y paginación
    */
-  async function fetchOrders(filters = {}) {
-    try {
-      loadingStates.value.orders = true
-      const cacheKey = generateCacheKey(filters, pagination.value)
-      
-      // Verificar cache (solo si han pasado menos de 30 segundos)
-      if (shouldUseCache(cacheKey)) {
-        const cachedData = cache.value.data.get(cacheKey)
-        if (cachedData) {
-          orders.value = cachedData.orders
-          pagination.value = cachedData.pagination
-          calculateStats()
-          loadingStates.value.orders = false
-          console.log('📦 [Cache Hit] Orders loaded from cache')
-          return
+ /**
+ * Fetch orders with filters and pagination
+ */
+async function fetchOrders(filters = {}) {
+  try {
+     // 🔍 DEBUG TEMPORAL - QUITA ESTO DESPUÉS
+    console.group('🚨 DEBUG FETCHORDERS')
+    console.log('Filtros recibidos:', filters)
+    
+    // Buscar valores problemáticos
+    Object.entries(filters).forEach(([key, value]) => {
+      if ((key === 'company_id' || key === 'channel_id') && value) {
+        console.log(`🔍 Verificando ${key}:`, {
+          value,
+          type: typeof value,
+          length: value.length,
+          isValidObjectId: /^[0-9a-fA-F]{24}$/.test(value),
+          charCodes: value.split('').map(c => c.charCodeAt(0))
+        })
+        
+        if (!/^[0-9a-fA-F]{24}$/.test(value)) {
+          console.error(`🚨 ESTE ES EL PROBLEMA: ${key} = "${value}"`)
+          console.error('Valor inválido detectado, detener ejecución')
+          console.groupEnd()
+          throw new Error(`Invalid ObjectId for ${key}: "${value}"`)
         }
       }
-      
-      const params = {
-        page: pagination.value.page,
-        limit: pagination.value.limit,
-        ...filters
-      }
+    })
+    console.groupEnd()
+    
+    loadingOrders.value = true
+    loadingStates.value.fetching = true
 
-      // En modo company, siempre filtrar por la empresa del usuario
-      if (mode === 'company' && companyId.value) {
-        params.company_id = companyId.value
-      }
-      
-      console.log(`📊 [${mode.toUpperCase()}] Fetching orders:`, params)
-      
-      const { data } = await apiService.orders.getAll(params)
-      
-      // Manejar diferentes formatos de respuesta de la API
-      handleApiResponse(data)
-      
-      // Guardar en cache
-      cache.value.data.set(cacheKey, {
-        orders: [...orders.value],
-        pagination: { ...pagination.value },
-        timestamp: Date.now()
-      })
-      
-      // Calcular estadísticas
-      calculateStats()
-      
-      // Actualizar metadata del cache
-      cache.value.lastFetch = Date.now()
-      cache.value.lastFilters = { ...params }
-      
-      console.log(`✅ [${mode.toUpperCase()}] Orders loaded:`, {
-        count: orders.value.length,
-        total: pagination.value.total,
-        page: pagination.value.page
-      })
-      
-    } catch (error) {
-      handleError(error, 'Error al cargar pedidos')
-      orders.value = []
-      pagination.value.total = 0
-      pagination.value.totalPages = 1
-    } finally {
-      loadingStates.value.orders = false
+    // ✅ LIMPIAR Y VALIDAR FILTROS ANTES DE ENVIAR
+    const cleanedFilters = cleanAndValidateFilters(filters)
+    
+    const params = {
+      page: pagination.value.page,
+      limit: pagination.value.limit,
+      ...cleanedFilters
     }
+    
+    console.log('📊 Fetching orders with cleaned params:', params)
+    
+    const { data } = await apiService.orders.getAll(params)
+
+    dataCache.value.lastFetch = Date.now()
+    dataCache.value.lastFilters = { ...params }
+    
+    // Handle different API response formats
+    if (data.orders) {
+      // Format: { orders: [...], pagination: {...} }
+      orders.value = data.orders
+      pagination.value = {
+        ...pagination.value,
+        ...data.pagination
+      }
+    } else if (Array.isArray(data)) {
+      // Format: [orders...] (simple array)
+      orders.value = data
+      pagination.value.total = data.length
+      pagination.value.totalPages = Math.ceil(data.length / pagination.value.limit)
+    } else {
+      // Other formats
+      orders.value = data.data || []
+      pagination.value = {
+        ...pagination.value,
+        total: data.total || 0,
+        totalPages: Math.ceil((data.total || 0) / pagination.value.limit)
+      }
+    }
+    
+    // Calcular stats
+    calculateAdditionalStats()
+    
+    console.log('✅ Orders loaded:', {
+      count: orders.value.length,
+      total: pagination.value.total,
+      page: pagination.value.page,
+      totalPages: pagination.value.totalPages
+    })
+    
+  } catch (error) {
+    console.error('❌ Error fetching orders:', error)
+    
+    // Debug del error específico
+    if (error.response?.data?.details) {
+      console.error('Error details:', error.response.data.details)
+    }
+    
+    toast.error('Error al cargar los pedidos: ' + (error.response?.data?.error || error.message))
+    orders.value = []
+    pagination.value.total = 0
+    pagination.value.totalPages = 1
+  } finally {
+    loadingOrders.value = false
+    loadingStates.value.fetching = false
   }
+}
+
+/**
+ * ✅ FUNCIÓN AUXILIAR PARA LIMPIAR Y VALIDAR FILTROS
+ */
+function cleanAndValidateFilters(filters) {
+  const cleaned = {}
+  
+  Object.entries(filters).forEach(([key, value]) => {
+    // Eliminar valores vacíos, null, undefined, "undefined", "null"
+    if (value === '' || 
+        value === null || 
+        value === undefined || 
+        value === 'undefined' || 
+        value === 'null' ||
+        (Array.isArray(value) && value.length === 0)) {
+      return // Skip este filtro
+    }
+    
+    // ✅ VALIDACIÓN ESPECÍFICA PARA OBJECTIDS
+    if (key === 'company_id' || key === 'channel_id') {
+      const objectIdRegex = /^[0-9a-fA-F]{24}$/
+      if (!objectIdRegex.test(value)) {
+        console.error(`❌ ${key} inválido ignorado:`, value)
+        return // Skip este filtro inválido
+      }
+    }
+    
+    // ✅ VALIDACIÓN PARA FECHAS
+    if (key === 'date_from' || key === 'date_to') {
+      const date = new Date(value)
+      if (isNaN(date.getTime())) {
+        console.error(`❌ ${key} fecha inválida ignorada:`, value)
+        return // Skip fecha inválida
+      }
+    }
+    
+    // ✅ VALIDACIÓN PARA ARRAYS DE COMUNAS
+    if (key === 'shipping_commune' && Array.isArray(value)) {
+      // Convertir array a string separado por comas para el backend
+      const validCommunes = value.filter(c => c && c.trim())
+      if (validCommunes.length > 0) {
+        cleaned[key] = validCommunes.join(',')
+      }
+      return
+    }
+    
+    // ✅ VALIDACIÓN PARA STRING DE COMUNAS
+    if (key === 'shipping_commune' && typeof value === 'string') {
+      const communes = value.split(',').map(c => c.trim()).filter(c => c)
+      if (communes.length > 0) {
+        cleaned[key] = communes.join(',')
+      }
+      return
+    }
+    
+    // ✅ AGREGAR FILTRO VÁLIDO
+    cleaned[key] = value
+  })
+  
+  console.log('🧹 Filtros limpiados:', cleaned)
+  return cleaned
+}
+
+/**
+ * ✅ FUNCIÓN AUXILIAR PARA DEBUG DE FILTROS
+ */
+function debugFilters(filters, context = 'Filtros') {
+  console.group(`🔍 ${context} Debug:`)
+  
+  Object.entries(filters).forEach(([key, value]) => {
+    console.log(`${key}:`, {
+      value,
+      type: typeof value,
+      isArray: Array.isArray(value),
+      isEmpty: value === '' || value === null || value === undefined,
+      isValidObjectId: (key === 'company_id' || key === 'channel_id') ? /^[0-9a-fA-F]{24}$/.test(value) : 'N/A'
+    })
+    
+    if ((key === 'company_id' || key === 'channel_id') && value) {
+      const isValidObjectId = /^[0-9a-fA-F]{24}$/.test(value)
+      if (!isValidObjectId) {
+        console.error(`❌ ${key} INVÁLIDO:`, {
+          value,
+          type: typeof value,
+          length: value.length
+        })
+      }
+    }
+  })
+  
+  console.groupEnd()
+}
 
   /**
    * 🏢 Obtener empresas (solo para admin)

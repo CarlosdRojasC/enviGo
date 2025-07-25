@@ -263,28 +263,40 @@ export function useOrdersFilters(orders, fetchOrders, options = {}) {
   /**
    * 🔄 Manejar cambio de filtro
    */
-  function handleFilterChange(key, value) {
-    console.log(`🔄 [${mode.toUpperCase()}] Filter changed:`, { key, value })
-    
-    if (key in filters.value) {
-      filters.value[key] = value
-    } else if (key in advancedFilters.value) {
-      advancedFilters.value[key] = value
-    } else {
-      console.warn(`❌ Unknown filter key: ${key}`)
+const handleFilterChange = async (key, value) => {
+  console.log(`🔄 handleFilterChange: ${key} = ${value} (tipo: ${typeof value})`)
+  
+  // ✅ VALIDAR ObjectIds antes de aplicar
+  if ((key === 'company_id' || key === 'channel_id') && value && value !== '') {
+    const objectIdRegex = /^[0-9a-fA-F]{24}$/
+    if (!objectIdRegex.test(value)) {
+      console.error(`❌ ${key} inválido:`, value)
+      toast.error(`ID de ${key === 'company_id' ? 'empresa' : 'canal'} inválido`)
       return
     }
-    
-    // Aplicar debounce para ciertos campos
-    if (['search', 'customer_email', 'order_number'].includes(key)) {
-      clearTimeout(filterTimeout)
-      filterTimeout = setTimeout(() => {
-        applyFilters()
-      }, 500)
-    } else {
-      applyFilters()
-    }
   }
+  
+  // ✅ LIMPIAR VALOR
+  const cleanValue = value === '' || value === 'undefined' || value === 'null' ? '' : value
+  
+  // ✅ APLICAR FILTRO
+  if (cleanValue === '' || cleanValue === null || cleanValue === undefined) {
+    delete filters.value[key]
+  } else {
+    filters.value[key] = cleanValue
+  }
+  
+  // ✅ DEBUG
+  console.log('🧹 Filtros después del cambio:', filters.value)
+  
+  // ✅ RESETEAR PAGINACIÓN Y REFRESCAR
+  try {
+    await fetchOrders(filters.value)
+  } catch (error) {
+    console.error('❌ Error aplicando filtros:', error)
+    toast.error('Error aplicando filtros: ' + error.message)
+  }
+}
 
   /**
    * 🎨 Aplicar preset
@@ -315,36 +327,24 @@ export function useOrdersFilters(orders, fetchOrders, options = {}) {
   /**
    * 🧹 Resetear filtros
    */
-  function resetFilters(applyImmediately = true) {
-    console.log(`🧹 [${mode.toUpperCase()}] Resetting filters`)
-    
-    // Reset filtros básicos
-    filters.value = {
-      status: '',
-      shipping_commune: [],
-      date_from: '',
-      date_to: '',
-      search: '',
-      company_id: isAdmin.value ? '' : (auth.user?.company_id || ''),
-      channel_id: '',
-      amount_min: '',
-      amount_max: ''
-    }
-    
-    // Reset filtros avanzados
-    Object.keys(advancedFilters.value).forEach(key => {
-      advancedFilters.value[key] = ''
-    })
-    
-    // Reset UI state
-    filtersUI.value.activePreset = null
-    filtersUI.value.communeSearch = ''
-    filtersUI.value.showCommuneDropdown = false
-    
-    if (applyImmediately) {
-      applyFilters()
-    }
+const resetFilters = async () => {
+  console.log('🧹 Limpiando todos los filtros...')
+  
+  // Limpiar todos los filtros
+  Object.keys(filters.value).forEach(key => {
+    delete filters.value[key]
+  })
+  
+  console.log('✅ Filtros limpiados:', filters.value)
+  
+  try {
+    await fetchOrders({})
+    toast.success('Filtros limpiados correctamente')
+  } catch (error) {
+    console.error('❌ Error limpiando filtros:', error)
+    toast.error('Error limpiando filtros')
   }
+}
 
   /**
    * 🔧 Toggle filtros avanzados
