@@ -152,30 +152,42 @@ const toast = useToast()
 const {
   orders,
   companies,
+  channels, // ← AÑADIDO
   pagination,
   loadingOrders,
   fetchOrders,
   fetchCompanies,
+  fetchChannels, // ← AÑADIDO  
   goToPage,
   changePageSize,
-  getOrdersStats,
   refreshOrders,
   updateOrderLocally,
   getCompanyName,
-  markAsWarehouseReceived,
-  markAsAssigned,
-} = useOrdersData()
+  orderStats,
+  additionalStats,
+  isAdmin
+} = useOrdersData({ mode: 'admin' }) // ← ESPECIFICAR MODO ADMIN
 
 // Filtros
 const {
   filters,
+  advancedFilters, // ← AÑADIDO
+  filtersUI, // ← CRÍTICO: esto faltaba
+  filterPresets, // ← AÑADIDO
   availableCommunes,
+  activeFiltersCount, // ← AÑADIDO
+  hasActiveFilters,
   handleFilterChange,
   resetFilters,
+  toggleAdvancedFilters, // ← AÑADIDO
+  updateAdvancedFilter, // ← AÑADIDO
+  applyPreset, // ← AÑADIDO
+  addCommune, // ← AÑADIDO
+  removeCommune, // ← AÑADIDO
+  // Legacy methods para compatibilidad
   setFilter,
-  exportFilters,
-  hasActiveFilters
-} = useOrdersFilters(orders, fetchOrders)
+  exportFilters
+} = useOrdersFilters(orders, fetchOrders, { mode: 'admin' })
 
 // Selección múltiple
 const {
@@ -191,7 +203,7 @@ const {
   selectOrdersByCriteria,
   validateSelection,
   cleanupSelection
-} = useOrdersSelection(orders)
+} = useOrdersSelection(orders, { mode: 'admin' }) // ← ESPECIFICAR MODO
 
 // Modales
 const {
@@ -213,7 +225,7 @@ const {
   validateNewOrder,
   openBulkAssignModal,
   resetNewOrderForm
-} = useOrdersModals()
+} = useOrdersModals({ mode: 'admin' }) // ← ESPECIFICAR MODO
 
 // Asignación de conductores
 const {
@@ -232,7 +244,7 @@ const {
   confirmBulkAssignment,
   closeBulkAssignModal,
   fetchAvailableDrivers
-} = useDriverAssignment(selectedOrderObjects, fetchOrders) 
+} = useDriverAssignment(selectedOrderObjects, fetchOrders)
 
 // Upload masivo
 const {
