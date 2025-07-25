@@ -152,42 +152,39 @@ const toast = useToast()
 const {
   orders,
   companies,
-  channels, // ← AÑADIDO
   pagination,
   loadingOrders,
   fetchOrders,
   fetchCompanies,
-  fetchChannels, // ← AÑADIDO  
   goToPage,
   changePageSize,
+  getOrdersStats,
   refreshOrders,
   updateOrderLocally,
   getCompanyName,
-  orderStats,
-  additionalStats,
-  isAdmin
-} = useOrdersData({ mode: 'admin' }) // ← ESPECIFICAR MODO ADMIN
+  markAsWarehouseReceived,
+  markAsAssigned,
+} = useOrdersData()
 
 // Filtros
 const {
   filters,
-  advancedFilters, // ← AÑADIDO
-  filtersUI, // ← CRÍTICO: esto faltaba
-  filterPresets, // ← AÑADIDO
+  advancedFilters,        // ← NUEVO
+  filtersUI,             // ← NUEVO (crítico para el error)
+  filterPresets,         // ← NUEVO
   availableCommunes,
-  activeFiltersCount, // ← AÑADIDO
-  hasActiveFilters,
+  activeFiltersCount,    // ← NUEVO
   handleFilterChange,
   resetFilters,
-  toggleAdvancedFilters, // ← AÑADIDO
-  updateAdvancedFilter, // ← AÑADIDO
-  applyPreset, // ← AÑADIDO
-  addCommune, // ← AÑADIDO
-  removeCommune, // ← AÑADIDO
-  // Legacy methods para compatibilidad
+  toggleAdvancedFilters, // ← NUEVO
+  updateAdvancedFilter,  // ← NUEVO
+  applyPreset,          // ← NUEVO
+  addCommune,           // ← NUEVO
+  removeCommune,        // ← NUEVO
   setFilter,
-  exportFilters
-} = useOrdersFilters(orders, fetchOrders, { mode: 'admin' })
+  exportFilters,
+  hasActiveFilters
+} = useOrdersFilters(orders, fetchOrders, { mode: 'admin' }) // ← NUEVO
 
 // Selección múltiple
 const {
@@ -203,7 +200,7 @@ const {
   selectOrdersByCriteria,
   validateSelection,
   cleanupSelection
-} = useOrdersSelection(orders, { mode: 'admin' }) // ← ESPECIFICAR MODO
+} = useOrdersSelection(orders, { mode: 'admin' })
 
 // Modales
 const {
@@ -225,7 +222,7 @@ const {
   validateNewOrder,
   openBulkAssignModal,
   resetNewOrderForm
-} = useOrdersModals({ mode: 'admin' }) // ← ESPECIFICAR MODO
+} = useOrdersModals({ mode: 'admin' })
 
 // Asignación de conductores
 const {
@@ -244,7 +241,7 @@ const {
   confirmBulkAssignment,
   closeBulkAssignModal,
   fetchAvailableDrivers
-} = useDriverAssignment(selectedOrderObjects, fetchOrders)
+} = useDriverAssignment(selectedOrderObjects, fetchOrders) 
 
 // Upload masivo
 const {
