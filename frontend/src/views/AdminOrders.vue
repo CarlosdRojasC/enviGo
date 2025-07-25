@@ -331,36 +331,6 @@ const selectionSummary = computed(() => {
     communes
   }
 })
-
-// ✅ COMPUTED PROPERTIES PARA EL UNIFIED FILTER
-/**
- * Filtros avanzados para el componente unificado
- */
-const advancedFilters = computed(() => {
-  return {
-    amount_min: filters.value.amount_min || '',
-    amount_max: filters.value.amount_max || '',
-    priority: filters.value.priority || '',
-    shipday_status: filters.value.shipday_status || '',
-    customer_email: filters.value.customer_email || '',
-    order_number: filters.value.order_number || '',
-    has_tracking: filters.value.has_tracking || ''
-  }
-})
-
-/**
- * UI de filtros para el componente unificado
- */
-const filtersUI = computed(() => {
-  return {
-    showAdvanced: showAdvancedFilters.value,
-    activePreset: activePreset.value
-  }
-})
-
-/**
- * Comunas filtradas para el dropdown
- */
 const filteredCommunes = computed(() => {
   const currentSelection = Array.isArray(filters.value.shipping_commune) 
     ? filters.value.shipping_commune 
@@ -370,45 +340,6 @@ const filteredCommunes = computed(() => {
     !currentSelection.includes(commune)
   ).sort()
 })
-
-/**
- * Presets de filtros
- */
-const filterPresets = computed(() => [
-  {
-    id: 'pending',
-    name: 'Pendientes',
-    icon: '⏳',
-    description: 'Pedidos pendientes de procesar',
-    filters: { status: 'pending' }
-  },
-  {
-    id: 'ready',
-    name: 'Listos',
-    icon: '📦',
-    description: 'Listos para recoger',
-    filters: { status: 'ready_for_pickup' }
-  },
-  {
-    id: 'unassigned',
-    name: 'Sin Asignar',
-    icon: '🚚',
-    description: 'No asignados a Shipday',
-    filters: { shipday_status: 'not_assigned' }
-  },
-  {
-    id: 'this_week',
-    name: 'Esta Semana',
-    icon: '📊',
-    description: 'Pedidos de esta semana',
-    filters: {
-      date_from: getWeekStart(),
-      date_to: getWeekEnd()
-    }
-  }
-])
-const showAdvancedFilters = ref(false)
-const activePreset = ref(null)
 
 // ==================== WATCHERS ====================
 
@@ -446,80 +377,83 @@ watch(orders, () => {
   cleanupSelection()
 })
 
-// ==================== METHODS ====================
-function getWeekStart() {
-  const now = new Date()
-  const startOfWeek = new Date(now.setDate(now.getDate() - now.getDay()))
-  return startOfWeek.toISOString().split('T')[0]
-}
+watch(() => companies.value, (newCompanies) => {
+  console.log('🏢 [AdminOrders] Companies updated:', {
+    count: newCompanies.length,
+    companies: newCompanies.map(c => ({ id: c._id, name: c.name }))
+  })
+}, { immediate: true })
 
-/**
- * Obtener fin de semana
- */
-function getWeekEnd() {
-  const now = new Date()
-  const endOfWeek = new Date(now.setDate(now.getDate() - now.getDay() + 6))
-  return endOfWeek.toISOString().split('T')[0]
-}
+// Watch para debug de channels
+watch(() => channels.value, (newChannels) => {
+  console.log('🏪 [AdminOrders] Channels updated:', {
+    count: newChannels.length,
+    channels: newChannels.map(c => ({ 
+      id: c._id, 
+      name: c.channel_name, 
+      type: c.channel_type,
+      company: c.company_name || c.company_id 
+    }))
+  })
+}, { immediate: true })
 
-/**
- * Toggle filtros avanzados
- */
-function toggleAdvancedFilters() {
-  showAdvancedFilters.value = !showAdvancedFilters.value
-}
-
-/**
- * Aplicar preset
- */
-function applyPreset(presetId) {
-  const preset = filterPresets.value.find(p => p.id === presetId)
-  if (!preset) return
+// Watch para debug de communes
+watch(() => availableCommunes.value, (newCommunes) => {
+  console.log('🏘️ [AdminOrders] Available communes updated:', {
+    count: newCommunes.length,
+    communes: newCommunes.slice(0, 10) // Mostrar solo las primeras 10
+  })
+}, { immediate: true })
+// ==================== FUNCIÓN DE DEBUG MANUAL ====================
+function debugCurrentState() {
+  console.group('🔍 [AdminOrders] Current State Debug')
   
-  // Aplicar filtros del preset
-  Object.entries(preset.filters).forEach(([key, value]) => {
-    handleFilterChange(key, value)
+  console.log('User:', {
+    isAdmin: auth.isAdmin,
+    role: auth.user?.role,
+    company: auth.user?.company_id
   })
   
-  activePreset.value = presetId
+  console.log('Companies:', {
+    loaded: companies.value.length > 0,
+    count: companies.value.length,
+    data: companies.value
+  })
   
-  // Limpiar preset después de 3 segundos
-  setTimeout(() => {
-    activePreset.value = null
-  }, 3000)
+  console.log('Channels:', {
+    loaded: channels.value.length > 0,
+    count: channels.value.length,
+    data: channels.value
+  })
+  
+  console.log('Available Communes:', {
+    loaded: availableCommunes.value.length > 0,
+    count: availableCommunes.value.length,
+    data: availableCommunes.value.slice(0, 10)
+  })
+  
+  console.log('Current Filters:', filters.value)
+  
+  console.log('Loading States:', {
+    orders: loadingOrders.value,
+    initial: isInitialLoad.value
+  })
+  
+  console.groupEnd()
 }
 
-/**
- * Actualizar filtro avanzado
- */
-function updateAdvancedFilter(key, value) {
-  handleFilterChange(key, value)
+// Exponer función de debug globalmente en desarrollo
+if (import.meta.env.DEV) {
+  window.debugAdminOrders = debugCurrentState
 }
 
-/**
- * Agregar comuna
- */
-function addCommune(commune) {
-  const currentCommunes = Array.isArray(filters.value.shipping_commune) 
-    ? [...filters.value.shipping_commune] 
-    : []
-  
-  if (!currentCommunes.includes(commune)) {
-    currentCommunes.push(commune)
-    handleFilterChange('shipping_commune', currentCommunes)
-  }
-}
+// Llamar debug después de 3 segundos
+setTimeout(() => {
+  console.log('🕒 [AdminOrders] Debug automático después de 3 segundos:')
+  debugCurrentState()
+}, 3000)
+// ==================== METHODS ====================
 
-/**
- * Remover comuna
- */
-function removeCommune(commune) {
-  const currentCommunes = Array.isArray(filters.value.shipping_commune) 
-    ? filters.value.shipping_commune.filter(c => c !== commune)
-    : []
-  
-  handleFilterChange('shipping_commune', currentCommunes)
-}
 
 const handleOpenModalFromGlobalSearch = async (orderId) => {
   if (!orderId) return;
@@ -879,6 +813,59 @@ async function loadAllChannels() {
   try {
     console.log('🏪 Loading all channels for admin...')
     
+    if (auth.isAdmin) {
+      // ✅ USAR EL ENDPOINT CORRECTO PARA ADMIN
+      const response = await apiService.channels.getAllForAdmin()
+      
+      console.log('📡 Admin channels response:', response)
+      
+      // Manejar diferentes formatos de respuesta
+      if (response.data?.data) {
+        channels.value = response.data.data
+      } else if (response.data) {
+        channels.value = response.data
+      } else {
+        channels.value = []
+      }
+      
+      console.log(`✅ Admin channels loaded: ${channels.value.length}`)
+      
+      // Debug estructura del primer canal
+      if (channels.value.length > 0) {
+        console.log('🔍 First channel structure:', {
+          _id: channels.value[0]._id,
+          channel_name: channels.value[0].channel_name,
+          channel_type: channels.value[0].channel_type,
+          company_name: channels.value[0].company_name || 'No company name'
+        })
+      }
+      
+    } else {
+      // ✅ PARA USUARIOS NO ADMIN, USAR fetchChannels DEL COMPOSABLE
+      await fetchChannels()
+    }
+    
+  } catch (error) {
+    console.error('❌ Error loading channels:', error)
+    console.error('Error details:', {
+      status: error.response?.status,
+      message: error.response?.data?.error || error.message,
+      url: error.config?.url
+    })
+    
+    channels.value = []
+    
+    // Si falla el endpoint admin, intentar el método manual
+    if (auth.isAdmin && error.response?.status === 404) {
+      console.log('⚠️ Admin endpoint not found, trying manual method...')
+      await loadChannelsManual()
+    }
+  }
+}
+async function loadChannelsManual() {
+  try {
+    console.log('🔄 Loading channels manually for each company...')
+    
     const allChannels = []
     
     // Cargar canales de todas las empresas
@@ -886,21 +873,30 @@ async function loadAllChannels() {
       try {
         const { data } = await apiService.channels.getByCompany(company._id)
         
-        if (data && Array.isArray(data)) {
-          allChannels.push(...data)
-        } else if (data && data.data && Array.isArray(data.data)) {
-          allChannels.push(...data.data)
+        let companyChannels = []
+        if (data && data.data && Array.isArray(data.data)) {
+          companyChannels = data.data
+        } else if (data && Array.isArray(data)) {
+          companyChannels = data
         }
+        
+        // Agregar nombre de empresa a cada canal
+        companyChannels.forEach(channel => {
+          channel.company_name = company.name
+        })
+        
+        allChannels.push(...companyChannels)
+        
       } catch (error) {
         console.warn(`⚠️ Error loading channels for company ${company.name}:`, error)
       }
     }
     
     channels.value = allChannels
-    console.log(`✅ Loaded ${channels.value.length} total channels`)
+    console.log(`✅ Manual method loaded ${channels.value.length} total channels`)
     
   } catch (error) {
-    console.error('❌ Error loading all channels:', error)
+    console.error('❌ Error with manual channel loading:', error)
     channels.value = []
   }
 }
