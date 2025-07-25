@@ -3,6 +3,8 @@ const ExcelService = require('../services/excel.service');
 const Order = require('../models/Order');
 const Company = require('../models/Company');
 const Channel = require('../models/Channel');
+const Notification = require('../models/Notification');
+
 const mongoose = require('mongoose'); // Agregar esta línea
 const ShipdayService = require('../services/shipday.service.js');
 const XLSX = require('xlsx'); // <--- Añade esta línea aquí
@@ -367,9 +369,25 @@ async getById(req, res) {
         updated_at: new Date()
       });
 
-      await order.save();
+      const savedOrder = await order.save();
 
-      res.status(201).json({ message: 'Pedido creado exitosamente', order });
+        if (savedOrder) {
+        try {
+          await Notification.create({
+            user: req.user.id,
+            title: 'Nuevo Pedido Creado',
+            message: `El pedido #${savedOrder.order_number} ha sido creado exitosamente.`,
+            type: 'new_order',
+            link: `/app/orders?search=${savedOrder.order_number}`,
+            order: savedOrder._id,
+          });
+          console.log(`✅ Notificación creada para el nuevo pedido ${savedOrder.order_number}.`);
+        } catch (notificationError) {
+          console.error('❌ No se pudo crear la notificación:', notificationError);
+        }
+      }
+
+      res.status(201).json({ message: 'Pedido creado exitosamente', order: savedOrder });
     } catch (error) {
       console.error('Error creando pedido:', error);
       res.status(500).json({ error: ERRORS.SERVER_ERROR });
