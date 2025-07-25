@@ -1,16 +1,10 @@
-// frontend/src/composables/useOrdersFilters.js - VERSIÓN UNIFICADA ESTILO ADMIN
+// frontend/src/composables/useOrdersFilters.js - VERSIÓN CORREGIDA
 import { ref, computed, watch } from 'vue'
 import { useAuthStore } from '../store/auth'
 import { apiService } from '../services/api'
 
 /**
- * 🔧 COMPOSABLE UNIFICADO PARA FILTROS DE PEDIDOS
- * Basado en el estilo AdminOrdersFilters pero funciona para ambos casos
- * 
- * @param {Object} orders - Ref de pedidos activos
- * @param {Function} fetchOrders - Función para obtener pedidos
- * @param {Object} options - Configuración adicional
- * @returns {Object} - API del composable
+ * 🔧 COMPOSABLE UNIFICADO PARA FILTROS DE PEDIDOS - FIXED
  */
 export function useOrdersFilters(orders, fetchOrders, options = {}) {
   const auth = useAuthStore()
@@ -19,80 +13,76 @@ export function useOrdersFilters(orders, fetchOrders, options = {}) {
   const mode = options.mode || (auth.user?.role === 'admin' ? 'admin' : 'company')
   const isAdmin = computed(() => mode === 'admin')
   
-  // ==================== ESTADO PRINCIPAL ====================
+  // ==================== ESTADO PRINCIPAL - INICIALIZACIÓN COMPLETA ====================
   
   /**
-   * Filtros básicos - formato unificado
+   * Filtros básicos - INICIALIZACIÓN SEGURA
    */
   const filters = ref({
-    // Filtros comunes
     status: '',
-    shipping_commune: [], // Array para múltiples comunas (estilo admin)
+    shipping_commune: [],
     date_from: '',
     date_to: '',
     search: '',
-    
-    // Filtros específicos de admin
-    company_id: isAdmin.value ? '' : auth.user?.company_id || '',
+    company_id: isAdmin.value ? '' : (auth.user?.company_id || ''),
     channel_id: '',
-    
-    // Filtros de rango
     amount_min: '',
     amount_max: ''
   })
 
   /**
-   * Filtros avanzados - completos como en Admin
+   * Filtros avanzados - INICIALIZACIÓN COMPLETA
    */
   const advancedFilters = ref({
     priority: '',
-    shipday_status: '', // assigned, not_assigned, with_driver, without_driver
+    shipday_status: '',
     customer_email: '',
     order_number: '',
     external_order_id: '',
     has_tracking: '',
     has_proof: '',
     driver_assigned: '',
-    
-    // Filtros adicionales para admin
-    created_by: isAdmin.value ? '' : auth.user?._id,
-    last_updated_hours: '', // Últimas X horas
+    created_by: isAdmin.value ? '' : (auth.user?._id || ''),
+    last_updated_hours: '',
     payment_status: '',
-    delivery_window: '' // morning, afternoon, evening
+    delivery_window: ''
   })
 
   /**
-   * Estado de la UI
+   * Estado de la UI - SIEMPRE INICIALIZADO
    */
   const filtersUI = ref({
     showAdvanced: false,
     activePreset: null,
     communeSearch: '',
-    showCommuneDropdown: false
+    showCommuneDropdown: false,
+    // Propiedades adicionales para compatibilidad
+    savedPresets: [],
+    lastAppliedFilters: null,
+    isInitialized: true
   })
 
+  // ==================== TIMEOUT REFS ====================
+  let filterTimeout = null
+
   // ==================== PRESETS INTELIGENTES ====================
-  
-  /**
-   * Presets dinámicos según el rol
-   */
   const filterPresets = computed(() => {
+    const today = new Date().toISOString().split('T')[0]
+    const weekStart = getWeekStart().toISOString().split('T')[0]
+    
     const basePresets = [
       {
         id: 'today',
         name: 'Hoy',
         icon: '📅',
         description: 'Pedidos creados hoy',
-        filters: {
-          date_from: new Date().toISOString().split('T')[0],
-          date_to: new Date().toISOString().split('T')[0]
-        }
+        filters: { date_from: today, date_to: today }
       },
       {
         id: 'pending',
         name: 'Pendientes',
         icon: '⏳',
-        description: 'Pedidos pendientes de procesar',
+        description: 'Pedidos pendientes',
         filters: { status: 'pending' }
       },
       {
@@ -107,14 +97,10 @@ export function useOrdersFilters(orders, fetchOrders, options = {}) {
         name: 'Esta Semana',
         icon: '📊',
         description: 'Pedidos de esta semana',
-        filters: {
-          date_from: getWeekStart().toISOString().split('T')[0],
-          date_to: new Date().toISOString().split('T')[0]
-        }
+        filters: { date_from: weekStart, date_to: today }
       }
     ]
 
-    // Presets adicionales para admin
     if (isAdmin.value) {
       basePresets.push(
         {
@@ -130,21 +116,13 @@ export function useOrdersFilters(orders, fetchOrders, options = {}) {
           icon: '💰',
           description: 'Pedidos > $50.000',
           filters: { amount_min: '50000' }
-        },
-        {
-          id: 'urgent',
-          name: 'Urgentes',
-          icon: '🚨',
-          description: 'Prioridad alta',
-          filters: { priority: 'Alta' }
         }
       )
     } else {
-      // Presets específicos para company users
       basePresets.push(
         {
           id: 'delivered',
-          name: 'Entregados',
+          name: 'Entregados',  
           icon: '✅',
           description: 'Pedidos entregados',
           filters: { status: 'delivered' }
@@ -152,7 +130,7 @@ export function useOrdersFilters(orders, fetchOrders, options = {}) {
         {
           id: 'in_transit',
           name: 'En Tránsito',
-          icon: '🚛',
+          icon: '🚛', 
           description: 'Pedidos en camino',
           filters: { status: 'shipped' }
         }
@@ -165,14 +143,13 @@ export function useOrdersFilters(orders, fetchOrders, options = {}) {
   // ==================== COMPUTED PROPERTIES ====================
 
   /**
-   * Comunas disponibles desde los pedidos actuales + API
+   * Comunas disponibles desde pedidos
    */
   const availableCommunes = computed(() => {
-    if (!orders.value?.length) return []
+    if (!orders?.value?.length) return []
     
     const communes = new Set()
     
-    // Extraer comunas de pedidos actuales
     orders.value.forEach(order => {
       let commune = order.shipping_commune
       
@@ -204,24 +181,22 @@ export function useOrdersFilters(orders, fetchOrders, options = {}) {
   })
 
   /**
-   * Cuenta de filtros activos
+   * Contador de filtros activos
    */
   const activeFiltersCount = computed(() => {
     let count = 0
     
-    // Contar filtros básicos
     Object.entries(filters.value).forEach(([key, value]) => {
       if (key === 'shipping_commune') {
         if (Array.isArray(value) && value.length > 0) count++
       } else if (key === 'company_id' && !isAdmin.value) {
-        // No contar company_id para usuarios no admin (es automático)
+        // No contar company_id para usuarios no admin
         return
       } else if (value !== '' && value !== null && value !== undefined) {
         count++
       }
     })
     
-    // Contar filtros avanzados
     if (filtersUI.value.showAdvanced) {
       Object.values(advancedFilters.value).forEach(value => {
         if (value !== '' && value !== null && value !== undefined) count++
@@ -237,72 +212,35 @@ export function useOrdersFilters(orders, fetchOrders, options = {}) {
   const hasActiveFilters = computed(() => activeFiltersCount.value > 0)
 
   /**
-   * Todos los filtros combinados para export
+   * Todos los filtros combinados
    */
   const allFilters = computed(() => ({
     ...filters.value,
-    ...advancedFilters.value
+    ...(filtersUI.value.showAdvanced ? advancedFilters.value : {})
   }))
-
-  /**
-   * Resumen de filtros activos
-   */
-  const filterSummary = computed(() => {
-    const summary = []
-    
-    if (filters.value.company_id && isAdmin.value) {
-      summary.push(`Empresa: ${getCompanyName(filters.value.company_id)}`)
-    }
-    
-    if (filters.value.status) {
-      summary.push(`Estado: ${getStatusDisplayName(filters.value.status)}`)
-    }
-    
-    if (filters.value.shipping_commune?.length) {
-      summary.push(`Comunas: ${filters.value.shipping_commune.join(', ')}`)
-    }
-    
-    if (filters.value.date_from) {
-      summary.push(`Desde: ${formatDate(filters.value.date_from)}`)
-    }
-    
-    if (filters.value.date_to) {
-      summary.push(`Hasta: ${formatDate(filters.value.date_to)}`)
-    }
-    
-    if (filters.value.search) {
-      summary.push(`Búsqueda: "${filters.value.search}"`)
-    }
-    
-    return summary
-  })
 
   // ==================== CORE METHODS ====================
 
   /**
-   * 🎯 Aplicar filtros con debounce inteligente
+   * 🎯 Aplicar filtros
    */
   function applyFilters() {
     console.log(`🎯 [${mode.toUpperCase()}] Applying filters:`, filters.value)
     
     const cleanFilters = {}
     
-    // Procesar filtros básicos
     Object.entries(filters.value).forEach(([key, value]) => {
       if (key === 'shipping_commune') {
-        // Convertir array de comunas a string separado por comas
         if (Array.isArray(value) && value.length > 0) {
           cleanFilters[key] = value.join(',')
         }
       } else if (key === 'company_id' && !isAdmin.value) {
-        // Para usuarios no admin, siempre incluir su company_id
         cleanFilters[key] = auth.user?.company_id || value
       } else if (value !== '' && value !== null && value !== undefined) {
         cleanFilters[key] = value
       }
     })
     
-    // Incluir filtros avanzados si están activos
     if (filtersUI.value.showAdvanced) {
       Object.entries(advancedFilters.value).forEach(([key, value]) => {
         if (value !== '' && value !== null && value !== undefined) {
@@ -311,52 +249,57 @@ export function useOrdersFilters(orders, fetchOrders, options = {}) {
       })
     }
     
-    console.log(`📡 [${mode.toUpperCase()}] Sending filters to API:`, cleanFilters)
-    fetchOrders(cleanFilters)
+    console.log(`📡 [${mode.toUpperCase()}] Sending filters:`, cleanFilters)
+    
+    // Guardar filtros aplicados
+    filtersUI.value.lastAppliedFilters = { ...cleanFilters }
+    
+    // Llamar función de fetch
+    if (fetchOrders && typeof fetchOrders === 'function') {
+      fetchOrders(cleanFilters)
+    }
   }
 
   /**
-   * 🔄 Manejar cambio de filtro con debounce
+   * 🔄 Manejar cambio de filtro
    */
-  let filterTimeout
   function handleFilterChange(key, value) {
     console.log(`🔄 [${mode.toUpperCase()}] Filter changed:`, { key, value })
     
-    // Actualizar el filtro
     if (key in filters.value) {
       filters.value[key] = value
     } else if (key in advancedFilters.value) {
       advancedFilters.value[key] = value
+    } else {
+      console.warn(`❌ Unknown filter key: ${key}`)
+      return
     }
     
-    // Aplicar debounce para búsqueda y comunas
-    if (key === 'search' || key === 'shipping_commune' || key === 'customer_email') {
+    // Aplicar debounce para ciertos campos
+    if (['search', 'customer_email', 'order_number'].includes(key)) {
       clearTimeout(filterTimeout)
       filterTimeout = setTimeout(() => {
         applyFilters()
       }, 500)
     } else {
-      // Otros filtros se aplican inmediatamente
       applyFilters()
     }
   }
 
   /**
-   * 🎨 Aplicar preset de filtros
+   * 🎨 Aplicar preset
    */
   function applyPreset(presetId) {
     console.log(`🎨 [${mode.toUpperCase()}] Applying preset:`, presetId)
     
     const preset = filterPresets.value.find(p => p.id === presetId)
     if (!preset) {
-      console.warn('❌ Preset no encontrado:', presetId)
+      console.warn('❌ Preset not found:', presetId)
       return
     }
     
-    // Resetear filtros
-    resetFilters(false) // No aplicar automáticamente
+    resetFilters(false)
     
-    // Aplicar filtros del preset
     Object.entries(preset.filters).forEach(([key, value]) => {
       if (key in filters.value) {
         filters.value[key] = value
@@ -370,30 +313,30 @@ export function useOrdersFilters(orders, fetchOrders, options = {}) {
   }
 
   /**
-   * 🧹 Resetear todos los filtros
+   * 🧹 Resetear filtros
    */
   function resetFilters(applyImmediately = true) {
     console.log(`🧹 [${mode.toUpperCase()}] Resetting filters`)
     
-    // Resetear filtros básicos
+    // Reset filtros básicos
     filters.value = {
       status: '',
       shipping_commune: [],
       date_from: '',
       date_to: '',
       search: '',
-      company_id: isAdmin.value ? '' : auth.user?.company_id || '',
+      company_id: isAdmin.value ? '' : (auth.user?.company_id || ''),
       channel_id: '',
       amount_min: '',
       amount_max: ''
     }
     
-    // Resetear filtros avanzados
+    // Reset filtros avanzados
     Object.keys(advancedFilters.value).forEach(key => {
       advancedFilters.value[key] = ''
     })
     
-    // Resetear UI
+    // Reset UI state
     filtersUI.value.activePreset = null
     filtersUI.value.communeSearch = ''
     filtersUI.value.showCommuneDropdown = false
@@ -403,27 +346,24 @@ export function useOrdersFilters(orders, fetchOrders, options = {}) {
     }
   }
 
-  // ==================== FILTROS AVANZADOS ====================
-
   /**
    * 🔧 Toggle filtros avanzados
    */
   function toggleAdvancedFilters() {
     filtersUI.value.showAdvanced = !filtersUI.value.showAdvanced
-    console.log(`🔧 [${mode.toUpperCase()}] Advanced filters:`, filtersUI.value.showAdvanced ? 'ON' : 'OFF')
+    console.log(`🔧 [${mode.toUpperCase()}] Advanced filters:`, filtersUI.value.showAdvanced)
   }
 
   /**
    * ⚙️ Actualizar filtro avanzado
    */
   function updateAdvancedFilter(key, value) {
-    console.log(`⚙️ [${mode.toUpperCase()}] Advanced filter changed:`, { key, value })
+    console.log(`⚙️ [${mode.toUpperCase()}] Advanced filter:`, { key, value })
     
     if (key in advancedFilters.value) {
       advancedFilters.value[key] = value
       
-      // Aplicar con debounce para campos de texto
-      if (typeof value === 'string' && ['customer_email', 'order_number'].includes(key)) {
+      if (['customer_email', 'order_number'].includes(key)) {
         clearTimeout(filterTimeout)
         filterTimeout = setTimeout(() => {
           applyFilters()
@@ -436,12 +376,7 @@ export function useOrdersFilters(orders, fetchOrders, options = {}) {
 
   // ==================== GESTIÓN DE COMUNAS ====================
 
-  /**
-   * ➕ Agregar comuna
-   */
   function addCommune(commune) {
-    console.log(`➕ [${mode.toUpperCase()}] Adding commune:`, commune)
-    
     if (!filters.value.shipping_commune.includes(commune)) {
       filters.value.shipping_commune.push(commune)
       filtersUI.value.communeSearch = ''
@@ -450,21 +385,11 @@ export function useOrdersFilters(orders, fetchOrders, options = {}) {
     }
   }
 
-  /**
-   * ➖ Remover comuna
-   */
   function removeCommune(commune) {
-    console.log(`➖ [${mode.toUpperCase()}] Removing commune:`, commune)
-    
-    filters.value.shipping_commune = filters.value.shipping_commune.filter(
-      c => c !== commune
-    )
+    filters.value.shipping_commune = filters.value.shipping_commune.filter(c => c !== commune)
     applyFilters()
   }
 
-  /**
-   * 🔄 Toggle comuna
-   */
   function toggleCommune(commune) {
     if (filters.value.shipping_commune.includes(commune)) {
       removeCommune(commune)
@@ -473,18 +398,12 @@ export function useOrdersFilters(orders, fetchOrders, options = {}) {
     }
   }
 
-  // ==================== BÚSQUEDA AVANZADA ====================
+  // ==================== BÚSQUEDA ====================
 
-  /**
-   * 🔍 Búsqueda con debounce
-   */
   function handleSearch(searchTerm) {
     handleFilterChange('search', searchTerm)
   }
 
-  /**
-   * 🔍 Búsqueda directa sin debounce
-   */
   function applySearch(searchTerm) {
     filters.value.search = searchTerm
     applyFilters()
@@ -492,31 +411,17 @@ export function useOrdersFilters(orders, fetchOrders, options = {}) {
 
   // ==================== HELPER FUNCTIONS ====================
 
-  /**
-   * Obtener inicio de la semana
-   */
   function getWeekStart() {
     const now = new Date()
     const day = now.getDay()
-    const diff = now.getDate() - day + (day === 0 ? -6 : 1) // Lunes como inicio
+    const diff = now.getDate() - day + (day === 0 ? -6 : 1)
     return new Date(now.setDate(diff))
   }
 
-  /**
-   * Obtener nombre de empresa
-   */
-  function getCompanyName(companyId) {
-    // Esta función debería venir del contexto o ser inyectada
-    return `Empresa ${companyId}`
-  }
-
-  /**
-   * Obtener nombre de estado para display
-   */
   function getStatusDisplayName(status) {
     const statusNames = {
       'pending': 'Pendiente',
-      'processing': 'Procesando',
+      'processing': 'Procesando', 
       'ready_for_pickup': 'Listo',
       'assigned': 'Asignado',
       'shipped': 'Enviado',
@@ -526,17 +431,11 @@ export function useOrdersFilters(orders, fetchOrders, options = {}) {
     return statusNames[status] || status
   }
 
-  /**
-   * Formatear fecha para display
-   */
   function formatDate(dateString) {
     if (!dateString) return ''
     return new Date(dateString).toLocaleDateString('es-CL')
   }
 
-  /**
-   * Validar rango de fechas
-   */
   function validateDateRange() {
     if (filters.value.date_from && filters.value.date_to) {
       return new Date(filters.value.date_from) <= new Date(filters.value.date_to)
@@ -546,17 +445,15 @@ export function useOrdersFilters(orders, fetchOrders, options = {}) {
 
   // ==================== WATCHERS ====================
 
-  // Validar fechas cuando cambian
   watch(
     [() => filters.value.date_from, () => filters.value.date_to],
     () => {
       if (!validateDateRange()) {
-        console.warn('⚠️ Rango de fechas inválido')
+        console.warn('⚠️ Invalid date range')
       }
     }
   )
 
-  // Limpiar preset activo cuando se modifica un filtro manualmente
   watch(
     filters,
     () => {
@@ -566,6 +463,12 @@ export function useOrdersFilters(orders, fetchOrders, options = {}) {
     },
     { deep: true }
   )
+
+  // ==================== INICIALIZACIÓN ====================
+  
+  // Marcar como inicializado
+  filtersUI.value.isInitialized = true
+  console.log(`✅ [${mode.toUpperCase()}] OrdersFilters initialized`)
 
   // ==================== RETURN API ====================
   return {
@@ -581,7 +484,6 @@ export function useOrdersFilters(orders, fetchOrders, options = {}) {
     hasActiveFilters,
     allFilters,
     filterPresets,
-    filterSummary,
     isAdmin,
     
     // Métodos principales
@@ -608,25 +510,16 @@ export function useOrdersFilters(orders, fetchOrders, options = {}) {
     getStatusDisplayName,
     formatDate,
     
-    // Legacy methods para compatibilidad
+    // Legacy methods (compatibilidad)
     setFilter: (key, value) => handleFilterChange(key, value),
     getFilter: (key) => filters.value[key] || advancedFilters.value[key],
     exportFilters: () => ({ ...allFilters.value }),
-    importFilters: (newFilters) => {
-      Object.entries(newFilters).forEach(([key, value]) => {
-        handleFilterChange(key, value)
-      })
-    },
     clearAllFilters: () => resetFilters(),
-    
-    // Métodos de UI
     handleFilterObjectChange: (newFilters) => {
       Object.entries(newFilters).forEach(([key, value]) => {
         handleFilterChange(key, value)
       })
     },
-    
-    // Funciones específicas para comunas (compatibilidad)
     fetchAvailableCommunes: () => {
       console.log('🏘️ Available communes updated from orders')
     }
