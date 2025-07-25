@@ -119,34 +119,30 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed, onBeforeUnmount, watch } from 'vue'
-import { useRouter } from 'vue-router'
-import { useAuthStore } from '../store/auth'
-import { apiService } from '../services/api'
-import { useToast } from 'vue-toastification'
+import { ref, computed, watch, onBeforeUnmount } from 'vue';
+import { useRouter } from 'vue-router';
+import { useAuthStore } from '../store/auth';
+import { apiService } from '../services/api';
+import { useToast } from 'vue-toastification';
 
-// Componentes importados
-import Modal from '../components/Modal.vue'
-import OrderDetails from '../components/OrderDetails.vue'
-import OrderTracking from '../components/OrderTracking.vue'
-import ProofOfDelivery from '../components/ProofOfDelivery.vue'
+// Componentes
+import Modal from '../components/Modal.vue';
+import OrderDetails from '../components/OrderDetails.vue';
+import OrderTracking from '../components/OrderTracking.vue';
+import ProofOfDelivery from '../components/ProofOfDelivery.vue';
+import OrdersHeader from '../components/Orders/OrdersHeader.vue';
+import OrdersTable from '../components/Orders/OrdersTable.vue';
+import UnifiedOrdersFilters from '../components/UnifiedOrdersFilters.vue';
 
-// Nuevos componentes modernos
-import OrdersHeader from '../components/Orders/OrdersHeader.vue'
-import OrdersTable from '../components/Orders/OrdersTable.vue'
-import UnifiedOrdersFilters from '../components/UnifiedOrdersFilters.vue'
+// Composables
+import { useOrdersData } from '../composables/useOrdersData';
+import { useOrdersFilters } from '../composables/useOrdersFilters';
+import { useOrdersSelection } from '../composables/useOrdersSelection';
 
-
-// Composables (asumiendo que ya los extendiste)
-import { useOrdersData } from '../composables/useOrdersData'
-import { useOrdersFilters } from '../composables/useOrdersFilters'
-import { useOrdersSelection } from '../composables/useOrdersSelection'
-import ExportDropdown from '../components/Orders/ExportDropdown.vue'
-
-
-const toast = useToast()
-const router = useRouter()
-const auth = useAuthStore()
+// --- SETUP INICIAL ---
+const toast = useToast();
+const router = useRouter();
+const auth = useAuthStore();
 
 // ==================== COMPOSABLES ====================
 
@@ -171,9 +167,8 @@ const {
   startAutoRefresh,
   stopAutoRefresh,
   updateOrderLocally
-} = useOrdersData()
+} = useOrdersData();
 
-// Filtros
 const {
   filters,
   advancedFilters,
@@ -182,19 +177,19 @@ const {
   allFilters,
   activeFiltersCount,
   availableCommunes,
+  filteredCommunes, // Añadido para que coincida con tu template
   applyPreset,
   toggleAdvancedFilters,
   updateAdvancedFilter,
   applySearch,
   resetFilters,
-  handleFilterChange,  // NUEVA FUNCIÓN
+  handleFilterChange,
   clearAllFilters,
-  addCommune,           // ✅ AGREGAR
-  removeCommune,        // ✅ AGREGAR
-  fetchAvailableCommunes // ✅ AGREGAR
-} = useOrdersFilters(orders, fetchOrders, { mode: 'company' })
+  addCommune,
+  removeCommune,
+  fetchAvailableCommunes
+} = useOrdersFilters(orders, fetchOrders, { mode: 'company' });
 
-// Selección múltiple
 const {
   selectedOrders,
   selectAllChecked,
@@ -204,29 +199,24 @@ const {
   toggleOrderSelection,
   toggleSelectAll,
   clearSelection
-} = useOrdersSelection(orders)
+} = useOrdersSelection(orders);
+
 
 // ==================== ESTADO LOCAL ====================
 
-const user = computed(() => auth.user)
-const lastUpdate = ref(Date.now())
-const autoRefreshEnabled = ref(false)
-const loadingOrderDetails = ref(false)
-const orderTrackingRef = ref(null)
-
-// Estados de modales (mantener los existentes)
-const selectedOrder = ref(null)
-const showOrderDetailsModal = ref(false)
-const selectedTrackingOrder = ref(null)
-const showTrackingModal = ref(false)
-const selectedProofOrder = ref(null)
-const showProofModal = ref(false)
-const supportOrder = ref(null)
-const showSupportModal = ref(false)
-const selectedStatuses = ref([]);
-const searchTerm = ref("");
-const dateRange = ref({ start: null, end: null });
-const hasInitialDataLoaded = ref(false);
+const lastUpdate = ref(Date.now());
+const autoRefreshEnabled = ref(false);
+const loadingOrderDetails = ref(false);
+const orderTrackingRef = ref(null);
+const selectedOrder = ref(null);
+const showOrderDetailsModal = ref(false);
+const selectedTrackingOrder = ref(null);
+const showTrackingModal = ref(false);
+const selectedProofOrder = ref(null);
+const showProofModal = ref(false);
+const supportOrder = ref(null);
+const showSupportModal = ref(false);
+const hasInitialDataLoaded = ref(false); // Flag de control
 
 // ⚡ TIEMPO REAL: Estado para actualización automática
 const realTimeEnabled = ref(true)
@@ -240,17 +230,57 @@ const orderUpdateQueue = ref([]) // Cola de notificaciones para mostrar
  * Estadísticas para el header
  */
 const orderStats = computed(() => ({
- total: orders.value.length,
+  total: orders.value.length,
   pending: orders.value.filter(o => o.status === 'pending').length,
   ready_for_pickup: orders.value.filter(o => o.status === 'ready_for_pickup').length,
-  warehouse_received: orders.value.filter(o => o.status === 'warehouse_received').length, // 🆕
+  warehouse_received: orders.value.filter(o => o.status === 'warehouse_received').length,
   processing: orders.value.filter(o => o.status === 'processing').length,
   shipped: orders.value.filter(o => o.status === 'shipped').length,
   delivered: orders.value.filter(o => o.status === 'delivered').length,
   cancelled: orders.value.filter(o => o.status === 'cancelled').length
-}))
+}));
 
 // ==================== MÉTODOS DEL HEADER ====================
+
+
+async function loadInitialData(companyId) {
+  if (hasInitialDataLoaded.value) return; // Si ya se cargaron los datos, no hacer nada.
+  hasInitialDataLoaded.value = true; // Marcar que la carga ha comenzado.
+  
+  console.log(`🚀 Iniciando carga de datos para la empresa: ${companyId}`);
+  toast.info('Cargando datos de pedidos...');
+
+  try {
+    await Promise.all([
+      fetchOrders(),
+      fetchChannels(),
+      fetchAvailableCommunes(companyId) // ¡Aquí pasamos el ID!
+    ]);
+
+    lastUpdate.value = Date.now();
+    console.log('✅ Datos iniciales cargados exitosamente.');
+    
+    // Configurar listeners de tiempo real DESPUÉS de cargar los datos.
+    window.addEventListener('orderUpdated', handleOrderUpdate);
+
+  } catch (error) {
+    console.error('❌ Error fatal durante la carga inicial:', error);
+    toast.error('No se pudieron cargar los datos de la página.');
+    hasInitialDataLoaded.value = false; // Permitir un reintento si algo falla.
+  }
+}
+
+// Este WATCH es el único responsable de disparar la carga de datos.
+watch(() => auth.user?.company_id, (newCompanyId) => {
+  console.log(`[WATCH] El company_id del usuario ahora es: ${newCompanyId}`);
+  
+  // Si tenemos un nuevo ID de empresa y los datos aún no se han cargado...
+  if (newCompanyId && !hasInitialDataLoaded.value) {
+    loadInitialData(newCompanyId);
+  }
+}, {
+  immediate: true // Ejecutar inmediatamente al crear el componente.
+});
 
 async function handleRefresh() {
   try {
@@ -925,23 +955,14 @@ watch(() => auth.user, async (newUser, oldUser) => {
 });
 
 
-onMounted(() => {
-  console.log("Componente Orders montado. Esperando datos de autenticación...");
-});
+
 onBeforeUnmount(() => {
-  // Cleanup existente
   if (autoRefreshEnabled.value) {
-    stopAutoRefresh()
+    stopAutoRefresh();
   }
-  
-  // ⚡ NUEVO: Cleanup real-time listeners
-  console.log('🧹 [Orders] Limpiando listeners de tiempo real')
-  window.removeEventListener('orderUpdated', handleOrderUpdate)
-  
-  // Limpiar estado
-  pendingOrderUpdates.value.clear()
-  orderUpdateQueue.value = []
-})
+  console.log('🧹 Limpiando listeners de tiempo real...');
+  window.removeEventListener('orderUpdated', handleOrderUpdate);
+});
 </script>
 
 <style scoped>
