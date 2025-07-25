@@ -98,19 +98,7 @@ class SyncSchedulerService {
   }
 
   // Detener el scheduler
-  stop() {
-    if (!this.isRunning) {
-      console.log('⚠️ Sync Scheduler ya está detenido');
-      return;
-    }
 
-    this.mainTask.stop();
-    this.cleanupTask.stop();
-    this.monitorTask.stop();
-    this.isRunning = false;
-    
-    console.log('⏹️ Sync Scheduler detenido');
-  }
 
   // ✅ MÉTODO DE EMERGENCIA PARA PAUSAR TODO
   async emergencyPause(reason = 'Pausa manual de emergencia') {
@@ -440,6 +428,103 @@ class SyncSchedulerService {
       throw error;
     }
   }
+   async syncChannelById(channelId) {
+    try {
+      console.log(`🔄 Sincronización forzada del canal ${channelId}...`);
+      
+      // Obtener el canal
+      const channel = await Channel.findById(channelId);
+      if (!channel) {
+        throw new Error(`Canal ${channelId} no encontrado`);
+      }
+
+      if (!channel.is_active) {
+        throw new Error(`Canal ${channel.channel_name} está inactivo`);
+      }
+
+      // Verificar configuración
+      const configCheck = channel.isConfiguredCorrectly();
+      if (!configCheck.valid) {
+        throw new Error(`Canal mal configurado: ${configCheck.error}`);
+      }
+
+      // Ejecutar sincronización según el tipo
+      let result;
+      const syncParams = {
+        dateFrom: new Date(Date.now() - (7 * 24 * 60 * 60 * 1000)), // Últimos 7 días
+        dateTo: new Date(),
+        limit: 100
+      };
+
+      switch (channel.channel_type) {
+        case 'shopify':
+          result = await this.syncShopifyOrders(channel, syncParams);
+          break;
+        case 'woocommerce':
+          result = await this.syncWooCommerceOrders(channel, syncParams);
+          break;
+        case 'mercadolibre':
+          result = await this.syncMercadoLibreOrders(channel, syncParams);
+          break;
+        default:
+          throw new Error(`Tipo de canal no soportado: ${channel.channel_type}`);
+      }
+
+      // Actualizar estadísticas del canal
+      await this.updateChannelSyncStats(channel, true, result);
+
+      console.log(`✅ Sincronización de ${channel.channel_name} completada: ${result} pedidos`);
+      
+      return {
+        success: true,
+        channel_name: channel.channel_name,
+        orders_synced: result,
+        sync_time: new Date().toISOString(),
+        message: `${result} pedidos sincronizados exitosamente`
+      };
+
+    } catch (error) {
+      console.error(`❌ Error sincronizando canal ${channelId}:`, error);
+      
+      // Actualizar canal con error
+      if (channelId) {
+        await this.updateChannelSyncStats(
+          await Channel.findById(channelId), 
+          false, 
+          0, 
+          error.message
+        );
+      }
+
+      throw error;
+    }
+  }
+
+    async updateChannelSyncStats(channel, success, ordersCount = 0, errorMessage = null) {
+    try {
+      const updateData = {
+        last_sync: new Date(),
+        last_sync_orders: ordersCount,
+        sync_status: success ? 'success' : 'error'
+      };
+
+      if (success) {
+        updateData.last_sync_error = null;
+        updateData['sync_stats.total_syncs'] = (channel.sync_stats?.total_syncs || 0) + 1;
+        updateData['sync_stats.successful_syncs'] = (channel.sync_stats?.successful_syncs || 0) + 1;
+        updateData['sync_stats.total_orders_imported'] = (channel.sync_stats?.total_orders_imported || 0) + ordersCount;
+      } else {
+        updateData.last_sync_error = errorMessage;
+        updateData['sync_stats.total_syncs'] = (channel.sync_stats?.total_syncs || 0) + 1;
+        updateData['sync_stats.failed_syncs'] = (channel.sync_stats?.failed_syncs || 0) + 1;
+      }
+
+      await Channel.findByIdAndUpdate(channel._id, updateData);
+      
+    } catch (error) {
+      console.error('Error actualizando estadísticas del canal:', error);
+    }
+  }
 
   // ✅ PROCESAR PEDIDO INDIVIDUAL CON VALIDACIÓN MEJORADA
   async processSingleShopifyOrder(orderData, channel) {
@@ -766,44 +851,90 @@ async syncWooCommerceOrders(channel, params) {
   }
 
   // Reiniciar el scheduler
-  async restart() {
-    console.log('🔄 Reiniciando Sync Scheduler...');
-    this.stop();
-    await this.sleep(1000);
-    this.start();
-    console.log('✅ Sync Scheduler reiniciado');
+ async restart() {
+    try {
+      console.log('🔄 Reiniciando Sync Scheduler...');
+      
+      // Limpiar timers existentes
+      if (this.syncTimer) {
+        clearInterval(this.syncTimer);
+        this.syncTimer = null;
+      }
+
+      // Limpiar errores acumulados
+      this.syncErrors.clear();
+      this.emergencyPaused = false;
+
+      // Reinicializar
+      await this.initialize();
+      
+      console.log('✅ Sync Scheduler reiniciado exitosamente');
+      
+      return {
+        success: true,
+        message: 'Sistema de sincronización reiniciado',
+        restart_time: new Date().toISOString()
+      };
+
+    } catch (error) {
+      console.error('❌ Error reiniciando Sync Scheduler:', error);
+      throw error;
+    }
   }
 
   // Obtener próximas sincronizaciones programadas
-  async getUpcomingSyncs() {
+async getUpcomingSyncs() {
     try {
       const channels = await Channel.find({
         is_active: true,
         auto_sync_enabled: true
-      });
+      }).select('channel_name channel_type last_sync sync_frequency_minutes');
 
-      return channels.map(channel => {
-        const lastSync = channel.last_sync || new Date(0);
+      const upcomingSyncs = channels.map(channel => {
+        const lastSync = new Date(channel.last_sync || 0);
         const nextSync = new Date(lastSync.getTime() + (channel.sync_frequency_minutes * 60 * 1000));
-        const minutesUntilSync = Math.max(0, Math.ceil((nextSync - new Date()) / (1000 * 60)));
+        const minutesUntilNext = Math.max(0, Math.floor((nextSync.getTime() - Date.now()) / (1000 * 60)));
 
         return {
-          channelId: channel._id,
-          channelName: channel.channel_name,
-          channelType: channel.channel_type,
-          lastSync: lastSync,
-          nextSync: nextSync,
-          minutesUntilSync: minutesUntilSync,
-          status: channel.sync_status,
-          errors: this.syncErrors.get(channel._id.toString()) || 0,
-          inProgress: this.syncInProgress.has(channel._id.toString())
+          channel_id: channel._id,
+          channel_name: channel.channel_name,
+          channel_type: channel.channel_type,
+          last_sync: channel.last_sync,
+          next_sync: nextSync,
+          minutes_until_next: minutesUntilNext,
+          frequency_minutes: channel.sync_frequency_minutes,
+          is_overdue: minutesUntilNext === 0 && lastSync.getTime() > 0
         };
-      }).sort((a, b) => a.minutesUntilSync - b.minutesUntilSync);
+      });
+
+      // Ordenar por próxima sincronización
+      upcomingSyncs.sort((a, b) => a.minutes_until_next - b.minutes_until_next);
+
+      return {
+        success: true,
+        upcoming_syncs: upcomingSyncs,
+        total_channels: channels.length,
+        overdue_count: upcomingSyncs.filter(s => s.is_overdue).length
+      };
 
     } catch (error) {
-      console.error('❌ Error obteniendo próximas sincronizaciones:', error);
-      return [];
+      console.error('Error obteniendo próximas sincronizaciones:', error);
+      throw error;
     }
+  }
+
+    stop() {
+    if (!this.isRunning) {
+      console.log('⚠️ Sync Scheduler ya está detenido');
+      return;
+    }
+
+    this.mainTask.stop();
+    this.cleanupTask.stop();
+    this.monitorTask.stop();
+    this.isRunning = false;
+    
+    console.log('⏹️ Sync Scheduler detenido');
   }
 }
 
