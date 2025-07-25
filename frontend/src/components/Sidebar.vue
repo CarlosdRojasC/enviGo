@@ -121,29 +121,10 @@ function logout() {
   align-items: center;
   gap: 12px;
 }
-
-.logo-icon {
-  font-size: 2rem;
-  filter: drop-shadow(0 0 4px rgba(139, 197, 63, 0.3));
-}
-
-.logo-text {
-  display: flex;
-  flex-direction: column;
-  line-height: 1;
-}
-
-.logo-main {
-  font-size: 1.5rem;
-  font-weight: 800;
-  color: #8BC53F;
-}
-
-.logo-sub {
-  font-size: 0.7rem;
-  color: #94a3b8;
-  font-weight: 400;
-  letter-spacing: 2px;
+.imagelogo {
+  width: 160px;
+  height: auto;
+  filter: drop-shadow(0 0 4px rgba(0, 255, 128, 0.2));
 }
 
 .nav-menu {
