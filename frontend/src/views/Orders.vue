@@ -23,9 +23,10 @@
       :companies="companies"
       :channels="channels"
       :available-communes="availableCommunes"
+      :filtered-communes="filteredCommunes"
       :filter-presets="filterPresets"
       :active-filters-count="activeFiltersCount"
-      :is-admin="false"
+      :is-admin="auth.isAdmin"
       :loading="loadingOrders"
       @filter-change="handleFilterChange"
       @advanced-filter-change="updateAdvancedFilter"
@@ -35,6 +36,7 @@
       @add-commune="addCommune"
       @remove-commune="removeCommune"
     />
+
 
     <!-- Tabla moderna -->
     <OrdersTable
