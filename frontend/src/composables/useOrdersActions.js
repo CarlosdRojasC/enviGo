@@ -3,7 +3,7 @@ import { ref } from 'vue'
 import { useToast } from 'vue-toastification'
 import { apiService } from '../services/api'
 
-export function useOrdersActions(newOrder, isCreatingOrder, fetchOrders) {
+export function useOrdersActions(orders, newOrder, isCreatingOrder, fetchOrders) {
   const toast = useToast()
 
   // ==================== STATE ====================
@@ -131,23 +131,21 @@ export function useOrdersActions(newOrder, isCreatingOrder, fetchOrders) {
       console.log('📦 Prepared order data:', orderData)
       
       // Create order
-      const response = await apiService.orders.create(orderData);
-      const createdOrder = response.data;
-
-      toast.success(`✅ Pedido #${createdOrder.order_number} creado exitosamente`);
-      console.log('✅ Order created:', createdOrder);
+   // 1. Crear la orden en la API
+      const response = await apiService.orders.create(orderData)
       
-      if (orders && orders.value) {
-       orders.value.unshift(createdOrder);
-    } else {
-        // Si no tienes 'orders.value', llama a fetchOrders como plan B.
-        await fetchOrders();
-    }
-    
-    // 4. Resetear el formulario (esto está bien)
-    resetNewOrderForm();
-    
-    return true;
+      // 2. La respuesta es la orden creada
+      const createdOrder = response.data
+      
+      // 3. (IMPORTANTE) Añadir la nueva orden a la lista local
+      //    en lugar de llamar a fetchOrders(). Esto soluciona el error.
+      orders.value.unshift(createdOrder)
+      
+      toast.success(`✅ Pedido #${createdOrder.order_number} creado exitosamente`)
+      
+      // La función para resetear el formulario se debe llamar desde el componente
+      // que lo define, usualmente el de modales. Aquí devolvemos éxito.
+      return true // Indica que la creación fue exitosa
 
     } catch (error) {
       console.error('❌ Error creating order:', error)
