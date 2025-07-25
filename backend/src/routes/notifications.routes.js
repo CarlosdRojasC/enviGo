@@ -1,7 +1,7 @@
 
 const express = require('express');
 const router = express.Router();
-const notificationController = require('../controllers/notificationController');
+const notificationController = require('../controllers/notifications.controller');
 const { authenticateToken } = require('../middlewares/auth.middleware');
 
 // --- AQUÍ ESTÁ LA RUTA QUE FALTA ---
