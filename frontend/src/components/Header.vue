@@ -1,185 +1,4 @@
-// frontend/src/components/Header.vue - MEJORA PARA APERTURA DE MODALES
-
-<template>
-  <header class="app-header" :class="{ scrolled: isScrolled }">
-    <div class="header-container">
-      <!-- Left Section -->
-      <div class="header-left">
-        <button 
-          @click="$emit('toggle-mobile-menu')" 
-          class="mobile-menu-trigger md:hidden"
-          aria-label="Abrir menú"
-        >
-          ☰
-        </button>
-
-        <div class="page-info">
-          <h1 class="page-title">{{ pageTitle }}</h1>
-          <nav class="breadcrumb" aria-label="Breadcrumb">
-            <template v-for="(crumb, index) in breadcrumbs" :key="index">
-              <router-link 
-                v-if="crumb.path" 
-                :to="crumb.path" 
-                class="breadcrumb-link"
-              >
-                {{ crumb.name }}
-              </router-link>
-              <span v-else class="breadcrumb-current">{{ crumb.name }}</span>
-              <span 
-                v-if="index < breadcrumbs.length - 1" 
-                class="breadcrumb-separator"
-              >/</span>
-            </template>
-          </nav>
-        </div>
-
-        <div v-if="quickStats.length > 0" class="quick-stats">
-          <div 
-            v-for="stat in quickStats" 
-            :key="stat.label"
-            class="quick-stat-item"
-            :class="{ updated: stat.updated }"
-          >
-            <span class="stat-icon">{{ stat.icon }}</span>
-            <div>
-              <div class="stat-value">{{ stat.value }}</div>
-              <div class="stat-label">{{ stat.label }}</div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Center Section - Search -->
-      <div class="header-center">
-        <div class="global-search" v-if="showSearch">
-          <div class="search-input-container">
-            <i class="search-icon">🔍</i>
-            <input
-              v-model="searchQuery"
-              @input="handleSearchInput"
-              @focus="searchFocused = true"
-              @blur="handleSearchBlur"
-              class="search-input"
-              placeholder="Buscar pedidos, canales, clientes..."
-              autocomplete="off"
-            />
-            <div v-if="searchLoading" class="search-loading">
-              <div class="loading-spinner"></div>
-            </div>
-            <button v-else-if="searchQuery" @click="clearSearch" class="clear-search">×</button>
-          </div>
-          
-          <div v-if="searchResults.length > 0 && searchFocused" class="search-results">
-            <div class="search-category" v-for="category in groupedResults" :key="category.type">
-              <div class="category-header">{{ category.label }}</div>
-              <div 
-                v-for="result in category.items" 
-                :key="result.id"
-                @click="selectSearchResult(result)"
-                class="search-result-item"
-                :title="`Clic para abrir ${result.type === 'orders' ? (auth.isAdmin ? 'detalles' : 'tracking') : 'detalles'} de ${result.title}`"
-              >
-                <span class="result-icon">{{ result.icon }}</span>
-                <div class="result-content">
-                  <div class="result-title">{{ result.title }}</div>
-                  <div class="result-subtitle">{{ result.subtitle }}</div>
-                </div>
-                <span class="result-action">
-                  {{ result.type === 'orders' ? (auth.isAdmin ? '👁️' : '🚚') : '→' }}
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Right Section -->
-      <div class="header-right">
-        <div class="connection-status" :class="connectionStatusClass">
-          <div class="status-dot" :class="{ pulsing: isConnected }"></div>
-          <span class="status-text">{{ connectionStatusText }}</span>
-        </div>
-
-        <div class="notifications-container">
-          <button 
-            @click="toggleNotifications" 
-            class="notifications-trigger"
-            :class="{ active: showNotifications }"
-          >
-            <div class="notification-icon">
-              <i class="icon">🔔</i>
-              <span v-if="unreadCount > 0" class="notification-badge" :class="{ pulse: hasNewNotifications }">
-                {{ unreadCount > 99 ? '99+' : unreadCount }}
-              </span>
-            </div>
-          </button>
-          
-          <!-- Notifications Panel -->
-          <div v-if="showNotifications" class="notifications-panel">
-            <!-- Notifications content... -->
-          </div>
-        </div>
-
-        <!-- User Menu -->
-        <div class="user-profile" @click="toggleUserMenu">
-          <div class="user-avatar">
-            {{ auth.user?.name?.charAt(0) || 'U' }}
-          </div>
-          <div class="user-info">
-            <div class="user-name">{{ auth.user?.name || 'Usuario' }}</div>
-            <div class="user-role">{{ formatRole(auth.user?.role) }}</div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Modal de OrderDetails para Admin (cuando busca desde header) -->
-    <Modal 
-      v-model="showOrderDetailsFromSearch" 
-      :title="`Detalles del Pedido #${selectedOrderFromSearch?.order_number}`" 
-      width="900px"
-      class="header-search-modal"
-    >
-      <OrderDetails 
-        v-if="selectedOrderFromSearch" 
-        :order="selectedOrderFromSearch" 
-        :loading="loadingOrderFromSearch"
-        @close="closeOrderDetailsFromSearch"
-      />
-    </Modal>
-
-    <!-- Modal de OrderTracking para Company Users (cuando busca desde header) -->
-    <Modal 
-      v-model="showTrackingFromSearch" 
-      :title="`🚚 Tracking - Pedido #${selectedOrderFromSearch?.order_number}`"
-      width="700px"
-      class="header-search-modal"
-    >
-      <OrderTracking 
-        v-if="selectedOrderFromSearch" 
-        :order-id="selectedOrderFromSearch._id" 
-        :order-number="selectedOrderFromSearch.order_number"
-        :loading="loadingOrderFromSearch"
-        @close="closeTrackingFromSearch"
-        @show-proof="handleShowProofFromSearch"
-      />
-    </Modal>
-
-    <!-- Modal de Proof of Delivery (cuando viene desde tracking del header) -->
-    <Modal 
-      v-model="showProofFromSearch" 
-      :title="`📋 Prueba de Entrega - #${selectedOrderFromSearch?.order_number}`"
-      width="700px"
-      class="header-search-modal"
-    >
-      <ProofOfDelivery 
-        v-if="selectedOrderFromSearch && !loadingOrderFromSearch" 
-        :order="selectedOrderFromSearch" 
-      />
-    </Modal>
-  </header>
-</template>
-
+<!-- frontend/src/components/Header.vue - CORRECCIÓN INMEDIATA -->
 <script setup>
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -188,13 +7,7 @@ import { apiService } from '../services/api'
 import { useEnvigoToast } from '../services/toast.service'
 import wsManager from '../services/websocket.service'
 import UtilsService, { useDebouncedSearch, useCache } from '../services/utils.service'
-
-// Componentes importados
-import Modal from './Modal.vue'
-import OrderDetails from './OrderDetails.vue'
-import OrderTracking from './OrderTracking.vue'
-import ProofOfDelivery from './ProofOfDelivery.vue'
-
+import { emitter } from '../services/eventBus.service';
 // ==================== SETUP ====================
 const emit = defineEmits(['toggle-mobile-menu'])
 const route = useRoute()
@@ -230,13 +43,6 @@ const quickStats = ref([])
 // Connection status
 const isConnected = ref(false)
 const lastPingTime = ref(null)
-
-// ==================== NUEVOS REFS PARA MODALES DESDE BÚSQUEDA ====================
-const showOrderDetailsFromSearch = ref(false)
-const showTrackingFromSearch = ref(false)
-const showProofFromSearch = ref(false)
-const selectedOrderFromSearch = ref(null)
-const loadingOrderFromSearch = ref(false)
 
 // ==================== CACHE INSTANCES ====================
 const notificationsCache = useCache(30000) // 30 segundos
@@ -313,108 +119,64 @@ const connectionStatusText = computed(() => {
   return 'En línea'
 })
 
-// ==================== MÉTODOS PRINCIPALES ====================
+// ==================== MÉTODOS CORREGIDOS ====================
 
 /**
- * 🔍 NUEVA FUNCIÓN MEJORADA: selectSearchResult
- * Ahora abre el modal apropiado según el rol del usuario y el tipo de resultado
+ * Cargar notificaciones - VERSIÓN SIMPLIFICADA Y SEGURA
  */
-async function selectSearchResult(result) {
-  console.log('🔍 [Header] Resultado seleccionado:', result)
-  
-  searchFocused.value = false
-  
-  try {
-    // Si es un pedido, manejar según el rol del usuario
-    if (result.type === 'orders') {
-      await handleOrderSelection(result)
-    } 
-    // Si es otro tipo de resultado, usar la navegación tradicional
-    else {
-      if (result.route) {
-        router.push(result.route)
-      }
+async function loadNotifications(page = 1, useCacheFlag = true) {
+  const cacheKey = `notifications_${page}`;
+
+  if (useCacheFlag) {
+    const cached = notificationsCache.get(cacheKey);
+    if (cached) {
+      notifications.value = cached;
+      return;
     }
-    
-  } catch (error) {
-    console.error('❌ [Header] Error procesando resultado de búsqueda:', error)
-    toast.error('Error al abrir el resultado seleccionado')
-  } finally {
-    // Limpiar búsqueda después de un momento
-    setTimeout(() => {
-      searchQuery.value = ''
-      searchResults.value = []
-    }, 100)
   }
-}
 
-/**
- * 🎯 NUEVA FUNCIÓN: Manejar selección de pedidos según rol
- */
-async function handleOrderSelection(result) {
-  console.log('📦 [Header] Manejando selección de pedido:', result.title)
-  
-  // Cargar datos completos del pedido
-  loadingOrderFromSearch.value = true
-  
   try {
-    // Obtener datos completos del pedido
-    const { data: fullOrder } = await apiService.orders.getById(result.order_id || result.id)
-    selectedOrderFromSearch.value = fullOrder
-    
-    // Decidir qué modal abrir según el rol
-    if (auth.isAdmin) {
-      // Admin ve detalles completos
-      showOrderDetailsFromSearch.value = true
-      console.log('👨‍💼 [Header] Abriendo modal de detalles para admin')
+    loading.value = page === 1;
+    loadingMore.value = page > 1;
+
+    // ✅ Llamada correcta al nuevo servicio que acabamos de crear
+    const response = await utils.retry(() =>
+      apiService.notifications.getAll({
+        page,
+        limit: 10,
+        include_read: true
+      })
+    );
+
+    const newNotifications = response.data.notifications || response.data.data || response.data || [];
+
+    if (page === 1) {
+      notifications.value = newNotifications;
     } else {
-      // Company users ven tracking
-      showTrackingFromSearch.value = true
-      console.log('🏢 [Header] Abriendo modal de tracking para usuario empresa')
+      notifications.value.push(...newNotifications);
     }
-    
+
+    hasMoreNotifications.value = response.data.hasMore || response.data.has_more || false;
+    currentPage.value = page;
+
+    if (newNotifications.length > 0) {
+      notificationsCache.set(cacheKey, notifications.value);
+    }
+
   } catch (error) {
-    console.error('❌ [Header] Error cargando pedido:', error)
-    toast.error('No se pudo cargar la información del pedido')
+    console.error('❌ Error cargando notificaciones:', error);
+    if (page === 1) {
+      notifications.value = getExampleNotifications();
+    }
+    toast.error('No se pudieron cargar las notificaciones.');
   } finally {
-    loadingOrderFromSearch.value = false
+    loading.value = false;
+    loadingMore.value = false;
   }
 }
 
 /**
- * 🚪 NUEVAS FUNCIONES: Cerrar modales desde búsqueda
- */
-function closeOrderDetailsFromSearch() {
-  showOrderDetailsFromSearch.value = false
-  selectedOrderFromSearch.value = null
-  console.log('❌ [Header] Modal de detalles cerrado')
-}
-
-function closeTrackingFromSearch() {
-  showTrackingFromSearch.value = false
-  selectedOrderFromSearch.value = null
-  console.log('❌ [Header] Modal de tracking cerrado')
-}
-
-function closeProofFromSearch() {
-  showProofFromSearch.value = false
-  console.log('❌ [Header] Modal de prueba de entrega cerrado')
-}
-
-/**
- * 📋 NUEVA FUNCIÓN: Manejar mostrar prueba de entrega desde tracking
- */
-function handleShowProofFromSearch(proofData) {
-  console.log('📋 [Header] Mostrando prueba de entrega desde tracking')
-  showTrackingFromSearch.value = false
-  showProofFromSearch.value = true
-  // Los datos del pedido ya están en selectedOrderFromSearch
-}
-
-// ==================== FUNCIONES EXISTENTES (mantenidas) ====================
-
-/**
- * Búsqueda global - VERSIÓN MEJORADA
+ * Búsqueda global - VERSIÓN SIMPLIFICADA
  */
 async function handleSearch() {
   if (searchQuery.value.trim().length < 2) {
@@ -431,38 +193,159 @@ async function handleSearch() {
     searchResults.value = cached
     return
   }
-
-  try {
-    searchLoading.value = true
+ try {
+    searchLoading.value = true;
     
-    const response = await apiService.get('/search/global', {
-      params: { q: query, limit: 10 }
-    })
+    // --- 👇 ESTA ES LA LÍNEA CORREGIDA 👇 ---
+    // Usamos el nuevo servicio apiService.search.global
+    const response = await apiService.search.global(query);
     
-    const results = response.data.results || response.data.data || response.data || []
+    const results = response.data.results || response.data.data || response.data || [];
+    searchResults.value = results;
     
-    // Enriquecer resultados con información adicional para orders
-    const enrichedResults = results.map(result => {
-      if (result.type === 'orders') {
-        return {
-          ...result,
-          order_id: result.id, // Asegurar que tenemos order_id
-          subtitle: `${result.subtitle} • ${auth.isAdmin ? 'Ver detalles' : 'Ver tracking'}`
-        }
-      }
-      return result
-    })
-    
-    searchResults.value = enrichedResults
-    
-    // Guardar en cache
-    searchCache.set(cacheKey, enrichedResults)
+    searchCache.set(cacheKey, results);
     
   } catch (error) {
-    console.error('❌ [Header] Error en búsqueda global:', error)
-    searchResults.value = []
+    console.error('❌ Error en búsqueda global:', error); // Este error ya no debería aparecer
+    searchResults.value = [];
   } finally {
-    searchLoading.value = false
+    searchLoading.value = false;
+  }
+}
+/**
+ * Cargar stats del dashboard - VERSIÓN SIMPLIFICADA
+ */
+async function loadQuickStats() {
+  if (!['Dashboard', 'Orders'].includes(route.name)) {
+    quickStats.value = []
+    return
+  }
+
+  const cacheKey = `stats_${route.name}`
+  
+  // Verificar cache
+  const cached = statsCache.get(cacheKey)
+  if (cached) {
+    quickStats.value = cached
+    return
+  }
+
+  try {
+    // USAR DIRECTAMENTE apiService.get
+    const response = await utils.retry(async () => {
+      return await apiService.get('/dashboard/stats')
+    }, 2, 1000)
+    
+    const stats = response.data
+    
+    const newStats = [
+      {
+        key: 'today',
+        icon: '📦',
+        value: stats.ordersToday || stats.orders_today || 0,
+        label: 'Hoy',
+        updated: false
+      },
+      {
+        key: 'month',
+        icon: '📅',
+        value: stats.monthlyOrders || stats.monthly_orders || 0,
+        label: 'Este mes',
+        updated: false
+      },
+      {
+        key: 'delivered',
+        icon: '✅',
+        value: stats.deliveredTotal || stats.delivered_total || 0,
+        label: 'Entregados',
+        updated: false
+      }
+    ]
+    
+    quickStats.value = newStats
+    
+    // Guardar en cache
+    statsCache.set(cacheKey, newStats)
+    
+  } catch (error) {
+    console.error('❌ Error cargando stats rápidas:', error)
+    quickStats.value = []
+    
+    // No mostrar toast para stats, es información secundaria
+  }
+}
+
+/**
+ * Marcar notificación como leída - VERSIÓN SIMPLIFICADA
+ */
+async function markAsRead(notificationId) {
+  const notification = notifications.value.find(n => n.id === notificationId)
+  if (!notification) return
+  
+  // Optimistic update
+  const originalState = { read: notification.read, isNew: notification.isNew }
+  notification.read = true
+  notification.isNew = false
+  
+  try {
+    // USAR DIRECTAMENTE apiService.post
+    await apiService.post(`/notifications/${notificationId}/read`)
+    
+    // Limpiar cache para recargar datos frescos
+    notificationsCache.clear()
+    console.log(`✅ Notificación marcada como leída: ${notificationId}`)
+    
+  } catch (error) {
+    console.error('❌ Error marcando notificación como leída:', error)
+    
+    // Revertir optimistic update
+    notification.read = originalState.read
+    notification.isNew = originalState.isNew
+    
+    toast.error('Error al marcar notificación como leída')
+  }
+}
+
+/**
+ * Marcar todas como leídas - VERSIÓN SIMPLIFICADA
+ */
+async function markAllAsRead() {
+  const unreadNotifications = notifications.value.filter(n => !n.read)
+  if (unreadNotifications.length === 0) return
+  
+  // Optimistic update
+  const originalStates = unreadNotifications.map(n => ({
+    id: n.id,
+    read: n.read,
+    isNew: n.isNew
+  }))
+  
+  unreadNotifications.forEach(notification => {
+    notification.read = true
+    notification.isNew = false
+  })
+  
+  try {
+    // USAR DIRECTAMENTE apiService.post
+    await apiService.post('/notifications/mark-all-read')
+    
+    // Limpiar cache
+    notificationsCache.clear()
+    toast.success('✅ Todas las notificaciones marcadas como leídas')
+    
+  } catch (error) {
+    console.error('❌ Error marcando todas como leídas:', error)
+    
+    // Revertir optimistic update
+    originalStates.forEach(({ id, read, isNew }) => {
+      const notification = notifications.value.find(n => n.id === id)
+      if (notification) {
+        notification.read = read
+        notification.isNew = isNew
+      }
+    })
+    
+    toast.error('Error al marcar todas como leídas')
   }
 }
 
@@ -480,6 +363,191 @@ function handleSearchInput() {
   debouncedSearch()
 }
 
+/**
+ * Configurar WebSocket de forma segura
+ */
+function setupWebSocket() {
+  // Solo configurar si wsManager está disponible
+  if (typeof wsManager === 'undefined' || !wsManager) {
+    console.warn('⚠️ WebSocket manager no disponible')
+    isConnected.value = false
+    return
+  }
+
+  try {
+    // Estado de conexión
+    wsManager.on('connected', () => {
+      isConnected.value = true
+      lastPingTime.value = Date.now()
+      console.log('🔔 Header: WebSocket conectado')
+    })
+    
+    wsManager.on('disconnected', () => {
+      isConnected.value = false
+      console.log('🔔 Header: WebSocket desconectado')
+    })
+    
+    wsManager.on('error', (error) => {
+      console.error('🔔 Header: Error WebSocket:', error)
+      isConnected.value = false
+    })
+    
+    wsManager.on('pong', () => {
+      lastPingTime.value = Date.now()
+    })
+    
+    // Notificaciones en tiempo real
+    wsManager.on('order_notification', (data) => {
+      addRealTimeNotification({
+        id: `rt_${Date.now()}_${Math.random()}`,
+        type: 'order',
+        title: data.title,
+        message: data.message,
+        order_id: data.data?.order_id,
+        order_number: data.data?.order_number,
+        created_at: new Date(),
+        read: false,
+        isNew: true
+      })
+      
+      hasNewNotifications.value = true
+      notificationsCache.clear()
+    })
+    
+    wsManager.on('new_order_notification', (data) => {
+      addRealTimeNotification({
+        id: `rt_${Date.now()}_${Math.random()}`,
+        type: 'new_order',
+        title: data.title,
+        message: data.message,
+        order_id: data.data?.order_id,
+        order_number: data.data?.order_number,
+        created_at: new Date(),
+        read: false,
+        isNew: true
+      })
+      
+      hasNewNotifications.value = true
+      notificationsCache.clear()
+    })
+
+    // Stats updates en tiempo real
+    wsManager.on('stats_update', (data) => {
+      updateQuickStats(data)
+    })
+  } catch (error) {
+    console.error('❌ Error configurando WebSocket:', error)
+    isConnected.value = false
+  }
+}
+
+/**
+ * Resto de métodos auxiliares
+ */
+function updateQuickStats(data) {
+  let hasUpdates = false
+  
+  quickStats.value.forEach(stat => {
+    if (data[stat.key] !== undefined && data[stat.key] !== stat.value) {
+      stat.value = data[stat.key]
+      stat.updated = true
+      hasUpdates = true
+      
+      setTimeout(() => {
+        stat.updated = false
+      }, 2000)
+    }
+  })
+  
+  if (hasUpdates) {
+    statsCache.clear()
+  }
+}
+
+function toggleUserMenu() {
+  showUserMenu.value = !showUserMenu.value
+}
+
+function goToProfile() {
+  router.push('/app/profile')
+  showUserMenu.value = false
+}
+
+function goToSettings() {
+  router.push('/app/settings')
+  showUserMenu.value = false
+}
+
+async function handleLogout() {
+  try {
+    await auth.logout()
+    
+    // Limpiar todos los caches
+    notificationsCache.clear()
+    statsCache.clear()
+    searchCache.clear()
+    
+    router.push('/login')
+    toast.success('Sesión cerrada correctamente')
+  } catch (error) {
+    console.error('Error al cerrar sesión:', error)
+    toast.error('Error al cerrar sesión')
+  }
+}
+
+function loadMoreNotifications() {
+  if (!loadingMore.value && hasMoreNotifications.value) {
+    loadNotifications(currentPage.value + 1, false)
+  }
+}
+
+function toggleNotifications() {
+  showNotifications.value = !showNotifications.value
+  
+  if (showNotifications.value) {
+    loadNotifications(1, false)
+    hasNewNotifications.value = false
+  }
+}
+
+function handleNotificationClick(notification) {
+  if (!notification.read) {
+    markAsRead(notification.id)
+  }
+  
+  if (notification.order_id) {
+    router.push(`/app/orders?search=${notification.order_number}`)
+    showNotifications.value = false
+  } else if (notification.channel_id) {
+    router.push(`/app/channels`)
+    showNotifications.value = false
+  }
+}
+
+function selectSearchResult(result) {
+  // Ocultar y limpiar la búsqueda
+  searchFocused.value = false;
+  searchQuery.value = '';
+  searchResults.value = [];
+
+  // Si el resultado es un pedido con un ID
+  if (result && result.type === 'orders' && result.id) {
+    console.log(`🚀 Navegando a órdenes y solicitando modal para ID: ${result.id}`);
+
+    // Navegamos a la página de órdenes y añadimos un query param
+    router.push({
+      path: '/app/admin/orders',
+      query: { open_order: result.id } // <-- Parámetro clave
+    });
+
+  } else if (result && result.route) {
+    // Si es otro tipo de resultado (ej. empresa), usamos la navegación normal
+    router.push(result.route);
+  } else {
+    console.warn('⚠️ El resultado no tiene ID ni ruta para la acción.', result);
+  }
+}
+
 function clearSearch() {
   searchQuery.value = ''
   searchResults.value = []
@@ -492,7 +560,33 @@ function handleSearchBlur() {
   }, 200)
 }
 
-// ==================== FUNCIONES DE UTILIDAD ====================
+function addRealTimeNotification(notification) {
+  notifications.value.unshift(notification)
+  
+  setTimeout(() => {
+    const notif = notifications.value.find(n => n.id === notification.id)
+    if (notif) notif.isNew = false
+  }, 3000)
+  
+  if (notifications.value.length > 50) {
+    notifications.value = notifications.value.slice(0, 50)
+  }
+}
+
+// Throttled scroll handler
+const handleScroll = utils.createThrottledHandler(() => {
+  isScrolled.value = window.scrollY > 10
+}, 100)
+
+function handleClickOutside(event) {
+  if (!event.target.closest('.notifications-container') && 
+      !event.target.closest('.notifications-panel-overlay')) {
+    showNotifications.value = false
+  }
+  if (!event.target.closest('.user-profile')) {
+    showUserMenu.value = false
+  }
+}
 
 function formatRole(role) {
   const roles = {
@@ -501,6 +595,20 @@ function formatRole(role) {
     'company_employee': 'Empleado'
   }
   return roles[role] || role
+}
+
+function getNotificationIcon(type) {
+  const icons = {
+    'order': '📦',
+    'new_order': '🆕',
+    'delivery': '🚚',
+    'error': '❌',
+    'success': '✅',
+    'warning': '⚠️',
+    'info': 'ℹ️',
+    'sync': '🔄'
+  }
+  return icons[type] || '📬'
 }
 
 function getSearchCategoryLabel(type) {
@@ -513,110 +621,351 @@ function getSearchCategoryLabel(type) {
   return labels[type] || type
 }
 
-function toggleNotifications() {
-  showNotifications.value = !showNotifications.value
+function getExampleNotifications() {
+  return [
+    {
+      id: '1',
+      type: 'order',
+      title: 'Pedido Entregado',
+      message: 'El pedido #ORD-001 ha sido entregado exitosamente',
+      order_number: 'ORD-001',
+      created_at: new Date(Date.now() - 1000 * 60 * 15),
+      read: false,
+      isNew: false
+    },
+    {
+      id: '2',
+      type: 'new_order',
+      title: 'Nuevo Pedido',
+      message: 'Nuevo pedido recibido desde Shopify',
+      order_number: 'ORD-002',
+      created_at: new Date(Date.now() - 1000 * 60 * 60),
+      read: false,
+      isNew: false
+    },
+    {
+      id: '3',
+      type: 'sync',
+      title: 'Sincronización Completada',
+      message: 'Canal "Mi Tienda" sincronizado: 5 pedidos importados',
+      created_at: new Date(Date.now() - 1000 * 60 * 60 * 2),
+      read: true,
+      isNew: false
+    },
+    {
+      id: '4',
+      type: 'delivery',
+      title: 'Entrega en Progreso',
+      message: 'El conductor está en camino a Las Condes',
+      order_number: 'ORD-003',
+      created_at: new Date(Date.now() - 1000 * 60 * 30),
+      read: false,
+      isNew: false
+    }
+  ]
 }
 
-function toggleUserMenu() {
-  showUserMenu.value = !showUserMenu.value
-}
+// ==================== WATCHERS ====================
+watch(() => route.name, () => {
+  loadQuickStats()
+})
+
+// Cleanup cuando se cambia de usuario
+watch(() => auth.user?.id, () => {
+  notificationsCache.clear()
+  statsCache.clear()
+  searchCache.clear()
+  notifications.value = []
+  quickStats.value = []
+  
+  if (auth.user?.id) {
+    nextTick(() => {
+      loadNotifications()
+      loadQuickStats()
+    })
+  }
+})
 
 // ==================== LIFECYCLE ====================
-
-onMounted(() => {
-  // Setup event listeners y websockets
-  document.addEventListener('scroll', handleScroll)
+onMounted(async () => {
+  console.log('🔔 Header dinámico montado')
+  console.log('🔧 DEBUG - apiService:', apiService)
+  console.log('🔧 DEBUG - apiService.get:', typeof apiService?.get)
+  
+  // Configurar eventos con throttling
+  window.addEventListener('scroll', handleScroll, { passive: true })
   document.addEventListener('click', handleClickOutside)
   
-  console.log('🔍 [Header] Componente inicializado con búsqueda mejorada')
+  // Cargar datos iniciales
+  await nextTick()
+  
+  // Verificar que el usuario esté autenticado antes de cargar datos
+  if (auth.user?.id) {
+    loadNotifications()
+    loadQuickStats()
+  } else {
+    console.warn('⚠️ Usuario no autenticado, cargando datos de ejemplo')
+    notifications.value = getExampleNotifications()
+  }
+  
+  // Configurar WebSocket
+  setupWebSocket()
+  
+  // Auto-refresh con intervalos más inteligentes
+  const statsInterval = setInterval(() => {
+    if (document.visibilityState === 'visible' && auth.user?.id) {
+      loadQuickStats()
+    }
+  }, 5 * 60 * 1000) // 5 minutos
+  
+  const notificationsInterval = setInterval(() => {
+    if (document.visibilityState === 'visible' && !showNotifications.value && auth.user?.id) {
+      loadNotifications(1, false)
+    }
+  }, 2 * 60 * 1000) // 2 minutos
+  
+  // Listener para visibility change (optimización)
+  const handleVisibilityChange = () => {
+    if (document.visibilityState === 'visible' && auth.user?.id) {
+      // Refrescar datos cuando la tab vuelve a estar visible
+      loadNotifications(1, false)
+      loadQuickStats()
+    }
+  }
+  
+  document.addEventListener('visibilitychange', handleVisibilityChange)
+  
+  onUnmounted(() => {
+    clearInterval(statsInterval)
+    clearInterval(notificationsInterval)
+    document.removeEventListener('visibilitychange', handleVisibilityChange)
+  })
 })
 
 onUnmounted(() => {
-  document.removeEventListener('scroll', handleScroll)
+  window.removeEventListener('scroll', handleScroll)
   document.removeEventListener('click', handleClickOutside)
+  
+  // Limpiar caches
+  notificationsCache.clear()
+  statsCache.clear()
+  searchCache.clear()
+  
+  console.log('🔔 Header dinámico desmontado')
 })
-
-// ==================== EVENT HANDLERS ====================
-
-const handleScroll = utils.createThrottledHandler(() => {
-  isScrolled.value = window.scrollY > 10
-}, 100)
-
-function handleClickOutside(event) {
-  if (!event.target.closest('.notifications-container')) {
-    showNotifications.value = false
-  }
-  if (!event.target.closest('.user-profile')) {
-    showUserMenu.value = false
-  }
-}
-
 </script>
 
+<!-- El template permanece exactamente igual -->
+<template>
+  <header class="header" :class="{ 'header-scrolled': isScrolled }">
+    <div class="header-content">
+      <!-- Left Section -->
+      <div class="header-left">
+        <div class="page-info">
+          <h1 class="page-title">{{ pageTitle }}</h1>
+          <div class="breadcrumb" v-if="breadcrumbs.length > 0">
+            <span v-for="(crumb, index) in breadcrumbs" :key="index">
+              <router-link v-if="crumb.path" :to="crumb.path" class="breadcrumb-link">
+                {{ crumb.name }}
+              </router-link>
+              <span v-else class="breadcrumb-current">{{ crumb.name }}</span>
+              <span v-if="index < breadcrumbs.length - 1" class="breadcrumb-separator">/</span>
+            </span>
+          </div>
+        </div>
+        
+        <div class="quick-stats" v-if="quickStats.length > 0">
+          <div 
+            v-for="stat in quickStats" 
+            :key="stat.key" 
+            class="quick-stat-item"
+            :class="{ updated: stat.updated }"
+          >
+            <span class="stat-icon">{{ stat.icon }}</span>
+            <span class="stat-value">{{ utils.formatNumber(stat.value) }}</span>
+            <span class="stat-label">{{ stat.label }}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Center Section -->
+      <div class="header-center">
+        <div class="global-search" v-if="showSearch">
+          <div class="search-input-container">
+            <i class="search-icon">🔍</i>
+            <input
+              v-model="searchQuery"
+              @input="handleSearchInput"
+              @focus="searchFocused = true"
+              @blur="handleSearchBlur"
+              class="search-input"
+              placeholder="Buscar pedidos, canales, clientes..."
+              autocomplete="off"
+            />
+            <div v-if="searchLoading" class="search-loading">
+              <div class="loading-spinner"></div>
+            </div>
+            <button v-else-if="searchQuery" @click="clearSearch" class="clear-search">×</button>
+          </div>
+          
+          <div v-if="searchResults.length > 0 && searchFocused" class="search-results">
+            <div class="search-category" v-for="category in groupedResults" :key="category.type">
+              <div class="category-header">{{ category.label }}</div>
+              <div 
+                v-for="result in category.items" 
+                :key="result.id"
+                @click="selectSearchResult(result)"
+                class="search-result-item"
+              >
+                <span class="result-icon">{{ result.icon }}</span>
+                <div class="result-content">
+                  <div class="result-title">{{ result.title }}</div>
+                  <div class="result-subtitle">{{ result.subtitle }}</div>
+                </div>
+                <span class="result-action">→</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right Section -->
+      <div class="header-right">
+        <div class="connection-status" :class="connectionStatusClass">
+          <div class="status-dot" :class="{ pulsing: isConnected }"></div>
+          <span class="status-text">{{ connectionStatusText }}</span>
+        </div>
+
+        <div class="notifications-container">
+          <button 
+            @click="toggleNotifications" 
+            class="notifications-trigger"
+            :class="{ active: showNotifications }"
+          >
+            <div class="notification-icon">
+              <i class="icon">🔔</i>
+              <span v-if="unreadCount > 0" class="notification-badge" :class="{ pulse: hasNewNotifications }">
+                {{ unreadCount > 99 ? '99+' : unreadCount }}
+              </span>
+            </div>
+          </button>
+
+          <teleport to="body">
+            <div 
+              v-if="showNotifications" 
+              class="notifications-panel-overlay"
+              @click="showNotifications = false"
+            >
+              <div class="notifications-panel" @click.stop>
+                <div class="notifications-header">
+                  <h3>Notificaciones</h3>
+                  <div class="header-actions">
+                    <button @click="markAllAsRead" class="mark-all-read" :disabled="unreadCount === 0">
+                      Marcar todas como leídas
+                    </button>
+                    <button @click="showNotifications = false" class="close-panel">×</button>
+                  </div>
+                </div>
+                
+                <div class="notifications-content">
+                  <div v-if="loading" class="notifications-loading">
+                    <div class="loading-spinner"></div>
+                    <span>Cargando notificaciones...</span>
+                  </div>
+                  
+                  <div v-else-if="notifications.length === 0" class="no-notifications">
+                    <i class="empty-icon">🔕</i>
+                    <p>No hay notificaciones</p>
+                  </div>
+                  
+                  <div v-else class="notifications-list">
+                    <div 
+                      v-for="notification in displayNotifications" 
+                      :key="notification.id"
+                      class="notification-item"
+                      :class="{ 
+                        unread: !notification.read, 
+                        [notification.type]: true,
+                        new: notification.isNew 
+                      }"
+                      @click="handleNotificationClick(notification)"
+                    >
+                      <div class="notification-icon-container">
+                        <span class="notification-type-icon">{{ getNotificationIcon(notification.type) }}</span>
+                      </div>
+                      
+                      <div class="notification-content">
+                        <div class="notification-title">{{ notification.title }}</div>
+                        <div class="notification-message">{{ notification.message }}</div>
+                        <div class="notification-meta">
+                          <span class="notification-time">{{ utils.formatRelativeDate(notification.created_at) }}</span>
+                          <span v-if="notification.order_number" class="notification-order">
+                            #{{ notification.order_number }}
+                          </span>
+                        </div>
+                      </div>
+                      
+                      <div class="notification-actions">
+                        <button 
+                          v-if="!notification.read" 
+                          @click.stop="markAsRead(notification.id)"
+                          class="mark-read-btn"
+                          title="Marcar como leída"
+                        >
+                          ✓
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div v-if="hasMoreNotifications" class="notifications-footer">
+                    <button @click="loadMoreNotifications" class="load-more-btn" :disabled="loadingMore">
+                      {{ loadingMore ? 'Cargando...' : 'Ver más notificaciones' }}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </teleport>
+        </div>
+
+        <div class="user-profile" @click="toggleUserMenu" ref="userMenuRef">
+          <div class="user-avatar" :class="{ online: isConnected }">
+            {{ auth.user?.full_name?.charAt(0).toUpperCase() }}
+            <div class="user-status-dot" :class="{ online: isConnected }"></div>
+          </div>
+          <div class="user-info">
+            <span class="user-name">{{ auth.user?.full_name }}</span>
+            <span class="user-role">{{ formatRole(auth.user?.role) }}</span>
+          </div>
+          <div class="user-dropdown-arrow">⌄</div>
+          
+          <div v-if="showUserMenu" class="user-menu-dropdown">
+            <div class="user-menu-item" @click="goToProfile">
+              <i class="menu-icon">👤</i>
+              <span>Mi Perfil</span>
+            </div>
+            <div class="user-menu-item" @click="goToSettings">
+              <i class="menu-icon">⚙️</i>
+              <span>Configuración</span>
+            </div>
+            <hr class="menu-divider">
+            <div class="user-menu-item logout" @click="handleLogout">
+              <i class="menu-icon">🚪</i>
+              <span>Cerrar Sesión</span>
+            </div>
+          </div>
+        </div>
+
+        <button class="mobile-menu-btn" @click="$emit('toggle-mobile-menu')">
+          <i class="hamburger-icon">☰</i>
+        </button>
+      </div>
+    </div>
+  </header>
+</template>
+
 <style scoped>
-/* Estilos existentes mantenidos... */
-
-/* Nuevos estilos para modales desde búsqueda */
-.header-search-modal :deep(.modal-container) {
-  border-top: 3px solid #8BC53F;
-}
-
-.search-result-item {
-  display: flex;
-  align-items: center;
-  padding: 0.75rem 1rem;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  border-radius: 8px;
-  margin: 2px 8px;
-}
-
-.search-result-item:hover {
-  background: linear-gradient(135deg, #f9fafb 0%, #f3f4f6 100%);
-  transform: translateX(4px);
-}
-
-.result-action {
-  color: #8BC53F;
-  font-weight: 600;
-  font-size: 1.1rem;
-  transition: transform 0.2s ease;
-}
-
-.search-result-item:hover .result-action {
-  transform: scale(1.2);
-}
-
-/* Indicador visual para tipos de pedidos */
-.search-result-item[title*="detalles"] .result-icon::after {
-  content: "👨‍💼";
-  position: absolute;
-  font-size: 0.6em;
-  margin-left: -4px;
-  margin-top: -4px;
-}
-
-.search-result-item[title*="tracking"] .result-icon::after {
-  content: "🏢";
-  position: absolute;
-  font-size: 0.6em;
-  margin-left: -4px;
-  margin-top: -4px;
-}
-
-.loading-spinner {
-  width: 16px;
-  height: 16px;
-  border: 2px solid #f3f4f6;
-  border-top: 2px solid #8BC53F;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
 /* Header base */
 .header {
   position: sticky;

@@ -252,7 +252,6 @@ class WebSocketManager {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       const message = JSON.stringify({ type, data })
       this.ws.send(message)
-      console.log('📤 WS: Enviado:', { type, data })
       return true
     } else {
       console.warn('⚠️ WS: No se puede enviar, no conectado')
