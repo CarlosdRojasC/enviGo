@@ -226,6 +226,7 @@ const showSupportModal = ref(false)
 const selectedStatuses = ref([]);
 const searchTerm = ref("");
 const dateRange = ref({ start: null, end: null });
+const hasInitialDataLoaded = ref(false);
 
 // ⚡ TIEMPO REAL: Estado para actualización automática
 const realTimeEnabled = ref(true)
@@ -887,44 +888,45 @@ const realTimeStats = computed(() => ({
 }))
 // ==================== LIFECYCLE ====================
 
-onMounted(async () => {
-  try {
-    // 1. Obtén el ID de la empresa del usuario autenticado.
-    const companyId = auth.user?.company_id;
+watch(() => auth.user, async (newUser, oldUser) => {
+  // Nos aseguramos de que el nuevo usuario tenga un company_id y que no hayamos cargado los datos antes.
+  if (newUser?.company_id && !hasInitialDataLoaded.value) {
+    
+    // Marcamos que la carga inicial va a comenzar para que no se ejecute dos veces.
+    hasInitialDataLoaded.value = true;
+    const companyId = newUser.company_id;
 
-    // 2. Valida que el ID exista antes de continuar.
-    if (!companyId) {
-      toast.error("No se pudo identificar la empresa del usuario.");
-      return;
+    console.log(`✅ Usuario identificado. Iniciando carga de datos para la empresa: ${companyId}`);
+
+    try {
+      // Ahora sí, ejecutamos toda la lógica de carga sabiendo que tenemos el companyId.
+      await Promise.all([
+        fetchOrders(),
+        fetchChannels(),
+        fetchAvailableCommunes(companyId) // Pasamos el ID directamente.
+      ]);
+
+      lastUpdate.value = Date.now();
+      
+      // ... (aquí puedes poner el resto de tu lógica que estaba en onMounted, como los listeners de WebSocket)
+      console.log('🔗 [Orders] Configurando actualizaciones en tiempo real...');
+      window.addEventListener('orderUpdated', handleOrderUpdate);
+
+    } catch (error) {
+      console.error('Error al inicializar los datos de Orders:', error);
+      toast.error('Error al cargar los datos de la página.');
+      // Si falla, reseteamos el flag para permitir un reintento si el usuario navega y vuelve.
+      hasInitialDataLoaded.value = false;
     }
-
-    // 3. Llama a las funciones de carga en paralelo.
-    //    ¡Aquí está el cambio clave! Le pasamos 'companyId' a la función.
-    await Promise.all([
-      fetchOrders(),       // Esta función ya debería estar filtrando por empresa internamente.
-      fetchChannels(),     // Esta también debería usar el contexto del usuario.
-      fetchAvailableCommunes(companyId) // <--- ¡LA SOLUCIÓN ESTÁ AQUÍ!
-    ]);
-
-    lastUpdate.value = Date.now();
-
-    // Setup de actualizaciones en tiempo real (código existente)
-    console.log('🔗 [Orders] Configurando actualizaciones en tiempo real para empresa:', companyId);
-    window.addEventListener('orderUpdated', handleOrderUpdate);
-    setInterval(() => {
-      if (realTimeEnabled.value) {
-        processPendingUpdates();
-      }
-    }, 20000);
-    setInterval(() => {
-      cleanupNotificationQueue();
-    }, 60000);
-    console.log('✅ [Orders] Sistema de tiempo real configurado');
-
-  } catch (error) {
-    console.error('Error al inicializar Orders:', error);
-    toast.error('Error al cargar la página');
   }
+}, {
+  immediate: true, // Esto hace que el watcher se ejecute una vez al inicio.
+  deep: true       // Vigila cambios dentro del objeto de usuario.
+});
+
+
+onMounted(() => {
+  console.log("Componente Orders montado. Esperando datos de autenticación...");
 });
 onBeforeUnmount(() => {
   // Cleanup existente
