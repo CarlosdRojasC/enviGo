@@ -14,7 +14,8 @@ module.exports = {
     WOOCOMMERCE: 'woocommerce',
     MERCADOLIBRE: 'mercadolibre',
     FALABELLA: 'falabella',
-    RIPLEY: 'ripley'
+    RIPLEY: 'ripley',
+    GENERAL_STORE: 'general_store'
   },
      
   // Estados de pedidos (expandido)

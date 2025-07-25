@@ -63,6 +63,7 @@
               <option value="shopify">Shopify</option>
               <option value="woocommerce">WooCommerce</option>
               <option value="mercadolibre">MercadoLibre</option>
+              <option value="general_store">Tienda General</option>
             </select>
           </div>
           
@@ -578,7 +579,8 @@ function getChannelIcon(type) {
   const icons = {
     shopify: '🛍️',
     woocommerce: '🛒',
-    mercadolibre: '🏪'
+    mercadolibre: '🏪',
+    general_store: '📱'
   }
   return icons[type] || '📦'
 }
@@ -587,7 +589,8 @@ function getChannelTypeName(type) {
   const names = {
     shopify: 'Shopify',
     woocommerce: 'WooCommerce',
-    mercadolibre: 'MercadoLibre'
+    mercadolibre: 'MercadoLibre',
+    general_store: 'Tienda General'
   }
   return names[type] || type
 }
@@ -886,7 +889,8 @@ function getChannelNamePlaceholder(type) {
   const placeholders = {
     shopify: 'Mi Tienda Shopify',
     woocommerce: 'Mi Tienda WooCommerce',
-    mercadolibre: 'Mi Tienda MercadoLibre'
+    mercadolibre: 'Mi Tienda MercadoLibre',
+    general_store: 'Mi Tienda General'
   }
   return placeholders[type] || 'Mi Tienda'
 }

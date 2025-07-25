@@ -375,6 +375,7 @@ app.post('/api/admin/sync/force/:channelId', async (req, res) => {
     });
   }
 });
+app.use('/api/general-store', require('./routes/generalStore.routes'));
 
 app.post('/api/admin/sync/restart', async (req, res) => {
   try {
