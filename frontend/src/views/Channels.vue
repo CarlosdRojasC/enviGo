@@ -876,15 +876,17 @@ const isFormValid = computed(() => {
   
   // Para admin, también validar empresa
   if (isAdmin.value && !channelData.value.company_id) return false
+
+  if (channelData.value.channel_type === 'general_store') {
+    return true
+  }
   
   // Para canales que NO son MercadoLibre, validar credenciales
-  if (channelData.value.channel_type !== 'mercadolibre') {
+  if (channelData.value.channel_type !== 'mercadolibre' ) {
     if (!channelData.value.api_key?.trim()) return false
     if (!channelData.value.api_secret?.trim()) return false
   }
-   if (channelData.value.channel_type === 'general_store') {
-    return true // Solo necesita nombre y tipo
-  }
+
   
   return true
 })
