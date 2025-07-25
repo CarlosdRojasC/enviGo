@@ -1,20 +1,38 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '../store/auth'
-import DashboardLayout from '../layouts/DashboardLayout.vue'
-import Login from '../views/login.vue'
-import PickupManifest from '../views/PickupManifest.vue'
-import MercadoLibreCallback from '../views/MercadoLibreCallback.vue'
-import DriverPayments from '../components/DriverPayments.vue'
 
+// Layouts
+import DashboardLayout from '../layouts/DashboardLayout.vue'
+import PublicLayout from '../layouts/PublicLayout.vue'
+
+// Vistas públicas
+import LandingPage from '../views/LandingPage.vue'
+import Login from '../views/login.vue'
+
+// Vistas del sistema (existentes)
 const routes = [
-  {
-    path: '/login',
-    name: 'Login',
-    component: Login,
-    meta: { guest: true }
-  },
+  // ==================== RUTAS PÚBLICAS ====================
   {
     path: '/',
+    component: PublicLayout,
+    children: [
+      {
+        path: '',
+        name: 'Home',
+        component: LandingPage
+      },
+      {
+        path: 'login',
+        name: 'Login',
+        component: Login,
+        meta: { guest: true }
+      }
+    ]
+  },
+
+  // ==================== RUTAS DEL SISTEMA ====================
+  {
+    path: '/app',
     component: DashboardLayout,
     meta: { requiresAuth: true },
     children: [
@@ -22,79 +40,22 @@ const routes = [
         path: '', 
         redirect: to => {
           const auth = useAuthStore();
-          return auth.isAdmin ? '/admin/dashboard' : '/dashboard';
+          return auth.isAdmin ? '/app/admin/dashboard' : '/app/dashboard';
         }
       },
+      
+      // RUTAS PARA EMPRESAS
       {
         path: 'dashboard',
         name: 'Dashboard',
         component: () => import('../views/dashboard.vue'),
         meta: { roles: ['company_owner', 'company_employee'], requiresCompany: true }
-      }, 
-      {
-        path: 'admin/dashboard',
-        name: 'AdminDashboard',
-        component: () => import('../views/AdminDashboard.vue'),
-        meta: { roles: ['admin'] }
       },
-   // Rutas de facturas para empresas
-      {
-        path: 'Billing',
-        name: 'Billing',
-        component: () => import('../views/Billing.vue'),
-        meta: { 
-          roles: ['company_owner', 'company_employee'], 
-          requiresCompany: true 
-        }
-      },
-
-// Facturación para administradores
-      {
-        path: 'admin/billing',
-        name: 'AdminBilling',
-        component: () => import('../views/AdminBilling.vue'), // Versión para admin
-        meta: { roles: ['admin'] }
-      },
-      {
-    path: 'admin/companies',
-    name: 'AdminCompanies',
-    component: () => import('../views/Companies.vue'),
-    meta: { roles: ['admin'] }
-  },
-   // --- AÑADE ESTE BLOQUE PARA LA NUEVA RUTA ---
-      {
-        path: 'admin/drivers',
-        name: 'AdminDrivers',
-        component: () => import('../views/Drivers.vue'),
-        meta: { roles: ['admin'] }
-      },
-    {
-    path: 'admin/orders',
-    name: 'AdminOrders',
-    component: () => import('../views/AdminOrders.vue'),
-    meta: { roles: ['admin'] }
-  },
-  {
-  path: '/admin/communes',
-  name: 'AdminCommunes',
-  component: () => import('../views/AdminCommunes.vue'),
-  meta: { roles: ['admin']  }
-},
       {
         path: 'orders',
         name: 'Orders',
         component: () => import('../views/Orders.vue'),
         meta: { roles: ['company_owner', 'company_employee'], requiresCompany: true }
-      },
-      // <-- INICIO DE NUEVA RUTA -->
-      {
-        path: 'pickup-manifest',
-        name: 'PickupManifest',
-        component: () => import('../views/PickupManifest.vue'),
-        meta: { 
-          roles: ['company_owner', 'company_employee', 'admin'], 
-          requiresCompany: false // Los admins pueden ver manifiestos de cualquier empresa
-        }
       },
       {
         path: 'channels',
@@ -102,30 +63,78 @@ const routes = [
         component: () => import('../views/Channels.vue'),
         meta: { roles: ['company_owner', 'company_employee'], requiresCompany: true }
       },
-       {
-        path: 'admin/channels',
-        name: 'AdminChannels',
-        component: () => import('../views/Channels.vue'), // Reutilizamos la misma vista
+      {
+        path: 'billing',
+        name: 'Billing',
+        component: () => import('../views/Billing.vue'),
+        meta: { roles: ['company_owner', 'company_employee'], requiresCompany: true }
+      },
+      
+      // RUTAS PARA ADMIN
+      {
+        path: 'admin/dashboard',
+        name: 'AdminDashboard',
+        component: () => import('../views/AdminDashboard.vue'),
         meta: { roles: ['admin'] }
       },
       {
-        path: '/driver-payments',
-        name: 'DriverPayments',
-        component: DriverPayments,
-        meta: { 
-          requiresAuth: true,
-          roles: ['admin']
-        }
+        path: 'admin/companies',
+        name: 'AdminCompanies',
+        component: () => import('../views/Companies.vue'),
+        meta: { roles: ['admin'] }
       },
+      {
+        path: 'admin/orders',
+        name: 'AdminOrders',
+        component: () => import('../views/AdminOrders.vue'),
+        meta: { roles: ['admin'] }
+      },
+      {
+        path: 'admin/channels',
+        name: 'AdminChannels',
+        component: () => import('../views/Channels.vue'),
+        meta: { roles: ['admin'] }
+      },
+      {
+        path: 'admin/billing',
+        name: 'AdminBilling',
+        component: () => import('../views/AdminBilling.vue'),
+        meta: { roles: ['admin'] }
+      },
+      {
+        path: 'admin/drivers',
+        name: 'AdminDrivers',
+        component: () => import('../views/Drivers.vue'),
+        meta: { roles: ['admin'] }
+      },
+      {
+        path: 'admin/driver-payments',
+        name: 'AdminDriverPayments',
+        component: () => import('../components/DriverPayments.vue'),
+        meta: { roles: ['admin'] }
+      },
+      {
+        path: 'admin/communes',
+        name: 'AdminCommunes',
+        component: () => import('../views/AdminCommunes.vue'),
+        meta: { roles: ['admin'] }
+      }
     ]
   },
+
+  // ==================== RUTAS ESPECIALES ====================
   {
     path: '/integrations/mercadolibre/callback',
     name: 'MercadoLibreCallback',
-    component: MercadoLibreCallback,
+    component: () => import('../views/MercadoLibreCallback.vue'),
     meta: { requiresAuth: true }
   },
-  { path: '/:pathMatch(.*)*', redirect: '/login' }
+
+  // Redirigir cualquier ruta no encontrada
+  { 
+    path: '/:pathMatch(.*)*', 
+    redirect: '/' 
+  }
 ]
 
 const router = createRouter({
@@ -133,26 +142,31 @@ const router = createRouter({
   routes
 })
 
+// Guards de navegación actualizados
 router.beforeEach((to, from, next) => {
   const auth = useAuthStore()
   const isAuthenticated = auth.isLoggedIn
   const userRole = auth.user?.role
   const hasCompany = auth.hasCompany
 
+  // Si requiere autenticación y no está autenticado
   if (to.meta.requiresAuth && !isAuthenticated) {
     return next({ name: 'Login' })
   }
 
+  // Si es una ruta de invitado y está autenticado, redirigir al dashboard
   if (to.meta.guest && isAuthenticated) {
-    if (userRole === 'admin') return next({ name: 'AdminDashboard' })
-    return next({ name: 'Dashboard' })
+    if (userRole === 'admin') return next({ path: '/app/admin/dashboard' })
+    return next({ path: '/app/dashboard' })
   }
 
+  // Verificar roles
   if (to.meta.roles && !to.meta.roles.includes(userRole)) {
-    if (userRole === 'admin') return next({ name: 'AdminDashboard' })
-    return next({ name: 'Dashboard' })
+    if (userRole === 'admin') return next({ path: '/app/admin/dashboard' })
+    return next({ path: '/app/dashboard' })
   }
 
+  // Verificar si requiere empresa
   if (to.meta.requiresCompany && !hasCompany) {
     return next({ name: 'Login' })
   }

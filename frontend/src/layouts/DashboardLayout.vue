@@ -1,28 +1,50 @@
+<!-- frontend/src/layouts/DashboardLayout.vue - ACTUALIZADO -->
 <template>
   <div class="dashboard-layout">
     <Sidebar />
     <main class="main-content">
-      <router-view />
+      <Header />
+      <div class="content-area">
+        <router-view />
+      </div>
     </main>
   </div>
 </template>
 
 <script setup>
-import Sidebar from '../components/Sidebar.vue';
+import Sidebar from '../components/Sidebar.vue'
+import Header from '../components/Header.vue'
 </script>
 
 <style scoped>
 .dashboard-layout {
- display: flex;
-  height: 100vh; /* Fija la altura a la de la pantalla */
-  width: 100%;
-  background-color: #f3f4f6;
-  overflow: hidden; /* Evita que el layout principal se desborde y genere un scroll global */
+  display: flex;
+  height: 100vh;
+  overflow: hidden;
 }
+
 .main-content {
-  flex-grow: 1;
-  padding: 32px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.content-area {
+  flex: 1;
   overflow-y: auto;
-  height: 100vh; 
+  padding: 2rem;
+  background-color: #f8fafc;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .dashboard-layout {
+    flex-direction: column;
+  }
+  
+  .content-area {
+    padding: 1rem;
+  }
 }
 </style>
