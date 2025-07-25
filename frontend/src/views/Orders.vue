@@ -890,7 +890,8 @@ onMounted(async () => {
     // Carga inicial existente
     await Promise.all([
       fetchOrders(),
-      fetchChannels()
+      fetchChannels(),
+      fetchAvailableCommunes()
     ])
     lastUpdate.value = Date.now()
     
