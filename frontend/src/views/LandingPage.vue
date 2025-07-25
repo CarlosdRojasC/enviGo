@@ -194,7 +194,7 @@ const features = ref([
   {
     emoji: '🗺️',
     title: 'Gestión Inteligente de Rutas',
-    description: 'Optimización automática de rutas para tus conductores. Reduce tiempos de entrega y costos operacionales hasta en un 40%.',
+    description: 'Optimización automática de rutas para conductores. Reduce tiempos de entrega y costos operacionales hasta en un 40%.',
     tags: ['Optimización IA', 'GPS Real-time', 'Multi-zona']
   },
   {
