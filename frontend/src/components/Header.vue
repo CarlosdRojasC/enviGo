@@ -193,31 +193,25 @@ async function handleSearch() {
     searchResults.value = cached
     return
   }
-
-  try {
-    searchLoading.value = true
+ try {
+    searchLoading.value = true;
     
-    // USAR DIRECTAMENTE apiService.get
-    const response = await apiService.get('/search/global', {
-      params: { q: query, limit: 10 }
-    })
+    // --- 👇 ESTA ES LA LÍNEA CORREGIDA 👇 ---
+    // Usamos el nuevo servicio apiService.search.global
+    const response = await apiService.search.global(query);
     
-    const results = response.data.results || response.data.data || response.data || []
-    searchResults.value = results
+    const results = response.data.results || response.data.data || response.data || [];
+    searchResults.value = results;
     
-    // Guardar en cache
-    searchCache.set(cacheKey, results)
+    searchCache.set(cacheKey, results);
     
   } catch (error) {
-    console.error('❌ Error en búsqueda global:', error)
-    searchResults.value = []
-    
-    // No mostrar error toast para búsqueda, es menos crítico
+    console.error('❌ Error en búsqueda global:', error); // Este error ya no debería aparecer
+    searchResults.value = [];
   } finally {
-    searchLoading.value = false
+    searchLoading.value = false;
   }
 }
-
 /**
  * Cargar stats del dashboard - VERSIÓN SIMPLIFICADA
  */

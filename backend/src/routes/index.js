@@ -12,7 +12,7 @@ const driverRoutes = require('./drivers.routes');
 const billingRoutes = require('./billing.routes');
 const webhookRoutes = require('./webhooks.routes');
 const dashboardRoutes = require('./dashboard.routes');
-
+const searchRoutes = require('./search.routes');
 
 // ==================== IMPORTAR RUTAS SEPARADAS ====================
 const shipdayRoutes = require('./shipday.routes');
@@ -43,6 +43,7 @@ router.use('/notifications', notificationRoutes);
 
 // Dashboard y estadísticas
 router.use('/', dashboardRoutes);
+router.use('/search', searchRoutes);
 // ==================== USAR RUTAS SEPARADAS ====================
 router.use('/shipday', shipdayRoutes);
 router.use('/communes', comunasRoutes);

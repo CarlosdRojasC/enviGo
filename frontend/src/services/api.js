@@ -771,6 +771,14 @@ const shipday = {
   getDriversDetailed: () => api.get('/shipday/drivers-detailed'),
   fullInvestigation: () => api.get('/shipday/full-investigation')
 }
+const search = {
+  /**
+   * Realiza una búsqueda global en la aplicación
+   * @param {string} query - El término de búsqueda
+   * @returns {Promise}
+   */
+  global: (query) => api.get('/search/global', { params: { q: query } })
+};
 
 // ACTUALIZAR la exportación para incluir shipday
 // Exportar todos los servicios
@@ -785,7 +793,8 @@ export const apiService = {
   dashboard,
   users,
   shipday,
-  notifications
+  notifications,
+  search
 }
 
 // Exportar instancia de axios para casos especiales
