@@ -54,101 +54,124 @@ class ExcelService {
     }
   }
 
-  // Generar Excel para OptiRoute
-  static async generateOptiRouteExport(orders) {
-    try {
-      // Preparar datos para OptiRoute
-      const data = orders.map((order, index) => ({
-          'Order ID': order.order_number,
-        'Customer Name': order.customer_name,
-        'Phone': order.customer_phone || '',
-        'Email': order.customer_email || '',
-        'Address': order.shipping_address,
-        'City': order.shipping_city,
-        'State': order.shipping_state || '',
-        'Zip Code': order.shipping_zip || '',
-        'Notes': order.notes || '',
-        // --- USANDO LOS NUEVOS CAMPOS DEL MODELO ---
-        'Priority': order.priority,
-        'Service Time': order.serviceTime,
-        'Time Window Start': order.timeWindowStart,
-        'Time Window End': order.timeWindowEnd,
-        'Skills Required': '', // Puedes añadir este campo al modelo si lo necesitas
-        'Vehicle Type': 'Any', // Puedes añadir este campo al modelo si lo necesitas
-        'Load 1 (Packages)': order.load1Packages,
-        'Load 2 (Weight kg)': order.load2WeightKg,
-        'Revenue': order.total_amount || 0, // El valor de la venta
-        'Company': order.company_id.name || '',
-        'Channel': order.channel_id.channel_name || ''
-      }));
+static async generateOrdersExport(orders) {
+  try {
+    console.log(`📊 Generando Excel con ${orders.length} pedidos`);
+
+    // Preparar datos para Excel
+    const data = orders.map((order, index) => ({
+      // Información básica
+      'N° Pedido': order.order_number,
+      'ID Externo': order.external_id || '',
+      'Empresa': order.company_id?.name || 'Sin empresa',
+      'Canal': order.channel_id?.channel_name || 'Sin canal',
       
-      // Crear libro de Excel
-      const wb = XLSX.utils.book_new();
+      // Fechas
+      'Fecha Pedido': order.order_date ? new Date(order.order_date).toLocaleDateString('es-CL') : '',
+      'Fecha Entrega': order.delivery_date ? new Date(order.delivery_date).toLocaleDateString('es-CL') : '',
       
-      // Crear hoja con los datos
-      const ws = XLSX.utils.json_to_sheet(data);
+      // Cliente
+      'Cliente': order.customer_name,
+      'Email Cliente': order.customer_email || '',
+      'Teléfono Cliente': order.customer_phone || '',
+      'Documento Cliente': order.customer_document || '',
       
-      // Ajustar anchos de columna
-      const colWidths = [
-        { wch: 15 }, // Order ID
-        { wch: 25 }, // Customer Name
-        { wch: 15 }, // Phone
-        { wch: 25 }, // Email
-        { wch: 40 }, // Address
-        { wch: 20 }, // City
-        { wch: 15 }, // State
-        { wch: 10 }, // Zip Code
-        { wch: 30 }, // Notes
-        { wch: 10 }, // Priority
-        { wch: 12 }, // Service Time
-        { wch: 15 }, // Time Window Start
-        { wch: 15 }, // Time Window End
-        { wch: 15 }, // Skills Required
-        { wch: 12 }, // Vehicle Type
-        { wch: 15 }, // Load 1
-        { wch: 15 }, // Load 2
-        { wch: 12 }, // Revenue
-        { wch: 20 }, // Company
-        { wch: 20 }  // Channel
-      ];
-      ws['!cols'] = colWidths;
+      // Dirección - ✅ INCLUIR COMUNA
+      'Dirección': order.shipping_address,
+      'Comuna': order.shipping_commune || 'Sin comuna', // ← CORREGIDO: estaba faltando
+      'Ciudad': order.shipping_city || '',
+      'Región': order.shipping_state || '',
+      'Código Postal': order.shipping_zip || '',
       
-      // Agregar hoja al libro
-      XLSX.utils.book_append_sheet(wb, ws, 'Orders');
+      // Montos
+      'Total': order.total_amount || 0,
+      'Costo Envío': order.shipping_cost || 0,
+      'Método Pago': order.payment_method || '',
       
-      // Crear hoja de resumen
-      const summary = [
-        ['Resumen de Exportación'],
-        [''],
-        ['Total de Pedidos:', orders.length],
-        ['Fecha de Exportación:', new Date().toLocaleString()],
-        [''],
-        ['Pedidos por Ciudad:']
-      ];
+      // Estado y tracking
+      'Estado': order.status,
+      'Estado Shipday': order.shipday_order_id ? 'En Shipday' : 'No enviado',
+      'ID Shipday': order.shipday_order_id || '',
+      'Conductor': order.driver_info?.name || '',
+      'URL Tracking': order.shipday_tracking_url || '',
       
-      // Contar pedidos por ciudad
-      const cityCounts = {};
-      orders.forEach(order => {
-        const city = order.shipping_city || 'Sin Ciudad';
-        cityCounts[city] = (cityCounts[city] || 0) + 1;
-      });
-      
-      Object.entries(cityCounts).forEach(([city, count]) => {
-        summary.push([city + ':', count]);
-      });
-      
-      const wsSummary = XLSX.utils.aoa_to_sheet(summary);
-      XLSX.utils.book_append_sheet(wb, wsSummary, 'Resumen');
-      
-      // Generar buffer
-      const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
-      
-      return buffer;
-    } catch (error) {
-      console.error('Error generando Excel:', error);
-      throw new Error('Error al generar archivo Excel');
-    }
+      // Notas
+      'Notas': order.notes || '',
+      'Instrucciones Entrega': order.delivery_instructions || ''
+    }));
+
+    const wb = XLSX.utils.book_new();
+
+    // Crear hoja principal
+    const ws = XLSX.utils.json_to_sheet(data);
+
+    // Configurar ancho de columnas
+    ws['!cols'] = [
+      { wch: 15 }, // N° Pedido
+      { wch: 15 }, // ID Externo
+      { wch: 20 }, // Empresa
+      { wch: 15 }, // Canal
+      { wch: 12 }, // Fecha Pedido
+      { wch: 12 }, // Fecha Entrega
+      { wch: 25 }, // Cliente
+      { wch: 25 }, // Email
+      { wch: 15 }, // Teléfono
+      { wch: 15 }, // Documento
+      { wch: 40 }, // Dirección
+      { wch: 15 }, // Comuna ← NUEVA COLUMNA
+      { wch: 15 }, // Ciudad
+      { wch: 15 }, // Región
+      { wch: 12 }, // Código Postal
+      { wch: 12 }, // Total
+      { wch: 12 }, // Costo Envío
+      { wch: 15 }, // Método Pago
+      { wch: 15 }, // Estado
+      { wch: 15 }, // Estado Shipday
+      { wch: 15 }, // ID Shipday
+      { wch: 20 }, // Conductor
+      { wch: 30 }, // URL Tracking
+      { wch: 30 }, // Notas
+      { wch: 30 }  // Instrucciones
+    ];
+
+    XLSX.utils.book_append_sheet(wb, ws, 'Pedidos');
+
+    // Crear hoja de resumen
+    const summaryData = [
+      ['RESUMEN DE EXPORTACIÓN'],
+      [''],
+      ['Total de pedidos:', orders.length],
+      ['Fecha de exportación:', new Date().toLocaleString('es-CL')],
+      [''],
+      ['ESTADOS:'],
+      ...Object.entries(
+        orders.reduce((acc, order) => {
+          acc[order.status] = (acc[order.status] || 0) + 1;
+          return acc;
+        }, {})
+      ).map(([status, count]) => [status, count]),
+      [''],
+      ['EMPRESAS:'],
+      ...Object.entries(
+        orders.reduce((acc, order) => {
+          const company = order.company_id?.name || 'Sin empresa';
+          acc[company] = (acc[company] || 0) + 1;
+          return acc;
+        }, {})
+      ).map(([company, count]) => [company, count])
+    ];
+
+    const wsSummary = XLSX.utils.aoa_to_sheet(summaryData);
+    XLSX.utils.book_append_sheet(wb, wsSummary, 'Resumen');
+
+    return XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+    
+  } catch (error) {
+    console.error('❌ Error generando Excel:', error);
+    throw new Error('Error al generar archivo Excel');
   }
+}
+
   
   // Generar reporte mensual de facturación
   static async generateMonthlyInvoiceReport(invoiceData) {

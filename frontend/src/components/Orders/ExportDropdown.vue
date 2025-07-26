@@ -27,19 +27,18 @@
       </button>
       
       <button 
-        v-if="isAdmin"
-        @click="handleExport('optiroute')"
-        :disabled="exporting"
-        class="export-option"
-      >
-        <span class="option-icon">🚛</span>
-        <div class="option-content">
-          <div class="option-title">Exportar para OptiRoute</div>
-          <div class="option-description">
-            Formato optimizado para planificación de rutas
-          </div>
-        </div>
-      </button>
+  @click="handleExport('complete')"
+  :disabled="exporting"
+  class="export-option"
+>
+  <span class="option-icon">📊</span>
+  <div class="option-content">
+    <div class="option-title">Exportar Completo</div>
+    <div class="option-description">
+      Excel detallado con comuna, tracking y toda la información
+    </div>
+  </div>
+</button>
       
       <div class="export-divider"></div>
       

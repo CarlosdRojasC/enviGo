@@ -73,14 +73,6 @@ export function useOrdersModals() {
       total_amount: 0,
       shipping_cost: 0,
       notes: '',
-      
-      // OptiRoute specific fields
-      priority: 'Normal',
-      serviceTime: 5,
-      timeWindowStart: '09:00',
-      timeWindowEnd: '18:00',
-      load1Packages: 1,
-      load2WeightKg: 1
     }
     
     showCreateOrderModal.value = true

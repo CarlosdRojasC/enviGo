@@ -500,95 +500,77 @@ async getById(req, res) {
     }
   }
 
-  async exportForOptiRoute(req, res) {
-    try {
-      const { date_from, date_to, company_id, status } = req.query;
+async exportOrders(req, res) {
+  try {
+    const { date_from, date_to, company_id, status, shipping_commune } = req.query;
 
-      const filters = {};
+    console.log('📤 Exportando pedidos con filtros:', { date_from, date_to, company_id, status, shipping_commune });
 
-      if (status) {
-        filters.status = status;
-      }
-      
-      if (company_id) {
-        filters.company_id = company_id;
-      }
+    const filters = {};
 
-      if (date_from || date_to) {
-        filters.order_date = {};
-        if (date_from) filters.order_date.$gte = new Date(date_from);
-        if (date_to) filters.order_date.$lte = new Date(date_to);
-      }
-
-      const orders = await Order.find(filters)
-        .populate('company_id', 'name')
-        .populate('channel_id', 'channel_name')
-        .sort({ shipping_city: 1, shipping_address: 1 })
-        .lean();
-
-      if (orders.length === 0) {
-        return res.status(404).json({ error: 'No se encontraron pedidos para exportar con los filtros aplicados' });
-      }
-
-      const excelBuffer = await ExcelService.generateOptiRouteExport(orders);
-
-      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-      res.setHeader('Content-Disposition', `attachment; filename=optiroute_export_${Date.now()}.xlsx`);
-      res.send(excelBuffer);
-    } catch (error) {
-      console.error('Error exportando para OptiRoute:', error);
-      res.status(500).json({ error: 'Error interno del servidor' });
+    // Filtros de rol y empresa
+    if (req.user.role !== 'admin') {
+      filters.company_id = req.user.company_id;
+    } else if (company_id) {
+      filters.company_id = company_id;
     }
+
+    // Filtro por estado
+    if (status) {
+      filters.status = status;
+    }
+
+    // Filtro por comuna
+    if (shipping_commune) {
+      if (Array.isArray(shipping_commune)) {
+        filters.shipping_commune = { $in: shipping_commune };
+      } else {
+        filters.shipping_commune = shipping_commune;
+      }
+    }
+
+    // Filtro por fechas
+    if (date_from || date_to) {
+      filters.order_date = {};
+      if (date_from) filters.order_date.$gte = new Date(date_from);
+      if (date_to) filters.order_date.$lte = new Date(date_to);
+    }
+
+    const orders = await Order.find(filters)
+      .populate('company_id', 'name address')
+      .populate('channel_id', 'channel_name')
+      .sort({ order_date: -1, shipping_commune: 1, shipping_address: 1 })
+      .lean();
+
+    if (orders.length === 0) {
+      return res.status(404).json({ 
+        error: 'No se encontraron pedidos para exportar con los filtros aplicados' 
+      });
+    }
+
+    console.log(`✅ Exportando ${orders.length} pedidos`);
+
+    const excelBuffer = await ExcelService.generateOrdersExport(orders);
+
+    const timestamp = new Date().toISOString().split('T')[0];
+    const filename = `pedidos_export_${timestamp}.xlsx`;
+
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    );
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename=${filename}`
+    );
+
+    res.send(excelBuffer);
+    
+  } catch (error) {
+    console.error('❌ Error exportando pedidos:', error);
+    res.status(500).json({ error: 'Error interno del servidor' });
   }
-
-async exportForOptiRoute(req, res) {
-    // Esta ruta ahora es solo para administradores
-    try {
-      const { date_from, date_to, company_id, status } = req.query;
-
-      const filters = {};
-
-      if (status) {
-        filters.status = status;
-      }
-      
-      // El admin puede filtrar por una empresa específica
-      if (company_id) {
-        filters.company_id = company_id;
-      }
-
-      if (date_from || date_to) {
-        filters.order_date = {};
-        if (date_from) filters.order_date.$gte = new Date(date_from);
-        if (date_to) filters.order_date.$lte = new Date(date_to);
-      }
-
-      const orders = await Order.find(filters)
-        .populate('company_id', 'name')
-        .populate('channel_id', 'channel_name')
-        .sort({ shipping_city: 1, shipping_address: 1 })
-        .lean();
-
-      if (orders.length === 0) {
-        return res.status(404).json({ error: 'No se encontraron pedidos para exportar con los filtros aplicados' });
-      }
-
-      const excelBuffer = await ExcelService.generateOptiRouteExport(orders);
-
-      res.setHeader(
-        'Content-Type',
-        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-      );
-      res.setHeader(
-        'Content-Disposition',
-        `attachment; filename=optiroute_export_${Date.now()}.xlsx`
-      );
-
-      res.send(excelBuffer);
-    } catch (error) {
-      console.error('Error exportando para OptiRoute:', error);
-      res.status(500).json({ error: 'Error interno del servidor' });
-    }}
+}
   async getStats(req, res) {
     try {
       const { company_id, date_from, date_to } = req.query;

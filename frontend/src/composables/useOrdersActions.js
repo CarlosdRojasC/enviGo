@@ -11,55 +11,52 @@ export function useOrdersActions(newOrder, isCreatingOrder, fetchOrders) {
 
   // ==================== METHODS ====================
   
-  /**
-   * Export orders for OptiRoute
-   */
-  async function exportOrders(filters = {}) {
-    isExporting.value = true
+async function exportOrders(filters = {}) {
+  isExporting.value = true
+  
+  try {
+    console.log('📤 Exportando pedidos con filtros:', filters)
     
-    try {
-      console.log('📤 Exporting orders with filters:', filters)
-      
-      const response = await apiService.orders.exportForOptiRoute(filters)
-      
-      // Handle different response types
-      let data = response.data
-      let filename = `pedidos_optiroute_${Date.now()}.xlsx`
-      
-      // Check if response has custom filename
-      const contentDisposition = response.headers['content-disposition']
-      if (contentDisposition) {
-        const filenameMatch = contentDisposition.match(/filename="(.+)"/)
-        if (filenameMatch) {
-          filename = filenameMatch[1]
-        }
+    const response = await apiService.orders.exportOrders(filters)
+    
+    // Handle different response types
+    let data = response.data
+    let filename = `pedidos_${Date.now()}.xlsx`
+    
+    // Check if response has custom filename
+    const contentDisposition = response.headers['content-disposition']
+    if (contentDisposition) {
+      const filenameMatch = contentDisposition.match(/filename="?([^"]+)"?/)
+      if (filenameMatch) {
+        filename = filenameMatch[1]
       }
-      
-      // Create and download file
-      const url = window.URL.createObjectURL(new Blob([data]))
-      const link = document.createElement('a')
-      link.href = url
-      link.setAttribute('download', filename)
-      document.body.appendChild(link)
-      link.click()
-      link.remove()
-      window.URL.revokeObjectURL(url)
-      
-      toast.success('✅ Pedidos exportados exitosamente')
-      console.log('✅ Export completed:', filename)
-      
-    } catch (error) {
-      console.error('❌ Error exporting orders:', error)
-      
-      if (error.response?.status === 404 || error.response?.data?.message?.includes('no encontraron')) {
-        toast.warning('No se encontraron pedidos para exportar con los filtros aplicados')
-      } else {
-        toast.error('Error al exportar pedidos. Inténtalo de nuevo.')
-      }
-    } finally {
-      isExporting.value = false
     }
+    
+    // Create and download file
+    const url = window.URL.createObjectURL(new Blob([data]))
+    const link = document.createElement('a')
+    link.href = url
+    link.setAttribute('download', filename)
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    window.URL.revokeObjectURL(url)
+    
+    toast.success('✅ Pedidos exportados exitosamente')
+    console.log('✅ Export completed:', filename)
+    
+  } catch (error) {
+    console.error('❌ Error exporting orders:', error)
+    
+    if (error.response?.status === 404 || error.response?.data?.message?.includes('no encontraron')) {
+      toast.warning('No se encontraron pedidos para exportar con los filtros aplicados')
+    } else {
+      toast.error('Error al exportar pedidos. Inténtalo de nuevo.')
+    }
+  } finally {
+    isExporting.value = false
   }
+}
 
   /**
    * Create new order manually
@@ -291,13 +288,6 @@ if (!channels || channels.length === 0) {
         order_number: `DUP-${Date.now()}`,
         external_order_id: `duplicate-${order._id}-${Date.now()}`,
         
-        // OptiRoute fields
-        priority: order.priority || 'Normal',
-        serviceTime: order.serviceTime || 5,
-        timeWindowStart: order.timeWindowStart || '09:00',
-        timeWindowEnd: order.timeWindowEnd || '18:00',
-        load1Packages: order.load1Packages || 1,
-        load2WeightKg: order.load2WeightKg || 1
       }
       
       await apiService.orders.create(duplicateData)
@@ -332,14 +322,7 @@ if (!channels || channels.length === 0) {
       total_amount: 0,
       shipping_cost: 0,
       notes: '',
-      
-      // OptiRoute fields
-      priority: 'Normal',
-      serviceTime: 5,
-      timeWindowStart: '09:00',
-      timeWindowEnd: '18:00',
-      load1Packages: 1,
-      load2WeightKg: 1
+
     })
     
     console.log('🔄 New order form reset')

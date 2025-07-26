@@ -23,14 +23,16 @@
         </button>
         
         <button 
-          @click="$emit('export')" 
-          :disabled="exporting"
-          class="action-btn export-btn"
-          :class="{ 'loading': exporting }"
-        >
-          <span class="btn-icon">{{ exporting ? '⏳' : '📊' }}</span>
-          <span class="btn-text">Exportar</span>
-        </button>
+  @click="$emit('export')" 
+  class="btn-header export"
+  :disabled="isExporting"
+  title="Exportar pedidos a Excel"
+>
+  <span class="btn-icon">{{ isExporting ? '⏳' : '📤' }}</span>
+  <span class="btn-text">
+    {{ isExporting ? 'Exportando...' : 'Exportar Pedidos' }}
+  </span>
+</button>
         
         <button 
           v-if="showCreateButton"

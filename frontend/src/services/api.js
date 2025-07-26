@@ -90,10 +90,13 @@ const orders = {
   getTrend: (params = {}) => api.get('/orders/trend', { params }),
   debugShipday: (orderId) => api.get(`/orders/${orderId}/debug-shipday`),
   getAvailableCommunes: (params = {}) => api.get('/orders/communes', { params }),
-  exportForOptiRoute: (params = {}) => api.get('/orders/export', { 
-    params,
-    responseType: 'blob'
-  }),
+  exportOrders: (filters = {}) => {
+    console.log('📤 API: Exportando pedidos con filtros:', filters);
+    return api.get('/orders/export', { 
+      params: filters,
+      responseType: 'blob' // Importante para descargar archivos
+    });
+  },
    // 🆕 Nueva función para exportación de dashboard
   exportForDashboard: (params = {}) => api.get('/orders/export-dashboard', { 
     params,
