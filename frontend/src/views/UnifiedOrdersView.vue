@@ -414,12 +414,6 @@ const {
 
 // ==================== DECLARAR VARIABLES FALTANTES ====================
 
-// ✅ SI NO VIENEN DEL COMPOSABLE, DECLARARLAS MANUALMENTE
-const selectedTrackingOrder = selectedTrackingOrder || ref(null)
-const selectedProofOrder = selectedProofOrder || ref(null)
-const supportOrder = supportOrder || ref(null)
-
-
 // ✅ COMPOSABLES ESPECÍFICOS DE ADMIN (CONDICIONAL)
 let driverAssignment = null
 let bulkUpload = null
