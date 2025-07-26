@@ -9,6 +9,194 @@ const fs = require('fs').promises;
 const path = require('path');
 const mongoose = require('mongoose');
 
+// ==================== MÉTODOS AUXILIARES (FUERA DE LA CLASE) ====================
+
+/**
+ * Obtener manifiesto para generación de PDF
+ */
+async function getManifestForGeneration(id, user) {
+  try {
+    console.log('🔍 Buscando manifiesto para PDF:', id);
+    
+    // Validar ObjectId
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      console.log('❌ ID inválido:', id);
+      return null;
+    }
+
+    // Usar lógica de filtros según rol
+    let filters = { _id: id };
+    if (user.role !== 'admin') {
+      filters.company_id = user.company_id;
+      console.log('🏢 Filtrando por empresa para PDF:', user.company_id);
+    }
+
+    const manifest = await Manifest.findOne(filters)
+      .populate('company_id', 'name address phone email')
+      .populate('order_ids', 'order_number customer_name shipping_commune shipping_address customer_phone load1Packages')
+      .lean();
+
+    if (manifest) {
+      console.log('✅ Manifiesto encontrado para PDF:', manifest.manifest_number);
+      console.log('📊 Pedidos en manifiesto:', manifest.order_ids?.length || 0);
+    } else {
+      console.log('❌ Manifiesto no encontrado con filtros:', filters);
+    }
+
+    return manifest;
+  } catch (error) {
+    console.error('❌ Error obteniendo manifiesto para generación:', error);
+    return null;
+  }
+}
+
+/**
+ * Crear buffer del PDF
+ */
+async function createPDFBuffer(manifest) {
+  return new Promise((resolve, reject) => {
+    try {
+      console.log('📄 Iniciando creación de PDF...');
+      
+      const doc = new PDFDocument({ margin: 50 });
+      const buffers = [];
+
+      doc.on('data', chunk => buffers.push(chunk));
+      doc.on('end', () => {
+        console.log('✅ PDF creado exitosamente');
+        resolve(Buffer.concat(buffers));
+      });
+      doc.on('error', reject);
+
+      // Header estilo enviGo
+      doc.fontSize(20).text('MANIFIESTO DE RETIRO', { align: 'center' });
+      doc.fontSize(16).text('enviGo Logistics', { align: 'center' });
+      doc.moveDown(2);
+
+      // Información de empresa y manifiesto
+      doc.fontSize(14);
+      doc.text(`Empresa: ${manifest.company_id?.name || 'No especificada'}`, { align: 'left' });
+      doc.text(`Dirección: ${manifest.company_id?.address || 'No especificada'}`);
+      if (manifest.company_id?.phone) {
+        doc.text(`Teléfono: ${manifest.company_id.phone}`);
+      }
+      doc.moveDown();
+      
+      doc.text(`Manifiesto N°: ${manifest.manifest_number}`);
+      doc.text(`Fecha de generación: ${new Date(manifest.generated_at).toLocaleDateString('es-CL')}`);
+      doc.text(`Total de pedidos: ${manifest.total_orders}`);
+      doc.text(`Total de bultos: ${manifest.total_packages || manifest.total_orders}`);
+      doc.moveDown(2);
+
+      // Verificar si hay pedidos
+      if (!manifest.order_ids || manifest.order_ids.length === 0) {
+        doc.fontSize(12).text('No hay pedidos en este manifiesto', { align: 'center' });
+        doc.end();
+        return;
+      }
+
+      // Tabla de pedidos
+      const tableTop = doc.y;
+      const itemHeight = 25;
+      const pageHeight = doc.page.height - doc.page.margins.bottom;
+      
+      // Headers de la tabla
+      doc.fontSize(12);
+      doc.text('N° Pedido', 50, tableTop, { width: 100 });
+      doc.text('Cliente', 150, tableTop, { width: 150 });
+      doc.text('Comuna', 300, tableTop, { width: 100 });
+      doc.text('Dirección', 400, tableTop, { width: 100 });
+      doc.text('Bultos', 500, tableTop, { width: 50 });
+      
+      // Línea separadora
+      doc.moveTo(50, tableTop + 15)
+         .lineTo(550, tableTop + 15)
+         .stroke();
+
+      // Filas de datos
+      let currentY = tableTop + 25;
+      
+      manifest.order_ids.forEach((order, i) => {
+        // Verificar si necesitamos una nueva página
+        if (currentY > pageHeight - 100) {
+          doc.addPage();
+          currentY = 50;
+          
+          // Repetir headers en nueva página
+          doc.fontSize(12);
+          doc.text('N° Pedido', 50, currentY, { width: 100 });
+          doc.text('Cliente', 150, currentY, { width: 150 });
+          doc.text('Comuna', 300, currentY, { width: 100 });
+          doc.text('Dirección', 400, currentY, { width: 100 });
+          doc.text('Bultos', 500, currentY, { width: 50 });
+          
+          doc.moveTo(50, currentY + 15)
+             .lineTo(550, currentY + 15)
+             .stroke();
+          
+          currentY += 25;
+        }
+
+        // Datos del pedido
+        doc.fontSize(10);
+        doc.text(order.order_number || 'N/A', 50, currentY, { width: 100 });
+        doc.text(order.customer_name || 'N/A', 150, currentY, { width: 150 });
+        doc.text(order.shipping_commune || 'N/A', 300, currentY, { width: 100 });
+        
+        // Dirección truncada si es muy larga
+        const address = order.shipping_address || 'N/A';
+        const truncatedAddress = address.length > 30 ? address.substring(0, 30) + '...' : address;
+        doc.text(truncatedAddress, 400, currentY, { width: 100 });
+        
+        doc.text((order.load1Packages || 1).toString(), 500, currentY, { width: 50 });
+        
+        currentY += itemHeight;
+      });
+
+      // Sección de firmas (en nueva página si es necesario)
+      if (currentY > pageHeight - 150) {
+        doc.addPage();
+        currentY = 100;
+      } else {
+        currentY += 50;
+      }
+
+      doc.fontSize(12);
+      doc.text('FIRMAS', 50, currentY, { align: 'center', width: 500 });
+      currentY += 30;
+
+      // Firmas lado a lado
+      doc.text('ENTREGADO POR:', 50, currentY);
+      doc.text('RECIBIDO POR:', 300, currentY);
+      currentY += 30;
+
+      doc.text('Nombre: ________________________', 50, currentY);
+      doc.text('Nombre: ________________________', 300, currentY);
+      currentY += 25;
+
+      doc.text('RUT: ____________________________', 50, currentY);
+      doc.text('RUT: ____________________________', 300, currentY);
+      currentY += 25;
+
+      doc.text('Firma: ___________________________', 50, currentY);
+      doc.text('Firma: ___________________________', 300, currentY);
+      currentY += 25;
+
+      doc.text('Fecha: ___________________________', 50, currentY);
+      doc.text('Hora: ____________________________', 300, currentY);
+
+      console.log('📄 Finalizando documento PDF...');
+      doc.end();
+
+    } catch (error) {
+      console.error('❌ Error creando PDF:', error);
+      reject(error);
+    }
+  });
+}
+
+// ==================== CLASE CONTROLADOR ====================
+
 class ManifestController {
   
   // ==================== CREAR MANIFIESTO ====================
@@ -16,7 +204,7 @@ class ManifestController {
     const session = await mongoose.startSession();
     session.startTransaction();
     
-    let transactionCommitted = false; // ✅ AÑADIR FLAG PARA TRACKING
+    let transactionCommitted = false;
     
     try {
       const { orderIds } = req.body;
@@ -164,7 +352,7 @@ class ManifestController {
         total_orders: orders.length,
         total_packages: totalPackages,
         communes,
-        generated_by: new mongoose.Types.ObjectId(userId), // ✅ Usar ObjectId del usuario
+        generated_by: new mongoose.Types.ObjectId(userId),
         manifest_data: manifestData
       });
 
@@ -197,19 +385,19 @@ class ManifestController {
 
       // ✅ FIX: Confirmar transacción y marcar como committed
       await session.commitTransaction();
-      transactionCommitted = true; // ✅ MARCAR COMO COMMITTED
+      transactionCommitted = true;
       
       console.log(`✅ Manifiesto ${manifestNumber} creado exitosamente`);
 
-      // Notificar via WebSocket si está disponible
-      if (global.wsService) {
-        global.wsService.notifyManifestCreated({
-          manifest_id: manifest._id,
-          manifest_number: manifestNumber,
-          company_id: companyId,
-          total_orders: orders.length
-        });
-      }
+      // TODO: Notificar via WebSocket cuando esté implementado
+      // if (global.wsService && global.wsService.notifyManifestCreated) {
+      //   global.wsService.notifyManifestCreated({
+      //     manifest_id: manifest._id,
+      //     manifest_number: manifestNumber,
+      //     company_id: companyId,
+      //     total_orders: orders.length
+      //   });
+      // }
 
       // Respuesta exitosa (compatible con tu frontend)
       res.status(201).json({
@@ -259,7 +447,6 @@ class ManifestController {
         details: process.env.NODE_ENV === 'development' ? error.message : undefined
       });
     } finally {
-      // ✅ FIX: Solo cerrar la sesión, no hacer abort
       session.endSession();
     }
   }
@@ -276,17 +463,14 @@ class ManifestController {
         limit = 50 
       } = req.query;
 
-      // Construir filtros
       let filters = {};
 
-      // Filtros por rol (tu lógica actual)
       if (req.user.role !== 'admin') {
         filters.company_id = req.user.company_id;
       } else if (company_id) {
         filters.company_id = company_id;
       }
 
-      // Filtros adicionales
       if (status) filters.status = status;
       
       if (date_from || date_to) {
@@ -295,11 +479,9 @@ class ManifestController {
         if (date_to) filters.generated_at.$lte = new Date(date_to);
       }
 
-      // Paginación
       const skip = (page - 1) * limit;
-      const limitNum = Math.min(parseInt(limit), 100); // Max 100 por página
+      const limitNum = Math.min(parseInt(limit), 100);
       
-      // Consulta paralela para manifiestos y total
       const [manifests, total] = await Promise.all([
         Manifest.find(filters)
           .populate('company_id', 'name address')
@@ -339,12 +521,10 @@ class ManifestController {
     try {
       const { id } = req.params;
 
-      // Validar ObjectId
       if (!mongoose.Types.ObjectId.isValid(id)) {
         return res.status(400).json({ error: 'ID de manifiesto inválido' });
       }
 
-      // Construir filtros según rol (tu lógica actual)
       let filters = { _id: id };
       if (req.user.role !== 'admin') {
         filters.company_id = req.user.company_id;
@@ -379,12 +559,10 @@ class ManifestController {
       const { id } = req.params;
       const { status, pickup_info } = req.body;
 
-      // Validar ObjectId
       if (!mongoose.Types.ObjectId.isValid(id)) {
         return res.status(400).json({ error: 'ID de manifiesto inválido' });
       }
 
-      // Validar estado
       const validStatuses = ['generated', 'printed', 'picked_up', 'cancelled'];
       if (!validStatuses.includes(status)) {
         return res.status(400).json({ 
@@ -393,7 +571,6 @@ class ManifestController {
         });
       }
 
-      // Construir filtros según rol (tu lógica actual)
       let filters = { _id: id };
       if (req.user.role !== 'admin') {
         filters.company_id = req.user.company_id;
@@ -401,7 +578,6 @@ class ManifestController {
 
       const updateData = { status };
       
-      // Agregar información específica según el estado
       if (status === 'picked_up') {
         updateData.picked_up_at = new Date();
         if (pickup_info) {
@@ -421,15 +597,15 @@ class ManifestController {
 
       console.log(`📋 Estado actualizado: ${manifest.manifest_number} → ${status}`);
 
-      // Notificar via WebSocket si está disponible
-      if (global.wsService) {
-        global.wsService.notifyManifestStatusUpdated({
-          manifest_id: manifest._id,
-          manifest_number: manifest.manifest_number,
-          new_status: status,
-          company_id: manifest.company_id
-        });
-      }
+      // TODO: Notificar via WebSocket cuando esté implementado
+      // if (global.wsService && global.wsService.notifyManifestStatusUpdated) {
+      //   global.wsService.notifyManifestStatusUpdated({
+      //     manifest_id: manifest._id,
+      //     manifest_number: manifest.manifest_number,
+      //     new_status: status,
+      //     company_id: manifest.company_id
+      //   });
+      // }
 
       res.json({
         message: 'Estado actualizado exitosamente',
@@ -450,17 +626,26 @@ class ManifestController {
     }
   }
 
-  // ==================== GENERAR PDF ====================
+  // ==================== GENERAR PDF (FIXED) ====================
   async generatePDF(req, res) {
     try {
       const { id } = req.params;
 
-      const manifest = await this.getManifestForGeneration(id, req.user);
+      console.log('📄 Generando PDF para manifiesto:', id);
+      console.log('👤 Usuario solicitante:', req.user.email, req.user.role);
+
+      // ✅ FIX: Usar función externa en lugar de this.getManifestForGeneration
+      const manifest = await getManifestForGeneration(id, req.user);
+      
       if (!manifest) {
+        console.log('❌ Manifiesto no encontrado para PDF');
         return res.status(404).json({ error: 'Manifiesto no encontrado' });
       }
 
-      const pdfBuffer = await this.createPDFBuffer(manifest);
+      console.log('✅ Manifiesto encontrado, generando PDF:', manifest.manifest_number);
+
+      // ✅ FIX: Usar función externa en lugar de this.createPDFBuffer
+      const pdfBuffer = await createPDFBuffer(manifest);
       
       // Configurar headers para descarga
       const filename = `manifest_${manifest.manifest_number}.pdf`;
@@ -468,6 +653,7 @@ class ManifestController {
       res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
       res.setHeader('Content-Length', pdfBuffer.length);
       
+      console.log('✅ PDF generado y enviado exitosamente');
       res.send(pdfBuffer);
 
     } catch (error) {
@@ -477,94 +663,6 @@ class ManifestController {
         details: process.env.NODE_ENV === 'development' ? error.message : undefined
       });
     }
-  }
-
-  // ==================== MÉTODOS AUXILIARES ====================
-
-  async getManifestForGeneration(id, user) {
-    try {
-      // Usar tu lógica de filtros actual
-      let filters = { _id: id };
-      if (user.role !== 'admin') {
-        filters.company_id = user.company_id;
-      }
-
-      return await Manifest.findOne(filters)
-        .populate('company_id', 'name address phone email')
-        .populate('order_ids', 'order_number customer_name shipping_commune shipping_address customer_phone load1Packages')
-        .lean();
-    } catch (error) {
-      console.error('❌ Error obteniendo manifiesto para generación:', error);
-      return null;
-    }
-  }
-
-  async createPDFBuffer(manifest) {
-    return new Promise((resolve, reject) => {
-      try {
-        const doc = new PDFDocument({ margin: 50 });
-        const buffers = [];
-
-        doc.on('data', chunk => buffers.push(chunk));
-        doc.on('end', () => resolve(Buffer.concat(buffers)));
-        doc.on('error', reject);
-
-        // Header estilo enviGo
-        doc.fontSize(20).text('MANIFIESTO DE RETIRO', { align: 'center' });
-        doc.fontSize(16).text('enviGo Logistics', { align: 'center' });
-        doc.moveDown();
-
-        // Información de empresa
-        doc.fontSize(14).text(`Empresa: ${manifest.company_id.name}`);
-        doc.text(`Dirección: ${manifest.company_id.address || 'No especificada'}`);
-        doc.text(`Teléfono: ${manifest.company_id.phone || 'No especificado'}`);
-        doc.text(`Manifiesto: ${manifest.manifest_number}`);
-        doc.text(`Fecha: ${new Date(manifest.generated_at).toLocaleDateString('es-CL')}`);
-        doc.text(`Total Pedidos: ${manifest.total_orders}`);
-        doc.moveDown();
-
-        // Tabla de pedidos
-        const tableTop = doc.y;
-        const itemHeight = 20;
-        
-        // Headers
-        doc.fontSize(12).text('N° Pedido', 50, tableTop);
-        doc.text('Cliente', 150, tableTop);
-        doc.text('Comuna', 300, tableTop);
-        doc.text('Bultos', 450, tableTop);
-        
-        // Línea separadora
-        doc.moveTo(50, tableTop + 15)
-           .lineTo(550, tableTop + 15)
-           .stroke();
-
-        // Filas de datos
-        manifest.order_ids.forEach((order, i) => {
-          const y = tableTop + 25 + (i * itemHeight);
-          doc.text(order.order_number || '', 50, y);
-          doc.text(order.customer_name || '', 150, y, { width: 140 });
-          doc.text(order.shipping_commune || '', 300, y);
-          doc.text((order.load1Packages || 1).toString(), 450, y);
-        });
-
-        // Sección de firmas
-        const signatureY = doc.y + 50;
-        doc.text('Entregado por:', 50, signatureY);
-        doc.text('Nombre: ____________________', 50, signatureY + 20);
-        doc.text('RUT: ____________________', 50, signatureY + 40);
-        doc.text('Firma: ____________________', 50, signatureY + 60);
-        
-        doc.text('Recibido por:', 300, signatureY);
-        doc.text('Nombre: ____________________', 300, signatureY + 20);
-        doc.text('RUT: ____________________', 300, signatureY + 40);
-        doc.text('Firma: ____________________', 300, signatureY + 60);
-
-        doc.end();
-
-      } catch (error) {
-        reject(error);
-      }
-    });
   }
 }
 
