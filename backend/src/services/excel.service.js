@@ -90,8 +90,6 @@ static async generateOrdersExport(orders) {
       
       // Estado y tracking
       'Estado': order.status,
-      'Estado Shipday': order.shipday_order_id ? 'En Shipday' : 'No enviado',
-      'ID Shipday': order.shipday_order_id || '',
       'Conductor': order.driver_info?.name || '',
       'URL Tracking': order.shipday_tracking_url || '',
       
