@@ -613,53 +613,150 @@ async function openLiveTracking(order) {
  * ✅ OVERRIDE: Show Proof of Delivery
  */
 async function showProofOfDelivery(order) {
-  console.log('📸 Cargando prueba de entrega para:', order.order_number)
+  console.log('📸 === INICIANDO showProofOfDelivery ===')
+  console.log('📦 Orden recibida:', order)
   
-  // Validación previa
-  if (!order || !order._id) {
-    console.error('❌ Order no válida para proof')
-    toast.error('Error: Orden no válida')
+  // 🔧 VERIFICACIÓN PREVIA
+  if (!order) {
+    console.error('❌ Order is null/undefined')
+    alert('Error: Orden no válida (null)')
+    return
+  }
+  
+  if (!order._id) {
+    console.error('❌ Order._id is missing:', order)
+    alert('Error: Orden sin ID válido')
+    return
+  }
+
+  // 🔧 VERIFICAR QUE LAS VARIABLES REACTIVAS EXISTEN
+  console.log('🔍 Verificando variables reactivas antes de usar:')
+  debugReactiveStates()
+
+  if (typeof showProofModal === 'undefined') {
+    console.error('❌ showProofModal is undefined!')
+    alert('Error crítico: showProofModal no está definido')
+    return
+  }
+
+  if (typeof selectedProofOrder === 'undefined') {
+    console.error('❌ selectedProofOrder is undefined!')
+    alert('Error crítico: selectedProofOrder no está definido')
     return
   }
 
   try {
-    // Reset estados
-    selectedProofOrder.value = null
-    loadingOrderDetails.value = true
-    showProofModal.value = true
+    console.log('🔄 Paso 1: Limpiando estados...')
+    
+    // Limpiar estados de forma segura
+    if (selectedProofOrder && typeof selectedProofOrder.value !== 'undefined') {
+      selectedProofOrder.value = null
+      console.log('✅ selectedProofOrder limpiado')
+    } else {
+      console.warn('⚠️ selectedProofOrder no es reactivo')
+    }
+    
+    if (loadingOrderDetails && typeof loadingOrderDetails.value !== 'undefined') {
+      loadingOrderDetails.value = true
+      console.log('✅ loadingOrderDetails = true')
+    } else {
+      console.warn('⚠️ loadingOrderDetails no es reactivo')
+    }
+    
+    console.log('🔄 Paso 2: Intentando abrir modal...')
+    
+    if (showProofModal && typeof showProofModal.value !== 'undefined') {
+      showProofModal.value = true
+      console.log('✅ showProofModal = true')
+      
+      // Verificar inmediatamente si cambió
+      await nextTick()
+      console.log('🔍 Estado después de nextTick:', showProofModal.value)
+      
+    } else {
+      console.error('❌ showProofModal no es reactivo')
+      alert('Error: showProofModal no es reactivo')
+      return
+    }
 
-    // Esperar al siguiente tick
-    await nextTick()
-
-    // Obtener datos frescos
-    console.log('📡 Obteniendo datos frescos para:', order._id)
+    console.log('🔄 Paso 3: Haciendo llamada a la API...')
+    
+    // Llamada a la API
     const { data } = await apiService.orders.getById(order._id)
     
     if (!data) {
-      throw new Error('No se obtuvieron datos de la orden')
+      throw new Error('No se obtuvieron datos de la API')
     }
 
-    // Asignar datos
-    selectedProofOrder.value = { ...data }
+    console.log('✅ Datos obtenidos de la API:', data)
+    console.log('🔄 Paso 4: Asignando datos...')
     
-    console.log('✅ Prueba de entrega cargada:', {
-      order_number: data.order_number,
-      has_proof: !!data.proof_of_delivery
-    })
+    // Asignar datos
+    if (selectedProofOrder && typeof selectedProofOrder.value !== 'undefined') {
+      selectedProofOrder.value = { ...data }
+      console.log('✅ selectedProofOrder asignado:', selectedProofOrder.value.order_number)
+    } else {
+      console.error('❌ No se pudo asignar selectedProofOrder')
+    }
+    
+    // Verificación final
+    console.log('🔍 Estado final después de asignación:')
+    debugReactiveStates()
     
   } catch (error) {
-    console.error('❌ Error cargando prueba de entrega:', error)
+    console.error('❌ Error en showProofOfDelivery:', error)
     
     // Cerrar modal en caso de error
-    showProofModal.value = false
-    selectedProofOrder.value = null
+    if (showProofModal && typeof showProofModal.value !== 'undefined') {
+      showProofModal.value = false
+    }
     
-    toast.error('No se pudo cargar la información de la entrega')
+    if (selectedProofOrder && typeof selectedProofOrder.value !== 'undefined') {
+      selectedProofOrder.value = null
+    }
+    
+    alert(`Error cargando prueba de entrega: ${error.message}`)
     
   } finally {
-    loadingOrderDetails.value = false
+    if (loadingOrderDetails && typeof loadingOrderDetails.value !== 'undefined') {
+      loadingOrderDetails.value = false
+      console.log('✅ loadingOrderDetails = false')
+    }
+    
+    console.log('📸 === FIN showProofOfDelivery ===')
   }
 }
+
+function verifyComposable() {
+  console.log('🔍 === VERIFICANDO COMPOSABLE useOrdersModals ===')
+  
+  try {
+    const composableResult = useOrdersModals()
+    
+    console.log('📦 Composable retorna:', {
+      keys: Object.keys(composableResult),
+      hasShowProofModal: 'showProofModal' in composableResult,
+      hasSelectedProofOrder: 'selectedProofOrder' in composableResult,
+      hasLoadingOrderDetails: 'loadingOrderDetails' in composableResult,
+      showProofModalType: typeof composableResult.showProofModal,
+      selectedProofOrderType: typeof composableResult.selectedProofOrder
+    })
+    
+    if (!composableResult.showProofModal) {
+      console.error('❌ El composable no está retornando showProofModal')
+    }
+    
+    if (!composableResult.selectedProofOrder) {
+      console.error('❌ El composable no está retornando selectedProofOrder')
+    }
+    
+    return composableResult
+    
+  } catch (error) {
+    console.error('❌ Error verificando composable:', error)
+  }
+}
+
 async function showProofOfDeliveryFallback(order) {
   console.log('📸 Método alternativo para prueba de entrega:', order.order_number)
   
@@ -1471,7 +1568,24 @@ onMounted(async () => {
         await driverAssignment.fetchAvailableDrivers()
       }
     }
+    console.log('🚀 UnifiedOrdersView montado')
+  
+  // Verificar composable
+  verifyComposable()
+  
+  // Hacer funciones disponibles globalmente para debugging
+  if (import.meta.env.DEV) {
+    window.debugModalStates = debugReactiveStates
+    window.testModal = testModalManually
+    window.emergencyModal = emergencyModalSolution
+    window.verifyComposable = verifyComposable
     
+    console.log('🛠️ Funciones de debugging disponibles:')
+    console.log('- window.debugModalStates()')
+    console.log('- window.testModal()')
+    console.log('- window.emergencyModal(order)')
+    console.log('- window.verifyComposable()')
+  }
   } catch (error) {
     console.error('❌ Error cargando datos iniciales:', error)
     toast.error('Error al cargar los datos iniciales')
@@ -1858,6 +1972,50 @@ function setupGlobalErrorHandling() {
     handleError(event.error, 'JavaScript')
   })
 }
+
+
+
+function debugReactiveStates() {
+  console.log('🔍 Verificando estados reactivos:', {
+    showProofModal: {
+      exists: typeof showProofModal !== 'undefined',
+      isRef: showProofModal && typeof showProofModal.value !== 'undefined',
+      value: showProofModal?.value,
+      type: typeof showProofModal
+    },
+    selectedProofOrder: {
+      exists: typeof selectedProofOrder !== 'undefined',
+      isRef: selectedProofOrder && typeof selectedProofOrder.value !== 'undefined',
+      value: selectedProofOrder?.value?.order_number || 'null',
+      type: typeof selectedProofOrder
+    },
+    loadingOrderDetails: {
+      exists: typeof loadingOrderDetails !== 'undefined',
+      isRef: loadingOrderDetails && typeof loadingOrderDetails.value !== 'undefined',
+      value: loadingOrderDetails?.value,
+      type: typeof loadingOrderDetails
+    }
+  })
+}
+
+/**
+ * 🔍 PASO 2: WATCHERS PARA DETECTAR CAMBIOS
+ */
+if (import.meta.env.DEV) {
+  // Observar cambios en showProofModal
+  watch(() => showProofModal?.value, (newVal, oldVal) => {
+    console.log('👀 showProofModal cambió:', { from: oldVal, to: newVal })
+  }, { immediate: true })
+
+  // Observar cambios en selectedProofOrder
+  watch(() => selectedProofOrder?.value, (newVal, oldVal) => {
+    console.log('👀 selectedProofOrder cambió:', { 
+      from: oldVal?.order_number || 'null', 
+      to: newVal?.order_number || 'null' 
+    })
+  }, { immediate: true })
+}
+
 
 // Configurar manejo de errores en mount
 onMounted(() => {
