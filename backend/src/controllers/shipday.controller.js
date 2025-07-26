@@ -603,23 +603,24 @@ case 'READY_TO_DELIVER':        // Por si acaso viene sin el prefijo
 
 
   // NUEVO: Registrar entrega en historial de conductores
-  try {
-    const carrierInfo = webhookData.carrier || webhookData.order?.carrier;
-    if (carrierInfo) {
-      await DriverHistoryService.recordDelivery(order, {
-        driver_id: carrierInfo.id || carrierInfo.driver_id,
-        driver_email: carrierInfo.email || 'sin-email@conductor.com',
-        driver_name: carrierInfo.name || 'Conductor'
-      });
-      
-      console.log(`💰 Entrega registrada en historial: ${order.order_number} - $1700`);
-    } else {
-      console.warn('⚠️ No se encontró información del conductor en el webhook');
-    }
-  } catch (historyError) {
-    console.error('❌ Error registrando en historial:', historyError);
-    // No fallar el webhook por esto, solo logear el error
+try {
+  const carrierInfo = webhookData.carrier || webhookData.order?.carrier;
+  if (carrierInfo) {
+    await DriverHistoryService.recordDelivery(order, {
+      driver_id: carrierInfo.id || carrierInfo.driver_id,
+      driver_email: carrierInfo.email || 'sin-email@conductor.com',
+      driver_name: carrierInfo.name || 'Conductor',
+      payment_period: 'weekly' // ✅ Agregar payment_period requerido
+    });
+    
+    console.log(`💰 Entrega registrada en historial: ${order.order_number} - $1700`);
+  } else {
+    console.warn('⚠️ No se encontró información del conductor en el webhook');
   }
+} catch (historyError) {
+  console.error('❌ Error registrando en historial:', historyError);
+  // No fallar el webhook por esto, solo logear el error
+}
   break;
   // ELIMINAR casos de assigned y out_for_delivery
 }

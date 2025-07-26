@@ -176,7 +176,7 @@ class ShipDayService {
         deliveryInstruction: orderData.deliveryInstruction || '',
         deliveryFee: parseFloat(orderData.deliveryFee) || 1800,
         total: parseFloat(orderData.total) || 1,
-        paymentMethod: "cash"
+        paymentMethod: "credit_card",
       };
 
       const headers = this.getHeaders();

@@ -22,6 +22,9 @@ class NotificationService {
   /**
  * Extraer ID de Shipday de la URL de tracking y construir URL personalizada
  */
+/**
+ * Extraer ID de Shipday de la URL de tracking y construir URL personalizada
+ */
 extractShipdayIdAndBuildUrl(webhookData, order) {
   let shipdayTrackingId = null;
   
@@ -37,7 +40,6 @@ extractShipdayIdAndBuildUrl(webhookData, order) {
   
   // Si no se encontró, intentar desde el order.id del webhook
   if (!shipdayTrackingId && webhookData.order?.id) {
-    // Usar el ID directo de la orden
     shipdayTrackingId = webhookData.order.id;
     console.log(`🔗 Usando order.id como ID: ${shipdayTrackingId}`);
   }
@@ -48,9 +50,9 @@ extractShipdayIdAndBuildUrl(webhookData, order) {
     console.log(`🔗 Usando shipday_order_id guardado: ${shipdayTrackingId}`);
   }
   
-  // Construir URL personalizada
+  // Construir URL personalizada CON IDIOMA ESPAÑOL
   if (shipdayTrackingId) {
-    return `https://www.ordertracking.io/enviGo/delivery/${shipdayTrackingId}`;
+    return `https://www.ordertracking.io/enviGo/delivery/${shipdayTrackingId}&lang=es`;
   }
   
   // Fallback a tu frontend

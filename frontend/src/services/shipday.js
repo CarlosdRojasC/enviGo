@@ -237,11 +237,10 @@ export const shipdayService = {
       restaurantPhone: formData.restaurantPhone?.trim() || '',
       deliveryInstruction: formData.deliveryInstruction?.trim() || '',
       deliveryFee: parseFloat(formData.deliveryFee) || 0,
-      tips: parseFloat(formData.tips) || 0,
       tax: parseFloat(formData.tax) || 0,
       discount: parseFloat(formData.discount) || 0,
       total: parseFloat(formData.total) || 0,
-      paymentMethod: formData.paymentMethod || 'CASH',
+      paymentMethod: formData.paymentMethod || 'credit_card',
       orderItems: formData.orderItems || [],
       expectedPickupTime: formData.expectedPickupTime || null,
       expectedDeliveryTime: formData.expectedDeliveryTime || null
