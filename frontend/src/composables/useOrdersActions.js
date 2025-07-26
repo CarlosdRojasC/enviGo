@@ -121,11 +121,22 @@ export function useOrdersActions(newOrder, isCreatingOrder, fetchOrders) {
       
       // Get company channels
       const channelsResponse = await apiService.channels.getByCompany(newOrder.value.company_id)
-      console.log('📡 Channels response:', channelsResponse)
-      if (!channelsResponse.data || channelsResponse.data.length === 0) {
-        toast.warning('La empresa seleccionada no tiene canales configurados. Configure uno primero.')
-        return false
-      }
+console.log('📡 Channels response:', channelsResponse)
+
+// ✅ EXTRAER CANALES CORRECTAMENTE
+let channels = []
+if (channelsResponse?.data?.data && Array.isArray(channelsResponse.data.data)) {
+  channels = channelsResponse.data.data
+} else if (channelsResponse?.data && Array.isArray(channelsResponse.data)) {
+  channels = channelsResponse.data
+}
+
+console.log('📡 Extracted channels:', channels)
+
+if (!channels || channels.length === 0) {
+  toast.warning('La empresa seleccionada no tiene canales configurados. Configure uno primero.')
+  return false
+}
       
       // Prepare order data
       const orderData = {
