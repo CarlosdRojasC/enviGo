@@ -267,6 +267,14 @@
   </div>
 </template>
 <script setup>
+
+console.log('🔍 UnifiedOrdersView - Estado inicial:', {
+  isAdmin: isAdmin.value,
+  user: auth.user,
+  companies: companies?.value || 'UNDEFINED',
+  companiesType: typeof companies
+})
+
 // ==================== IMPORTS ====================
 import { ref, computed, onMounted, onBeforeUnmount, onUnmounted, watch, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
@@ -1358,6 +1366,14 @@ function handleError(error, context = 'Operación') {
 // ==================== LIFECYCLE ====================
 
 onMounted(async () => {
+
+    console.log('🔍 Datos cargados:', {
+    companies: companies?.value,
+    companiesCount: companies?.value?.length,
+    bulkUpload: !!bulkUpload,
+    ordersActions: !!ordersActions,
+    driverAssignment: !!driverAssignment
+  })
   console.log(`🚀 UnifiedOrdersView montada para ${isAdmin.value ? 'ADMIN' : 'CLIENTE'}`)
   
   try {
