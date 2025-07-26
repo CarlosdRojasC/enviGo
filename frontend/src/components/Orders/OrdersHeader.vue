@@ -263,14 +263,14 @@ function formatLastUpdate(timestamp) {
 </script>
 
 <style scoped>
-
+/* ==================== ORDERS HEADER BASE ==================== */
 .orders-header {
-  background: var(--envigo-gradient);
+  background: linear-gradient(135deg, #8BC53F 0%, #A4D65E 100%);
   border-radius: 16px;
   padding: 24px;
   margin-bottom: 24px;
   color: white;
-  box-shadow: var(--envigo-shadow-green);
+  box-shadow: 0 10px 25px rgba(139, 197, 63, 0.2);
   position: relative;
   overflow: hidden;
 }
@@ -286,7 +286,7 @@ function formatLastUpdate(timestamp) {
   pointer-events: none;
 }
 
-/* Header Top */
+/* ==================== HEADER TOP SECTION ==================== */
 .header-top {
   display: flex;
   justify-content: space-between;
@@ -323,7 +323,7 @@ function formatLastUpdate(timestamp) {
   font-weight: 400;
 }
 
-/* Actions */
+/* ==================== HEADER ACTIONS ==================== */
 .header-actions {
   display: flex;
   gap: 12px;
@@ -379,6 +379,10 @@ function formatLastUpdate(timestamp) {
   transform: none;
 }
 
+.action-btn:active {
+  transform: translateY(0) !important;
+}
+
 .refresh-btn {
   background: rgba(255, 255, 255, 0.15);
   color: white;
@@ -394,14 +398,14 @@ function formatLastUpdate(timestamp) {
 }
 
 .create-btn {
-  background: var(--envigo-accent);
+  background: #6BA428;
   color: white;
-  border-color: var(--envigo-accent);
+  border-color: #6BA428;
 }
 
 .create-btn:hover:not(:disabled) {
-  background: var(--envigo-primary-dark);
-  border-color: var(--envigo-primary-dark);
+  background: #7AB32E;
+  border-color: #7AB32E;
 }
 
 .btn-icon {
@@ -412,7 +416,7 @@ function formatLastUpdate(timestamp) {
   font-weight: 600;
 }
 
-/* Stats Grid */
+/* ==================== STATS GRID ==================== */
 .stats-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -451,19 +455,48 @@ function formatLastUpdate(timestamp) {
   border-color: rgba(255, 255, 255, 0.35);
 }
 
+.stat-card:hover .stat-icon {
+  transform: scale(1.1);
+  transition: transform 0.3s ease;
+}
+
+.stat-card:hover .stat-number {
+  transform: scale(1.05);
+  transition: transform 0.3s ease;
+}
+
 .stat-card.primary {
   background: rgba(255, 255, 255, 0.25);
   border: 2px solid rgba(255, 255, 255, 0.4);
   grid-column: span 2;
 }
 
-.stat-card.warning { border-left: 4px solid #f59e0b; }
-.stat-card.info { border-left: 4px solid #3b82f6; }
-.stat-card.purple { border-left: 4px solid #8b5cf6; }
-.stat-card.success { border-left: 4px solid var(--envigo-accent); }
-.stat-card.revenue { border-left: 4px solid #f59e0b; }
-.stat-card.performance { border-left: 4px solid var(--envigo-secondary); }
+/* ==================== STAT CARD TYPES ==================== */
+.stat-card.warning { 
+  border-left: 4px solid #f59e0b; 
+}
 
+.stat-card.info { 
+  border-left: 4px solid #3b82f6; 
+}
+
+.stat-card.purple { 
+  border-left: 4px solid #8b5cf6; 
+}
+
+.stat-card.success { 
+  border-left: 4px solid #6BA428; 
+}
+
+.stat-card.revenue { 
+  border-left: 4px solid #f59e0b; 
+}
+
+.stat-card.performance { 
+  border-left: 4px solid #A4D65E; 
+}
+
+/* ==================== STAT CARD CONTENT ==================== */
 .stat-header {
   display: flex;
   align-items: center;
@@ -533,7 +566,7 @@ function formatLastUpdate(timestamp) {
   border: 1px solid rgba(255, 255, 255, 0.2);
 }
 
-/* Progress Bar */
+/* ==================== PROGRESS BAR ==================== */
 .progress-bar {
   width: 100%;
   height: 4px;
@@ -551,7 +584,7 @@ function formatLastUpdate(timestamp) {
   box-shadow: 0 0 8px rgba(255, 255, 255, 0.3);
 }
 
-/* Update Info */
+/* ==================== UPDATE INFO ==================== */
 .update-info {
   display: flex;
   justify-content: space-between;
@@ -598,7 +631,7 @@ function formatLastUpdate(timestamp) {
   animation: rotate 2s linear infinite;
 }
 
-/* Animations */
+/* ==================== ANIMATIONS ==================== */
 @keyframes shimmer {
   0% { transform: translateX(-100%); }
   100% { transform: translateX(100%); }
@@ -609,20 +642,54 @@ function formatLastUpdate(timestamp) {
   to { transform: rotate(360deg); }
 }
 
-/* Responsive */
+/* ==================== RESPONSIVE DESIGN ==================== */
+
+/* Tablet - 1024px and down */
 @media (max-width: 1024px) {
+  .orders-header {
+    padding: 20px;
+  }
+  
   .stats-grid {
     grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 14px;
   }
   
   .stat-card.primary {
     grid-column: span 1;
   }
+  
+  .stat-card {
+    padding: 18px;
+  }
+  
+  .page-title {
+    font-size: 28px;
+  }
+  
+  .title-icon {
+    font-size: 32px;
+  }
+  
+  .action-btn {
+    min-width: 110px;
+    padding: 10px 18px;
+  }
+  
+  .stat-number {
+    font-size: 26px;
+  }
+  
+  .stat-card.primary .stat-number {
+    font-size: 32px;
+  }
 }
 
+/* Mobile Landscape - 768px and down */
 @media (max-width: 768px) {
   .orders-header {
     padding: 20px;
+    border-radius: 12px;
   }
   
   .header-top {
@@ -633,15 +700,26 @@ function formatLastUpdate(timestamp) {
   
   .header-actions {
     justify-content: center;
+    flex-wrap: wrap;
   }
   
   .action-btn {
     min-width: 100px;
     padding: 10px 16px;
+    flex: 1;
+    max-width: 140px;
   }
   
   .page-title {
     font-size: 24px;
+  }
+  
+  .title-icon {
+    font-size: 28px;
+  }
+  
+  .page-subtitle {
+    font-size: 14px;
   }
   
   .stats-grid {
@@ -657,25 +735,295 @@ function formatLastUpdate(timestamp) {
     font-size: 24px;
   }
   
+  .stat-card.primary .stat-number {
+    font-size: 28px;
+  }
+  
+  .stat-icon {
+    font-size: 18px;
+  }
+  
+  .stat-label {
+    font-size: 13px;
+  }
+  
+  .stat-percentage,
+  .stat-detail {
+    font-size: 11px;
+  }
+  
   .update-info {
     flex-direction: column;
     gap: 12px;
     align-items: flex-start;
   }
+  
+  .auto-refresh-btn {
+    align-self: center;
+  }
 }
 
+/* Mobile Portrait - 480px and down */
 @media (max-width: 480px) {
+  .orders-header {
+    padding: 16px;
+    margin-bottom: 16px;
+  }
+  
+  .header-top {
+    gap: 12px;
+  }
+  
+  .page-title {
+    font-size: 20px;
+  }
+  
+  .title-icon {
+    font-size: 24px;
+  }
+  
+  .page-subtitle {
+    font-size: 13px;
+  }
+  
   .stats-grid {
     grid-template-columns: 1fr;
+    gap: 10px;
+  }
+  
+  .stat-card {
+    padding: 14px;
+  }
+  
+  .stat-number {
+    font-size: 22px;
+  }
+  
+  .stat-card.primary .stat-number {
+    font-size: 26px;
   }
   
   .header-actions {
     flex-direction: column;
     width: 100%;
+    gap: 8px;
   }
   
   .action-btn {
     width: 100%;
+    max-width: none;
+    padding: 12px 16px;
+  }
+  
+  .update-info {
+    padding-top: 12px;
+    font-size: 12px;
+  }
+  
+  .auto-refresh-btn {
+    padding: 4px 8px;
+    font-size: 11px;
+  }
+}
+
+/* Small Mobile - 320px and down */
+@media (max-width: 320px) {
+  .orders-header {
+    padding: 12px;
+    border-radius: 8px;
+  }
+  
+  .page-title {
+    font-size: 18px;
+    gap: 8px;
+  }
+  
+  .title-icon {
+    font-size: 20px;
+  }
+  
+  .action-btn {
+    padding: 10px 12px;
+    font-size: 13px;
+    min-width: auto;
+  }
+  
+  .btn-text {
+    font-size: 12px;
+  }
+  
+  .stat-card {
+    padding: 12px;
+  }
+  
+  .stat-number {
+    font-size: 20px;
+  }
+  
+  .stat-card.primary .stat-number {
+    font-size: 24px;
+  }
+  
+  .stat-icon {
+    font-size: 16px;
+  }
+  
+  .stat-label {
+    font-size: 12px;
+  }
+  
+  .stat-percentage,
+  .stat-detail {
+    font-size: 10px;
+  }
+}
+
+/* ==================== LANDSCAPE ORIENTATION ==================== */
+@media (max-height: 500px) and (orientation: landscape) {
+  .orders-header {
+    padding: 16px;
+  }
+  
+  .header-top {
+    margin-bottom: 16px;
+  }
+  
+  .page-title {
+    font-size: 24px;
+  }
+  
+  .stats-grid {
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  
+  .stat-card {
+    padding: 14px;
+  }
+  
+  .update-info {
+    padding-top: 12px;
+  }
+}
+
+/* ==================== HIGH DPI DISPLAYS ==================== */
+@media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+  .orders-header {
+    box-shadow: 0 10px 25px rgba(139, 197, 63, 0.25);
+  }
+  
+  .stat-card:hover {
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  }
+}
+
+/* ==================== DARK MODE SUPPORT ==================== */
+@media (prefers-color-scheme: dark) {
+  .orders-header {
+    box-shadow: 0 10px 25px rgba(139, 197, 63, 0.3);
+  }
+  
+  .stat-card {
+    background: rgba(255, 255, 255, 0.1);
+  }
+  
+  .stat-card:hover {
+    background: rgba(255, 255, 255, 0.15);
+  }
+}
+
+/* ==================== REDUCED MOTION ==================== */
+@media (prefers-reduced-motion: reduce) {
+  .orders-header,
+  .stat-card,
+  .action-btn,
+  .auto-refresh-btn {
+    transition: none;
+  }
+  
+  .stat-card::before {
+    animation: none;
+  }
+  
+  .refresh-icon.animate {
+    animation: none;
+  }
+  
+  .stat-card:hover .stat-icon,
+  .stat-card:hover .stat-number {
+    transform: none;
+  }
+}
+
+/* ==================== PRINT STYLES ==================== */
+@media print {
+  .orders-header {
+    background: #8BC53F !important;
+    box-shadow: none;
+    break-inside: avoid;
+  }
+  
+  .orders-header::before {
+    display: none;
+  }
+  
+  .header-actions {
+    display: none;
+  }
+  
+  .auto-refresh-btn {
+    display: none;
+  }
+  
+  .stat-card {
+    background: rgba(139, 197, 63, 0.1) !important;
+    border: 1px solid #8BC53F !important;
+  }
+  
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* ==================== ACCESSIBILITY IMPROVEMENTS ==================== */
+@media (prefers-contrast: high) {
+  .orders-header {
+    background: linear-gradient(135deg, #7AB32E 0%, #8BC53F 100%);
+  }
+  
+  .stat-card {
+    border: 2px solid rgba(255, 255, 255, 0.5);
+  }
+  
+  .action-btn {
+    border: 2px solid rgba(255, 255, 255, 0.5);
+  }
+}
+
+/* ==================== FOCUS STATES ==================== */
+.action-btn:focus,
+.auto-refresh-btn:focus {
+  outline: 2px solid rgba(255, 255, 255, 0.8);
+  outline-offset: 2px;
+}
+
+.stat-card:focus-within {
+  outline: 2px solid rgba(255, 255, 255, 0.6);
+  outline-offset: 2px;
+}
+
+/* ==================== HOVER STATES FOR NON-TOUCH DEVICES ==================== */
+@media (hover: hover) and (pointer: fine) {
+  .action-btn:hover {
+    transform: translateY(-2px);
+  }
+  
+  .stat-card:hover {
+    transform: translateY(-4px);
+  }
+  
+  .auto-refresh-btn:hover {
+    transform: translateY(-1px);
   }
 }
 </style>
