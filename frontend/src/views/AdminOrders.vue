@@ -124,8 +124,6 @@ import { useRoute, useRouter } from 'vue-router'
 import { useToast } from 'vue-toastification'
 import { emitter } from '../services/eventBus.service'
 import { useAuthStore } from '../store/auth'
-import { logger } from '../services/logger.service'
-
 // Composables
 import { useOrdersData } from '../composables/useOrdersData'
 import { useOrdersFilters } from '../composables/useOrdersFilters'
@@ -333,15 +331,6 @@ const selectionSummary = computed(() => {
     communes
   }
 })
-const filteredCommunes = computed(() => {
-  const currentSelection = Array.isArray(filters.value.shipping_commune) 
-    ? filters.value.shipping_commune 
-    : []
-  
-  return availableCommunes.value.filter(commune =>
-    !currentSelection.includes(commune)
-  ).sort()
-})
 
 // ==================== WATCHERS ====================
 
@@ -350,9 +339,6 @@ const filteredCommunes = computed(() => {
  */
 watch(() => route.query, (newQuery) => {
   if (isInitialLoad.value && newQuery.company_id) {
-    logger.dev('[AdminOrders] 🔄 Setting initial filter from route:', {
-      company_id: newQuery.company_id
-    })
     setFilter('company_id', newQuery.company_id)
   }
 }, { immediate: true })
@@ -372,7 +358,6 @@ watch(filters, (newFilters) => {
     }
   })
   
-  logger.debug('[AdminOrders] 📍 Updating URL query params:', logger.sanitize(query))
   router.replace({ query })
 }, { deep: true })
 
@@ -380,93 +365,16 @@ watch(filters, (newFilters) => {
  * Cleanup selection when orders change
  */
 watch(orders, () => {
-  logger.debug('[AdminOrders] 📋 Orders updated, cleaning up selection')
   cleanupSelection()
 })
 
-watch(() => companies.value, (newCompanies) => {
-  logger.dev('[AdminOrders] 🏢 Companies updated:', {
-    count: newCompanies.length,
-    companies: newCompanies.map(c => ({ id: c._id, name: c.name }))
-  })
-}, { immediate: true })
-
-// Watch para debug de channels
-watch(() => channels.value, (newChannels) => {
-  logger.dev('[AdminOrders] 🏪 Channels updated:', {
-    count: newChannels.length,
-    channels: newChannels.map(c => ({ 
-      id: c._id, 
-      name: c.channel_name, 
-      type: c.channel_type,
-      company: c.company_name || c.company_id 
-    }))
-  })
-}, { immediate: true })
-
-// Watch para debug de communes
-watch(() => availableCommunes.value, (newCommunes) => {
-  logger.dev('[AdminOrders] 🏘️ Available communes updated:', {
-    count: newCommunes.length,
-    communes: newCommunes.slice(0, 10) // Mostrar solo las primeras 10
-  })
-}, { immediate: true })
-
-// ==================== FUNCIÓN DE DEBUG MANUAL ====================
-function debugCurrentState() {
-  logger.group('[AdminOrders] 🔍 Current State Debug')
-  
-  logger.dev('User:', {
-    isAdmin: auth.isAdmin,
-    role: auth.user?.role,
-    company: auth.user?.company_id
-  })
-  
-  logger.dev('Companies:', {
-    loaded: companies.value.length > 0,
-    count: companies.value.length,
-    data: companies.value
-  })
-  
-  logger.dev('Channels:', {
-    loaded: channels.value.length > 0,
-    count: channels.value.length,
-    data: channels.value
-  })
-  
-  logger.dev('Available Communes:', {
-    loaded: availableCommunes.value.length > 0,
-    count: availableCommunes.value.length,
-    data: availableCommunes.value.slice(0, 10)
-  })
-  
-  logger.dev('Current Filters:', logger.sanitize(filters.value))
-  
-  logger.dev('Loading States:', {
-    orders: loadingOrders.value,
-    initial: isInitialLoad.value
-  })
-  
-  logger.groupEnd()
-}
-
-// Exponer función de debug globalmente en desarrollo
-if (import.meta.env.DEV) {
-  window.debugAdminOrders = debugCurrentState
-}
-
-// Llamar debug después de 3 segundos
-setTimeout(() => {
-  logger.dev('[AdminOrders] 🕒 Debug automático después de 3 segundos:')
-  debugCurrentState()
-}, 3000)
-
 // ==================== METHODS ====================
+
 
 const handleOpenModalFromGlobalSearch = async (orderId) => {
   if (!orderId) return;
   
-  logger.dev(`[AdminOrders] 🔍 Event received: open-order-details with ID: ${orderId}`)
+  console.log(`Event received: open-order-details with ID: ${orderId}`);
   
   try {
     // Podrías poner un spinner aquí si quisieras
@@ -476,17 +384,14 @@ const handleOpenModalFromGlobalSearch = async (orderId) => {
     openOrderDetailsModal(response.data);
 
   } catch (error) {
-    logger.error('[AdminOrders] ❌ Error buscando detalles del pedido desde el header:', error)
+    console.error('Error buscando detalles del pedido desde el header:', error);
     toast.error('No se pudo encontrar el pedido seleccionado.');
   }
 };
-
 /**
  * Handle quick actions from header
  */
 function handleQuickAction(action) {
-  logger.dev(`[AdminOrders] ⚡ Quick action triggered: ${action}`)
-  
   switch (action) {
     case 'refresh':
       refreshOrders()
@@ -524,7 +429,7 @@ function handleQuickAction(action) {
       break
       
     default:
-      logger.warn('[AdminOrders] ⚠️ Acción rápida no implementada:', action)
+      console.log('Acción rápida no implementada:', action)
   }
 }
 
@@ -532,11 +437,8 @@ function handleQuickAction(action) {
  * Handle bulk status change
  */
 async function handleBulkStatusChange(newStatus) {
-  logger.process(`[AdminOrders] 🔄 Starting bulk status change to: ${newStatus}`)
-  
   const validation = validateSelection()
   if (!validation.valid) {
-    logger.warn('[AdminOrders] ⚠️ Selection validation failed:', validation.message)
     toast.error(validation.message)
     return
   }
@@ -546,10 +448,7 @@ async function handleBulkStatusChange(newStatus) {
     `¿Cambiar estado de ${selectedOrders.value.length} pedidos a "${statusName}"?`
   )
   
-  if (!confirmed) {
-    logger.dev('[AdminOrders] ❌ Bulk status change cancelled by user')
-    return
-  }
+  if (!confirmed) return
 
   try {
     // Implementation would depend on your API
@@ -559,12 +458,11 @@ async function handleBulkStatusChange(newStatus) {
     )
     
     await Promise.all(promises)
-    logger.success(`[AdminOrders] ✅ Bulk status updated for ${selectedOrders.value.length} orders`)
     toast.success(`Estado actualizado para ${selectedOrders.value.length} pedidos`)
     clearSelection()
     
   } catch (error) {
-    logger.error('[AdminOrders] ❌ Error in bulk status change:', error)
+    console.error('Error in bulk status change:', error)
     toast.error('Error al cambiar estado masivo')
   }
 }
@@ -574,12 +472,10 @@ async function handleBulkStatusChange(newStatus) {
  */
 function handleBulkExport() {
   if (selectedOrders.value.length === 0) {
-    logger.warn('[AdminOrders] ⚠️ Attempted export with no orders selected')
     toast.warning('Selecciona pedidos para exportar')
     return
   }
 
-  logger.process(`[AdminOrders] 📤 Exporting ${selectedOrders.value.length} orders`)
   const orderIds = selectedOrders.value
   exportOrders({ order_ids: orderIds })
 }
@@ -589,12 +485,10 @@ function handleBulkExport() {
  */
 function handleBulkPrint() {
   if (selectedOrders.value.length === 0) {
-    logger.warn('[AdminOrders] ⚠️ Attempted print with no orders selected')
     toast.warning('Selecciona pedidos para imprimir')
     return
   }
 
-  logger.dev(`[AdminOrders] 🖨️ Print requested for ${selectedOrders.value.length} orders`)
   // Implementation for printing labels
   toast.info('Función de impresión en desarrollo')
 }
@@ -603,7 +497,7 @@ function handleBulkPrint() {
  * Handle errors globally
  */
 function handleError(error, context = 'Operación') {
-  logger.error(`[AdminOrders] ❌ Error en ${context}:`, error)
+  console.error(`Error en ${context}:`, error)
   
   let message = `Error en ${context.toLowerCase()}`
   
@@ -620,11 +514,9 @@ function handleError(error, context = 'Operación') {
  * Refresh data periodically (optional)
  */
 function startPeriodicRefresh() {
-  logger.dev('[AdminOrders] ⏰ Starting periodic refresh (5 min intervals)')
   // Refresh every 5 minutes
   setInterval(() => {
     if (!document.hidden) {
-      logger.dev('[AdminOrders] 🔄 Periodic refresh triggered')
       refreshOrders()
     }
   }, 5 * 60 * 1000)
@@ -637,7 +529,6 @@ function handleKeyboardShortcuts(event) {
   // Ctrl/Cmd + R: Refresh
   if ((event.ctrlKey || event.metaKey) && event.key === 'r') {
     event.preventDefault()
-    logger.dev('[AdminOrders] ⌨️ Keyboard shortcut: Refresh')
     refreshOrders()
     return
   }
@@ -647,10 +538,8 @@ function handleKeyboardShortcuts(event) {
     if (showOrderDetailsModal.value || showCreateOrderModal.value || 
         showBulkUploadModal.value || showAssignModal.value || 
         showBulkAssignModal.value || showUpdateStatusModal.value) {
-      logger.dev('[AdminOrders] ⌨️ Keyboard shortcut: Close modals (ESC)')
       closeAllModals()
     } else if (selectedOrders.value.length > 0) {
-      logger.dev('[AdminOrders] ⌨️ Keyboard shortcut: Clear selection (ESC)')
       clearSelection()
     }
   }
@@ -658,11 +547,9 @@ function handleKeyboardShortcuts(event) {
   // Ctrl/Cmd + A: Select all
   if ((event.ctrlKey || event.metaKey) && event.key === 'a') {
     event.preventDefault()
-    logger.dev('[AdminOrders] ⌨️ Keyboard shortcut: Select all')
     toggleSelectAll()
   }
 }
-
 /**
  * ⚡ ACTUALIZACIÓN AUTOMÁTICA EN TIEMPO REAL
  * Maneja las actualizaciones de órdenes via WebSocket
@@ -670,7 +557,7 @@ function handleKeyboardShortcuts(event) {
 function handleOrderUpdate(event) {
   const { orderId, orderNumber, newStatus, eventType, companyId } = event.detail
   
-  logger.process('[AdminOrders] 🔄 Actualizando orden en tiempo real:', {
+  console.log('🔄 [AdminOrders] Actualizando orden en tiempo real:', {
     orderNumber,
     newStatus,
     eventType,
@@ -716,7 +603,7 @@ function handleOrderUpdate(event) {
     lastUpdateTime.value = new Date()
     
     // Log para debugging
-    logger.success(`[AdminOrders] ✅ Orden ${orderNumber} actualizada localmente:`, {
+    console.log(`✅ [AdminOrders] Orden ${orderNumber} actualizada localmente:`, {
       newStatus: existingOrder.status,
       eventType,
       timestamp: existingOrder.updated_at
@@ -727,11 +614,11 @@ function handleOrderUpdate(event) {
     
   } else {
     // ❓ Orden no encontrada en la lista actual
-    logger.debug(`[AdminOrders] 🔄 Orden ${orderNumber} no encontrada en lista actual`)
+    console.log(`🔄 [AdminOrders] Orden ${orderNumber} no encontrada en lista actual`)
     
     // Verificar si la orden debería estar en la lista actual según filtros
     if (shouldOrderBeInCurrentView(companyId, newStatus)) {
-      logger.process('[AdminOrders] 📥 Orden debería estar en vista actual, recargando...')
+      console.log('📥 [AdminOrders] Orden debería estar en vista actual, recargando...')
       refreshOrders()
     }
   }
@@ -775,7 +662,7 @@ function showOrderUpdateIndicator(orderId) {
 async function refreshPendingUpdates() {
   if (pendingUpdates.value.size === 0) return
   
-  logger.process(`[AdminOrders] 🔄 Refrescando ${pendingUpdates.value.size} órdenes con actualizaciones pendientes`)
+  console.log(`🔄 [AdminOrders] Refrescando ${pendingUpdates.value.size} órdenes con actualizaciones pendientes`)
   
   try {
     // Obtener detalles actualizados de las órdenes pendientes
@@ -789,7 +676,7 @@ async function refreshPendingUpdates() {
     pendingUpdates.value.clear()
     
   } catch (error) {
-    logger.error('[AdminOrders] ❌ Error refrescando actualizaciones pendientes:', error)
+    console.error('❌ [AdminOrders] Error refrescando actualizaciones pendientes:', error)
   }
 }
 
@@ -800,35 +687,30 @@ function toggleAutoRefresh() {
   autoRefreshEnabled.value = !autoRefreshEnabled.value
   
   if (autoRefreshEnabled.value) {
-    logger.success('[AdminOrders] 🔄 Actualización automática activada')
     toast.success('🔄 Actualización automática activada')
   } else {
-    logger.info('[AdminOrders] ⏸️ Actualización automática pausada')
     toast.info('⏸️ Actualización automática pausada')
   }
 }
-
 /**
  * handleOpenBulkAssignModal
  */
 function handleOpenBulkAssignModal() {
-  logger.dev('[AdminOrders] 📋 Solicitando apertura de modal masivo...')
+  console.log('Solicitando apertura de modal masivo...');
   fetchAvailableDrivers(); // Carga los conductores
   openBulkAssignModal();   // Abre el modal
 }
-
 /**
  * Orquesta la apertura del modal de asignación individual
  */
 function handleOpenAssignModal(order) {
-  logger.dev('[AdminOrders] 👤 Solicitando apertura de modal individual...')
+  console.log('Solicitando apertura de modal individual...');
   fetchAvailableDrivers(); // Carga los conductores
   openAssignModal(order);  // Abre el modal con el pedido correcto
 }
-
 async function fetchChannelsManual() {
   try {
-    logger.process('[AdminOrders] 🏪 Fetching all channels for admin...')
+    console.log('🏪 [AdminOrders] Fetching all channels for admin...')
     
     // Admin obtiene todos los canales
     const { data } = await apiService.channels.getAll ? 
@@ -836,23 +718,22 @@ async function fetchChannelsManual() {
       await apiService.get('/channels')
     
     channels.value = data?.data || data || []
-    logger.success(`[AdminOrders] ✅ Channels loaded: ${channels.value.length}`)
+    console.log(`✅ [AdminOrders] Channels loaded: ${channels.value.length}`)
     
   } catch (error) {
-    logger.error('[AdminOrders] ❌ Error fetching channels:', error)
+    console.error('❌ [AdminOrders] Error fetching channels:', error)
     channels.value = []
   }
 }
-
 async function loadAllChannels() {
   try {
-    logger.process('[AdminOrders] 🏪 Loading all channels for admin...')
+    console.log('🏪 Loading all channels for admin...')
     
     if (auth.isAdmin) {
       // ✅ USAR EL ENDPOINT CORRECTO PARA ADMIN
       const response = await apiService.channels.getAllForAdmin()
       
-      logger.debug('[AdminOrders] 📡 Admin channels response:', logger.sanitize(response))
+      console.log('📡 Admin channels response:', response)
       
       // Manejar diferentes formatos de respuesta
       if (response.data?.data) {
@@ -863,11 +744,11 @@ async function loadAllChannels() {
         channels.value = []
       }
       
-      logger.success(`[AdminOrders] ✅ Admin channels loaded: ${channels.value.length}`)
+      console.log(`✅ Admin channels loaded: ${channels.value.length}`)
       
       // Debug estructura del primer canal
       if (channels.value.length > 0) {
-        logger.dev('[AdminOrders] 🔍 First channel structure:', {
+        console.log('🔍 First channel structure:', {
           _id: channels.value[0]._id,
           channel_name: channels.value[0].channel_name,
           channel_type: channels.value[0].channel_type,
@@ -881,8 +762,8 @@ async function loadAllChannels() {
     }
     
   } catch (error) {
-    logger.error('[AdminOrders] ❌ Error loading channels:', error)
-    logger.error('[AdminOrders] Error details:', {
+    console.error('❌ Error loading channels:', error)
+    console.error('Error details:', {
       status: error.response?.status,
       message: error.response?.data?.error || error.message,
       url: error.config?.url
@@ -892,15 +773,14 @@ async function loadAllChannels() {
     
     // Si falla el endpoint admin, intentar el método manual
     if (auth.isAdmin && error.response?.status === 404) {
-      logger.warn('[AdminOrders] ⚠️ Admin endpoint not found, trying manual method...')
+      console.log('⚠️ Admin endpoint not found, trying manual method...')
       await loadChannelsManual()
     }
   }
 }
-
 async function loadChannelsManual() {
   try {
-    logger.process('[AdminOrders] 🔄 Loading channels manually for each company...')
+    console.log('🔄 Loading channels manually for each company...')
     
     const allChannels = []
     
@@ -924,15 +804,15 @@ async function loadChannelsManual() {
         allChannels.push(...companyChannels)
         
       } catch (error) {
-        logger.warn(`[AdminOrders] ⚠️ Error loading channels for company ${company.name}:`, error)
+        console.warn(`⚠️ Error loading channels for company ${company.name}:`, error)
       }
     }
     
     channels.value = allChannels
-    logger.success(`[AdminOrders] ✅ Manual method loaded ${channels.value.length} total channels`)
+    console.log(`✅ Manual method loaded ${channels.value.length} total channels`)
     
   } catch (error) {
-    logger.error('[AdminOrders] ❌ Error with manual channel loading:', error)
+    console.error('❌ Error with manual channel loading:', error)
     channels.value = []
   }
 }
@@ -940,7 +820,7 @@ async function loadChannelsManual() {
 // ==================== LIFECYCLE ====================
 
 onMounted(async () => {
-  logger.process('[AdminOrders] 🚀 AdminOrders mounted, loading initial data...')
+  console.log('🚀 AdminOrders mounted, loading initial data...')
   
   try {
     isInitialLoad.value = true
@@ -963,7 +843,7 @@ onMounted(async () => {
       await fetchChannels()
     }
     
-    logger.success('[AdminOrders] ✅ Initial data loaded:', {
+    console.log('✅ Initial data loaded:', {
       companies: companies.value.length,
       channels: channels.value.length,
       orders: orders.value.length,
@@ -971,7 +851,7 @@ onMounted(async () => {
     })
     
   } catch (error) {
-    logger.error('[AdminOrders] ❌ Error loading initial data:', error)
+    console.error('❌ Error loading initial data:', error)
     toast.error('Error cargando datos iniciales')
   } finally {
     isInitialLoad.value = false
@@ -982,7 +862,7 @@ onMounted(async () => {
 onUnmounted(() => {
   document.removeEventListener('keydown', handleKeyboardShortcuts);
   // ⚡ NUEVO: Cleanup real-time listeners
-  logger.dev('[AdminOrders] 🧹 Limpiando listeners de tiempo real');
+  console.log('🧹 [AdminOrders] Limpiando listeners de tiempo real');
   window.removeEventListener('orderUpdated', handleOrderUpdate);
   emitter.off('open-order-details', handleOpenModalFromGlobalSearch);
 })
