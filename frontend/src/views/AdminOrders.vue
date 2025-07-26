@@ -276,7 +276,7 @@ const {
   getStatusName,
   getCommuneClass,
   debugOrder
-} = useOrdersActions(orders, newOrder, isCreatingOrder, fetchOrders)
+} = useOrdersActions(newOrder, isCreatingOrder, fetchOrders)
 
 
 // ==================== LOCAL STATE ====================
