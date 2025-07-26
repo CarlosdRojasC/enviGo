@@ -174,6 +174,7 @@ router.post('/:orderId/create-shipday', authenticateToken, isAdmin, async (req, 
   try {
     const { orderId } = req.params;
 
+    // ✅ CORRECCIÓN: Incluir populate desde el inicio
     const order = await Order.findById(orderId).populate('company_id');
     if (!order) {
       return res.status(404).json({ error: 'Pedido no encontrado.' });
@@ -183,17 +184,27 @@ router.post('/:orderId/create-shipday', authenticateToken, isAdmin, async (req, 
       return res.status(400).json({ error: 'Este pedido ya está en Shipday.' });
     }
 
+    // ✅ CORRECCIÓN: Usar nombre de empresa + enviGo
+    const companyName = order.company_id?.name || 'Cliente';
+    const restaurantName = `${companyName} - enviGo`;
+    const restaurantAddress = order.company_id?.address || "santa hilda 1447, quilicura";
+
     const shipdayData = {
       orderNumber: order.order_number,
       customerName: order.customer_name,
       customerAddress: order.shipping_address,
-      restaurantName: order.company_id?.name || 'Tienda Principal',
-      restaurantAddress: order.company_id?.address || order.shipping_address,
+      restaurantName: restaurantName, // ← CAMBIADO
+      restaurantAddress: restaurantAddress, // ← CAMBIADO
       customerEmail: order.customer_email || '',
       customerPhoneNumber: order.customer_phone || '',
       deliveryInstruction: order.notes || 'Sin instrucciones especiales',
+      deliveryFee: order.shipping_cost || 1800,
+      total: parseFloat(order.total_amount) || parseFloat(order.shipping_cost) || 1,
+      payment_method: order.payment_method || '',
+      // ✅ CORRECCIÓN: NO incluir campos de propina
     };
 
+    console.log(`🏢 Creando orden individual para: ${restaurantName}`);
     const shipdayOrder = await ShipdayService.createOrder(shipdayData);
 
     order.shipday_order_id = shipdayOrder.orderId;
@@ -202,7 +213,9 @@ router.post('/:orderId/create-shipday', authenticateToken, isAdmin, async (req, 
 
     res.status(200).json({
       message: 'Pedido creado en Shipday exitosamente.',
-      shipday_order_id: shipdayOrder.orderId
+      shipday_order_id: shipdayOrder.orderId,
+      company_name: companyName,
+      restaurant_name_sent: restaurantName
     });
 
   } catch (error) {
@@ -232,7 +245,9 @@ router.post('/bulk-assign-driver', authenticateToken, isAdmin, async (req, res) 
     console.log(`🚀 INICIO: Asignación masiva de ${orderIds.length} pedidos al conductor ${driverId}`);
     
     const results = { successful: [], failed: [] };
-    const ordersToProcess = await Order.find({ _id: { $in: orderIds } });
+    
+    // ✅ CORRECCIÓN: Hacer populate de company_id desde el inicio
+    const ordersToProcess = await Order.find({ _id: { $in: orderIds } }).populate('company_id');
     const ordersThatFailedCreation = new Set();
 
     // --- FASE 1: Crear en Shipday todas las órdenes que no existan ---
@@ -241,25 +256,39 @@ router.post('/bulk-assign-driver', authenticateToken, isAdmin, async (req, res) 
       if (!order.shipday_order_id) {
         try {
           console.log(`📦 Creando orden #${order.order_number} en Shipday...`);
+          
+          // ✅ CORRECCIÓN: Usar nombre de empresa + enviGo
+          const companyName = order.company_id?.name || 'Cliente';
+          const restaurantName = `${companyName} - enviGo`;
+          const restaurantAddress = order.company_id?.address || "santa hilda 1447, quilicura";
+          
           const orderDataForShipday = {
             orderNumber: order.order_number,
             customerName: order.customer_name,
             customerAddress: order.shipping_address,
-            restaurantName: "enviGo",
-            restaurantAddress: "santa hilda 1447, quilicura",
+            restaurantName: restaurantName, // ← CAMBIADO: era "enviGo"
+            restaurantAddress: restaurantAddress, // ← CAMBIADO: era fijo
             customerPhoneNumber: order.customer_phone || '',
             deliveryInstruction: order.notes || '',
-            deliveryFee: 1800,
+            deliveryFee: order.shipping_cost || 1800, // ← MEJORADO: usar shipping_cost dinámico
             total: parseFloat(order.total_amount) || parseFloat(order.shipping_cost) || 1,
             customerEmail: order.customer_email || '',
-            payment_method: '',
+            payment_method: order.payment_method || '', // ← MEJORADO: usar payment_method real
+            // ✅ CORRECCIÓN: NO incluir campos de propina para permitir que el repartidor añada propina
           };
+          
+          console.log(`🏢 Creando orden bulk assign para: ${restaurantName}`);
           const createdShipdayOrder = await ShipdayService.createOrder(orderDataForShipday);
           order.shipday_order_id = createdShipdayOrder.orderId;
           await order.save();
+          
         } catch (creationError) {
           console.error(`❌ Error creando #${order.order_number} en Shipday:`, creationError.message);
-          results.failed.push({ orderId: order._id, orderNumber: order.order_number, error: `Error al crear en Shipday: ${creationError.message}` });
+          results.failed.push({ 
+            orderId: order._id, 
+            orderNumber: order.order_number, 
+            error: `Error al crear en Shipday: ${creationError.message}` 
+          });
           ordersThatFailedCreation.add(order._id.toString());
         }
       }
@@ -276,7 +305,11 @@ router.post('/bulk-assign-driver', authenticateToken, isAdmin, async (req, res) 
         await ShipdayService.assignOrder(order.shipday_order_id, driverId);
       } catch (assignError) {
         console.error(`❌ Error asignando #${order.order_number}:`, assignError.message);
-        results.failed.push({ orderId: order._id, orderNumber: order.order_number, error: `Error en la asignación: ${assignError.message}` });
+        results.failed.push({ 
+          orderId: order._id, 
+          orderNumber: order.order_number, 
+          error: `Error en la asignación: ${assignError.message}` 
+        });
       }
     }
     
@@ -299,18 +332,33 @@ router.post('/bulk-assign-driver', authenticateToken, isAdmin, async (req, res) 
       order.status = 'shipped';
       order.shipday_tracking_url = trackingUrl;
       if (driverInfo) {
-        order.driver_info = { name: driverInfo.name, phone: driverInfo.phone, email: driverInfo.email, status: driverInfo.isOnShift ? 'ONLINE' : 'OFFLINE' };
+        order.driver_info = { 
+          name: driverInfo.name, 
+          phone: driverInfo.phone, 
+          email: driverInfo.email, 
+          status: driverInfo.isOnShift ? 'ONLINE' : 'OFFLINE' 
+        };
       }
       await order.save();
       
-      results.successful.push({ orderId: order._id, orderNumber: order.order_number });
-      console.log(`✅ Orden #${order.order_number} actualizada con Tracking URL: "${trackingUrl}"`);
+      // ✅ AGREGADO: Incluir información de empresa en el resultado
+      results.successful.push({ 
+        orderId: order._id, 
+        orderNumber: order.order_number,
+        companyName: order.company_id?.name, // ← AGREGADO para logging
+        restaurantNameSent: `${order.company_id?.name || 'Cliente'} - enviGo` // ← AGREGADO para debug
+      });
+      console.log(`✅ Orden #${order.order_number} (${order.company_id?.name}) actualizada con Tracking URL: "${trackingUrl}"`);
     }
 
     console.log(`🏁 FIN: Proceso completado.`);
     res.status(200).json({
       message: `Asignación masiva completada: ${results.successful.length} exitosas, ${results.failed.length} fallidas.`,
-      summary: { total: orderIds.length, successful: results.successful.length, failed: results.failed.length },
+      summary: { 
+        total: orderIds.length, 
+        successful: results.successful.length, 
+        failed: results.failed.length 
+      },
       details: results
     });
 
@@ -494,18 +542,19 @@ router.post('/bulk-unassign-driver', authenticateToken, isAdmin, async (req, res
 });
 
 // Crear múltiples órdenes en Shipday de una vez
-router.post('/bulk-create-shipday', authenticateToken, isAdmin, async (req, res) => {
+router.post('/bulk-create-shipday', authenticateToken, async (req, res) => {
   try {
     const { orderIds } = req.body;
-
-    if (!Array.isArray(orderIds) || orderIds.length === 0) {
+    
+    if (!orderIds || !Array.isArray(orderIds) || orderIds.length === 0) {
       return res.status(400).json({ error: 'Se requiere un array de IDs de órdenes.' });
     }
 
+    // ✅ CORRECCIÓN: Incluir populate de company_id desde el inicio
     const orders = await Order.find({
       _id: { $in: orderIds },
       shipday_order_id: { $exists: false }
-    }).populate('company_id');
+    }).populate('company_id'); // ← AGREGADO POPULATE
 
     if (orders.length === 0) {
       return res.status(400).json({ error: 'No se encontraron órdenes válidas para procesar.' });
@@ -518,18 +567,27 @@ router.post('/bulk-create-shipday', authenticateToken, isAdmin, async (req, res)
 
     for (const order of orders) {
       try {
+        // ✅ CORRECCIÓN: Usar nombre de empresa + enviGo
+        const companyName = order.company_id?.name || 'Cliente';
+        const restaurantName = `${companyName} - enviGo`;
+        const restaurantAddress = order.company_id?.address || "santa hilda 1447, quilicura";
+        
         const shipdayData = {
           orderNumber: order.order_number,
           customerName: order.customer_name,
           customerAddress: order.shipping_address,
-          restaurantName: "enviGo",
-          restaurantAddress: "santa hilda 1447, quilicura",
+          restaurantName: restaurantName, // ← CAMBIADO
+          restaurantAddress: restaurantAddress, // ← CAMBIADO
           customerEmail: order.customer_email || '',
           customerPhoneNumber: order.customer_phone || '',
           deliveryInstruction: order.notes || 'Sin instrucciones especiales',
-          deliveryFee: 1800
+          deliveryFee: order.shipping_cost || 1800,
+          total: parseFloat(order.total_amount) || parseFloat(order.shipping_cost) || 1,
+          payment_method: order.payment_method || '',
+          // ✅ CORRECCIÓN: NO incluir campos de propina para permitir que el repartidor añada propina
         };
 
+        console.log(`🏢 Creando orden bulk para: ${restaurantName}`);
         const shipdayOrder = await ShipdayService.createOrder(shipdayData);
 
         order.shipday_order_id = shipdayOrder.orderId;
@@ -539,7 +597,9 @@ router.post('/bulk-create-shipday', authenticateToken, isAdmin, async (req, res)
         results.successful.push({
           local_order_id: order._id,
           order_number: order.order_number,
-          shipday_order_id: shipdayOrder.orderId
+          shipday_order_id: shipdayOrder.orderId,
+          company_name: companyName, // ← AGREGADO PARA LOGGING
+          restaurant_name_sent: restaurantName // ← AGREGADO PARA DEBUG
         });
 
       } catch (error) {

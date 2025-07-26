@@ -729,7 +729,8 @@ async assignToDriver(req, res) {
 
     console.log(`🚀 INICIO: Asignando driver ${driverId} a orden ${orderId}`);
 
-    let order = await Order.findById(orderId);
+    // ✅ CORRECCIÓN: Hacer populate de company_id desde el inicio
+    let order = await Order.findById(orderId).populate('company_id');
     if (!order) {
       return res.status(404).json({ error: 'Pedido no encontrado.' });
     }
@@ -739,19 +740,31 @@ async assignToDriver(req, res) {
     // Si la orden no está en Shipday, la creamos primero
     if (!shipdayOrderId) {
       console.log('📦 Orden no existe en Shipday. Creando...');
+      
+      // ✅ CORRECCIÓN: Usar nombre de empresa + enviGo
+      const companyName = order.company_id?.name || 'Cliente';
+      const restaurantName = `${companyName} - enviGo`;
+      
+      // ✅ CORRECCIÓN: Usar dirección de empresa si está disponible
+      const restaurantAddress = order.company_id?.address || "santa hilda 1447, quilicura";
+      
       const orderDataForShipday = {
           orderNumber: order.order_number,
           customerName: order.customer_name,
           customerAddress: order.shipping_address,
-          restaurantName: "enviGo",
-          restaurantAddress: "santa hilda 1447, quilicura",
+          restaurantName: restaurantName, // ← CAMBIADO: Ahora usa empresa + enviGo
+          restaurantAddress: restaurantAddress, // ← CAMBIADO: Ahora usa dirección de empresa
           customerPhoneNumber: order.customer_phone || '',
           deliveryInstruction: order.notes || '',
-          deliveryFee: 1800,
+          deliveryFee: order.shipping_cost || 1800,
           total: parseFloat(order.total_amount) || parseFloat(order.shipping_cost) || 1,
           customerEmail: order.customer_email || '',
-          payment_method: '',
+          payment_method: order.payment_method || '',
+          // ✅ CORRECCIÓN: Campos de propina vacíos o sin definir para que Shipday permita añadir propina
+          // NO incluir tip: 0 ni tipAmount: 0, dejar que Shipday maneje esto
       };
+      
+      console.log(`🏢 Creando orden para: ${restaurantName} en dirección: ${restaurantAddress}`);
       
       const createdShipdayOrder = await ShipdayService.createOrder(orderDataForShipday);
       if (!createdShipdayOrder || !createdShipdayOrder.orderId) {
@@ -761,7 +774,7 @@ async assignToDriver(req, res) {
       shipdayOrderId = createdShipdayOrder.orderId;
       order.shipday_order_id = shipdayOrderId;
       await order.save();
-      console.log(`✅ Orden creada en Shipday con ID: ${shipdayOrderId}`);
+      console.log(`✅ Orden creada en Shipday con ID: ${shipdayOrderId} para empresa: ${companyName}`);
     }
 
     // --- INICIO DE LA CORRECCIÓN DEFINITIVA ---
@@ -791,7 +804,7 @@ async assignToDriver(req, res) {
     
     // Paso 5: Actualizar la orden local
     order.shipday_driver_id = driverId;
-    order.status = 'shipped';
+    order.status = 'shipped'; // o 'assigned' según tu lógica de negocio
     order.shipday_tracking_url = trackingUrl;
 
     // Obtener info del conductor (opcional pero recomendado)
@@ -799,7 +812,12 @@ async assignToDriver(req, res) {
       const drivers = await ShipdayService.getDrivers();
       const driver = drivers.find(d => d.id == driverId);
       if (driver) {
-        order.driver_info = { name: driver.name, phone: driver.phone || '', email: driver.email || '', status: driver.isOnShift ? 'ONLINE' : 'OFFLINE' };
+        order.driver_info = { 
+          name: driver.name, 
+          phone: driver.phone || '', 
+          email: driver.email || '', 
+          status: driver.isOnShift ? 'ONLINE' : 'OFFLINE' 
+        };
       }
     } catch (driverError) {
       console.warn('⚠️ No se pudo obtener info del conductor:', driverError.message);
@@ -815,6 +833,8 @@ async assignToDriver(req, res) {
       message: 'Conductor asignado exitosamente.',
       success: true,
       trackingUrl: savedOrder.shipday_tracking_url,
+      company_name: order.company_id?.name, // ← AGREGADO para confirmación
+      restaurant_name_sent: `${order.company_id?.name || 'Cliente'} - enviGo`, // ← AGREGADO para debug
       order: savedOrder
     });
 
