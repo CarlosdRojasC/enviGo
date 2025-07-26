@@ -6,7 +6,7 @@ const fs = require('fs').promises;
 class NotificationService {
   constructor() {
     // Configurar Gmail
-    this.emailTransporter = nodemailer.createTransporter({
+    this.emailTransporter = nodemailer.createTransport({
       service: 'gmail',
       auth: {
         user: process.env.EMAIL_USER,
