@@ -128,17 +128,6 @@ const handleActionClick = (action) => {
 </script>
 
 <style scoped>
-/* Variables CSS para colores enviGo */
-:root {
-  --envigo-primary: #8BC53F;
-  --envigo-primary-dark: #7AB32E;
-  --envigo-secondary: #A4D65E;
-  --envigo-accent: #6BA428;
-  --envigo-dark: #2C2C2C;
-  --envigo-dark-lighter: #3A3A3A;
-  --envigo-gradient: linear-gradient(135deg, #8BC53F 0%, #A4D65E 100%);
-  --envigo-shadow-green: 0 10px 25px rgba(139, 197, 63, 0.15);
-}
 
 .quick-actions {
   background: white;
