@@ -140,10 +140,10 @@ if (!channels || channels.length === 0) {
       
       // Prepare order data
       const orderData = {
-        ...newOrder.value,
-        channel_id: channelsResponse.data[0]._id,
-        order_number: `MANUAL-${Date.now()}`,
-        external_order_id: `manual-admin-${Date.now()}`,
+  ...newOrder.value,
+  channel_id: channels[0]._id,  // ✅ USAR EL ARRAY EXTRAÍDO
+  order_number: `MANUAL-${Date.now()}`,
+  external_order_id: `manual-admin-${Date.now()}`,
         
         // Ensure numeric fields are properly typed
         total_amount: parseFloat(newOrder.value.total_amount) || 0,
