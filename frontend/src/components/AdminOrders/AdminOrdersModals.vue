@@ -307,50 +307,151 @@
       </div>
     </Modal>
 
-<Modal 
-  :model-value="showBulkUpload" 
-  @update:model-value="(value) => !value && $emit('close-bulk-upload')"
-  title="Subida Masiva de Pedidos" 
-  width="700px"
-  class="bulk-upload-modal"
->
-  <div class="bulk-upload-content">
-    <div class="upload-section">
-      <div class="section-header">
-        <h4 class="section-title">
-          <span class="section-icon">🏢</span>
-          Seleccionar Empresa
-        </h4>
-      </div>
-      
-      <div class="form-group">
-        <label class="form-label required">Asignar pedidos a la empresa:</label>
-        <select 
-          :value="bulkUploadCompanyId" 
-          @change="$emit('update:bulkUploadCompanyId', $event.target.value)"
-          class="form-select" 
-          required
-        >
-          <option value="" disabled>-- Seleccione una empresa --</option>
-          <!-- ✅ VALIDACIÓN AGREGADA -->
-          <option 
-            v-for="company in (companies || [])" 
-            :key="company._id" 
-            :value="company._id"
+ <Modal 
+      :model-value="showBulkUpload" 
+      @update:model-value="(value) => !value && $emit('close-bulk-upload')"
+      title="Subida Masiva de Pedidos" 
+      width="700px"
+      class="bulk-upload-modal"
+    >
+      <div class="bulk-upload-content">
+        <div class="upload-section">
+          <div class="section-header">
+            <h4 class="section-title">
+              <span class="section-icon">🏢</span>
+              Seleccionar Empresa
+            </h4>
+          </div>
+          
+          <div class="form-group">
+            <label class="form-label required">Asignar pedidos a la empresa:</label>
+            <select 
+              :value="bulkUploadCompanyId" 
+              @change="$emit('update:bulkUploadCompanyId', $event.target.value)"
+              class="form-select" 
+              required
+            >
+              <option value="" disabled>-- Seleccione una empresa --</option>
+              <option 
+                v-for="company in companies" 
+                :key="company._id" 
+                :value="company._id"
+              >
+                {{ company.name }}
+              </option>
+            </select>
+          </div>
+        </div>
+
+        <div class="upload-section">
+          <div class="section-header">
+            <h4 class="section-title">
+              <span class="section-icon">📋</span>
+              Plantilla de Importación
+            </h4>
+          </div>
+          
+          <div class="template-info">
+            <p class="template-description">
+              Descarga la plantilla de Excel con el formato requerido para la importación masiva de pedidos.
+            </p>
+            
+            <button 
+              @click="$emit('download-template')" 
+              class="btn-template-download"
+            >
+              <span class="btn-icon">⬇️</span>
+              <span class="btn-text">Descargar Plantilla de Ejemplo</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="upload-section">
+          <div class="section-header">
+            <h4 class="section-title">
+              <span class="section-icon">📁</span>
+              Subir Archivo
+            </h4>
+          </div>
+          
+          <div class="file-upload-area">
+            <div class="file-upload-zone" :class="{ 'has-file': selectedFile }">
+              <input 
+                type="file" 
+                @change="$emit('file-selected', $event)" 
+                accept=".xlsx,.xls"
+                class="file-input"
+                id="bulk-file-input"
+              />
+              
+              <label for="bulk-file-input" class="file-upload-label">
+                <div class="upload-icon">📤</div>
+                <div class="upload-text">
+                  <span class="upload-title">
+                    {{ selectedFile ? 'Cambiar archivo' : 'Seleccionar archivo Excel' }}
+                  </span>
+                  <span class="upload-subtitle">
+                    Formatos soportados: .xlsx, .xls (máximo 10MB)
+                  </span>
+                </div>
+              </label>
+            </div>
+            
+            <div v-if="selectedFile" class="file-info">
+              <div class="file-details">
+                <span class="file-icon">📄</span>
+                <div class="file-meta">
+                  <span class="file-name">{{ selectedFile.name }}</span>
+                  <span class="file-size">{{ formatFileSize(selectedFile.size) }}</span>
+                </div>
+                <button 
+                  @click="clearSelectedFile" 
+                  class="file-remove"
+                  title="Remover archivo"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div v-if="uploadFeedback" class="upload-feedback" :class="uploadStatus">
+          <div class="feedback-icon">
+            {{ uploadStatus === 'processing' ? '⏳' : 
+                uploadStatus === 'success' ? '✅' : 
+                uploadStatus === 'error' ? '❌' : 'ℹ️' }}
+          </div>
+          <div class="feedback-content">
+            <div class="feedback-message">{{ uploadFeedback }}</div>
+            <div v-if="isUploading" class="feedback-progress">
+              <div class="progress-bar">
+                <div class="progress-fill"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-actions">
+          <button 
+            @click="$emit('close-bulk-upload')" 
+            class="btn-modal cancel"
           >
-            {{ company.name }}
-          </option>
-        </select>
-        <!-- ✅ MENSAJE DE CARGA -->
-        <div v-if="!companies || companies.length === 0" class="loading-message">
-          <span class="loading-icon">⏳</span>
-          Cargando empresas...
+            <span class="btn-icon">❌</span>
+            <span class="btn-text">Cerrar</span>
+          </button>
+          
+          <button 
+            @click="$emit('bulk-upload')" 
+            :disabled="!selectedFile || isUploading || !bulkUploadCompanyId" 
+            class="btn-modal save"
+          >
+            <span class="btn-icon">{{ isUploading ? '⏳' : '⬆️' }}</span>
+            <span class="btn-text">{{ isUploading ? 'Subiendo...' : 'Iniciar Subida' }}</span>
+          </button>
         </div>
       </div>
-    </div>
-    <!-- resto del modal... -->
-  </div>
-</Modal>
+    </Modal>
 
  <Modal 
       :model-value="showAssign" 
