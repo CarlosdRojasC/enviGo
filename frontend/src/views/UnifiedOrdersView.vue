@@ -303,16 +303,6 @@ const auth = useAuthStore()
 const isAdmin = computed(() => auth.isAdmin)
 const user = computed(() => auth.user)
 
-// 🆕 VARIABLES REACTIVAS FALTANTES
-const selectedProofOrder = ref(null)
-const loadingOrderDetails = ref(false)
-const showProofModal = ref(false)
-const showTrackingModal = ref(false)
-const selectedTrackingOrder = ref(null)
-const showSupportModal = ref(false)
-const supportOrder = ref(null)
-const showOrderDetailsModal = ref(false)
-const selectedOrder = ref(null)
 
 
 // ==================== COMPOSABLES INITIALIZATION ====================
@@ -579,7 +569,14 @@ async function openOrderDetailsModal(order) {
  */
 function openTrackingModal(order) {
   console.log('📍 Abriendo tracking para:', order.order_number)
-  selectedTrackingOrder.value = order
+  
+  if (!order || !order._id) {
+    console.error('❌ Order no válida para tracking')
+    toast.error('Error: Orden no válida')
+    return
+  }
+
+  selectedTrackingOrder.value = { ...order }
   showTrackingModal.value = true
 }
 
@@ -618,35 +615,47 @@ async function openLiveTracking(order) {
 async function showProofOfDelivery(order) {
   console.log('📸 Cargando prueba de entrega para:', order.order_number)
   
-  // ✅ VERIFICAR QUE selectedProofOrder EXISTE
-  if (!selectedProofOrder || !selectedProofOrder.value !== undefined) {
-    console.error('❌ selectedProofOrder no está definido correctamente')
-    toast.error('Error en la configuración del modal')
+  // Validación previa
+  if (!order || !order._id) {
+    console.error('❌ Order no válida para proof')
+    toast.error('Error: Orden no válida')
     return
   }
-  
+
   try {
-    // Limpiar estado anterior
+    // Reset estados
     selectedProofOrder.value = null
     loadingOrderDetails.value = true
     showProofModal.value = true
 
-    // Obtener datos completos y frescos del pedido
+    // Esperar al siguiente tick
+    await nextTick()
+
+    // Obtener datos frescos
+    console.log('📡 Obteniendo datos frescos para:', order._id)
     const { data } = await apiService.orders.getById(order._id)
     
-    // ✅ VERIFICAR QUE LA RESPUESTA ES VÁLIDA
     if (!data) {
-      throw new Error('No se recibieron datos del pedido')
+      throw new Error('No se obtuvieron datos de la orden')
     }
+
+    // Asignar datos
+    selectedProofOrder.value = { ...data }
     
-    selectedProofOrder.value = data
-    
-    console.log('✅ Prueba de entrega cargada:', data.proof_of_delivery)
+    console.log('✅ Prueba de entrega cargada:', {
+      order_number: data.order_number,
+      has_proof: !!data.proof_of_delivery
+    })
     
   } catch (error) {
     console.error('❌ Error cargando prueba de entrega:', error)
-    toast.error('No se pudo cargar la información de la entrega')
+    
+    // Cerrar modal en caso de error
     showProofModal.value = false
+    selectedProofOrder.value = null
+    
+    toast.error('No se pudo cargar la información de la entrega')
+    
   } finally {
     loadingOrderDetails.value = false
   }
