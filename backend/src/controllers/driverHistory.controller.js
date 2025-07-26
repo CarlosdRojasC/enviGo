@@ -1,4 +1,4 @@
-// backend/src/controllers/driverHistory.controller.js - PARTE 1
+// backend/src/controllers/driverHistory.controller.js - ARCHIVO COMPLETO
 const DriverHistoryService = require('../services/driverHistory.service');
 const DriverHistory = require('../models/DriveryHistory');
 const mongoose = require('mongoose');
@@ -18,7 +18,7 @@ class DriverHistoryController {
         date_from, 
         date_to, 
         driver_id, 
-        company_id, // Filtro opcional para ver empresa específica
+        company_id, 
         payment_status = 'pending' 
       } = req.query;
 
@@ -54,12 +54,16 @@ class DriverHistoryController {
         filters.payment_status = payment_status;
       }
 
+      console.log('🔍 Filtros aplicados:', filters);
+
       // Obtener entregas con información de empresa
       const deliveries = await DriverHistory.find(filters)
         .populate('company_id', 'name email phone')
         .populate('order_id', 'order_number customer_name total_amount')
         .sort({ delivered_at: -1 })
         .lean();
+
+      console.log('📊 Entregas encontradas:', deliveries.length);
 
       // Agrupar por conductor (incluye empresas servidas)
       const driverGroups = this.groupDeliveriesByDriverGlobal(deliveries);
@@ -86,7 +90,6 @@ class DriverHistoryController {
             payment_amount: delivery.payment_amount,
             payment_status: delivery.payment_status,
             paid_at: delivery.paid_at,
-            // Información de la empresa cliente
             company: {
               id: delivery.company_id?._id,
               name: delivery.company_id?.name || 'Empresa Desconocida'
@@ -116,7 +119,6 @@ class DriverHistoryController {
 
       const filters = { payment_status: 'pending' };
       
-      // Filtro opcional por empresa
       if (company_id) {
         filters.company_id = new mongoose.Types.ObjectId(company_id);
       }
@@ -196,6 +198,7 @@ class DriverHistoryController {
       });
     }
   }
+
   /**
    * Obtener todos los conductores activos de EnviGo
    * GET /api/driver-history/all-active-drivers
@@ -288,10 +291,6 @@ class DriverHistoryController {
 
   // ==================== MÉTODOS POR EMPRESA ====================
 
-  /**
-   * Obtener entregas de conductores para una empresa específica
-   * GET /api/driver-history/company/:companyId/deliveries
-   */
   async getCompanyDeliveries(req, res) {
     try {
       const { companyId } = req.params;
@@ -309,37 +308,29 @@ class DriverHistoryController {
         driver_id 
       });
 
-      // Filtros base - SIEMPRE filtrar por empresa
       const filters = { company_id: new mongoose.Types.ObjectId(companyId) };
 
-      // Filtro por fechas
       if (date_from || date_to) {
         filters.delivered_at = {};
         if (date_from) filters.delivered_at.$gte = new Date(date_from);
         if (date_to) filters.delivered_at.$lte = new Date(date_to + 'T23:59:59.999Z');
       }
 
-      // Filtro por conductor específico
       if (driver_id) {
         filters.driver_id = driver_id;
       }
 
-      // Filtro por estado de pago
       if (payment_status && payment_status !== 'all') {
         filters.payment_status = payment_status;
       }
 
-      // Obtener entregas
       const deliveries = await DriverHistory.find(filters)
         .populate('company_id', 'name')
         .populate('order_id', 'order_number customer_name total_amount')
         .sort({ delivered_at: -1 })
         .lean();
 
-      // Agrupar por conductor
       const driverGroups = this.groupDeliveriesByDriver(deliveries);
-
-      // Calcular estadísticas
       const stats = this.calculateDeliveryStats(deliveries);
 
       res.json({
@@ -374,11 +365,9 @@ class DriverHistoryController {
       });
     }
   }
-  // ==================== MÉTODOS ORIGINALES (MANTENER) ====================
 
-  /**
-   * Obtiene el historial de entregas de un conductor específico
-   */
+  // ==================== MÉTODOS ORIGINALES ====================
+
   async getDriverHistory(req, res) {
     try {
       const { driverId } = req.params;
@@ -435,9 +424,6 @@ class DriverHistoryController {
     }
   }
 
-  /**
-   * Obtiene pagos pendientes de un conductor
-   */
   async getPendingPayments(req, res) {
     try {
       const { driverId } = req.params;
@@ -459,9 +445,6 @@ class DriverHistoryController {
     }
   }
 
-  /**
-   * Marca entregas como pagadas
-   */
   async markDeliveriesAsPaid(req, res) {
     try {
       const { deliveryIds } = req.body;
@@ -491,16 +474,12 @@ class DriverHistoryController {
     }
   }
 
-  /**
-   * Marca todos los pagos pendientes de un conductor como pagados
-   */
   async payAllPendingToDriver(req, res) {
     try {
       const { driverId } = req.params;
-      const { companyId } = req.body; // Opcional - si no se pasa, paga TODAS las empresas
+      const { companyId } = req.body;
       const paidBy = req.user.id;
 
-      // Obtener todas las entregas pendientes (de todas las empresas o una específica)
       const pendingResult = await DriverHistoryService.getPendingPayments(driverId, companyId);
       
       if (pendingResult.deliveries.length === 0) {
@@ -531,9 +510,7 @@ class DriverHistoryController {
       });
     }
   }
-  /**
-   * Obtiene reporte mensual de pagos para una empresa
-   */
+
   async getMonthlyPaymentReport(req, res) {
     try {
       const { companyId } = req.params;
@@ -563,9 +540,6 @@ class DriverHistoryController {
     }
   }
 
-  /**
-   * Obtiene conductores activos de una empresa
-   */
   async getActiveDrivers(req, res) {
     try {
       const { companyId } = req.params;
@@ -596,9 +570,6 @@ class DriverHistoryController {
     }
   }
 
-  /**
-   * Obtiene estadísticas generales de entregas para una empresa
-   */
   async getCompanyDeliveryStats(req, res) {
     try {
       const { companyId } = req.params;
@@ -635,15 +606,10 @@ class DriverHistoryController {
     }
   }
 
-  /**
-   * Exportar reporte a Excel
-   * GET /api/driver-history/export-excel
-   */
   async exportToExcel(req, res) {
     try {
       const { company_id, date_from, date_to, payment_status = 'pending' } = req.query;
 
-      // Filtros base
       const filters = { payment_status };
       if (company_id) {
         filters.company_id = new mongoose.Types.ObjectId(company_id);
@@ -661,7 +627,6 @@ class DriverHistoryController {
         .sort({ delivered_at: -1 })
         .lean();
 
-      // Formatear datos para Excel
       const excelData = deliveries.map(delivery => ({
         'Conductor': delivery.driver_name,
         'Email': delivery.driver_email,
@@ -675,7 +640,6 @@ class DriverHistoryController {
         'Fecha Pago': delivery.paid_at ? delivery.paid_at.toLocaleDateString('es-CL') : ''
       }));
 
-      // Calcular resumen
       const totalAmount = deliveries.reduce((sum, d) => sum + d.payment_amount, 0);
       const uniqueDrivers = new Set(deliveries.map(d => d.driver_id)).size;
       const uniqueCompanies = new Set(deliveries.map(d => d.company_id?._id?.toString()).filter(Boolean)).size;
@@ -688,7 +652,6 @@ class DriverHistoryController {
         period: { date_from, date_to }
       };
 
-      // Generar Excel usando el servicio existente
       const ExcelService = require('../services/excel.service');
       const excelBuffer = await ExcelService.generateDriverPaymentReport(excelData, summary);
 
@@ -704,6 +667,7 @@ class DriverHistoryController {
       });
     }
   }
+
   // ================ MÉTODOS AUXILIARES ================
 
   groupDeliveriesByDriver(deliveries) {
@@ -772,15 +736,13 @@ class DriverHistoryController {
         drivers[driverId].paid_amount += delivery.payment_amount;
       }
 
-      // Agregar empresa servida
       if (delivery.company_id) {
-        drivers[driverId].companies_served.add(delivery.company_id.name ||'Empresa Desconocida');
+        drivers[driverId].companies_served.add(delivery.company_id.name || 'Empresa Desconocida');
       }
 
       drivers[driverId].deliveries.push(delivery._id);
     });
 
-    // Convertir Set a Array para el response
     return Object.values(drivers).map(driver => ({
       ...driver,
       companies_served: Array.from(driver.companies_served),
