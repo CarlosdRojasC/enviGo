@@ -185,6 +185,14 @@
 
     <!-- ==================== MODALES CLIENTE ==================== -->
     <template v-else>
+            <Modal v-model="showOrderDetailsModal" @close="showOrderDetailsModal = false">
+      <OrderDetails 
+        :order="selectedOrder" 
+        :is-admin="isAdmin"
+        :loading="loadingOrderDetails"
+        @update="handleOrderUpdate" 
+      />
+    </Modal>
       <!-- Modal de tracking en tiempo real -->
       <Modal 
   v-model="showTrackingModal"
@@ -248,14 +256,7 @@
 
     <!-- ==================== MODAL COMPARTIDO ==================== -->
     <!-- Modal de detalles (ambos roles) -->
-    <Modal v-model="showOrderDetailsModal" @close="showOrderDetailsModal = false">
-      <OrderDetails 
-        :order="selectedOrder" 
-        :is-admin="isAdmin"
-        :loading="loadingOrderDetails"
-        @update="handleOrderUpdate" 
-      />
-    </Modal>
+
 
     <!-- Notificaciones Toast (si no están globales) -->
     <Teleport to="body" v-if="showNotification && isAdmin">
