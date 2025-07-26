@@ -56,13 +56,10 @@ async prepareTemplateData(order, webhookData) {
   // Obtener datos de la empresa
   await order.populate('company_id');
   
-  // Intentar obtener tracking URL de Shipday
-  let trackingUrl = order.shipday_tracking_url || `${process.env.FRONTEND_URL}/tracking/${order.order_number}`;
-  
-  // Si tenemos ID de Shipday, construir URL directa
-  if (webhookData.order?.id) {
-    trackingUrl = `https://app.shipday.com/track/${webhookData.order.id}`;
-  }
+  // Usar tracking URL de Shipday del webhook
+  let trackingUrl = webhookData.trackingUrl || 
+                   order.shipday_tracking_url || 
+                   `${process.env.FRONTEND_URL}/tracking/${order.order_number}`;
   
   return {
     customer_name: order.customer_name,
@@ -79,7 +76,7 @@ async prepareTemplateData(order, webhookData) {
     company_phone: order.company_id?.phone || '',
     company_email: order.company_id?.email || '',
     
-    tracking_url: trackingUrl,  // ✅ Ahora usa tracking de Shipday
+    tracking_url: trackingUrl,  // ✅ Ahora usa el tracking real de Shipday
     
     formatted_date: new Date().toLocaleString('es-CL', {
       weekday: 'long',
