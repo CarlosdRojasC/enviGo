@@ -157,10 +157,15 @@ export function useOrdersModals() {
   /**
    * ✅ Open bulk upload modal
    */
-  function openBulkUploadModal() {
-    showBulkUploadModal.value = true
-    console.log('⬆️ Opening bulk upload modal')
-  }
+function openBulkUploadModal() {
+  console.log('🏢 Debug empresas disponibles:', {
+    companies: companies.value,
+    count: companies.value?.length || 0,
+    firstCompany: companies.value?.[0]
+  })
+  
+  showBulkUploadModal.value = true
+}
 
   /**
    * ✅ Close bulk upload modal
