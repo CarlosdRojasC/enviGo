@@ -502,8 +502,9 @@ async handleWebhook(req, res) {
     notificationEventType = 'picked_up';
     orderUpdated = true;
     break;
-    
-case 'ORDER_READY_TO_DELIVER':  // ✅ Estado cuando va en camino al cliente
+
+case 'ORDER_ONTHEWAY':  // ✅ Este es el evento real de Shipday
+case 'ORDER_READY_TO_DELIVER':  // Por compatibilidad
 case 'READY_TO_DELIVER':        // Por si acaso viene sin el prefijo
   console.log('🚚 Evento: En Camino al Cliente - ENVIANDO EMAIL.');
   order.status = 'out_for_delivery';  
