@@ -1,12 +1,12 @@
 <template>
   <div class="modals-container">
-      <Modal 
-      :model-value="showDetails" 
-      @update:model-value="(value) => !value && $emit('close-details')"
-      :title="`Detalles del Pedido #${selectedOrder?.order_number}`" 
-      width="900px"
-      class="order-details-modal"
-    >
+     <Modal 
+  :model-value="showDetails" 
+  @update:model-value="$emit('close-details')"
+  :title="`Detalles del Pedido #${selectedOrder?.order_number}`" 
+  width="900px"
+  class="order-details-modal"
+>
       <OrderDetails 
         v-if="selectedOrder" 
         :order="selectedOrder" 
@@ -14,12 +14,12 @@
       />
     </Modal>
     <Modal 
-      :model-value="showUpdateStatus" 
-      @update:model-value="(value) => !value && $emit('close-update-status')"
-      title="Actualizar Estado del Pedido" 
-      width="600px"
-      class="update-status-modal"
-    >
+  :model-value="showUpdateStatus" 
+  @update:model-value="$emit('close-update-status')"
+  title="Actualizar Estado del Pedido" 
+  width="600px"
+  class="update-status-modal"
+>
       <UpdateOrderStatus 
         v-if="selectedOrder" 
         :order="selectedOrder" 
@@ -28,13 +28,13 @@
       />
     </Modal>
 
-   <Modal 
-      :model-value="showCreate" 
-      @update:model-value="(value) => !value && $emit('close-create')"
-      title="Crear Nuevo Pedido Manual" 
-      width="1000px"
-      class="create-order-modal"
-    >
+<Modal 
+  :model-value="showCreate" 
+  @update:model-value="$emit('close-create')"
+  title="Crear Nuevo Pedido Manual" 
+  width="1000px"
+  class="create-order-modal"
+>
       <div class="create-order-content">
         <form @submit.prevent="$emit('create-order')" class="order-form">
           <div class="form-section">
@@ -308,12 +308,12 @@
     </Modal>
 
  <Modal 
-      :model-value="showBulkUpload" 
-      @update:model-value="(value) => !value && $emit('close-bulk-upload')"
-      title="Subida Masiva de Pedidos" 
-      width="700px"
-      class="bulk-upload-modal"
-    >
+  :model-value="showBulkUpload" 
+  @update:model-value="$emit('close-bulk-upload')"
+  title="Subida Masiva de Pedidos" 
+  width="700px"
+  class="bulk-upload-modal"
+>
       <div class="bulk-upload-content">
         <div class="upload-section">
           <div class="section-header">
@@ -454,12 +454,12 @@
     </Modal>
 
  <Modal 
-      :model-value="showAssign" 
-      @update:model-value="(value) => !value && $emit('close-assign')"
-      title="Asignar Conductor" 
-      width="600px"
-      class="assign-modal"
-    >
+  :model-value="showAssign" 
+  @update:model-value="$emit('close-assign')"
+  title="Asignar Conductor" 
+  width="600px"
+  class="assign-modal"
+>
       <div class="assign-content" v-if="selectedOrder">
         <div class="assign-section">
           <div class="order-summary">
@@ -577,12 +577,12 @@
     </Modal>
 
      <Modal 
-      :model-value="showBulkAssign" 
-      @update:model-value="(value) => !value && $emit('close-bulk-assign')"
-      title="Asignación Masiva" 
-      width="800px"
-      class="bulk-assign-modal"
-    >
+  :model-value="showBulkAssign" 
+  @update:model-value="$emit('close-bulk-assign')"
+  title="Asignación Masiva" 
+  width="800px"
+  class="bulk-assign-modal"
+>
       <div class="bulk-assign-content">
         <div class="bulk-section">
           <div class="section-header">
