@@ -206,12 +206,24 @@
       </Modal>
 
       <!-- Modal de prueba de entrega -->
-      <Modal v-if="showProofModal" @close="showProofModal = false">
-        <ProofOfDelivery 
-          :order="selectedProofOrder"
-          :loading="loadingOrderDetails"
-        />
-      </Modal>
+<div v-if="showProofModal" style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.8);z-index:9999;display:flex;align-items:center;justify-content:center" @click="showProofModal = false">
+  <div style="background:white;padding:30px;border-radius:12px;max-width:600px;max-height:80vh;overflow:auto" @click.stop>
+    <h3 style="margin:0 0 20px 0;color:#8BC53F">🧪 MODAL DE PRUEBA FUNCIONANDO</h3>
+    <p><strong>Pedido:</strong> {{ selectedProofOrder?.order_number }}</p>
+    <p><strong>Cliente:</strong> {{ selectedProofOrder?.customer_name }}</p>
+    <p><strong>Estado:</strong> {{ selectedProofOrder?.status }}</p>
+    
+    <div v-if="selectedProofOrder?.proof_of_delivery" style="margin:20px 0">
+      <h4>📋 Prueba de Entrega:</h4>
+      <p>Foto: {{ selectedProofOrder.proof_of_delivery.photo_url ? '✅ Disponible' : '❌ No disponible' }}</p>
+      <p>Firma: {{ selectedProofOrder.proof_of_delivery.signature_url ? '✅ Disponible' : '❌ No disponible' }}</p>
+    </div>
+    
+    <button @click="showProofModal = false" style="margin-top:20px;padding:10px 20px;background:#8BC53F;color:white;border:none;border-radius:6px;cursor:pointer">
+      ✅ Cerrar
+    </button>
+  </div>
+</div>
 
       <!-- Modal de soporte -->
       <Modal v-if="showSupportModal" @close="showSupportModal = false">
