@@ -412,6 +412,14 @@ const {
   resetCreateOrder
 } = useOrdersModals()
 
+// ==================== DECLARAR VARIABLES FALTANTES ====================
+
+// ✅ SI NO VIENEN DEL COMPOSABLE, DECLARARLAS MANUALMENTE
+const selectedTrackingOrder = selectedTrackingOrder || ref(null)
+const selectedProofOrder = selectedProofOrder || ref(null)
+const supportOrder = supportOrder || ref(null)
+
+
 // ✅ COMPOSABLES ESPECÍFICOS DE ADMIN (CONDICIONAL)
 let driverAssignment = null
 let bulkUpload = null
@@ -604,13 +612,27 @@ async function openLiveTracking(order) {
 async function showProofOfDelivery(order) {
   console.log('📸 Cargando prueba de entrega para:', order.order_number)
   
-  selectedProofOrder.value = null
-  loadingOrderDetails.value = true
-  showProofModal.value = true
-
+  // ✅ VERIFICAR QUE selectedProofOrder EXISTE
+  if (!selectedProofOrder || !selectedProofOrder.value !== undefined) {
+    console.error('❌ selectedProofOrder no está definido correctamente')
+    toast.error('Error en la configuración del modal')
+    return
+  }
+  
   try {
+    // Limpiar estado anterior
+    selectedProofOrder.value = null
+    loadingOrderDetails.value = true
+    showProofModal.value = true
+
     // Obtener datos completos y frescos del pedido
     const { data } = await apiService.orders.getById(order._id)
+    
+    // ✅ VERIFICAR QUE LA RESPUESTA ES VÁLIDA
+    if (!data) {
+      throw new Error('No se recibieron datos del pedido')
+    }
+    
     selectedProofOrder.value = data
     
     console.log('✅ Prueba de entrega cargada:', data.proof_of_delivery)
@@ -622,6 +644,55 @@ async function showProofOfDelivery(order) {
   } finally {
     loadingOrderDetails.value = false
   }
+}
+async function showProofOfDeliveryFallback(order) {
+  console.log('📸 Método alternativo para prueba de entrega:', order.order_number)
+  
+  try {
+    loadingOrderDetails.value = true
+    
+    // Usar selectedOrder en lugar de selectedProofOrder
+    const { data } = await apiService.orders.getById(order._id)
+    selectedOrder.value = data
+    
+    // Abrir modal de detalles en lugar del modal específico de proof
+    showOrderDetailsModal.value = true
+    
+    console.log('✅ Detalles del pedido cargados (incluye proof):', data)
+    
+  } catch (error) {
+    console.error('❌ Error cargando detalles:', error)
+    toast.error('No se pudo cargar la información del pedido')
+  } finally {
+    loadingOrderDetails.value = false
+  }
+}
+
+// ==================== DECLARACIONES EXPLÍCITAS PARA MODALES DE CLIENTE ====================
+
+// ✅ SI useOrdersModals NO INCLUYE ESTOS, DECLARARLOS AQUÍ
+if (!selectedTrackingOrder) {
+  const selectedTrackingOrder = ref(null)
+}
+
+if (!selectedProofOrder) {
+  const selectedProofOrder = ref(null)
+}
+
+if (!supportOrder) {
+  const supportOrder = ref(null)
+}
+
+if (!showTrackingModal) {
+  const showTrackingModal = ref(false)
+}
+
+if (!showProofModal) {
+  const showProofModal = ref(false)
+}
+
+if (!showSupportModal) {
+  const showSupportModal = ref(false)
 }
 
 /**
