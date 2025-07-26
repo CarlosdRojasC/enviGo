@@ -63,25 +63,6 @@ const routes = [
         component: () => import('../views/Channels.vue'),
         meta: { roles: ['company_owner', 'company_employee'], requiresCompany: true }
       },
-     {
-  path: 'manifest/:id?',
-  name: 'PickupManifest',
-  component: () => import('../views/PickupManifest.vue'),
-  meta: { 
-    requiresAuth: true,
-    title: 'Manifiesto de Retiro'
-  }
-},
-{
-  path: 'manifests',
-  name: 'ManifestsAdmin',
-  component: () => import('../views/ManifestsAdmin.vue'),
-  meta: { 
-    requiresAuth: true,
-    requiresAdmin: true,
-    title: 'Gestión de Manifiestos'
-  }
-},
       {
         path: 'billing',
         name: 'Billing',
@@ -137,7 +118,25 @@ const routes = [
         name: 'AdminCommunes',
         component: () => import('../views/AdminCommunes.vue'),
         meta: { roles: ['admin'] }
-      }
+      },
+      {
+  path: 'admin/manifests',
+  name: 'AdminManifests',
+  component: () => import('../views/ManifestsAdmin.vue'),
+  meta: { 
+    requiresAuth: true, 
+    roles: ['admin'] 
+  }
+},
+{
+  path: 'admin/manifest/:id',
+  name: 'AdminManifestView',
+  component: () => import('../views/PickupManifest.vue'),
+  meta: { 
+    requiresAuth: true, 
+    roles: ['admin'] 
+  }
+},
     ]
   },
 

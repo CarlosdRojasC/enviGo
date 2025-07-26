@@ -335,7 +335,7 @@ async function generateManifestAndMarkReady() {
   try {
     console.log('📋 Creando manifiesto guardado...');
     
-    // 1. Crear manifiesto en la base de datos (esto también marca los pedidos como listos)
+    // 1. Crear manifiesto en la base de datos
     const response = await apiService.manifests.create(selectedOrders.value);
     const manifest = response.data;
     
@@ -350,8 +350,14 @@ async function generateManifestAndMarkReady() {
       }
     });
 
-    // 3. Abrir manifiesto guardado para ver/imprimir
-    const manifestUrl = `/app/manifest/${manifest.manifest.id}`;
+    // 3. ✅ CORRECCIÓN: Usar ruta según el rol del usuario
+    let manifestUrl;
+    if (auth.isAdmin) {
+      manifestUrl = `/app/admin/manifest/${manifest.manifest.id}`;
+    } else {
+      manifestUrl = `/app/manifest/${manifest.manifest.id}`;
+    }
+    
     window.open(manifestUrl, '_blank', 'width=900,height=700');
     
     toast.success(`✅ Manifiesto ${manifest.manifest.manifest_number} creado exitosamente`);
@@ -367,6 +373,7 @@ async function generateManifestAndMarkReady() {
     }
   }
 }
+
 
 async function handleBulkExport() {
   try {
