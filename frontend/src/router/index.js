@@ -69,6 +69,18 @@ const routes = [
         component: () => import('../views/Billing.vue'),
         meta: { roles: ['company_owner', 'company_employee'], requiresCompany: true }
       },
+      {
+  path: 'manifests',
+  name: 'Manifests',
+  component: () => import('../views/ManifestsAdmin.vue'), // Reutilizar el mismo componente
+  meta: { roles: ['company_owner', 'company_employee'], requiresCompany: true }
+},
+{
+  path: 'manifest/:id',
+  name: 'ManifestView',
+  component: () => import('../views/PickupManifest.vue'),
+  meta: { roles: ['company_owner', 'company_employee'], requiresCompany: true }
+},
       
       // RUTAS PARA ADMIN
       {

@@ -51,6 +51,9 @@
       <router-link v-if="!auth.isAdmin" to="/app/billing" class="nav-item">
         🧾 <span>Facturación</span>
       </router-link>
+      <router-link v-if="!auth.isAdmin" to="/app/manifests" class="nav-item">
+  📋 <span>Manifiestos</span>
+</router-link>
     </nav>
     
     <div class="sidebar-footer">
