@@ -1,6 +1,7 @@
-// backend/src/controllers/driverHistory.controller.js
+// backend/src/controllers/driverHistory.controller.js - PARTE 1
 const DriverHistoryService = require('../services/driverHistory.service');
 const DriverHistory = require('../models/DriveryHistory');
+const mongoose = require('mongoose');
 
 class DriverHistoryController {
 
@@ -45,7 +46,7 @@ class DriverHistoryController {
 
       // Filtro por empresa (opcional)
       if (company_id) {
-        filters.company_id = company_id;
+        filters.company_id = new mongoose.Types.ObjectId(company_id);
       }
 
       // Filtro por estado de pago
@@ -57,7 +58,8 @@ class DriverHistoryController {
       const deliveries = await DriverHistory.find(filters)
         .populate('company_id', 'name email phone')
         .populate('order_id', 'order_number customer_name total_amount')
-        .sort({ delivered_at: -1 });
+        .sort({ delivered_at: -1 })
+        .lean();
 
       // Agrupar por conductor (incluye empresas servidas)
       const driverGroups = this.groupDeliveriesByDriverGlobal(deliveries);
@@ -98,7 +100,8 @@ class DriverHistoryController {
       console.error('❌ Error obteniendo entregas globales:', error);
       res.status(500).json({ 
         success: false, 
-        error: 'Error obteniendo entregas para pagos' 
+        error: 'Error obteniendo entregas para pagos',
+        details: error.message
       });
     }
   }
@@ -114,7 +117,9 @@ class DriverHistoryController {
       const filters = { payment_status: 'pending' };
       
       // Filtro opcional por empresa
-      if (company_id) filters.company_id = company_id;
+      if (company_id) {
+        filters.company_id = new mongoose.Types.ObjectId(company_id);
+      }
       
       if (date_from || date_to) {
         filters.delivered_at = {};
@@ -186,11 +191,11 @@ class DriverHistoryController {
       console.error('❌ Error obteniendo resumen global:', error);
       res.status(500).json({ 
         success: false, 
-        error: 'Error obteniendo resumen global de pagos' 
+        error: 'Error obteniendo resumen global de pagos',
+        details: error.message
       });
     }
   }
-
   /**
    * Obtener todos los conductores activos de EnviGo
    * GET /api/driver-history/all-active-drivers
@@ -275,7 +280,8 @@ class DriverHistoryController {
       console.error('❌ Error obteniendo conductores activos globales:', error);
       res.status(500).json({ 
         success: false, 
-        error: 'Error obteniendo conductores activos' 
+        error: 'Error obteniendo conductores activos',
+        details: error.message
       });
     }
   }
@@ -304,7 +310,7 @@ class DriverHistoryController {
       });
 
       // Filtros base - SIEMPRE filtrar por empresa
-      const filters = { company_id: companyId };
+      const filters = { company_id: new mongoose.Types.ObjectId(companyId) };
 
       // Filtro por fechas
       if (date_from || date_to) {
@@ -327,7 +333,8 @@ class DriverHistoryController {
       const deliveries = await DriverHistory.find(filters)
         .populate('company_id', 'name')
         .populate('order_id', 'order_number customer_name total_amount')
-        .sort({ delivered_at: -1 });
+        .sort({ delivered_at: -1 })
+        .lean();
 
       // Agrupar por conductor
       const driverGroups = this.groupDeliveriesByDriver(deliveries);
@@ -362,11 +369,11 @@ class DriverHistoryController {
       console.error('❌ Error obteniendo entregas de empresa:', error);
       res.status(500).json({ 
         success: false, 
-        error: 'Error obteniendo entregas para pagos' 
+        error: 'Error obteniendo entregas para pagos',
+        details: error.message
       });
     }
   }
-
   // ==================== MÉTODOS ORIGINALES (MANTENER) ====================
 
   /**
@@ -524,7 +531,6 @@ class DriverHistoryController {
       });
     }
   }
-
   /**
    * Obtiene reporte mensual de pagos para una empresa
    */
@@ -639,7 +645,9 @@ class DriverHistoryController {
 
       // Filtros base
       const filters = { payment_status };
-      if (company_id) filters.company_id = company_id;
+      if (company_id) {
+        filters.company_id = new mongoose.Types.ObjectId(company_id);
+      }
       
       if (date_from || date_to) {
         filters.delivered_at = {};
@@ -650,7 +658,8 @@ class DriverHistoryController {
       const deliveries = await DriverHistory.find(filters)
         .populate('order_id', 'order_number customer_name')
         .populate('company_id', 'name')
-        .sort({ delivered_at: -1 });
+        .sort({ delivered_at: -1 })
+        .lean();
 
       // Formatear datos para Excel
       const excelData = deliveries.map(delivery => ({
@@ -695,7 +704,6 @@ class DriverHistoryController {
       });
     }
   }
-
   // ================ MÉTODOS AUXILIARES ================
 
   groupDeliveriesByDriver(deliveries) {
@@ -766,7 +774,7 @@ class DriverHistoryController {
 
       // Agregar empresa servida
       if (delivery.company_id) {
-        drivers[driverId].companies_served.add(delivery.company_id.name || 'Empresa Desconocida');
+        drivers[driverId].companies_served.add(delivery.company_id.name ||'Empresa Desconocida');
       }
 
       drivers[driverId].deliveries.push(delivery._id);
