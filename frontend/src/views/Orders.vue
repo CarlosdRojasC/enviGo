@@ -338,38 +338,36 @@ async function generateManifestAndMarkReady() {
     const markReadyResult = await markMultipleAsReady(selectedOrders.value);
     console.log('✅ Pedidos marcados como listos:', markReadyResult);
 
-    // 2. Generar manifiesto
-    console.log('📋 Paso 2: Generando manifiesto...');
+    // 2. Abrir manifiesto
+    console.log('📋 Paso 2: Abriendo manifiesto...');
+    
     try {
-      const manifestResponse = await apiService.orders.getManifest(selectedOrders.value);
-      
-      console.log('✅ Datos del manifiesto obtenidos:', manifestResponse.data);
-      
-      // Abrir manifiesto en nueva pestaña
-      const routeData = router.resolve({ 
-        name: 'PickupManifest', 
-        query: { ids: selectedOrders.value.join(',') } 
+      // ✅ OPCIÓN 1: Usar router.push (navegación en la misma pestaña)
+      router.push({
+        path: '/manifest',
+        query: { 
+          ids: selectedOrders.value.join(','),
+          from: 'orders'
+        }
       });
       
-      const newWindow = window.open(routeData.href, '_blank');
+      toast.success('✅ Pedidos marcados como listos. Abriendo manifiesto...');
+      
+    } catch (routerError) {
+      console.warn('⚠️ Error con router.push, intentando con window.open:', routerError);
+      
+      // ✅ FALLBACK: Usar window.open si router.push falla
+      const baseUrl = window.location.origin;
+      const manifestUrl = `${baseUrl}/manifest?ids=${selectedOrders.value.join(',')}`;
+      
+      const newWindow = window.open(manifestUrl, '_blank', 'width=900,height=700');
       
       if (!newWindow) {
         toast.error('No se pudo abrir el manifiesto. Habilita las ventanas emergentes.');
         return;
       }
       
-      toast.success('✅ Pedidos marcados como listos y manifiesto generado exitosamente');
-      
-    } catch (manifestError) {
-      console.error('❌ Error generando manifiesto:', manifestError);
-      
-      if (manifestError.response?.status === 403) {
-        toast.error('No tienes permisos para generar el manifiesto');
-      } else if (manifestError.response?.status === 404) {
-        toast.error('No se encontraron pedidos para el manifiesto');
-      } else {
-        toast.error('Error al generar el manifiesto');
-      }
+      toast.success('✅ Pedidos marcados como listos y manifiesto abierto en nueva pestaña');
     }
 
     // 3. Limpiar selección

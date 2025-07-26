@@ -64,6 +64,15 @@ const routes = [
         meta: { roles: ['company_owner', 'company_employee'], requiresCompany: true }
       },
       {
+  path: '/manifest',
+  name: 'PickupManifest',
+  component: () => import('../views/PickupManifest.vue'),
+  meta: { 
+    requiresAuth: true,
+    title: 'Manifiesto de Retiro'
+  }
+},
+      {
         path: 'billing',
         name: 'Billing',
         component: () => import('../views/Billing.vue'),

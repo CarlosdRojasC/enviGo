@@ -133,8 +133,7 @@ const orders = {
       
       console.log('✅ API: Datos del manifiesto obtenidos:', {
         orders: response.data.orders?.length || 0,
-        company: response.data.company?.name || 'N/A',
-        generated_by: response.data.generated_by
+        company: response.data.company?.name || 'N/A'
       });
       
       return response;
@@ -142,13 +141,15 @@ const orders = {
     } catch (error) {
       console.error('❌ API: Error obteniendo manifiesto:', {
         status: error.response?.status,
-        statusText: error.response?.statusText,
         message: error.response?.data?.error || error.message,
-        details: error.response?.data?.details,
         orderIds
       });
       throw error;
     }
+  },
+getManifestData: function(orderIds) {
+    console.warn('⚠️ getManifestData está deprecado, usar getManifest');
+    return this.getManifest(orderIds);
   },
 markMultipleAsReady: async (orderIds) => {
     try {
