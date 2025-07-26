@@ -605,40 +605,20 @@ async function showProofOfDelivery(order) {
   console.log('📸 === INICIANDO showProofOfDelivery ===')
   
   try {
-    // 🔍 VER QUÉ DEVUELVE LA API
-    const response = await fetch(`/api/orders/${order._id}`, {
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        'Content-Type': 'application/json'
-      }
-    })
+    // 🔍 VER QUÉ URL ESTÁ USANDO EL APISERVICE
+    console.log('🔗 Base URL del API:', import.meta.env.VITE_API_URL)
     
-    // 🔍 DEBUG: Ver respuesta completa
-    console.log('📡 Respuesta de la API:', {
-      status: response.status,
-      statusText: response.statusText,
-      headers: Object.fromEntries(response.headers.entries()),
-      url: response.url
-    })
+    // Usar tu apiService original
+    const { data } = await apiService.orders.getById(order._id)
     
-    // 🔍 VER EL CONTENIDO COMO TEXTO PRIMERO
-    const responseText = await response.text()
-    console.log('📄 Contenido de la respuesta:', responseText.substring(0, 500))
+    selectedProofOrder.value = data
+    showProofModal.value = true
+    loadingOrderDetails.value = false
     
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`)
-    }
-    
-    // Solo parsear como JSON si no es HTML
-    if (responseText.startsWith('<!doctype') || responseText.startsWith('<html')) {
-      throw new Error('La API devolvió HTML en lugar de JSON')
-    }
-    
-    const data = JSON.parse(responseText)
-    console.log('✅ Datos parseados correctamente:', data)
+    console.log('✅ Modal abierto correctamente con apiService')
     
   } catch (error) {
-    console.error('❌ Error detallado:', error)
+    console.error('❌ Error:', error)
   }
 }
 /**
