@@ -602,28 +602,40 @@ async function openLiveTracking(order) {
  * ✅ OVERRIDE: Show Proof of Delivery
  */
 async function showProofOfDelivery(order) {
-  console.log('📸 Cargando prueba de entrega para:', order.order_number)
+  console.log('📸 === INICIANDO showProofOfDelivery ===')
   
-  selectedProofOrder.value = null
-  loadingOrderDetails.value = true
-  showProofModal.value = true
-
+  // 🔧 DEBUG: Verificar apiService
+  console.log('🔍 Verificando apiService:', {
+    apiService: typeof apiService,
+    orders: typeof apiService.orders,
+    getById: typeof apiService.orders?.getById,
+    apiExists: !!apiService
+  })
+  
   try {
-    // Obtener datos completos y frescos del pedido
-    const { data } = await apiService.orders.getById(order._id)
-    selectedProofOrder.value = data
+    // 🔧 LLAMADA DIRECTA PARA TESTING
+    const response = await fetch(`/api/orders/${order._id}`, {
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        'Content-Type': 'application/json'
+      }
+    })
     
-    console.log('✅ Prueba de entrega cargada:', data.proof_of_delivery)
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+    }
+    
+    const data = await response.json()
+    console.log('✅ Datos obtenidos con fetch:', data)
+    
+    // Resto de tu código...
+    selectedProofOrder.value = data
+    showProofModal.value = true
     
   } catch (error) {
-    console.error('❌ Error cargando prueba de entrega:', error)
-    toast.error('No se pudo cargar la información de la entrega')
-    showProofModal.value = false
-  } finally {
-    loadingOrderDetails.value = false
+    console.error('❌ Error:', error)
   }
 }
-
 /**
  * ✅ OVERRIDE: Contact Support
  */
