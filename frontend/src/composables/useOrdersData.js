@@ -408,24 +408,59 @@ export function useOrdersData() {
   /**
    * Mark multiple orders as ready
    */
-  async function markMultipleAsReady(orderIds) {
-    try {
-      loadingStates.value.updating = true
-      
-      // Implementar lógica de marcado múltiple
-      for (const orderId of orderIds) {
-        await apiService.orders.updateStatus(orderId, 'ready_for_pickup')
-        updateOrderLocally({ _id: orderId, status: 'ready_for_pickup' })
-      }
-      
-      toast.success(`${orderIds.length} pedidos marcados como listos`)
-    } catch (error) {
-      logger.error('Error marking multiple as ready:', error.message)
-      toast.error('Error al marcar pedidos como listos')
-    } finally {
-      loadingStates.value.updating = false
-    }
+async function markMultipleAsReady(orderIds) {
+  if (!orderIds || orderIds.length === 0) {
+    throw new Error('No se especificaron pedidos para marcar como listos');
   }
+
+  loadingStates.value.markingReady = true;
+  
+  try {
+    console.log(`📦 Marcando ${orderIds.length} pedidos como listos...`);
+    
+    const response = await apiService.orders.markMultipleAsReady(orderIds);
+    
+    console.log(`✅ Respuesta del servidor:`, response.data);
+    
+    const { updatedCount, foundPending, updated_orders } = response.data;
+    
+    // Actualizar orders localmente solo los que fueron actualizados
+    if (updated_orders && updated_orders.length > 0) {
+      orders.value.forEach(order => {
+        const updatedOrder = updated_orders.find(u => u.id === order._id);
+        if (updatedOrder) {
+          order.status = 'ready_for_pickup';
+          order.updated_at = new Date().toISOString();
+        }
+      });
+    }
+    
+    // Mensaje de éxito más detallado
+    if (updatedCount > 0) {
+      toast.success(`✅ ${updatedCount} pedidos marcados como listos para retiro`);
+    }
+    
+    if (foundPending < orderIds.length) {
+      toast.warning(`⚠️ ${orderIds.length - foundPending} pedidos no pudieron ser marcados (no están pendientes)`);
+    }
+    
+    return response.data;
+    
+  } catch (error) {
+    console.error('❌ Error marcando pedidos como listos:', error);
+    
+    if (error.response?.status === 403) {
+      throw new Error('No tienes permisos para marcar estos pedidos como listos');
+    } else if (error.response?.status === 400) {
+      const errorData = error.response.data;
+      throw new Error(errorData.error || 'Algunos pedidos no pueden ser marcados como listos');
+    } else {
+      throw new Error('Error al marcar pedidos como listos');
+    }
+  } finally {
+    loadingStates.value.markingReady = false;
+  }
+}
 
   /**
    * Mark single order as ready

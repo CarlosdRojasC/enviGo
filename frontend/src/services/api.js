@@ -123,41 +123,50 @@ const orders = {
  * @param {Array} orderIds - Array de IDs de pedidos
  * @returns {Promise} Datos del manifiesto
  */
-getManifest: async (orderIds) => {
-  try {
-    console.log('📋 API: Solicitando datos del manifiesto para:', orderIds);
-    
-    const response = await api.post('/orders/manifest', {
-      orderIds
-    });
-    
-    console.log('✅ API: Datos del manifiesto obtenidos:', {
-      orders: response.data.orders?.length || 0,
-      company: response.data.company?.name || 'N/A'
-    });
-    
-    return response;
-    
-  } catch (error) {
-    console.error('❌ API: Error obteniendo manifiesto:', {
-      status: error.response?.status,
-      message: error.response?.data?.error || error.message,
-      orderIds
-    });
-    throw error;
-  }
-},
-  markMultipleAsReady: async (orderIds) => {
+  getManifest: async (orderIds) => {
+    try {
+      console.log('📋 API: Solicitando datos del manifiesto para:', orderIds);
+      
+      const response = await api.post('/orders/manifest', {
+        orderIds
+      });
+      
+      console.log('✅ API: Datos del manifiesto obtenidos:', {
+        orders: response.data.orders?.length || 0,
+        company: response.data.company?.name || 'N/A',
+        generated_by: response.data.generated_by
+      });
+      
+      return response;
+      
+    } catch (error) {
+      console.error('❌ API: Error obteniendo manifiesto:', {
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        message: error.response?.data?.error || error.message,
+        details: error.response?.data?.details,
+        orderIds
+      });
+      throw error;
+    }
+  },
+markMultipleAsReady: async (orderIds) => {
     try {
       console.log('📦 API: Marcando pedidos como listos:', orderIds);
-      // Se corrige la ruta a '/orders/bulk-ready'
-      const response = await api.post('/orders/bulk-ready', { orderIds });
+      
+      const response = await api.post('/orders/bulk-ready', { 
+        orderIds 
+      });
+      
       console.log('✅ API: Respuesta del servidor:', response.data);
       return response;
+      
     } catch (error) {
       console.error('❌ API: Error marcando pedidos como listos:', {
         status: error.response?.status,
+        statusText: error.response?.statusText,
         message: error.response?.data?.error || error.message,
+        details: error.response?.data?.details,
         orderIds
       });
       throw error;

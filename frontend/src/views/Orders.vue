@@ -325,34 +325,64 @@ async function handleBulkMarkReady() {
 
 async function generateManifestAndMarkReady() {
   if (selectedOrders.value.length === 0) {
-    toast.warning('Selecciona al menos un pedido')
-    return
+    toast.warning('Selecciona al menos un pedido');
+    return;
   }
 
-  const confirmMsg = `¿Deseas generar el manifiesto y marcar ${selectedOrders.value.length} pedido(s) como "Listo para Retiro"?`
-  if (!confirm(confirmMsg)) return
+  const confirmMsg = `¿Deseas generar el manifiesto y marcar ${selectedOrders.value.length} pedido(s) como "Listo para Retiro"?`;
+  if (!confirm(confirmMsg)) return;
 
   try {
     // 1. Marcar pedidos como listos
-    await markMultipleAsReady(selectedOrders.value)
+    console.log('📦 Paso 1: Marcando pedidos como listos...');
+    const markReadyResult = await markMultipleAsReady(selectedOrders.value);
+    console.log('✅ Pedidos marcados como listos:', markReadyResult);
 
     // 2. Generar manifiesto
-    const ids = selectedOrders.value.join(',')
-    const routeData = router.resolve({ name: 'PickupManifest', query: { ids } })
-    const newWindow = window.open(routeData.href, '_blank')
-
-    if (!newWindow) {
-      toast.error('No se pudo abrir el manifiesto. Habilita las ventanas emergentes.')
-      return
+    console.log('📋 Paso 2: Generando manifiesto...');
+    try {
+      const manifestResponse = await apiService.orders.getManifest(selectedOrders.value);
+      
+      console.log('✅ Datos del manifiesto obtenidos:', manifestResponse.data);
+      
+      // Abrir manifiesto en nueva pestaña
+      const routeData = router.resolve({ 
+        name: 'PickupManifest', 
+        query: { ids: selectedOrders.value.join(',') } 
+      });
+      
+      const newWindow = window.open(routeData.href, '_blank');
+      
+      if (!newWindow) {
+        toast.error('No se pudo abrir el manifiesto. Habilita las ventanas emergentes.');
+        return;
+      }
+      
+      toast.success('✅ Pedidos marcados como listos y manifiesto generado exitosamente');
+      
+    } catch (manifestError) {
+      console.error('❌ Error generando manifiesto:', manifestError);
+      
+      if (manifestError.response?.status === 403) {
+        toast.error('No tienes permisos para generar el manifiesto');
+      } else if (manifestError.response?.status === 404) {
+        toast.error('No se encontraron pedidos para el manifiesto');
+      } else {
+        toast.error('Error al generar el manifiesto');
+      }
     }
 
     // 3. Limpiar selección
-    clearSelection()
+    clearSelection();
 
-    toast.success('✅ Pedidos marcados como listos y manifiesto generado exitosamente')
   } catch (error) {
-    console.error('❌ Error al generar manifiesto:', error)
-    toast.error('Error al procesar los pedidos')
+    console.error('❌ Error en generateManifestAndMarkReady:', error);
+    
+    if (error.message.includes('permisos')) {
+      toast.error(error.message);
+    } else {
+      toast.error('Error al procesar los pedidos');
+    }
   }
 }
 

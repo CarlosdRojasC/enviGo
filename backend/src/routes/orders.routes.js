@@ -114,56 +114,157 @@ router.patch('/:id/ready', authenticateToken, validateMongoId('id'), async (req,
   }
 });
 router.post('/bulk-ready', authenticateToken, async (req, res) => {
-    try {
-        const { orderIds } = req.body;
+  try {
+    const { orderIds } = req.body;
 
-        if (!orderIds || !Array.isArray(orderIds) || orderIds.length === 0) {
-            return res.status(400).json({ error: 'Se requiere un array de IDs de pedidos.' });
-        }
-
-        const result = await Order.updateMany(
-            {
-                '_id': { $in: orderIds },
-                'company_id': req.user.company_id, // Seguridad: solo actualizar pedidos de la propia empresa
-                'status': 'pending' // Solo actualizar los que están pendientes
-            },
-            {
-                $set: { status: 'ready_for_pickup' }
-            }
-        );
-
-        res.json({
-            message: `${result.modifiedCount} pedidos marcados como listos para retiro.`,
-            updatedCount: result.modifiedCount
-        });
-
-    } catch (error) {
-        res.status(500).json({ error: 'Error actualizando los pedidos', details: error.message });
+    if (!orderIds || !Array.isArray(orderIds) || orderIds.length === 0) {
+      return res.status(400).json({ error: 'Se requiere un array de IDs de pedidos.' });
     }
+
+    console.log(`🔄 Procesando ${orderIds.length} pedidos para marcar como listos`);
+    console.log(`👤 Usuario: ${req.user.email}, Rol: ${req.user.role}, Empresa: ${req.user.company_id}`);
+
+    let filters = {
+      '_id': { $in: orderIds },
+      'status': 'pending' // Solo actualizar los que están pendientes
+    };
+
+    // ✅ CORRECCIÓN: Solo filtrar por empresa si NO es admin
+    if (req.user.role !== 'admin') {
+      if (!req.user.company_id) {
+        return res.status(403).json({ 
+          error: 'Usuario no asociado a ninguna empresa',
+          user_role: req.user.role,
+          has_company: !!req.user.company_id
+        });
+      }
+      filters.company_id = req.user.company_id;
+      console.log(`🏢 Filtrando por empresa: ${req.user.company_id}`);
+    }
+
+    // Primero verificar cuántos pedidos coinciden con los filtros
+    const matchingOrders = await Order.find(filters).select('_id order_number status');
+    console.log(`📊 Pedidos encontrados: ${matchingOrders.length} de ${orderIds.length} solicitados`);
+
+    if (matchingOrders.length === 0) {
+      return res.status(400).json({ 
+        error: 'No se encontraron pedidos pendientes que puedan ser marcados como listos',
+        details: {
+          requested: orderIds.length,
+          found: 0,
+          filters_applied: filters
+        }
+      });
+    }
+
+    // Actualizar los pedidos
+    const result = await Order.updateMany(filters, {
+      $set: { 
+        status: 'ready_for_pickup',
+        updated_at: new Date()
+      }
+    });
+
+    console.log(`✅ ${result.modifiedCount} pedidos actualizados exitosamente`);
+
+    res.json({
+      message: `${result.modifiedCount} pedidos marcados como listos para retiro.`,
+      updatedCount: result.modifiedCount,
+      totalRequested: orderIds.length,
+      foundPending: matchingOrders.length,
+      updated_orders: matchingOrders.map(o => ({
+        id: o._id,
+        order_number: o.order_number,
+        previous_status: o.status
+      }))
+    });
+
+  } catch (error) {
+    console.error('❌ Error en bulk-ready:', error);
+    res.status(500).json({ 
+      error: 'Error actualizando los pedidos', 
+      details: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
 });
 // --> INICIO DE NUEVA RUTA PARA MANIFIESTO <--
 router.post('/manifest', authenticateToken, async (req, res) => {
   try {
     const { orderIds } = req.body;
+    
     if (!orderIds || !Array.isArray(orderIds) || orderIds.length === 0) {
       return res.status(400).json({ error: 'Se requiere un array de IDs de pedidos.' });
     }
 
-    const orders = await Order.find({
-      '_id': { $in: orderIds },
-      'company_id': req.user.company_id // Asegurar que solo obtenga pedidos de su empresa
-    }).select('order_number customer_name shipping_commune load1Packages');
+    console.log(`📋 Generando manifiesto para ${orderIds.length} pedidos`);
+    console.log(`👤 Usuario: ${req.user.email}, Rol: ${req.user.role}, Empresa: ${req.user.company_id}`);
 
-    const company = await Company.findById(req.user.company_id).select('name address');
+    let filters = {
+      '_id': { $in: orderIds }
+    };
 
-    res.json({
-      company,
+    // ✅ CORRECCIÓN: Solo filtrar por empresa si NO es admin
+    if (req.user.role !== 'admin') {
+      if (!req.user.company_id) {
+        return res.status(403).json({ 
+          error: 'Usuario no asociado a ninguna empresa',
+          user_role: req.user.role 
+        });
+      }
+      filters.company_id = req.user.company_id;
+      console.log(`🏢 Filtrando manifiesto por empresa: ${req.user.company_id}`);
+    }
+
+    const orders = await Order.find(filters)
+      .select('order_number customer_name shipping_commune shipping_address customer_phone notes')
+      .lean();
+
+    console.log(`📊 Pedidos encontrados para manifiesto: ${orders.length} de ${orderIds.length} solicitados`);
+
+    if (orders.length === 0) {
+      return res.status(404).json({ 
+        error: 'No se encontraron pedidos para generar el manifiesto',
+        details: {
+          requested: orderIds.length,
+          found: 0,
+          filters_applied: filters
+        }
+      });
+    }
+
+    // Obtener información de la empresa
+    let company = null;
+    if (req.user.company_id) {
+      company = await Company.findById(req.user.company_id)
+        .select('name address phone email')
+        .lean();
+    }
+
+    const manifestData = {
+      company: company || {
+        name: 'enviGo Admin',
+        address: 'Administración Central',
+        phone: '+56912345678',
+        email: 'admin@envigo.cl'
+      },
       orders,
-      generationDate: new Date()
-    });
+      generationDate: new Date(),
+      generated_by: req.user.email,
+      total_orders: orders.length
+    };
+
+    console.log(`✅ Manifiesto generado exitosamente para empresa: ${manifestData.company.name}`);
+
+    res.json(manifestData);
 
   } catch (error) {
-    res.status(500).json({ error: 'Error generando el manifiesto', details: error.message });
+    console.error('❌ Error generando manifiesto:', error);
+    res.status(500).json({ 
+      error: 'Error generando el manifiesto', 
+      details: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
   }
 });
 
