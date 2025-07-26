@@ -267,14 +267,6 @@
   </div>
 </template>
 <script setup>
-
-console.log('🔍 UnifiedOrdersView - Estado inicial:', {
-  isAdmin: isAdmin.value,
-  user: auth.user,
-  companies: companies?.value || 'UNDEFINED',
-  companiesType: typeof companies
-})
-
 // ==================== IMPORTS ====================
 import { ref, computed, onMounted, onBeforeUnmount, onUnmounted, watch, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
@@ -482,6 +474,13 @@ const debugMode = ref(false)
 
 // ==================== COMPUTED PROPERTIES ====================
 
+
+console.log('🔍 UnifiedOrdersView - Estado inicial:', {
+  isAdmin: isAdmin.value,
+  user: auth.user,
+  companies: companies?.value || 'UNDEFINED',
+  companiesType: typeof companies
+})
 /**
  * ✅ ESTADÍSTICAS DE PEDIDOS
  */
