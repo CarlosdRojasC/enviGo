@@ -233,8 +233,8 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useToast } from 'vue-toastification'
-import { useAuthStore } from '../stores/auth'
-import { driverPaymentsService } from '../services/driverPayments'
+import { useAuthStore } from '../store/auth'
+import { driverPaymentsService } from '../services/driverPayments.service'
 
 const toast = useToast()
 const authStore = useAuthStore()
