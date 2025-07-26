@@ -303,6 +303,18 @@ const auth = useAuthStore()
 const isAdmin = computed(() => auth.isAdmin)
 const user = computed(() => auth.user)
 
+// 🆕 VARIABLES REACTIVAS FALTANTES
+const selectedProofOrder = ref(null)
+const loadingOrderDetails = ref(false)
+const showProofModal = ref(false)
+const showTrackingModal = ref(false)
+const selectedTrackingOrder = ref(null)
+const showSupportModal = ref(false)
+const supportOrder = ref(null)
+const showOrderDetailsModal = ref(false)
+const selectedOrder = ref(null)
+
+
 // ==================== COMPOSABLES INITIALIZATION ====================
 
 // ✅ DATOS PRINCIPALES (COMÚN)
