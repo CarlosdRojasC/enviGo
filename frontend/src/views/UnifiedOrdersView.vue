@@ -604,16 +604,8 @@ async function openLiveTracking(order) {
 async function showProofOfDelivery(order) {
   console.log('📸 === INICIANDO showProofOfDelivery ===')
   
-  // 🔧 DEBUG: Verificar apiService
-  console.log('🔍 Verificando apiService:', {
-    apiService: typeof apiService,
-    orders: typeof apiService.orders,
-    getById: typeof apiService.orders?.getById,
-    apiExists: !!apiService
-  })
-  
   try {
-    // 🔧 LLAMADA DIRECTA PARA TESTING
+    // 🔍 VER QUÉ DEVUELVE LA API
     const response = await fetch(`/api/orders/${order._id}`, {
       headers: {
         'Authorization': `Bearer ${localStorage.getItem('token')}`,
@@ -621,19 +613,32 @@ async function showProofOfDelivery(order) {
       }
     })
     
+    // 🔍 DEBUG: Ver respuesta completa
+    console.log('📡 Respuesta de la API:', {
+      status: response.status,
+      statusText: response.statusText,
+      headers: Object.fromEntries(response.headers.entries()),
+      url: response.url
+    })
+    
+    // 🔍 VER EL CONTENIDO COMO TEXTO PRIMERO
+    const responseText = await response.text()
+    console.log('📄 Contenido de la respuesta:', responseText.substring(0, 500))
+    
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}: ${response.statusText}`)
     }
     
-    const data = await response.json()
-    console.log('✅ Datos obtenidos con fetch:', data)
+    // Solo parsear como JSON si no es HTML
+    if (responseText.startsWith('<!doctype') || responseText.startsWith('<html')) {
+      throw new Error('La API devolvió HTML en lugar de JSON')
+    }
     
-    // Resto de tu código...
-    selectedProofOrder.value = data
-    showProofModal.value = true
+    const data = JSON.parse(responseText)
+    console.log('✅ Datos parseados correctamente:', data)
     
   } catch (error) {
-    console.error('❌ Error:', error)
+    console.error('❌ Error detallado:', error)
   }
 }
 /**
