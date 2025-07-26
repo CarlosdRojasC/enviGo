@@ -183,6 +183,68 @@
       />
     </template>
 
+    <!-- ==================== MODALES CLIENTE ==================== -->
+    <template v-else>
+      <!-- Modal de tracking en tiempo real -->
+      <Modal 
+  v-model="showTrackingModal"
+  title="🚚 Tracking - Pedido"
+  width="700px"
+>
+  <OrderTracking 
+    :order="selectedTrackingOrder" 
+    ref="orderTrackingRef"
+    @close="showTrackingModal = false"
+    @support="handleTrackingSupport"
+    @show-proof="handleShowProof"
+  />
+</Modal>
+
+      <!-- Modal de prueba de entrega -->
+                <Modal 
+            v-model="showProofModal"
+            :title="`📋 Prueba de Entrega - #${selectedProofOrder?.order_number || ''}`"
+            width="700px"
+            >
+            <div v-if="loadingOrderDetails" class="loading-container">
+                <div class="loading-spinner"></div>
+                <p>Cargando prueba de entrega...</p>
+            </div>
+            <ProofOfDelivery 
+                v-else-if="selectedProofOrder"
+                :order="selectedProofOrder"
+            />
+            <div v-else>
+                <p>Error: No se pudo cargar la información</p>
+            </div>
+            </Modal>
+
+      <!-- Modal de soporte -->
+      <Modal 
+  v-model="showSupportModal"
+  title="💬 Contactar Soporte"
+  width="500px"
+>
+  <div v-if="supportOrder" class="support-modal">
+    <h3>Contactar Soporte</h3>
+    <p><strong>Pedido:</strong> {{ supportOrder?.order_number }}</p>
+    <p><strong>Cliente:</strong> {{ supportOrder?.customer_name }}</p>
+    <p><strong>Estado:</strong> {{ getStatusName(supportOrder?.status) }}</p>
+    
+    <div class="support-options">
+      <button @click="emailSupport(supportOrder)" class="support-option">
+        📧 Enviar Email
+      </button>
+      <button @click="whatsappSupport(supportOrder)" class="support-option">
+        💬 WhatsApp
+      </button>
+      <button @click="callSupport(supportOrder)" class="support-option">
+        📞 Llamar
+      </button>
+    </div>
+  </div>
+</Modal>
+    </template>
 
     <!-- ==================== MODAL COMPARTIDO ==================== -->
     <!-- Modal de detalles (ambos roles) -->
@@ -194,65 +256,13 @@
         @update="handleOrderUpdate" 
       />
     </Modal>
-    <!-- Modal de tracking en tiempo real -->
-      <Modal v-if="showTrackingModal" @close="showTrackingModal = false">
-        <OrderTracking 
-          :order="selectedTrackingOrder" 
-          ref="orderTrackingRef"
-          @close="showTrackingModal = false"
-          @support="handleTrackingSupport"
-          @show-proof="handleShowProof"
-        />
-      </Modal>
 
-      <!-- Modal de prueba de entrega -->
-<div v-if="showProofModal" style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.8);z-index:9999;display:flex;align-items:center;justify-content:center" @click="showProofModal = false">
-  <div style="background:white;padding:30px;border-radius:12px;max-width:600px;max-height:80vh;overflow:auto" @click.stop>
-    <h3 style="margin:0 0 20px 0;color:#8BC53F">🧪 MODAL DE PRUEBA FUNCIONANDO</h3>
-    <p><strong>Pedido:</strong> {{ selectedProofOrder?.order_number }}</p>
-    <p><strong>Cliente:</strong> {{ selectedProofOrder?.customer_name }}</p>
-    <p><strong>Estado:</strong> {{ selectedProofOrder?.status }}</p>
-    
-    <div v-if="selectedProofOrder?.proof_of_delivery" style="margin:20px 0">
-      <h4>📋 Prueba de Entrega:</h4>
-      <p>Foto: {{ selectedProofOrder.proof_of_delivery.photo_url ? '✅ Disponible' : '❌ No disponible' }}</p>
-      <p>Firma: {{ selectedProofOrder.proof_of_delivery.signature_url ? '✅ Disponible' : '❌ No disponible' }}</p>
-    </div>
-    
-    <button @click="showProofModal = false" style="margin-top:20px;padding:10px 20px;background:#8BC53F;color:white;border:none;border-radius:6px;cursor:pointer">
-      ✅ Cerrar
-    </button>
-  </div>
-</div>
-
-      <!-- Modal de soporte -->
-      <Modal v-if="showSupportModal" @close="showSupportModal = false">
-        <div class="support-modal">
-          <h3>Contactar Soporte</h3>
-          <p><strong>Pedido:</strong> {{ supportOrder?.order_number }}</p>
-          <p><strong>Cliente:</strong> {{ supportOrder?.customer_name }}</p>
-          <p><strong>Estado:</strong> {{ getStatusName(supportOrder?.status) }}</p>
-          
-          <div class="support-options">
-            <button @click="emailSupport(supportOrder)" class="support-option">
-              📧 Enviar Email
-            </button>
-            <button @click="whatsappSupport(supportOrder)" class="support-option">
-              💬 WhatsApp
-            </button>
-            <button @click="callSupport(supportOrder)" class="support-option">
-              📞 Llamar
-            </button>
-          </div>
-        </div>
-      </Modal>
     <!-- Notificaciones Toast (si no están globales) -->
     <Teleport to="body" v-if="showNotification && isAdmin">
       <div class="notification-overlay">
         <!-- Notificaciones personalizadas para admin -->
       </div>
     </Teleport>
-      
   </div>
 </template>
 <script setup>
@@ -614,45 +624,28 @@ async function openLiveTracking(order) {
  * ✅ OVERRIDE: Show Proof of Delivery
  */
 async function showProofOfDelivery(order) {
-  console.log('📸 === INICIANDO showProofOfDelivery ===')
+  console.log('📸 Cargando prueba de entrega para:', order.order_number)
   
+  selectedProofOrder.value = null
+  loadingOrderDetails.value = true
+  showProofModal.value = true
+
   try {
+    // Obtener datos completos y frescos del pedido
     const { data } = await apiService.orders.getById(order._id)
-    
     selectedProofOrder.value = data
-    showProofModal.value = true
-    loadingOrderDetails.value = false
     
-    console.log('✅ Estados asignados:', {
-      showProofModal: showProofModal.value,
-      selectedProofOrder: selectedProofOrder.value?.order_number
-    })
-    
-    // 🔍 VERIFICAR SI EL MODAL EXISTE EN EL DOM
-    await nextTick()
-    
-    setTimeout(() => {
-      const modalElement = document.querySelector('[data-modal-type="proof"]') ||
-                          document.querySelector('.modal') ||
-                          document.querySelector('[role="dialog"]')
-      
-      console.log('🔍 Modal en DOM:', modalElement)
-      
-      if (!modalElement) {
-        console.error('❌ MODAL NO ENCONTRADO EN EL DOM')
-        console.log('🔍 Elementos modales existentes:', 
-          Array.from(document.querySelectorAll('[class*="modal"]')).map(el => el.className)
-        )
-      } else {
-        console.log('✅ Modal encontrado pero no visible')
-        console.log('🎨 Estilos del modal:', window.getComputedStyle(modalElement))
-      }
-    }, 100)
+    console.log('✅ Prueba de entrega cargada:', data.proof_of_delivery)
     
   } catch (error) {
-    console.error('❌ Error:', error)
+    console.error('❌ Error cargando prueba de entrega:', error)
+    toast.error('No se pudo cargar la información de la entrega')
+    showProofModal.value = false
+  } finally {
+    loadingOrderDetails.value = false
   }
 }
+
 /**
  * ✅ OVERRIDE: Contact Support
  */
