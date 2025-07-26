@@ -467,6 +467,12 @@ async handleWebhook(req, res) {
       order.shipday_tracking_url = newTrackingUrl;
       orderUpdated = true;
     }
+    
+      if (newTrackingUrl) {
+        order.custom_tracking_url = NotificationService.extractShipdayIdAndBuildUrl(webhookData, order);
+        orderUpdated = true;
+        console.log(`🔗 URL personalizada guardada: ${order.custom_tracking_url}`);
+      }
 
     const carrierInfo = webhookData.carrier || webhookData.order?.carrier;
     if (carrierInfo) {
@@ -535,6 +541,7 @@ case 'READY_TO_DELIVER':        // Por si acaso viene sin el prefijo
 
   // 1. BUSCAR FOTOS en la estructura real del webhook
   const photos = [];
+
   
   // Ubicación real según tu webhook: webhookData.order.podUrls
   if (webhookData.order?.podUrls && Array.isArray(webhookData.order.podUrls)) {
@@ -582,6 +589,18 @@ case 'READY_TO_DELIVER':        // Por si acaso viene sin el prefijo
       order_signatureUrl: webhookData.order?.signatureUrl
     });
   }
+  // 🚀 ENVIAR EMAIL DE ENTREGA
+  if (order.customer_email) {
+    try {
+      await NotificationService.sendDeliveredEmail(order, webhookData);
+      console.log(`📧 Email "Entregado" enviado a: ${order.customer_email}`);
+    } catch (emailError) {
+      console.error('❌ Error enviando email de entrega:', emailError);
+    }
+  } else {
+    console.log('⚠️ No hay email del cliente para notificación de entrega');
+  }
+
 
   // NUEVO: Registrar entrega en historial de conductores
   try {

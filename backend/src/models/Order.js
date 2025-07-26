@@ -110,6 +110,10 @@ const orderSchema = new mongoose.Schema({
     expected_pickup_time: { type: Date }, // 🆕 AGREGADO
     expected_delivery_time: { type: Date } // 🆕 AGREGADO
   },
+  custom_tracking_url: {
+  type: String,
+  default: null
+},
 
   // 🆕 NUEVOS CAMPOS PARA SHIPDAY (datos de pickup)
   pickup_address: { type: String }, // Dirección de recogida (restaurante/tienda)

@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pedido Entregado - {{company_name}}</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #333; background-color: #f8fafc; }
+        .container { max-width: 600px; margin: 0 auto; background: white; box-shadow: 0 10px 25px rgba(0,0,0,0.1); }
+        .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 40px 20px; text-align: center; color: white; }
+        .header h1 { font-size: 32px; margin-bottom: 10px; font-weight: 700; }
+        .success-icon { font-size: 64px; margin-bottom: 20px; }
+        .content { padding: 40px 25px; }
+        .status-badge { display: inline-block; background: #10b981; color: white; padding: 12px 24px; border-radius: 30px; font-size: 16px; font-weight: bold; margin-bottom: 30px; text-transform: uppercase; letter-spacing: 1px; }
+        .delivery-card { background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%); border: 3px solid #10b981; border-radius: 20px; padding: 30px; margin: 30px 0; text-align: center; box-shadow: 0 4px 15px rgba(16, 185, 129, 0.2); }
+        .info-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin: 25px 0; }
+        .info-item { background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%); padding: 20px; border-radius: 12px; text-align: center; border: 1px solid #cbd5e1; }
+        .info-item strong { color: #475569; display: block; margin-bottom: 8px; font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px; }
+        .info-value { color: #1e293b; font-size: 16px; font-weight: 600; }
+        .proof-section { background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border: 2px solid #f59e0b; border-radius: 16px; padding: 30px; margin: 30px 0; }
+        .proof-title { color: #92400e; margin-bottom: 20px; font-size: 20px; font-weight: 700; text-align: center; }
+        .photo-gallery { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 15px; margin: 20px 0; }
+        .delivery-photo { width: 100%; height: 140px; object-fit: cover; border-radius: 12px; border: 3px solid #10b981; cursor: pointer; transition: transform 0.3s ease; box-shadow: 0 4px 10px rgba(0,0,0,0.2); }
+        .delivery-photo:hover { transform: scale(1.05); }
+        .signature-container { text-align: center; margin: 20px 0; }
+        .signature-image { max-width: 250px; height: auto; border-radius: 12px; border: 3px solid #667eea; box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3); }
+        .cta-button { display: inline-block; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 15px 30px; border-radius: 12px; text-decoration: none; font-weight: bold; margin: 15px 10px; transition: all 0.3s ease; box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4); }
+        .cta-button:hover { transform: translateY(-3px); box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6); }
+        .delivery-details { background: #f1f5f9; padding: 20px; border-radius: 12px; margin: 25px 0; border-left: 4px solid #667eea; }
+        .footer { background: #1e293b; color: white; padding: 25px; text-align: center; font-size: 14px; }
+        .footer a { color: #67e8f9; text-decoration: none; }
+        .envigo-brand { margin-top: 15px; opacity: 0.9; font-size: 12px; }
+        @media (max-width: 600px) {
+            .info-grid { grid-template-columns: 1fr; }
+            .photo-gallery { grid-template-columns: repeat(2, 1fr); }
+            .cta-button { width: 100%; margin: 10px 0; }
+            .content { padding: 25px 15px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <div class="success-icon">🎉</div>
+            <h1>¡Pedido Entregado!</h1>
+            <p>Tu pedido llegó exitosamente a destino</p>
+        </div>
+
+        <!-- Content -->
+        <div class="content">
+            <div class="status-badge">✅ Entregado con Éxito</div>
+            
+            <p style="font-size: 18px; margin-bottom: 10px;">¡Hola <strong>{{customer_name}}</strong>!</p>
+            <p style="font-size: 16px; color: #64748b; margin-bottom: 30px;">
+                Nos complace informarte que tu pedido <strong>#{{order_number}}</strong> ha sido entregado exitosamente.
+            </p>
+
+            <!-- Delivery Confirmation -->
+            <div class="delivery-card">
+                <h3 style="color: #065f46; margin-bottom: 20px; font-size: 22px;">📦 Confirmación de Entrega</h3>
+                <div class="info-grid">
+                    <div class="info-item">
+                        <strong>📅 Fecha de Entrega</strong>
+                        <div class="info-value">{{formatted_date}}</div>
+                    </div>
+                    <div class="info-item">
+                        <strong>📍 Dirección</strong>
+                        <div class="info-value">{{shipping_address}}</div>
+                    </div>
+                    <div class="info-item">
+                        <strong>🚗 Conductor</strong>
+                        <div class="info-value">{{driver.name}}</div>
+                    </div>
+                    <div class="info-item">
+                        <strong>💰 Total</strong>
+                        <div class="info-value">${{total_amount}}</div>
+                    </div>
+                </div>
+            </div>
+
+            {{#if has_proofs}}
+            <!-- Proof of Delivery -->
+            <div class="proof-section">
+                <h3 class="proof-title">📸 Pruebas de Entrega</h3>
+                
+                {{#if delivery_photos}}
+                <div style="margin-bottom: 25px;">
+                    <h4 style="color: #92400e; margin-bottom: 15px; font-size: 16px;">📷 Fotos de Entrega</h4>
+                    <div class="photo-gallery">
+                        {{#each delivery_photos}}
+                        <img src="{{this}}" alt="Foto de entrega" class="delivery-photo">
+                        {{/each}}
+                    </div>
+                </div>
+                {{/if}}
+
+                {{#if signature_url}}
+                <div class="signature-container">
+                    <h4 style="color: #92400e; margin-bottom: 15px; font-size: 16px;">✍️ Firma Digital</h4>
+                    <img src="{{signature_url}}" alt="Firma de recepción" class="signature-image">
+                </div>
+                {{/if}}
+            </div>
+            {{/if}}
+
+            <!-- Delivery Details -->
+            <div class="delivery-details">
+                <h4 style="color: #475569; margin-bottom: 15px;">📋 Detalles de la Entrega</h4>
+                <p><strong>Entregado por:</strong> {{driver.name}}</p>
+                <p><strong>Teléfono conductor:</strong> {{driver.phone}}</p>
+                <p><strong>Fecha y hora:</strong> {{formatted_date}}</p>
+                {{#if delivery_location}}
+                <p><strong>Ubicación de entrega:</strong> {{delivery_location.lat}}, {{delivery_location.lng}}</p>
+                {{/if}}
+            </div>
+
+            <!-- Action Buttons -->
+            <div style="text-align: center; margin: 30px 0;">
+                <a href="{{tracking_url}}" class="cta-button" target="_blank">
+                    🔍 Ver Detalles Completos
+                </a>
+                {{#if company_website}}
+                <a href="{{company_website}}" class="cta-button" target="_blank">
+                    🛒 Comprar Nuevamente
+                </a>
+                {{/if}}
+            </div>
+
+            <p style="margin-top: 30px; color: #64748b; font-size: 16px; text-align: center; padding: 20px; background: #f8fafc; border-radius: 12px;">
+                ¡Gracias por confiar en <strong>{{company_name}}</strong>!<br>
+                ¿Necesitas ayuda? Contáctanos a <a href="tel:{{company_phone}}" style="color: #667eea; font-weight: 600;">{{company_phone}}</a>
+            </p>
+        </div>
+
+        <!-- Footer -->
+        <div class="footer">
+            <p><strong>{{company_name}}</strong></p>
+            <p style="margin: 10px 0;">
+                {{#if company_website}}<a href="{{company_website}}">Sitio Web</a> | {{/if}}
+                <a href="{{tracking_url}}">Ver Entrega</a> | 
+                <a href="mailto:{{company_email}}">Soporte</a>
+            </p>
+            <div class="envigo-brand">
+                Powered by <strong>enviGo Logistics</strong> 🚀
+            </div>
+        </div>
+    </div>
+</body>
+</html>
