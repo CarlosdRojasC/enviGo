@@ -1805,8 +1805,9 @@ onMounted(() => {
   -moz-osx-font-smoothing: grayscale;
 }
 .unified-orders-view * {
-
+  font-family: inherit;
 }
+
 /* ==================== PAGINACIÓN CON TEMA ENVIGO ==================== */
 .pagination-container {
   display: flex;
