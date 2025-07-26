@@ -115,7 +115,14 @@
         </div>
       </div>
     </Modal>
+    <!-- Modal de Manifiesto -->
+<ManifestModal 
+  v-if="showManifestModal" 
+  :manifestId="currentManifestId"
+  @close="showManifestModal = false"
+/>
   </div>
+  
 </template>
 
 <script setup>
@@ -143,6 +150,8 @@ import { useOrdersFilters } from '../composables/useOrdersFilters'
 import { useOrdersSelection } from '../composables/useOrdersSelection'
 import ExportDropdown from '../components/Orders/ExportDropdown.vue'
 import UnifiedOrdersFilters from '../components/UnifiedOrdersFilters.vue'
+import ManifestModal from '../components/ManifestModal.vue';
+
 
 
 const toast = useToast()
@@ -214,6 +223,8 @@ const lastUpdate = ref(Date.now())
 const autoRefreshEnabled = ref(false)
 const loadingOrderDetails = ref(false)
 const orderTrackingRef = ref(null)
+const showManifestModal = ref(false);
+const currentManifestId = ref(null);
 
 // Estados de modales (mantener los existentes)
 const selectedOrder = ref(null)
@@ -350,15 +361,9 @@ async function generateManifestAndMarkReady() {
       }
     });
 
-    // 3. ✅ CORRECCIÓN: Usar ruta según el rol del usuario
-    let manifestUrl;
-    if (auth.isAdmin) {
-      manifestUrl = `/app/admin/manifest/${manifest.manifest.id}`;
-    } else {
-      manifestUrl = `/app/manifest/${manifest.manifest.id}`;
-    }
-    
-    window.open(manifestUrl, '_blank', 'width=900,height=700');
+// 3. ✅ NUEVO: Abrir modal en lugar de nueva pestaña
+currentManifestId.value = manifest.manifest.id;
+showManifestModal.value = true;
     
     toast.success(`✅ Manifiesto ${manifest.manifest.manifest_number} creado exitosamente`);
     clearSelection();

@@ -3,7 +3,7 @@
 const ShipdayService = require('../services/shipday.service');
 const Order = require('../models/Order'); // ¡CORRECCIÓN: Modelo Order importado!
 const DriverHistoryService = require('../services/driverHistory.service');
-
+const NotificationService = require('../services/notification.service');
 /**
  * Función auxiliar para generar un timeline de eventos basado en los datos de la orden de Shipday.
  * @param {object} orderData - El objeto de la orden de Shipday.
@@ -502,7 +502,25 @@ async handleWebhook(req, res) {
     notificationEventType = 'picked_up';
     orderUpdated = true;
     break;
-
+    
+case 'ORDER_READY_TO_DELIVER':  // ✅ Estado cuando va en camino al cliente
+case 'READY_TO_DELIVER':        // Por si acaso viene sin el prefijo
+  console.log('🚚 Evento: En Camino al Cliente - ENVIANDO EMAIL.');
+  order.status = 'out_for_delivery';  
+  orderUpdated = true;
+  
+  // 🚀 ENVIAR EMAIL AL CLIENTE
+  if (order.customer_email) {
+    try {
+      await NotificationService.sendOutForDeliveryEmail(order, webhookData);
+      console.log(`📧 Email "En Camino" enviado a: ${order.customer_email}`);
+    } catch (emailError) {
+      console.error('❌ Error enviando email:', emailError);
+    }
+  } else {
+    console.log('⚠️ No hay email del cliente, no se envía notificación');
+  }
+  break;
  case 'order_delivered':
  case 'order_completed':
  case 'ORDER_POD_UPLOAD':
