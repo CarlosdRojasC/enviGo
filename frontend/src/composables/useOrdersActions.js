@@ -65,6 +65,29 @@ export function useOrdersActions(newOrder, isCreatingOrder, fetchOrders) {
    * Create new order manually
    */
   async function handleCreateOrder() {
+
+    console.group('🐛 DEBUG - Create Order Form Data')
+  console.log('newOrder.value completo:', newOrder.value)
+  console.log('company_id:', newOrder.value.company_id)
+  console.log('customer_name:', newOrder.value.customer_name)
+  console.log('shipping_address:', newOrder.value.shipping_address)
+  console.log('shipping_commune:', newOrder.value.shipping_commune)
+  console.log('total_amount:', newOrder.value.total_amount)
+  console.groupEnd()
+
+  // Validation con mensajes más específicos
+  if (!newOrder.value.company_id) {
+    console.error('❌ company_id is missing:', newOrder.value.company_id)
+    toast.warning('Por favor, seleccione una empresa')
+    return false
+  }
+  
+  if (!newOrder.value.customer_name?.trim()) {
+    console.error('❌ customer_name is missing:', newOrder.value.customer_name)
+    toast.warning('Por favor, ingrese el nombre del cliente')
+    return false
+  }
+
     // Validation
     if (!newOrder.value.company_id) {
       toast.warning('Por favor, seleccione una empresa')
@@ -98,7 +121,7 @@ export function useOrdersActions(newOrder, isCreatingOrder, fetchOrders) {
       
       // Get company channels
       const channelsResponse = await apiService.channels.getByCompany(newOrder.value.company_id)
-      
+      console.log('📡 Channels response:', channelsResponse)
       if (!channelsResponse.data || channelsResponse.data.length === 0) {
         toast.warning('La empresa seleccionada no tiene canales configurados. Configure uno primero.')
         return false
