@@ -194,14 +194,7 @@
         @update="handleOrderUpdate" 
       />
     </Modal>
-
-    <!-- Notificaciones Toast (si no están globales) -->
-    <Teleport to="body" v-if="showNotification && isAdmin">
-      <div class="notification-overlay">
-        <!-- Notificaciones personalizadas para admin -->
-      </div>
-    </Teleport>
-          <!-- Modal de tracking en tiempo real -->
+    <!-- Modal de tracking en tiempo real -->
       <Modal v-if="showTrackingModal" @close="showTrackingModal = false">
         <OrderTracking 
           :order="selectedTrackingOrder" 
@@ -241,6 +234,13 @@
           </div>
         </div>
       </Modal>
+    <!-- Notificaciones Toast (si no están globales) -->
+    <Teleport to="body" v-if="showNotification && isAdmin">
+      <div class="notification-overlay">
+        <!-- Notificaciones personalizadas para admin -->
+      </div>
+    </Teleport>
+      
   </div>
 </template>
 <script setup>
