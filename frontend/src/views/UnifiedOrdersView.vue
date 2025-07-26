@@ -605,17 +605,37 @@ async function showProofOfDelivery(order) {
   console.log('📸 === INICIANDO showProofOfDelivery ===')
   
   try {
-    // 🔍 VER QUÉ URL ESTÁ USANDO EL APISERVICE
-    console.log('🔗 Base URL del API:', import.meta.env.VITE_API_URL)
-    
-    // Usar tu apiService original
     const { data } = await apiService.orders.getById(order._id)
     
     selectedProofOrder.value = data
     showProofModal.value = true
     loadingOrderDetails.value = false
     
-    console.log('✅ Modal abierto correctamente con apiService')
+    console.log('✅ Estados asignados:', {
+      showProofModal: showProofModal.value,
+      selectedProofOrder: selectedProofOrder.value?.order_number
+    })
+    
+    // 🔍 VERIFICAR SI EL MODAL EXISTE EN EL DOM
+    await nextTick()
+    
+    setTimeout(() => {
+      const modalElement = document.querySelector('[data-modal-type="proof"]') ||
+                          document.querySelector('.modal') ||
+                          document.querySelector('[role="dialog"]')
+      
+      console.log('🔍 Modal en DOM:', modalElement)
+      
+      if (!modalElement) {
+        console.error('❌ MODAL NO ENCONTRADO EN EL DOM')
+        console.log('🔍 Elementos modales existentes:', 
+          Array.from(document.querySelectorAll('[class*="modal"]')).map(el => el.className)
+        )
+      } else {
+        console.log('✅ Modal encontrado pero no visible')
+        console.log('🎨 Estilos del modal:', window.getComputedStyle(modalElement))
+      }
+    }, 100)
     
   } catch (error) {
     console.error('❌ Error:', error)
