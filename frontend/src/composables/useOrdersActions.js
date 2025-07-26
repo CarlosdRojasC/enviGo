@@ -3,7 +3,7 @@ import { ref } from 'vue'
 import { useToast } from 'vue-toastification'
 import { apiService } from '../services/api'
 
-export function useOrdersActions(orders, newOrder, isCreatingOrder, fetchOrders) {
+export function useOrdersActions(newOrder, isCreatingOrder, fetchOrders) {
   const toast = useToast()
 
   // ==================== STATE ====================
@@ -131,26 +131,41 @@ export function useOrdersActions(orders, newOrder, isCreatingOrder, fetchOrders)
       console.log('📦 Prepared order data:', orderData)
       
       // Create order
-   await apiService.orders.create(orderData);
+      const response = await apiService.orders.create(orderData)
       
-      toast.success('✅ Pedido manual creado exitosamente. Actualizando lista...');
+      toast.success('✅ Pedido manual creado exitosamente')
+      console.log('✅ Order created:', response.data)
       
-      // 2. (LA CLAVE) Volver a pedir la lista completa de órdenes.
-      //    Esto asegura que la nueva orden venga con todos los datos poblados.
-      await fetchOrders();
+      // Refresh orders list
+      await fetchOrders()
       
-      // 3. Devolver 'true' para que el componente sepa que debe cerrar el modal.
-      return true;
-
+      // Reset form
+      resetNewOrderForm()
+      
+      return true
+      
     } catch (error) {
-      console.error('❌ Error creating order:', error);
-      const errorMessage = error.response?.data?.error || 'No se pudo crear el pedido.';
-      toast.error(errorMessage);
-      return false;
+      console.error('❌ Error creating order:', error)
+      
+      let errorMessage = 'No se pudo crear el pedido'
+      
+      if (error.response?.data?.errors?.[0]?.msg) {
+        errorMessage = error.response.data.errors[0].msg
+      } else if (error.response?.data?.error) {
+        errorMessage = error.response.data.error
+      } else if (error.response?.data?.message) {
+        errorMessage = error.response.data.message
+      } else if (error.message) {
+        errorMessage = error.message
+      }
+      
+      toast.error(`Error al crear pedido: ${errorMessage}`)
+      return false
+      
     } finally {
-      isCreatingOrder.value = false;
+      isCreatingOrder.value = false
     }
-  };
+  }
 
   /**
    * Handle order status update
