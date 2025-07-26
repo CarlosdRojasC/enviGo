@@ -534,24 +534,6 @@ const filteredCommunes = computed(() => {
   ).sort()
 })
 
-/**
- * ✅ RESUMEN DE SELECCIÓN (ADMIN)
- */
-const selectionSummary = computed(() => {
-  if (!isAdmin.value || selectedOrderObjects.value.length === 0) return null
-
-  const totalValue = selectedOrderObjects.value.reduce((sum, order) => sum + (order.total_amount || 0), 0)
-  const companies = new Set(selectedOrderObjects.value.map(order => 
-    typeof order.company_id === 'object' ? order.company_id._id : order.company_id
-  )).size
-  const communes = new Set(selectedOrderObjects.value.map(order => order.shipping_commune)).size
-
-  return {
-    totalValue,
-    companies,
-    communes
-  }
-})
 
 // ==================== MÉTODOS OVERRIDES PARA UNIFICAR COMPORTAMIENTO ====================
 
