@@ -16,6 +16,8 @@ class ManifestController {
     const session = await mongoose.startSession();
     session.startTransaction();
     
+    let transactionCommitted = false; // ✅ AÑADIR FLAG PARA TRACKING
+    
     try {
       const { orderIds } = req.body;
       
@@ -28,6 +30,7 @@ class ManifestController {
       
       // Validación inicial
       if (!orderIds || !Array.isArray(orderIds) || orderIds.length === 0) {
+        await session.abortTransaction();
         return res.status(400).json({ 
           error: 'Se requiere un array de IDs de pedidos válidos.',
           received: orderIds 
@@ -42,6 +45,7 @@ class ManifestController {
       
       if (!userId) {
         console.error('❌ No se encontró ID de usuario en req.user:', req.user);
+        await session.abortTransaction();
         return res.status(400).json({ 
           error: 'No se pudo identificar al usuario. Token JWT inválido.',
           debug_user: req.user
@@ -53,6 +57,7 @@ class ManifestController {
       // Validar que los IDs son ObjectIds válidos
       const validObjectIds = orderIds.filter(id => mongoose.Types.ObjectId.isValid(id));
       if (validObjectIds.length !== orderIds.length) {
+        await session.abortTransaction();
         return res.status(400).json({ 
           error: 'Algunos IDs de pedidos no son válidos',
           invalid_ids: orderIds.filter(id => !mongoose.Types.ObjectId.isValid(id))
@@ -190,9 +195,10 @@ class ManifestController {
 
       console.log(`📦 Órdenes actualizadas: ${updateResult.modifiedCount} de ${orders.length}`);
 
-      // Confirmar transacción
+      // ✅ FIX: Confirmar transacción y marcar como committed
       await session.commitTransaction();
-
+      transactionCommitted = true; // ✅ MARCAR COMO COMMITTED
+      
       console.log(`✅ Manifiesto ${manifestNumber} creado exitosamente`);
 
       // Notificar via WebSocket si está disponible
@@ -221,7 +227,15 @@ class ManifestController {
       });
 
     } catch (error) {
-      await session.abortTransaction();
+      // ✅ FIX: Solo hacer abort si la transacción NO fue committed
+      if (!transactionCommitted) {
+        try {
+          await session.abortTransaction();
+        } catch (abortError) {
+          console.error('❌ Error haciendo abort de transacción:', abortError.message);
+        }
+      }
+      
       console.error('❌ Error creando manifiesto:', error);
       
       // Manejo específico de errores
@@ -245,6 +259,7 @@ class ManifestController {
         details: process.env.NODE_ENV === 'development' ? error.message : undefined
       });
     } finally {
+      // ✅ FIX: Solo cerrar la sesión, no hacer abort
       session.endSession();
     }
   }
