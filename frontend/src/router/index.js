@@ -116,19 +116,6 @@ const routes = [
           roles: ['admin'] 
         }
       },
-
-      // ==================== USUARIOS ====================
-      {
-        path: 'users',
-        name: 'Users',
-        component: () => import('../views/Users.vue'),
-        meta: { 
-          requiresAuth: true, 
-          requiresCompany: true,
-          roles: ['company_owner']
-        }
-      },
-
       // ==================== FACTURACIÓN ====================
       {
         path: 'billing',
@@ -140,17 +127,6 @@ const routes = [
           roles: ['company_owner']
         }
       },
-
-      // ==================== CONFIGURACIÓN ====================
-      {
-        path: 'settings',
-        name: 'Settings',
-        component: () => import('../views/Settings.vue'),
-        meta: { 
-          requiresAuth: true,
-          roles: ['admin', 'company_owner', 'company_employee']
-        }
-      }
     ]
   },
 
