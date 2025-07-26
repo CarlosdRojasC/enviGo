@@ -1,24 +1,25 @@
 <template>
   <div class="manifest-container">
-    <!-- HEADER solo visible en pantalla -->
-    <div class="manifest-header no-print">
-      <h1>📋 Manifiesto de Retiro</h1>
-      <div class="header-actions">
-        <button @click="goBack" class="back-button">
-          ← Volver
-        </button>
-        <button @click="printManifest" class="print-button" :disabled="!manifestData">
-          🖨️ Imprimir
-        </button>
-        <button 
-          v-if="manifestData && manifestData.status !== 'picked_up'" 
-          @click="markAsPickedUp" 
-          class="pickup-button"
-        >
-          ✅ Marcar como Retirado
-        </button>
-      </div>
-    </div>
+<!-- HEADER solo visible en pantalla -->
+<div class="manifest-header no-print">
+  <h1>📋 Manifiesto de Retiro</h1>
+  <div class="header-actions">
+    <button @click="goBack" class="back-button">
+      ← Volver
+    </button>
+    <button @click="printManifest" class="print-button" :disabled="!manifestData">
+      🖨️ Imprimir
+    </button>
+    <!-- Solo admin puede marcar como retirado -->
+    <button 
+      v-if="auth.isAdmin && manifestData && manifestData.status !== 'picked_up'" 
+      @click="markAsPickedUp" 
+      class="pickup-button"
+    >
+      ✅ Marcar como Retirado
+    </button>
+  </div>
+</div>
 
     <!-- ÁREA A IMPRIMIR -->
     <div id="print-area">
@@ -205,10 +206,13 @@ import { useRoute, useRouter } from 'vue-router';
 import { apiService } from '../services/api';
 import { useToast } from 'vue-toastification';
 import Modal from '../components/Modal.vue';
+import { useAuthStore } from '../store/auth';
 
 const route = useRoute();
 const router = useRouter();
 const toast = useToast();
+const auth = useAuthStore();
+
 
 // ==================== STATE ====================
 const manifestData = ref(null);

@@ -19,6 +19,9 @@
       <router-link v-if="auth.isAdmin" to="/app/admin/orders" class="nav-item">
         📦 <span>Pedidos Globales</span>
       </router-link>
+      <router-link v-if="auth.isAdmin" to="/app/admin/manifests" class="nav-item">
+  📋 <span>Manifiestos</span>
+</router-link>
       <router-link v-if="auth.isAdmin" to="/app/admin/channels" class="nav-item">
         📡 <span>Canales de Venta</span>
       </router-link>
@@ -34,9 +37,7 @@
       <router-link v-if="auth.isAdmin" to="/app/admin/communes" class="nav-item">
         🏘️ <span>Comunas</span>
       </router-link>
-<router-link v-if="auth.isAdmin" to="/app/admin/manifests" class="nav-item">
-  📋 <span>Manifiestos</span>
-</router-link>
+
 
       <!-- Rutas para Empresas -->
       <router-link v-if="!auth.isAdmin" to="/app/dashboard" class="nav-item">
@@ -45,15 +46,16 @@
       <router-link v-if="!auth.isAdmin" to="/app/orders" class="nav-item">
         📦 <span>Mis Pedidos</span>
       </router-link>
+            <router-link v-if="!auth.isAdmin" to="/app/manifests" class="nav-item">
+  📋 <span>Manifiestos</span>
+</router-link>
       <router-link v-if="!auth.isAdmin" to="/app/channels" class="nav-item">
         📡 <span>Mis Canales</span>
       </router-link>
       <router-link v-if="!auth.isAdmin" to="/app/billing" class="nav-item">
         🧾 <span>Facturación</span>
       </router-link>
-      <router-link v-if="!auth.isAdmin" to="/app/manifests" class="nav-item">
-  📋 <span>Manifiestos</span>
-</router-link>
+
     </nav>
     
     <div class="sidebar-footer">
