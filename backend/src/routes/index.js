@@ -18,6 +18,7 @@ const searchRoutes = require('./search.routes');
 const shipdayRoutes = require('./shipday.routes');
 const comunasRoutes = require('./comunas.routes');
 const channelRoutes = require('./channels.routes');
+const manifestRoutes = require('./manifest.routes');
 const notificationRoutes = require('./notifications.routes');
 
 router.use('/auth', authRoutes);
@@ -48,6 +49,7 @@ router.use('/search', searchRoutes);
 router.use('/shipday', shipdayRoutes);
 router.use('/communes', comunasRoutes);
 router.use('/channels', channelRoutes);
+route.use('/manifests', manifestRoutes); 
 
 
 module.exports = router;

@@ -64,7 +64,7 @@ const routes = [
         meta: { roles: ['company_owner', 'company_employee'], requiresCompany: true }
       },
      {
-  path: '/manifest/:id?',
+  path: 'manifest/:id?',
   name: 'PickupManifest',
   component: () => import('../views/PickupManifest.vue'),
   meta: { 
@@ -73,7 +73,7 @@ const routes = [
   }
 },
 {
-  path: '/manifests',
+  path: 'manifests',
   name: 'ManifestsAdmin',
   component: () => import('../views/ManifestsAdmin.vue'),
   meta: { 

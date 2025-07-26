@@ -351,7 +351,7 @@ async function generateManifestAndMarkReady() {
     });
 
     // 3. Abrir manifiesto guardado para ver/imprimir
-    const manifestUrl = `/manifest/${manifest.manifest.id}`;
+    const manifestUrl = `/app/manifest/${manifest.manifest.id}`;
     window.open(manifestUrl, '_blank', 'width=900,height=700');
     
     toast.success(`✅ Manifiesto ${manifest.manifest.manifest_number} creado exitosamente`);

@@ -521,7 +521,7 @@ async function goToPage(page) {
  * Ver manifiesto
  */
 function viewManifest(manifest) {
-  const manifestUrl = `/manifest/${manifest._id}`;
+  const manifestUrl = `/app/manifest/${manifest._id}`;
   window.open(manifestUrl, '_blank', 'width=900,height=700');
 }
 
