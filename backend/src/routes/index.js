@@ -49,7 +49,7 @@ router.use('/search', searchRoutes);
 router.use('/shipday', shipdayRoutes);
 router.use('/communes', comunasRoutes);
 router.use('/channels', channelRoutes);
-route.use('/manifests', manifestRoutes); 
+router.use('/manifests', manifestRoutes); 
 
 
 module.exports = router;
