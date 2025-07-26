@@ -1,25 +1,25 @@
+// backend/src/routes/manifest.routes.js
+
 const express = require('express');
 const router = express.Router();
 const manifestController = require('../controllers/manifest.controller');
-const { authenticateToken, authorizeRoles } = require('../middlewares/auth.middleware');
+const { authenticateToken, isAdmin, isAdminOrCompanyOwner } = require('../middlewares/auth.middleware');
 
-// Crear manifiesto
+// ==================== RUTAS DE MANIFIESTOS ====================
+
+// Crear manifiesto (todos los usuarios autenticados)
 router.post('/', authenticateToken, manifestController.create);
 
-// Listar manifiestos
+// Listar manifiestos (admin ve todos, otros solo los de su empresa)
 router.get('/', authenticateToken, manifestController.getAll);
 
-// Obtener manifiesto específico
+// Obtener manifiesto específico (admin ve todos, otros solo los de su empresa)
 router.get('/:id', authenticateToken, manifestController.getById);
 
-// Generar PDF
+// Generar PDF (admin ve todos, otros solo los de su empresa)
 router.get('/:id/pdf', authenticateToken, manifestController.generatePDF);
 
-// Actualizar estado
-router.patch('/:id/status', 
-  authenticateToken, 
-  authorizeRoles(['admin', 'company_owner']), 
-  manifestController.updateStatus
-);
+// Actualizar estado - solo admin y company_owner pueden cambiar estados
+router.patch('/:id/status', authenticateToken, isAdminOrCompanyOwner, manifestController.updateStatus);
 
 module.exports = router;

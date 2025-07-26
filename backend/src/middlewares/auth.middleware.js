@@ -40,7 +40,14 @@ const isCompanyOwner = (req, res, next) => {
   }
   next();
 };
-
+const isAdminOrCompanyOwner = (req, res, next) => {
+  if (req.user.role !== ROLES.COMPANY_OWNER && req.user.role !== ROLES.ADMIN) {
+    return res.status(403).json({ 
+      error: 'Acceso denegado. Se requiere rol de administrador o dueño de empresa.' 
+    });
+  }
+  next();
+};
 // Verificar acceso a empresa específica
 const hasCompanyAccess = (req, res, next) => {
   const companyId = req.params.companyId || req.query.company_id;
@@ -96,5 +103,6 @@ module.exports = {
   isCompanyOwner,
   hasCompanyAccess,
   requiresCompany,
-  verifyShopifyWebhook
+  verifyShopifyWebhook,
+  isAdminOrCompanyOwner
 };
