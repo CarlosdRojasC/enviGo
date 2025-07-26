@@ -1,7 +1,13 @@
-// frontend/src/components/ProofOfDelivery.vue - COMPONENTE CORREGIDO
 
 <template>
   <div class="proof-container">
+     <div v-if="!hasProofOfDelivery" class="no-proof-message">
+      <div class="no-proof-icon">📋</div>
+      <h3>Sin Prueba de Entrega</h3>
+      <p>Este pedido aún no tiene prueba de entrega disponible.</p>
+      <p class="help-text">La prueba se generará cuando el conductor complete la entrega.</p>
+    </div>
+    <div v-else>
     <!-- Header -->
     <div class="proof-header">
       <div class="delivery-success">
@@ -109,6 +115,7 @@
         ⚠️ Reportar Problema
       </button>
     </div>
+    </div>
 
     <!-- Modal de Error de Imagen -->
     <div v-if="showErrorModal" class="error-modal-overlay" @click="closeErrorModal">
@@ -143,37 +150,80 @@ const errorMessage = ref('')
 const failedImageIndex = ref(null)
 const imageLoadStates = ref({})
 
-// Computed properties
+// ✅ COMPUTED PROPERTIES CORREGIDOS - CON VERIFICACIÓN DE NULL
+const hasProofOfDelivery = computed(() => {
+  return !!(props.order?.proof_of_delivery)
+})
+
 const hasPhotos = computed(() => {
-  return order.proof_of_delivery?.photo_url || 
-         (Array.isArray(order.proof_of_delivery?.photos) && 
-          order.proof_of_delivery.photos.length > 0)
+  if (!hasProofOfDelivery.value) return false
+  
+  const proof = props.order.proof_of_delivery
+  return !!(proof.photo_url || 
+           (Array.isArray(proof.photos) && proof.photos.length > 0) ||
+           (Array.isArray(proof.podUrls) && proof.podUrls.length > 0))
 })
 
 const deliveryPhotos = computed(() => {
   if (!hasPhotos.value) return []
   
-  // Si es una sola foto
-  if (order.proof_of_delivery.photo_url) {
+  const proof = props.order.proof_of_delivery
+  
+  // Intentar diferentes fuentes de fotos
+  if (proof.photo_url) {
     return [{
-      url: order.proof_of_delivery.photo_url,
+      url: proof.photo_url,
       loading: imageLoadStates.value[0] !== 'loaded'
     }]
   }
   
-  // Si son múltiples fotos
-  return order.proof_of_delivery.photos.map((photo, index) => ({
-    url: photo,
-    loading: imageLoadStates.value[index] !== 'loaded'
-  }))
+  if (Array.isArray(proof.photos) && proof.photos.length > 0) {
+    return proof.photos.map((photo, index) => ({
+      url: photo,
+      loading: imageLoadStates.value[index] !== 'loaded'
+    }))
+  }
+  
+  if (Array.isArray(proof.podUrls) && proof.podUrls.length > 0) {
+    return proof.podUrls.map((photo, index) => ({
+      url: photo,
+      loading: imageLoadStates.value[index] !== 'loaded'
+    }))
+  }
+  
+  return []
+})
+
+const hasSignature = computed(() => {
+  if (!hasProofOfDelivery.value) return false
+  const proof = props.order.proof_of_delivery
+  return !!(proof.signature_url || proof.signatureUrl)
+})
+
+const signatureUrl = computed(() => {
+  if (!hasSignature.value) return null
+  const proof = props.order.proof_of_delivery
+  return proof.signature_url || proof.signatureUrl
 })
 
 const hasGpsLocation = computed(() => {
-  const coords = order.proof_of_delivery?.gps_coordinates
+  if (!hasProofOfDelivery.value) return false
+  const coords = props.order.proof_of_delivery.gps_coordinates
   return coords && coords.lat && coords.lng
 })
 
-// Métodos de manejo de errores CORREGIDOS
+const hasDeliveryNotes = computed(() => {
+  if (!hasProofOfDelivery.value) return false
+  return !!(props.order.proof_of_delivery.delivery_notes || props.order.proof_of_delivery.notes)
+})
+
+const deliveryNotes = computed(() => {
+  if (!hasDeliveryNotes.value) return ''
+  const proof = props.order.proof_of_delivery
+  return proof.delivery_notes || proof.notes || ''
+})
+
+// ✅ RESTO DE MÉTODOS SIN CAMBIOS...
 function handleImageError(event, imageNumber) {
   console.error('Error cargando imagen:', event.target.src)
   
@@ -181,7 +231,6 @@ function handleImageError(event, imageNumber) {
   failedImageIndex.value = imageNumber - 1
   showErrorModal.value = true
   
-  // Marcar imagen como fallida
   imageLoadStates.value[imageNumber - 1] = 'failed'
 }
 
@@ -196,10 +245,8 @@ function handleSignatureError(event) {
 
 function retryImageLoad() {
   if (failedImageIndex.value !== null) {
-    // Resetear estado de la imagen
     imageLoadStates.value[failedImageIndex.value] = 'loading'
     
-    // Forzar recarga de la imagen
     const imgElements = document.querySelectorAll('.delivery-photo')
     if (imgElements[failedImageIndex.value]) {
       const img = imgElements[failedImageIndex.value]
@@ -219,7 +266,6 @@ function closeErrorModal() {
   failedImageIndex.value = null
 }
 
-// Otros métodos
 function formatDateTime(dateStr) {
   if (!dateStr) return 'No especificado'
   
@@ -235,7 +281,7 @@ function formatDateTime(dateStr) {
 }
 
 function openInMaps() {
-  const coords = order.proof_of_delivery.gps_coordinates
+  const coords = props.order.proof_of_delivery.gps_coordinates
   const url = `https://www.google.com/maps?q=${coords.lat},${coords.lng}`
   window.open(url, '_blank')
 }
@@ -243,32 +289,29 @@ function openInMaps() {
 function shareProof() {
   if (navigator.share) {
     navigator.share({
-      title: `Comprobante de Entrega - Pedido #${order.order_number}`,
-      text: `Mi pedido #${order.order_number} fue entregado exitosamente el ${formatDateTime(order.delivery_date)}`,
+      title: `Comprobante de Entrega - Pedido #${props.order.order_number}`,
+      text: `Mi pedido #${props.order.order_number} fue entregado exitosamente el ${formatDateTime(props.order.delivery_date)}`,
       url: window.location.href
     })
   } else {
-    const text = `Mi pedido #${order.order_number} fue entregado exitosamente el ${formatDateTime(order.delivery_date)}`
+    const text = `Mi pedido #${props.order.order_number} fue entregado exitosamente el ${formatDateTime(props.order.delivery_date)}`
     navigator.clipboard.writeText(text)
     toast.success('Información copiada al portapapeles')
   }
 }
 
 function downloadProof() {
-  // Implementar descarga de comprobante
   toast.info('Función de descarga en desarrollo')
 }
 
 function reportIssue() {
-  const subject = `Problema con Entrega - Pedido #${order.order_number}`
-  const body = `Hola,\n\nTengo un problema con la entrega de mi pedido #${order.order_number}.\n\nDetalles de la entrega:\n- Fecha: ${formatDateTime(order.delivery_date)}\n- Conductor: ${order.driver_info?.name || 'No especificado'}\n\nDescripción del problema:\n[Describe el problema aquí]\n\nGracias.`
+  const subject = `Problema con Entrega - Pedido #${props.order.order_number}`
+  const body = `Hola,\n\nTengo un problema con la entrega de mi pedido #${props.order.order_number}.\n\nDetalles de la entrega:\n- Fecha: ${formatDateTime(props.order.delivery_date)}\n- Conductor: ${props.order.driver_info?.name || 'No especificado'}\n\nDescripción del problema:\n[Describe el problema aquí]\n\nGracias.`
     
   window.location.href = `mailto:soporte@tuempresa.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
 }
 
-// Inicialización
 onMounted(() => {
-  // Inicializar estados de carga de imágenes
   if (hasPhotos.value) {
     deliveryPhotos.value.forEach((_, index) => {
       imageLoadStates.value[index] = 'loading'
@@ -431,5 +474,31 @@ onMounted(() => {
     flex-direction: column;
     text-align: center;
   }
+}
+.no-proof-message {
+  text-align: center;
+  padding: 60px 20px;
+  color: #6b7280;
+}
+
+.no-proof-icon {
+  font-size: 64px;
+  margin-bottom: 20px;
+}
+
+.no-proof-message h3 {
+  margin: 0 0 12px 0;
+  color: #374151;
+  font-size: 24px;
+}
+
+.no-proof-message p {
+  margin: 0 0 8px 0;
+  font-size: 16px;
+}
+
+.help-text {
+  font-size: 14px !important;
+  color: #9ca3af !important;
 }
 </style>
