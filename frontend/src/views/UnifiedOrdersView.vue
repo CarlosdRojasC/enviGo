@@ -1779,6 +1779,18 @@ onMounted(() => {
 })
 </script>
 <style scoped>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+/* ==================== VARIABLES ENVIGO ==================== */
+:root {
+  --primary: #8BC53F;
+  --primary-dark: #7AB32E;
+  --secondary: #A4D65E;
+  --accent: #6BA428;
+  --gradient: linear-gradient(135deg, #8BC53F 0%, #A4D65E 100%);
+  --shadow-green: 0 4px 12px rgba(139, 197, 63, 0.15);
+  --font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
 /* ==================== LAYOUT PRINCIPAL ==================== */
 .unified-orders-view {
   max-width: 100%;
@@ -1786,9 +1798,16 @@ onMounted(() => {
   padding: 20px;
   min-height: 100vh;
   background: #f8fafc;
+  animation: fadeInUp 0.6s ease-out;
+    font-family: var(--font-family);
+  font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
+.unified-orders-view * {
 
-/* ==================== PAGINACIÓN ==================== */
+}
+/* ==================== PAGINACIÓN CON TEMA ENVIGO ==================== */
 .pagination-container {
   display: flex;
   justify-content: space-between;
@@ -1798,13 +1817,26 @@ onMounted(() => {
   background: white;
   border-radius: 12px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-  border: 1px solid #e2e8f0;
+  border: 1px solid rgba(139, 197, 63, 0.2);
+  position: relative;
+}
+
+.pagination-container::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--gradient);
+  border-radius: 12px 12px 0 0;
 }
 
 .pagination-info {
   font-size: 14px;
   color: #64748b;
   font-weight: 500;
+  letter-spacing: -0.01em;
 }
 
 .pagination-controls {
@@ -1815,21 +1847,39 @@ onMounted(() => {
 
 .pagination-btn {
   padding: 10px 16px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid rgba(139, 197, 63, 0.3);
   border-radius: 8px;
   background: white;
   color: #374151;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.3s ease;
   font-weight: 500;
   font-size: 14px;
+  position: relative;
+  overflow: hidden;
+  letter-spacing: -0.01em;
+}
+.pagination-btn::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: var(--gradient);
+  transition: left 0.3s ease;
+  z-index: -1;
 }
 
 .pagination-btn:hover:not(:disabled) {
-  background: #f8fafc;
-  border-color: #cbd5e1;
+  border-color: var(--primary);
+  color: white;
   transform: translateY(-1px);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--shadow-green);
+}
+
+.pagination-btn:hover:not(:disabled)::before {
+  left: 0;
 }
 
 .pagination-btn:disabled {
@@ -1837,21 +1887,38 @@ onMounted(() => {
   cursor: not-allowed;
   background: #f1f5f9;
   color: #94a3b8;
+  border-color: #e2e8f0;
 }
 
 .page-info {
   font-size: 14px;
   color: #64748b;
   font-weight: 600;
-  padding: 0 8px;
+  padding: 8px 16px;
+  background: linear-gradient(135deg, rgba(139, 197, 63, 0.1) 0%, rgba(164, 214, 94, 0.1) 100%);
+  border-radius: 8px;
+  border: 1px solid rgba(139, 197, 63, 0.2);
+  letter-spacing: -0.01em;
 }
 
-/* ==================== MODAL DE SOPORTE ==================== */
+/* ==================== MODAL DE SOPORTE CON TEMA ENVIGO ==================== */
 .support-modal {
   padding: 32px;
   max-width: 480px;
   background: white;
   border-radius: 16px;
+  position: relative;
+  overflow: hidden;
+}
+
+.support-modal::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: var(--gradient);
 }
 
 .support-modal h3 {
@@ -1860,13 +1927,15 @@ onMounted(() => {
   font-size: 24px;
   font-weight: 700;
   text-align: center;
+  letter-spacing: -0.02em;
 }
 
 .support-modal p {
   margin: 12px 0;
   color: #4b5563;
   font-size: 16px;
-  line-height: 1.5;
+  line-height: 1.6;
+  letter-spacing: -0.01em;
 }
 
 .support-modal p strong {
@@ -1895,33 +1964,49 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: 12px;
+  position: relative;
+  overflow: hidden;
+  letter-spacing: -0.01em;
+}
+
+.support-option::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: var(--gradient);
+  transition: left 0.3s ease;
+  z-index: -1;
 }
 
 .support-option:hover {
-  background: #f8fafc;
-  border-color: #6366f1;
+  border-color: var(--primary);
+  color: white;
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.15);
+  box-shadow: var(--shadow-green);
+}
+
+.support-option:hover::before {
+  left: 0;
 }
 
 .support-option:active {
   transform: translateY(0);
 }
 
-/* Colores específicos para cada opción de soporte */
-.support-option:nth-child(1):hover {
-  border-color: #dc2626;
-  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.15);
+/* Bordes específicos para cada opción de soporte */
+.support-option:nth-child(1) {
+  border-left: 4px solid #dc2626;
 }
 
-.support-option:nth-child(2):hover {
-  border-color: #16a34a;
-  box-shadow: 0 4px 12px rgba(22, 163, 74, 0.15);
+.support-option:nth-child(2) {
+  border-left: 4px solid #16a34a;
 }
 
-.support-option:nth-child(3):hover {
-  border-color: #2563eb;
-  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.15);
+.support-option:nth-child(3) {
+  border-left: 4px solid #2563eb;
 }
 
 /* ==================== NOTIFICACIONES ==================== */
@@ -1935,7 +2020,7 @@ onMounted(() => {
   pointer-events: none;
 }
 
-/* ==================== LOADING STATES ==================== */
+/* ==================== LOADING STATES CON TEMA ENVIGO ==================== */
 .loading-overlay {
   position: absolute;
   top: 0;
@@ -1953,8 +2038,8 @@ onMounted(() => {
 .loading-spinner {
   width: 40px;
   height: 40px;
-  border: 4px solid #e2e8f0;
-  border-top: 4px solid #6366f1;
+  border: 4px solid rgba(139, 197, 63, 0.2);
+  border-top: 4px solid var(--primary);
   border-radius: 50%;
   animation: spin 1s linear infinite;
 }
@@ -1962,6 +2047,144 @@ onMounted(() => {
 @keyframes spin {
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }
+}
+
+/* ==================== ANIMACIONES Y TRANSICIONES ==================== */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Animación suave para modales */
+.modal-enter-active, .modal-leave-active {
+  transition: all 0.3s ease;
+}
+
+.modal-enter-from, .modal-leave-to {
+  opacity: 0;
+  transform: scale(0.9);
+}
+
+/* Animación para elementos que aparecen */
+.slide-down-enter-active, .slide-down-leave-active {
+  transition: all 0.3s ease;
+}
+
+.slide-down-enter-from, .slide-down-leave-to {
+  opacity: 0;
+  transform: translateY(-10px);
+}
+
+/* Pulso para elementos importantes con colores EnviGo */
+.pulse-animation {
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(139, 197, 63, 0.4);
+  }
+  70% {
+    box-shadow: 0 0 0 10px rgba(139, 197, 63, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(139, 197, 63, 0);
+  }
+}
+
+/* ==================== ESTADOS DE HOVER Y FOCUS ==================== */
+
+/* Estados de focus mejorados con colores EnviGo */
+*:focus {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Mejoras de accesibilidad */
+.support-option:focus,
+.pagination-btn:focus {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+/* Estados de error */
+.error-state {
+  border-color: #dc2626 !important;
+  background-color: #fef2f2;
+  color: #dc2626;
+}
+
+.error-message {
+  color: #dc2626;
+  font-size: 14px;
+  margin-top: 4px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Estados de éxito con colores EnviGo */
+.success-state {
+  border-color: var(--primary) !important;
+  background-color: rgba(139, 197, 63, 0.1);
+  color: var(--accent);
+}
+
+/* ==================== ESTADOS DE CONEXIÓN TIEMPO REAL ==================== */
+.real-time-indicator {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  padding: 8px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  z-index: 1000;
+  transition: all 0.3s ease;
+}
+
+.real-time-indicator.connected {
+  background: #dcfce7;
+  color: #166534;
+  border: 1px solid #bbf7d0;
+}
+
+.real-time-indicator.disconnected {
+  background: #fee2e2;
+  color: #991b1b;
+  border: 1px solid #fecaca;
+}
+
+.real-time-indicator.connecting {
+  background: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fde68a;
+}
+
+/* ==================== SCROLL PERSONALIZADO CON TEMA ENVIGO ==================== */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--gradient);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(135deg, var(--primary-dark) 0%, var(--accent) 100%);
 }
 
 /* ==================== RESPONSIVE DESIGN ==================== */
@@ -2033,99 +2256,6 @@ onMounted(() => {
     font-size: 14px;
   }
 }
-/* ==================== ANIMACIONES Y TRANSICIONES ==================== */
-
-/* Fade in para el contenido principal */
-.unified-orders-view {
-  animation: fadeInUp 0.6s ease-out;
-}
-
-@keyframes fadeInUp {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-/* Animación suave para modales */
-.modal-enter-active, .modal-leave-active {
-  transition: all 0.3s ease;
-}
-
-.modal-enter-from, .modal-leave-to {
-  opacity: 0;
-  transform: scale(0.9);
-}
-
-/* Animación para elementos que aparecen */
-.slide-down-enter-active, .slide-down-leave-active {
-  transition: all 0.3s ease;
-}
-
-.slide-down-enter-from, .slide-down-leave-to {
-  opacity: 0;
-  transform: translateY(-10px);
-}
-
-/* Pulso para elementos importantes */
-.pulse-animation {
-  animation: pulse 2s infinite;
-}
-
-@keyframes pulse {
-  0% {
-    box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.4);
-  }
-  70% {
-    box-shadow: 0 0 0 10px rgba(99, 102, 241, 0);
-  }
-  100% {
-    box-shadow: 0 0 0 0 rgba(99, 102, 241, 0);
-  }
-}
-
-/* ==================== ESTADOS DE HOVER Y FOCUS ==================== */
-
-/* Estados de focus mejorados */
-*:focus {
-  outline: 2px solid #6366f1;
-  outline-offset: 2px;
-  border-radius: 4px;
-}
-
-/* Mejoras de accesibilidad */
-.support-option:focus,
-.pagination-btn:focus {
-  outline: 2px solid #6366f1;
-  outline-offset: 2px;
-}
-
-/* Estados de error */
-.error-state {
-  border-color: #dc2626 !important;
-  background-color: #fef2f2;
-  color: #dc2626;
-}
-
-.error-message {
-  color: #dc2626;
-  font-size: 14px;
-  margin-top: 4px;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-/* Estados de éxito */
-.success-state {
-  border-color: #16a34a !important;
-  background-color: #f0fdf4;
-  color: #16a34a;
-}
 
 /* ==================== DARK MODE SUPPORT ==================== */
 @media (prefers-color-scheme: dark) {
@@ -2136,18 +2266,18 @@ onMounted(() => {
   
   .pagination-container {
     background: #1e293b;
-    border-color: #334155;
+    border-color: rgba(139, 197, 63, 0.3);
   }
   
   .pagination-btn {
     background: #1e293b;
     color: #e2e8f0;
-    border-color: #334155;
+    border-color: rgba(139, 197, 63, 0.3);
   }
   
   .pagination-btn:hover:not(:disabled) {
-    background: #334155;
-    border-color: #475569;
+    background: var(--gradient);
+    border-color: var(--primary);
   }
   
   .pagination-btn:disabled {
@@ -2166,12 +2296,12 @@ onMounted(() => {
   
   .support-option {
     background: #1e293b;
-    border-color: #334155;
+    border-color: rgba(139, 197, 63, 0.3);
     color: #e2e8f0;
   }
   
   .support-option:hover {
-    background: #334155;
+    background: var(--gradient);
   }
 }
 
@@ -2235,56 +2365,6 @@ onMounted(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-/* Estados de conexión en tiempo real */
-.real-time-indicator {
-  position: fixed;
-  top: 20px;
-  right: 20px;
-  padding: 8px 12px;
-  border-radius: 20px;
-  font-size: 12px;
-  font-weight: 600;
-  z-index: 1000;
-  transition: all 0.3s ease;
-}
-
-.real-time-indicator.connected {
-  background: #dcfce7;
-  color: #166534;
-  border: 1px solid #bbf7d0;
-}
-
-.real-time-indicator.disconnected {
-  background: #fee2e2;
-  color: #991b1b;
-  border: 1px solid #fecaca;
-}
-
-.real-time-indicator.connecting {
-  background: #fef3c7;
-  color: #92400e;
-  border: 1px solid #fde68a;
-}
-
-/* ==================== SCROLL PERSONALIZADO ==================== */
-::-webkit-scrollbar {
-  width: 8px;
-}
-
-::-webkit-scrollbar-track {
-  background: #f1f5f9;
-  border-radius: 4px;
-}
-
-::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
-  border-radius: 4px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
 }
 
 /* ==================== ACCESIBILIDAD MEJORADA ==================== */
