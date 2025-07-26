@@ -6,6 +6,10 @@ const driverHistoryController = require('../controllers/driverHistory.controller
 
 // ==================== RUTAS GLOBALES DE ENVIGO (SOLO ADMINS) ====================
 
+router.get('/test', 
+  authenticateToken, 
+  driverHistoryController.testMethod
+);
 /**
  * GET /api/driver-history/all-deliveries
  * Obtener TODAS las entregas de TODOS los conductores de EnviGo
