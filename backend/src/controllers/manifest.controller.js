@@ -19,6 +19,13 @@ class ManifestController {
     try {
       const { orderIds } = req.body;
       
+      // ✅ DEBUGGING: Verificar req.user completo
+      console.log('🔍 DEBUG: req.user completo:', JSON.stringify(req.user, null, 2));
+      console.log('🔍 DEBUG: req.user._id:', req.user._id);
+      console.log('🔍 DEBUG: req.user.id:', req.user.id);
+      console.log('🔍 DEBUG: req.user.userId:', req.user.userId);
+      console.log('🔍 DEBUG: req.user.user_id:', req.user.user_id);
+      
       // Validación inicial
       if (!orderIds || !Array.isArray(orderIds) || orderIds.length === 0) {
         return res.status(400).json({ 
@@ -29,6 +36,19 @@ class ManifestController {
 
       console.log(`📋 Creando manifiesto para ${orderIds.length} pedidos`);
       console.log(`👤 Usuario: ${req.user.email}, Rol: ${req.user.role}, Empresa: ${req.user.company_id}`);
+
+      // ✅ FIX: Determinar userId de múltiples formas posibles
+      const userId = req.user._id || req.user.id || req.user.userId || req.user.user_id;
+      
+      if (!userId) {
+        console.error('❌ No se encontró ID de usuario en req.user:', req.user);
+        return res.status(400).json({ 
+          error: 'No se pudo identificar al usuario. Token JWT inválido.',
+          debug_user: req.user
+        });
+      }
+      
+      console.log('✅ Usuario ID encontrado:', userId);
 
       // Validar que los IDs son ObjectIds válidos
       const validObjectIds = orderIds.filter(id => mongoose.Types.ObjectId.isValid(id));
@@ -131,7 +151,7 @@ class ManifestController {
         generated_by: req.user.email
       };
 
-      // Crear documento de manifiesto
+      // ✅ FIX: Crear documento de manifiesto con generated_by correcto
       const manifest = new Manifest({
         manifest_number: manifestNumber,
         company_id: companyId,
@@ -139,12 +159,21 @@ class ManifestController {
         total_orders: orders.length,
         total_packages: totalPackages,
         communes,
-        generated_by: req.user._id,
+        generated_by: new mongoose.Types.ObjectId(userId), // ✅ Usar ObjectId del usuario
         manifest_data: manifestData
+      });
+
+      console.log('🔍 DEBUG: Datos del manifiesto antes de guardar:', {
+        manifest_number: manifest.manifest_number,
+        company_id: manifest.company_id,
+        generated_by: manifest.generated_by,
+        total_orders: manifest.total_orders
       });
 
       // Guardar manifiesto
       await manifest.save({ session });
+
+      console.log('✅ Manifiesto guardado en base de datos');
 
       // Actualizar estado de las órdenes
       const updateResult = await Order.updateMany(
@@ -197,6 +226,7 @@ class ManifestController {
       
       // Manejo específico de errores
       if (error.name === 'ValidationError') {
+        console.error('❌ Validation Error details:', error.errors);
         return res.status(400).json({ 
           error: 'Error de validación',
           details: Object.values(error.errors).map(e => e.message)
