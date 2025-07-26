@@ -76,14 +76,7 @@ const orderSchema = new mongoose.Schema({
   discount_amount: { type: Number, default: 0 },
   payment_method: { type: String, default: 'credit_card' },
   
-  // Campos de OptiRoute
-  priority: { type: String, default: 'Normal' },
-  serviceTime: { type: Number, default: 5 }, // En minutos
-  timeWindowStart: { type: String, default: '09:00' },
-  timeWindowEnd: { type: String, default: '18:00' },
-  load1Packages: { type: Number, default: 1 }, // Carga 1 (ej: N° de paquetes)
-  load2WeightKg: { type: Number, default: 1 }, // Carga 2 (ej: Peso en KG)
-  
+
   // Campos para Shipday
   shipday_order_id: { type: String }, // ID de la orden en Shipday
   shipday_driver_id: { type: String }, // ID del conductor asignado en Shipday
@@ -127,7 +120,8 @@ const orderSchema = new mongoose.Schema({
   status: { 
     type: String, 
     enum: ['pending',
-    'ready_for_pickup', 
+    'ready_for_pickup',
+    'out_for_delivery', 
     'warehouse_received',
     'invoiced',
     'shipped',

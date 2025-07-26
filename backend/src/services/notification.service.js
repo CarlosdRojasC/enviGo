@@ -52,36 +52,44 @@ class NotificationService {
     }
   }
 
-  async prepareTemplateData(order, webhookData) {
-    // Obtener datos de la empresa
-    await order.populate('company_id');
-    
-    return {
-      customer_name: order.customer_name,
-      order_number: order.order_number,
-      total_amount: order.total_amount,
-      shipping_address: order.shipping_address,
-      
-      driver: order.driver_info || {
-        name: 'Tu conductor',
-        phone: 'Se pondrá en contacto contigo'
-      },
-      
-      company_name: order.company_id?.name || 'Tu Tienda',
-      company_phone: order.company_id?.phone || '',
-      company_email: order.company_id?.email || '',
-      
-      tracking_url: `${process.env.FRONTEND_URL}/tracking/${order.order_number}`,
-      
-      formatted_date: new Date().toLocaleString('es-CL', {
-        weekday: 'long',
-        day: 'numeric',
-        month: 'long',
-        hour: '2-digit',
-        minute: '2-digit'
-      })
-    };
+async prepareTemplateData(order, webhookData) {
+  // Obtener datos de la empresa
+  await order.populate('company_id');
+  
+  // Intentar obtener tracking URL de Shipday
+  let trackingUrl = order.shipday_tracking_url || `${process.env.FRONTEND_URL}/tracking/${order.order_number}`;
+  
+  // Si tenemos ID de Shipday, construir URL directa
+  if (webhookData.order?.id) {
+    trackingUrl = `https://app.shipday.com/track/${webhookData.order.id}`;
   }
+  
+  return {
+    customer_name: order.customer_name,
+    order_number: order.order_number,
+    total_amount: order.total_amount,
+    shipping_address: order.shipping_address,
+    
+    driver: order.driver_info || {
+      name: 'Tu conductor',
+      phone: 'Se pondrá en contacto contigo'
+    },
+    
+    company_name: order.company_id?.name || 'Tu Tienda',
+    company_phone: order.company_id?.phone || '',
+    company_email: order.company_id?.email || '',
+    
+    tracking_url: trackingUrl,  // ✅ Ahora usa tracking de Shipday
+    
+    formatted_date: new Date().toLocaleString('es-CL', {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+      hour: '2-digit',
+      minute: '2-digit'
+    })
+  };
+}
 
   async getTemplate(templateName) {
     if (this.templateCache.has(templateName)) {
