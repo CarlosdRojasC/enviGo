@@ -248,7 +248,7 @@
 
     <!-- ==================== MODAL COMPARTIDO ==================== -->
     <!-- Modal de detalles (ambos roles) -->
-    <Modal v-if="showOrderDetailsModal" @close="showOrderDetailsModal = false">
+    <Modal v-model="showOrderDetailsModal" @close="showOrderDetailsModal = false">
       <OrderDetails 
         :order="selectedOrder" 
         :is-admin="isAdmin"
