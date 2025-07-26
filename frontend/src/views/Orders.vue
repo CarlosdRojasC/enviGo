@@ -333,53 +333,37 @@ async function generateManifestAndMarkReady() {
   if (!confirm(confirmMsg)) return;
 
   try {
-    // 1. Marcar pedidos como listos
-    console.log('📦 Paso 1: Marcando pedidos como listos...');
-    const markReadyResult = await markMultipleAsReady(selectedOrders.value);
-    console.log('✅ Pedidos marcados como listos:', markReadyResult);
-
-    // 2. Abrir manifiesto
-    console.log('📋 Paso 2: Abriendo manifiesto...');
+    console.log('📋 Creando manifiesto guardado...');
     
-    try {
-      // ✅ OPCIÓN 1: Usar router.push (navegación en la misma pestaña)
-      router.push({
-        path: '/manifest',
-        query: { 
-          ids: selectedOrders.value.join(','),
-          from: 'orders'
-        }
-      });
-      
-      toast.success('✅ Pedidos marcados como listos. Abriendo manifiesto...');
-      
-    } catch (routerError) {
-      console.warn('⚠️ Error con router.push, intentando con window.open:', routerError);
-      
-      // ✅ FALLBACK: Usar window.open si router.push falla
-      const baseUrl = window.location.origin;
-      const manifestUrl = `${baseUrl}/manifest?ids=${selectedOrders.value.join(',')}`;
-      
-      const newWindow = window.open(manifestUrl, '_blank', 'width=900,height=700');
-      
-      if (!newWindow) {
-        toast.error('No se pudo abrir el manifiesto. Habilita las ventanas emergentes.');
-        return;
+    // 1. Crear manifiesto en la base de datos (esto también marca los pedidos como listos)
+    const response = await apiService.manifests.create(selectedOrders.value);
+    const manifest = response.data;
+    
+    console.log('✅ Manifiesto creado:', manifest);
+    
+    // 2. Actualizar órdenes localmente
+    orders.value.forEach(order => {
+      if (selectedOrders.value.includes(order._id)) {
+        order.status = 'ready_for_pickup';
+        order.manifest_id = manifest.manifest.id;
+        order.updated_at = new Date().toISOString();
       }
-      
-      toast.success('✅ Pedidos marcados como listos y manifiesto abierto en nueva pestaña');
-    }
+    });
 
-    // 3. Limpiar selección
+    // 3. Abrir manifiesto guardado para ver/imprimir
+    const manifestUrl = `/manifest/${manifest.manifest.id}`;
+    window.open(manifestUrl, '_blank', 'width=900,height=700');
+    
+    toast.success(`✅ Manifiesto ${manifest.manifest.manifest_number} creado exitosamente`);
     clearSelection();
 
   } catch (error) {
-    console.error('❌ Error en generateManifestAndMarkReady:', error);
+    console.error('❌ Error creando manifiesto:', error);
     
-    if (error.message.includes('permisos')) {
-      toast.error(error.message);
+    if (error.response?.status === 403) {
+      toast.error('No tienes permisos para crear manifiestos');
     } else {
-      toast.error('Error al procesar los pedidos');
+      toast.error('Error al crear el manifiesto');
     }
   }
 }

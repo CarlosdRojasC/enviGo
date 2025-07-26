@@ -793,7 +793,40 @@ const search = {
    */
   global: (query) => api.get('/search/global', { params: { q: query } })
 };
-
+const manifests = {
+  // Crear manifiesto
+  create: (orderIds) => {
+    console.log('📋 API: Creando manifiesto para:', orderIds);
+    return api.post('/manifests', { orderIds });
+  },
+  
+  // Listar manifiestos
+  getAll: (params = {}) => {
+    console.log('📋 API: Obteniendo lista de manifiestos');
+    return api.get('/manifests', { params });
+  },
+  
+  // Obtener manifiesto específico
+  getById: (id) => {
+    console.log('📋 API: Obteniendo manifiesto:', id);
+    return api.get(`/manifests/${id}`);
+  },
+  
+  // Generar PDF
+  downloadPDF: (id) => {
+    console.log('📄 API: Descargando PDF del manifiesto:', id);
+    return api.get(`/manifests/${id}/pdf`, { responseType: 'blob' });
+  },
+  
+  // Actualizar estado
+  updateStatus: (id, status, pickupInfo = null) => {
+    console.log('📋 API: Actualizando estado del manifiesto:', id, 'a', status);
+    return api.patch(`/manifests/${id}/status`, { 
+      status, 
+      pickup_info: pickupInfo 
+    });
+  }
+};
 // ACTUALIZAR la exportación para incluir shipday
 // Exportar todos los servicios
 export const apiService = {
@@ -808,7 +841,8 @@ export const apiService = {
   users,
   shipday,
   notifications,
-  search
+  search,
+  manifests
 }
 
 // Exportar instancia de axios para casos especiales

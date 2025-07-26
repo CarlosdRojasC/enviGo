@@ -22,7 +22,10 @@ const orderSchema = new mongoose.Schema({
   // Relaciones
   company_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Company', required: true },
   channel_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Channel', required: true },
-  
+  manifest_id: {
+  type: mongoose.Schema.Types.ObjectId,
+  ref: 'Manifest'
+},
   // Relación con factura
   invoice_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Invoice', default: null },
   billed: { type: Boolean, default: false },

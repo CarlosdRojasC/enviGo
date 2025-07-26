@@ -34,6 +34,9 @@
       <router-link v-if="auth.isAdmin" to="/app/admin/communes" class="nav-item">
         🏘️ <span>Comunas</span>
       </router-link>
+          <router-link v-if="auth.isAdmin" to="/app/admin/manifests" class="nav-item">
+      📋 <span>Manifiestos</span>
+    </router-link>
 
       <!-- Rutas para Empresas -->
       <router-link v-if="!auth.isAdmin" to="/app/dashboard" class="nav-item">

@@ -63,13 +63,23 @@ const routes = [
         component: () => import('../views/Channels.vue'),
         meta: { roles: ['company_owner', 'company_employee'], requiresCompany: true }
       },
-      {
-  path: '/manifest',
+     {
+  path: '/manifest/:id?',
   name: 'PickupManifest',
   component: () => import('../views/PickupManifest.vue'),
   meta: { 
     requiresAuth: true,
     title: 'Manifiesto de Retiro'
+  }
+},
+{
+  path: '/manifests',
+  name: 'ManifestsAdmin',
+  component: () => import('../views/ManifestsAdmin.vue'),
+  meta: { 
+    requiresAuth: true,
+    requiresAdmin: true,
+    title: 'Gestión de Manifiestos'
   }
 },
       {
