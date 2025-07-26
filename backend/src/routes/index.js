@@ -20,6 +20,7 @@ const comunasRoutes = require('./comunas.routes');
 const channelRoutes = require('./channels.routes');
 const manifestRoutes = require('./manifest.routes');
 const notificationRoutes = require('./notifications.routes');
+const driverHistoryRoutes = require('./driverHistory.routes');
 
 router.use('/auth', authRoutes);
 
@@ -50,6 +51,6 @@ router.use('/shipday', shipdayRoutes);
 router.use('/communes', comunasRoutes);
 router.use('/channels', channelRoutes);
 router.use('/manifests', manifestRoutes); 
-
+router.use('/driver-history', driverHistoryRoutes);
 
 module.exports = router;

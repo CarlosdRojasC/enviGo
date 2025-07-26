@@ -1,4 +1,4 @@
-// backend/src/routes/driverHistory.routes.js
+// backend/src/routes/driverHistory.routes.js - VERSIÓN COMPLETA ACTUALIZADA
 const express = require('express');
 const router = express.Router();
 const { authenticateToken, isAdmin, isAdminOrCompanyOwner } = require('../middlewares/auth.middleware');
@@ -10,7 +10,6 @@ const driverHistoryController = require('../controllers/driverHistory.controller
  * GET /api/driver-history/all-deliveries
  * Obtener TODAS las entregas de TODOS los conductores de EnviGo
  * Solo accesible por ADMINS
- * Query params: date_from, date_to, driver_id, company_id (filtro opcional), payment_status
  */
 router.get('/all-deliveries', 
   authenticateToken, 
@@ -22,7 +21,6 @@ router.get('/all-deliveries',
  * GET /api/driver-history/global-payment-summary
  * Resumen global de pagos pendientes de todos los conductores
  * Solo accesible por ADMINS
- * Query params: date_from, date_to, company_id (filtro opcional)
  */
 router.get('/global-payment-summary', 
   authenticateToken, 
@@ -34,7 +32,6 @@ router.get('/global-payment-summary',
  * GET /api/driver-history/all-active-drivers
  * Todos los conductores activos de EnviGo
  * Solo accesible por ADMINS
- * Query params: startDate, endDate
  */
 router.get('/all-active-drivers', 
   authenticateToken, 
@@ -46,7 +43,6 @@ router.get('/all-active-drivers',
  * GET /api/driver-history/export-excel
  * Exportar reporte global de pagos a Excel
  * Solo accesible por ADMINS
- * Query params: company_id (opcional), date_from, date_to, payment_status
  */
 router.get('/export-excel', 
   authenticateToken, 
@@ -114,7 +110,6 @@ router.get('/driver/:driverId',
  * GET /api/driver-history/driver/:driverId/pending
  * Obtiene entregas pendientes de pago de un conductor
  * Solo accesible por ADMINS
- * Query params: companyId (opcional - para filtrar por empresa)
  */
 router.get('/driver/:driverId/pending', 
   authenticateToken, 
@@ -126,7 +121,6 @@ router.get('/driver/:driverId/pending',
  * POST /api/driver-history/driver/:driverId/pay-all
  * Marca todas las entregas pendientes de un conductor como pagadas
  * Solo ADMINS pueden pagar conductores (es responsabilidad de EnviGo)
- * Body: { companyId? } - opcional para pagar solo entregas de una empresa
  */
 router.post('/driver/:driverId/pay-all', 
   authenticateToken, 
@@ -140,36 +134,11 @@ router.post('/driver/:driverId/pay-all',
  * POST /api/driver-history/mark-paid
  * Marca entregas específicas como pagadas
  * Solo ADMINS pueden marcar pagos (es responsabilidad de EnviGo)
- * Body: { deliveryIds: ['id1', 'id2', ...] }
  */
 router.post('/mark-paid', 
   authenticateToken, 
   isAdmin, 
   driverHistoryController.markDeliveriesAsPaid
-);
-
-// ==================== RUTAS LEGACY (MANTENER COMPATIBILIDAD) ====================
-
-/**
- * GET /api/driver-history/company-deliveries
- * LEGACY: Redirigir a método global para admins
- * Query params: company_id, date_from, date_to, driver_id, payment_status
- */
-router.get('/company-deliveries', 
-  authenticateToken, 
-  isAdmin, 
-  driverHistoryController.getAllDeliveriesForPayments
-);
-
-/**
- * GET /api/driver-history/payment-summary
- * LEGACY: Redirigir a método global para admins
- * Query params: company_id, date_from, date_to
- */
-router.get('/payment-summary', 
-  authenticateToken, 
-  isAdmin, 
-  driverHistoryController.getGlobalPaymentSummary
 );
 
 module.exports = router;
