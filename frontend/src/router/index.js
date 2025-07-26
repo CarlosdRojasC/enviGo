@@ -70,6 +70,12 @@ const routes = [
         meta: { roles: ['company_owner', 'company_employee'], requiresCompany: true }
       },
       {
+  path: '/driver-payments',
+  name: 'DriverPayments',
+  component: () => import('../components/DriverPayments.vue'),
+  meta: { requiresAuth: true, roles: ['admin', 'company_owner'] }
+},
+      {
   path: 'manifests',
   name: 'Manifests',
   component: () => import('../views/ManifestsAdmin.vue'), // Reutilizar el mismo componente
