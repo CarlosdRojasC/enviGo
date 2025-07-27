@@ -128,6 +128,11 @@ router.post('/driver/:driverId/pay-all',
   driverHistoryController.payAllPendingToDriver
 );
 
+router.post('/create-from-orders', 
+  authenticateToken, 
+  isAdmin, 
+  driverHistoryController.createHistoryFromOrders
+);
 // ==================== RUTAS DE PAGOS (SOLO ADMINS) ====================
 
 /**

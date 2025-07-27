@@ -1,9 +1,199 @@
-// backend/src/controllers/driverHistory.controller.js - CON LOGS DE DEBUG
+// backend/src/controllers/driverHistory.controller.js
+// VERSIÓN CORREGIDA - El problema era la consulta incorrecta
+
+const DriverHistoryService = require('../services/driverHistory.service');
+const DriverHistory = require('../models/DriveryHistory');
 const Order = require('../models/Order');
 const mongoose = require('mongoose');
 
 class DriverHistoryController {
 
+  /**
+   * Método de prueba CORREGIDO
+   */
+  async testMethod(req, res) {
+    try {
+      const { 
+        date_from = '2025-06-27', 
+        date_to = '2025-07-27', 
+        driver_id, 
+        company_id, 
+        payment_status = 'pending' 
+      } = req.query;
+
+      console.log('🔥 PARAMS RECIBIDOS:', { 
+        date_from, 
+        date_to, 
+        driver_id, 
+        company_id, 
+        payment_status 
+      });
+
+      // PASO 1: Contar todos los pedidos
+      console.log('🔥 PASO 1: Contando TODOS los pedidos...');
+      const totalOrders = await Order.countDocuments({});
+      console.log('🔥 Total pedidos en BD:', totalOrders);
+
+      // PASO 2: Pedidos delivered
+      console.log('🔥 PASO 2: Contando pedidos delivered...');
+      const deliveredCount = await Order.countDocuments({ status: 'delivered' });
+      console.log('🔥 Pedidos delivered:', deliveredCount);
+
+      // PASO 3: Pedidos con información de conductor ✅ CONSULTA CORREGIDA
+      console.log('🔥 PASO 3: Contando pedidos con conductor...');
+      const withDriverCount = await Order.countDocuments({
+        $and: [
+          { status: 'delivered' },
+          {
+            $or: [
+              { shipday_driver_id: { $exists: true, $ne: null, $ne: '' } },
+              { 'driver_info.name': { $exists: true, $ne: null, $ne: '' } }
+            ]
+          }
+        ]
+      });
+      console.log('🔥 Pedidos delivered con conductor:', withDriverCount);
+
+      // PASO 4: Obtener ejemplos REALES
+      console.log('🔥 PASO 4: Obteniendo ejemplos de pedidos delivered con conductor...');
+      const deliveredWithDriverExamples = await Order.find({
+        status: 'delivered',
+        $or: [
+          { shipday_driver_id: { $exists: true, $ne: null, $ne: '' } },
+          { 'driver_info.name': { $exists: true, $ne: null, $ne: '' } }
+        ]
+      })
+      .limit(5)
+      .select('order_number status shipday_driver_id driver_info delivery_date shipping_address customer_name')
+      .lean();
+
+      console.log('🔥 PEDIDOS DELIVERED CON CONDUCTOR:');
+      deliveredWithDriverExamples.forEach((order, i) => {
+        console.log(`🔥 Pedido ${i + 1}:`, {
+          order_number: order.order_number,
+          status: order.status,
+          driver_id: order.shipday_driver_id,
+          driver_name: order.driver_info?.name,
+          customer_name: order.customer_name,
+          delivery_date: order.delivery_date
+        });
+      });
+
+      // PASO 5: Generar reporte de pagos por conductor
+      console.log('🔥 PASO 5: Generando reporte de pagos...');
+      const paymentReport = await this.generateDriverPaymentReport(date_from, date_to);
+
+      res.json({
+        success: true,
+        debug_info: {
+          total_orders: totalOrders,
+          delivered_orders: deliveredCount,
+          delivered_with_driver: withDriverCount
+        },
+        examples: deliveredWithDriverExamples,
+        payment_report: paymentReport
+      });
+
+    } catch (error) {
+      console.error('❌ Error en test method:', error);
+      res.status(500).json({ 
+        success: false, 
+        error: error.message 
+      });
+    }
+  }
+
+  /**
+   * Generar reporte de pagos por conductor ✅ MÉTODO NUEVO Y CORREGIDO
+   */
+  async generateDriverPaymentReport(dateFrom, dateTo) {
+    try {
+      // Filtros de fecha
+      const dateFilter = {};
+      if (dateFrom) dateFilter.$gte = new Date(dateFrom);
+      if (dateTo) dateFilter.$lte = new Date(dateTo + 'T23:59:59.999Z');
+
+      // Buscar pedidos entregados con conductor en el rango de fechas
+      const matchCriteria = {
+        status: 'delivered',
+        $or: [
+          { shipday_driver_id: { $exists: true, $ne: null, $ne: '' } },
+          { 'driver_info.name': { $exists: true, $ne: null, $ne: '' } }
+        ]
+      };
+
+      if (Object.keys(dateFilter).length > 0) {
+        matchCriteria.delivery_date = dateFilter;
+      }
+
+      console.log('🔍 Criterios de búsqueda:', JSON.stringify(matchCriteria, null, 2));
+
+      const deliveredOrders = await Order.find(matchCriteria)
+        .populate('company_id', 'name email')
+        .sort({ delivery_date: -1 })
+        .lean();
+
+      console.log(`📊 Órdenes encontradas: ${deliveredOrders.length}`);
+
+      // Agrupar por conductor
+      const driverGroups = {};
+      
+      deliveredOrders.forEach(order => {
+        const driverId = order.shipday_driver_id;
+        const driverName = order.driver_info?.name || 'Conductor sin nombre';
+        const driverEmail = order.driver_info?.email || 'sin-email@shipday.com';
+
+        if (!driverId) return; // Saltar si no hay driver_id
+
+        if (!driverGroups[driverId]) {
+          driverGroups[driverId] = {
+            driver_id: driverId,
+            driver_name: driverName,
+            driver_email: driverEmail,
+            total_deliveries: 0,
+            total_amount: 0,
+            deliveries: []
+          };
+        }
+
+        const paymentAmount = 1700; // Precio fijo por entrega
+        driverGroups[driverId].total_deliveries++;
+        driverGroups[driverId].total_amount += paymentAmount;
+        driverGroups[driverId].deliveries.push({
+          order_number: order.order_number,
+          customer_name: order.customer_name,
+          delivery_address: order.shipping_address,
+          delivered_at: order.delivery_date,
+          payment_amount: paymentAmount,
+          company_name: order.company_id?.name
+        });
+      });
+
+      const driversArray = Object.values(driverGroups)
+        .sort((a, b) => b.total_amount - a.total_amount);
+
+      const summary = {
+        total_drivers: driversArray.length,
+        total_deliveries: deliveredOrders.length,
+        total_amount: driversArray.reduce((sum, driver) => sum + driver.total_amount, 0),
+        period: { from: dateFrom, to: dateTo }
+      };
+
+      return {
+        summary,
+        drivers: driversArray,
+        raw_orders_found: deliveredOrders.length
+      };
+
+    } catch (error) {
+      console.error('❌ Error generando reporte:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Obtener entregas para pagos - VERSIÓN FINAL CORREGIDA
+   */
   async getAllDeliveriesForPayments(req, res) {
     try {
       const { 
@@ -14,274 +204,226 @@ class DriverHistoryController {
         payment_status = 'pending' 
       } = req.query;
 
-      console.log('🔥 PARAMS RECIBIDOS:', { date_from, date_to, driver_id, company_id, payment_status });
-
-      // PASO 1: Ver todos los pedidos primero
-      console.log('🔥 PASO 1: Contando TODOS los pedidos...');
-      const totalOrders = await Order.countDocuments({});
-      console.log('🔥 Total pedidos en BD:', totalOrders);
-
-      // PASO 2: Ver pedidos con status = 'delivered'
-      console.log('🔥 PASO 2: Contando pedidos delivered...');
-      const deliveredCount = await Order.countDocuments({ status: 'delivered' });
-      console.log('🔥 Pedidos delivered:', deliveredCount);
-
-      // PASO 3: Ver pedidos con conductor
-      console.log('🔥 PASO 3: Contando pedidos con conductor...');
-      const withDriverCount = await Order.countDocuments({ 
-        'driver_info.shipday_driver_id': { $exists: true, $ne: null } 
+      console.log('💰 Obteniendo entregas para pagos:', { 
+        date_from, 
+        date_to, 
+        driver_id, 
+        company_id, 
+        payment_status 
       });
-      console.log('🔥 Pedidos con conductor:', withDriverCount);
 
-      // PASO 4: Ver pedidos delivered Y con conductor
-      console.log('🔥 PASO 4: Contando pedidos delivered + conductor...');
-      const deliveredWithDriverCount = await Order.countDocuments({ 
-        status: 'delivered',
-        'driver_info.shipday_driver_id': { $exists: true, $ne: null } 
-      });
-      console.log('🔥 Pedidos delivered + conductor:', deliveredWithDriverCount);
+      // OPCIÓN 1: Intentar usar DriverHistory primero
+      let deliveriesFromHistory = [];
+      try {
+        const historyFilters = {};
+        
+        if (date_from || date_to) {
+          historyFilters.delivered_at = {};
+          if (date_from) historyFilters.delivered_at.$gte = new Date(date_from);
+          if (date_to) historyFilters.delivered_at.$lte = new Date(date_to + 'T23:59:59.999Z');
+        }
+        
+        if (driver_id) historyFilters.driver_id = driver_id;
+        if (company_id) historyFilters.company_id = new mongoose.Types.ObjectId(company_id);
+        if (payment_status && payment_status !== 'all') historyFilters.payment_status = payment_status;
 
-      // PASO 5: Ver algunos ejemplos de pedidos
-      console.log('🔥 PASO 5: Obteniendo ejemplos de pedidos...');
-      const sampleOrders = await Order.find({})
-        .select('order_number status driver_info delivery_date')
-        .limit(3)
-        .lean();
+        deliveriesFromHistory = await DriverHistory.find(historyFilters)
+          .populate('company_id', 'name email phone')
+          .populate('order_id', 'order_number customer_name total_amount')
+          .sort({ delivered_at: -1 })
+          .lean();
+
+        console.log('📊 Entregas desde DriverHistory:', deliveriesFromHistory.length);
+      } catch (historyError) {
+        console.log('⚠️ Error en DriverHistory:', historyError.message);
+      }
+
+      // OPCIÓN 2: Usar Order directamente (CONSULTA CORREGIDA)
+      let deliveriesFromOrders = [];
       
-      console.log('🔥 EJEMPLOS DE PEDIDOS:');
-      sampleOrders.forEach((order, index) => {
-        console.log(`🔥 Pedido ${index + 1}:`, {
-          order_number: order.order_number,
-          status: order.status,
-          has_driver_info: !!order.driver_info,
-          driver_id: order.driver_info?.shipday_driver_id,
-          delivery_date: order.delivery_date
-        });
-      });
-
-      // PASO 6: Aplicar filtros paso a paso
-      console.log('🔥 PASO 6: Aplicando filtros...');
-      
-      const filters = {
+      const orderFilters = {
         status: 'delivered',
-        'driver_info.shipday_driver_id': { $exists: true, $ne: null }
+        $or: [
+          { shipday_driver_id: { $exists: true, $ne: null, $ne: '' } },
+          { 'driver_info.name': { $exists: true, $ne: null, $ne: '' } }
+        ]
       };
 
-      console.log('🔥 Filtros base:', filters);
-
-      // Solo agregar filtro de fechas si se proporcionan
       if (date_from || date_to) {
-        filters.delivery_date = {};
-        if (date_from) {
-          filters.delivery_date.$gte = new Date(date_from);
-          console.log('🔥 Fecha desde:', new Date(date_from));
-        }
-        if (date_to) {
-          filters.delivery_date.$lte = new Date(date_to + 'T23:59:59.999Z');
-          console.log('🔥 Fecha hasta:', new Date(date_to + 'T23:59:59.999Z'));
-        }
+        orderFilters.delivery_date = {};
+        if (date_from) orderFilters.delivery_date.$gte = new Date(date_from);
+        if (date_to) orderFilters.delivery_date.$lte = new Date(date_to + 'T23:59:59.999Z');
       }
 
-      if (driver_id) {
-        filters['driver_info.shipday_driver_id'] = driver_id;
-        console.log('🔥 Filtro conductor:', driver_id);
-      }
+      if (driver_id) orderFilters.shipday_driver_id = driver_id;
+      if (company_id) orderFilters.company_id = new mongoose.Types.ObjectId(company_id);
 
-      if (company_id) {
-        filters.company_id = new mongoose.Types.ObjectId(company_id);
-        console.log('🔥 Filtro empresa:', company_id);
-      }
+      console.log('🔍 Filtros para Order:', JSON.stringify(orderFilters, null, 2));
 
-      console.log('🔥 FILTROS FINALES:', JSON.stringify(filters, null, 2));
-
-      // PASO 7: Ejecutar consulta con filtros
-      console.log('🔥 PASO 7: Ejecutando consulta con filtros...');
-      const filteredCount = await Order.countDocuments(filters);
-      console.log('🔥 Pedidos que cumplen filtros:', filteredCount);
-
-      // PASO 8: Obtener los pedidos
-      console.log('🔥 PASO 8: Obteniendo pedidos completos...');
-      const orders = await Order.find(filters)
-        .populate('company_id', 'name')
-        .select(`
-          order_number customer_name customer_email
-          shipping_address shipping_commune
-          shipping_cost total_amount
-          delivery_date driver_info
-          status created_at
-        `)
+      const orders = await Order.find(orderFilters)
+        .populate('company_id', 'name email phone')
         .sort({ delivery_date: -1 })
         .lean();
 
-      console.log('🔥 Pedidos obtenidos:', orders.length);
+      console.log('📊 Órdenes encontradas:', orders.length);
 
-      if (orders.length > 0) {
-        console.log('🔥 PRIMER PEDIDO:', {
-          order_number: orders[0].order_number,
-          driver_name: orders[0].driver_info?.name,
-          driver_id: orders[0].driver_info?.shipday_driver_id,
-          shipping_cost: orders[0].shipping_cost,
-          delivery_date: orders[0].delivery_date
-        });
-      }
-
-      // PASO 9: Agrupar por conductor
-      console.log('🔥 PASO 9: Agrupando por conductor...');
-      const driversMap = {};
-      
-      orders.forEach(order => {
-        const driverId = order.driver_info?.shipday_driver_id;
-        const driverName = order.driver_info?.name || 'Conductor Desconocido';
-        const driverEmail = order.driver_info?.email;
-        const paymentAmount = order.shipping_cost || 1800;
-
-        console.log('🔥 Procesando pedido:', {
-          order: order.order_number,
-          driver: driverName,
-          driver_id: driverId,
-          amount: paymentAmount
-        });
-
-        if (!driversMap[driverId]) {
-          driversMap[driverId] = {
-            driver_id: driverId,
-            driver_name: driverName,
-            driver_email: driverEmail,
-            total_deliveries: 0,
-            total_amount: 0,
-            pending_amount: 0,
-            paid_amount: 0,
-            companies_served: new Set(),
-            deliveries: []
-          };
-        }
-
-        driversMap[driverId].total_deliveries += 1;
-        driversMap[driverId].total_amount += paymentAmount;
-        driversMap[driverId].pending_amount += paymentAmount; // Todos pendientes por ahora
-
-        if (order.company_id?.name) {
-          driversMap[driverId].companies_served.add(order.company_id.name);
-        }
-
-        driversMap[driverId].deliveries.push(order._id);
-      });
-
-      const drivers = Object.values(driversMap).map(driver => ({
-        ...driver,
-        companies_served: Array.from(driver.companies_served),
-        companies_count: driver.companies_served.length
+      // Convertir órdenes a formato de entrega para pagos
+      deliveriesFromOrders = orders.map(order => ({
+        _id: `order_${order._id}`,
+        driver_id: order.shipday_driver_id,
+        driver_name: order.driver_info?.name || 'Conductor',
+        driver_email: order.driver_info?.email || 'no-email@shipday.com',
+        company_id: order.company_id,
+        order_id: order,
+        order_number: order.order_number,
+        customer_name: order.customer_name,
+        delivery_address: order.shipping_address,
+        delivered_at: order.delivery_date,
+        payment_amount: 1700,
+        payment_status: 'pending',
+        source: 'order_collection'
       }));
 
-      console.log('🔥 CONDUCTORES FINALES:', drivers.length);
-      drivers.forEach(driver => {
-        console.log('🔥 Conductor:', {
-          name: driver.driver_name,
-          deliveries: driver.total_deliveries,
-          amount: driver.total_amount
-        });
-      });
+      // Usar DriverHistory si tiene datos, sino usar Order
+      const finalDeliveries = deliveriesFromHistory.length > 0 ? deliveriesFromHistory : deliveriesFromOrders;
+      const dataSource = deliveriesFromHistory.length > 0 ? 'driver_history' : 'orders';
 
-      // Calcular estadísticas
-      const totalAmount = orders.reduce((sum, order) => sum + (order.shipping_cost || 1800), 0);
-      const uniqueDrivers = new Set(orders.map(order => order.driver_info?.shipday_driver_id)).size;
+      // Agrupar por conductor
+      const driverGroups = this.groupDeliveriesByDriver(finalDeliveries);
 
-      const stats = {
-        total_deliveries: orders.length,
-        total_amount: totalAmount,
-        pending_deliveries: orders.length,
-        pending_amount: totalAmount,
-        paid_deliveries: 0,
-        paid_amount: 0,
-        unique_drivers: uniqueDrivers,
-        average_per_delivery: orders.length > 0 ? totalAmount / orders.length : 0,
-        average_per_driver: uniqueDrivers > 0 ? totalAmount / uniqueDrivers : 0
+      const summary = {
+        total_deliveries: finalDeliveries.length,
+        unique_drivers: driverGroups.length,
+        total_amount: finalDeliveries.reduce((sum, d) => sum + (d.payment_amount || 1700), 0),
+        data_source: dataSource
       };
-
-      console.log('🔥 STATS FINALES:', stats);
 
       res.json({
         success: true,
         data: {
           period: { date_from, date_to },
           filters: { driver_id, company_id, payment_status },
-          stats,
-          drivers,
-          deliveries: orders.map(order => ({
-            id: order._id,
-            driver_id: order.driver_info?.shipday_driver_id,
-            driver_name: order.driver_info?.name,
-            driver_email: order.driver_info?.email,
-            order_number: order.order_number,
-            customer_name: order.customer_name,
-            delivery_address: order.shipping_address,
-            delivered_at: order.delivery_date,
-            payment_amount: order.shipping_cost || 1800,
-            payment_status: 'pending',
-            paid_at: null,
-            company: {
-              id: order.company_id?._id,
-              name: order.company_id?.name || 'Empresa Desconocida'
-            }
-          }))
-        },
-        timestamp: new Date().toISOString()
+          summary,
+          drivers: driverGroups,
+          all_deliveries: finalDeliveries.slice(0, 100) // Limitar respuesta
+        }
       });
 
     } catch (error) {
-      console.error('❌ ERROR COMPLETO:', error);
+      console.error('❌ Error obteniendo entregas para pagos:', error);
       res.status(500).json({ 
         success: false, 
-        error: 'Error obteniendo entregas para pagos',
-        details: error.message
+        error: error.message 
       });
     }
   }
 
-  // Otros métodos simplificados...
-  async markDeliveriesAsPaid(req, res) {
-    res.json({ success: false, error: 'Método no implementado aún' });
+  /**
+   * Agrupar entregas por conductor
+   */
+  groupDeliveriesByDriver(deliveries) {
+    const grouped = {};
+    
+    deliveries.forEach(delivery => {
+      const driverId = delivery.driver_id;
+      if (!driverId) return;
+
+      if (!grouped[driverId]) {
+        grouped[driverId] = {
+          driver_id: driverId,
+          driver_name: delivery.driver_name,
+          driver_email: delivery.driver_email,
+          total_deliveries: 0,
+          total_amount: 0,
+          deliveries: []
+        };
+      }
+
+      const amount = delivery.payment_amount || 1700;
+      grouped[driverId].total_deliveries++;
+      grouped[driverId].total_amount += amount;
+      grouped[driverId].deliveries.push({
+        order_number: delivery.order_number,
+        customer_name: delivery.customer_name,
+        delivery_address: delivery.delivery_address,
+        delivered_at: delivery.delivered_at,
+        payment_amount: amount,
+        company_name: delivery.company_id?.name
+      });
+    });
+
+    return Object.values(grouped).sort((a, b) => b.total_amount - a.total_amount);
   }
 
-  async payAllPendingToDriver(req, res) {
-    res.json({ success: false, error: 'Método no implementado aún' });
-  }
+  /**
+   * Crear registros en DriverHistory desde órdenes existentes
+   */
+  async createHistoryFromOrders(req, res) {
+    try {
+      console.log('🔄 Iniciando creación de registros en DriverHistory...');
 
-  async getGlobalPaymentSummary(req, res) {
-    return this.getAllDeliveriesForPayments(req, res);
-  }
+      const orders = await Order.find({
+        status: 'delivered',
+        $or: [
+          { shipday_driver_id: { $exists: true, $ne: null, $ne: '' } },
+          { 'driver_info.name': { $exists: true, $ne: null, $ne: '' } }
+        ]
+      }).populate('company_id').lean();
 
-  async getAllActiveDrivers(req, res) {
-    res.json({ success: false, error: 'Método no implementado' });
-  }
+      console.log(`📊 Encontradas ${orders.length} órdenes entregadas con conductor`);
 
-  async getCompanyDeliveries(req, res) {
-    req.query.company_id = req.params.companyId;
-    return this.getAllDeliveriesForPayments(req, res);
-  }
+      let created = 0;
+      let skipped = 0;
 
-  async getDriverHistory(req, res) {
-    res.json({ success: false, error: 'Método no implementado' });
-  }
+      for (const order of orders) {
+        // Verificar si ya existe
+        const exists = await DriverHistory.findOne({ order_id: order._id });
+        if (exists) {
+          skipped++;
+          continue;
+        }
 
-  async getPendingPayments(req, res) {
-    res.json({ success: false, error: 'Método no implementado' });
-  }
+        // Crear registro
+        const deliveryDate = order.delivery_date || order.updated_at || new Date();
+        const paymentPeriod = `${deliveryDate.getFullYear()}-${String(deliveryDate.getMonth() + 1).padStart(2, '0')}`;
 
-  async getMonthlyPaymentReport(req, res) {
-    res.json({ success: false, error: 'Método no implementado' });
-  }
+        const historyRecord = new DriverHistory({
+          driver_id: order.shipday_driver_id,
+          driver_email: order.driver_info?.email || 'no-email@migrated.com',
+          driver_name: order.driver_info?.name || 'Conductor',
+          company_id: order.company_id._id,
+          order_id: order._id,
+          shipday_order_id: order.shipday_order_id || 'no-shipday-id',
+          order_number: order.order_number,
+          delivery_address: order.shipping_address,
+          customer_name: order.customer_name,
+          delivered_at: deliveryDate,
+          payment_amount: 1700,
+          payment_status: 'pending',
+          payment_period: paymentPeriod
+        });
 
-  async getActiveDrivers(req, res) {
-    res.json({ success: false, error: 'Método no implementado' });
-  }
+        await historyRecord.save();
+        created++;
+      }
 
-  async getCompanyDeliveryStats(req, res) {
-    res.json({ success: false, error: 'Método no implementado' });
-  }
+      res.json({
+        success: true,
+        message: `Proceso completado: ${created} registros creados, ${skipped} omitidos`,
+        data: {
+          created,
+          skipped,
+          total_processed: orders.length
+        }
+      });
 
-  async exportToExcel(req, res) {
-    res.json({ success: false, error: 'Método no implementado' });
+    } catch (error) {
+      console.error('❌ Error creando registros:', error);
+      res.status(500).json({ 
+        success: false, 
+        error: error.message 
+      });
+    }
   }
 }
 
