@@ -1,6 +1,6 @@
-// backend/src/controllers/driverHistory.controller.js - ARCHIVO COMPLETO
+// backend/src/controllers/driverHistory.controller.js - MODIFICADO PARA USAR ORDERS
 const DriverHistoryService = require('../services/driverHistory.service');
-const DriverHistory = require('../models/DriveryHistory');
+const Order = require('../models/Order'); // CAMBIO: Usar Order en lugar de DriverHistory
 const mongoose = require('mongoose');
 
 class DriverHistoryController {
@@ -9,8 +9,8 @@ class DriverHistoryController {
 
   /**
    * Obtener TODAS las entregas de TODOS los conductores de EnviGo
+   * Ahora basado en Orders entregados con shipping_cost
    * GET /api/driver-history/all-deliveries
-   * Solo accesible por ADMINS
    */
   async getAllDeliveriesForPayments(req, res) {
     try {
@@ -22,15 +22,16 @@ class DriverHistoryController {
         payment_status = 'pending' 
       } = req.query;
 
-      console.log('📦 Obteniendo entregas GLOBALES para pagos:', { 
-        date_from, 
-        date_to, 
-        driver_id, 
-        company_id 
+      console.log('📦 Obteniendo pedidos entregados para pagos:', { 
+        date_from, date_to, driver_id, company_id, payment_status 
       });
 
-      // Filtros base
-      const filters = {};
+      // CAMBIO: Filtros basados en Orders entregados
+      const filters = {
+        shipday_status: 'delivered', // Solo pedidos entregados
+        shipday_driver_id: { $exists: true, $ne: null }, // Solo con conductor asignado
+        delivered_at: { $exists: true, $ne: null } // Solo con fecha de entrega
+      };
 
       // Filtro por fechas
       if (date_from || date_to) {
@@ -41,31 +42,41 @@ class DriverHistoryController {
 
       // Filtro por conductor específico
       if (driver_id) {
-        filters.driver_id = driver_id;
+        filters.shipday_driver_id = driver_id;
       }
 
       // Filtro por empresa (opcional)
       if (company_id) {
-        filters.company_id = new mongoose.Types.ObjectId(company_id);
+        filters.company = new mongoose.Types.ObjectId(company_id);
       }
 
-      // Filtro por estado de pago
-      if (payment_status && payment_status !== 'all') {
-        filters.payment_status = payment_status;
+      // CAMBIO: Filtro por estado de pago al conductor
+      if (payment_status === 'pending') {
+        filters.driver_payment_status = { $ne: 'paid' };
+      } else if (payment_status === 'paid') {
+        filters.driver_payment_status = 'paid';
       }
 
       console.log('🔍 Filtros aplicados:', filters);
 
-      // Obtener entregas con información de empresa
-      const deliveries = await DriverHistory.find(filters)
-        .populate('company_id', 'name email phone')
-        .populate('order_id', 'order_number customer_name total_amount')
+      // CAMBIO: Obtener Orders en lugar de DriverHistory
+      const deliveries = await Order.find(filters)
+        .populate('company', 'name email phone')
+        .populate('customer', 'first_name last_name email phone')
+        .select(`
+          order_number customer company 
+          shipping_address shipping_commune
+          total_amount shipping_cost delivery_fee
+          delivered_at shipday_driver_id shipday_driver_name shipday_driver_email
+          driver_payment_status driver_payment_date driver_payment_amount
+          created_at
+        `)
         .sort({ delivered_at: -1 })
         .lean();
 
-      console.log('📊 Entregas encontradas:', deliveries.length);
+      console.log('📊 Pedidos encontrados:', deliveries.length);
 
-      // Agrupar por conductor (incluye empresas servidas)
+      // Agrupar por conductor
       const driverGroups = this.groupDeliveriesByDriverGlobal(deliveries);
 
       // Estadísticas globales
@@ -80,19 +91,21 @@ class DriverHistoryController {
           drivers: driverGroups,
           deliveries: deliveries.map(delivery => ({
             id: delivery._id,
-            driver_id: delivery.driver_id,
-            driver_name: delivery.driver_name,
-            driver_email: delivery.driver_email,
+            driver_id: delivery.shipday_driver_id,
+            driver_name: delivery.shipday_driver_name,
+            driver_email: delivery.shipday_driver_email,
             order_number: delivery.order_number,
-            customer_name: delivery.customer_name,
-            delivery_address: delivery.delivery_address,
+            customer_name: delivery.customer ? 
+              `${delivery.customer.first_name} ${delivery.customer.last_name}` : 
+              'Cliente Desconocido',
+            delivery_address: delivery.shipping_address,
             delivered_at: delivery.delivered_at,
-            payment_amount: delivery.payment_amount,
-            payment_status: delivery.payment_status,
-            paid_at: delivery.paid_at,
+            payment_amount: delivery.shipping_cost || 1800, // CAMBIO: Usar shipping_cost
+            payment_status: delivery.driver_payment_status || 'pending',
+            paid_at: delivery.driver_payment_date,
             company: {
-              id: delivery.company_id?._id,
-              name: delivery.company_id?.name || 'Empresa Desconocida'
+              id: delivery.company?._id,
+              name: delivery.company?.name || 'Empresa Desconocida'
             }
           }))
         },
@@ -117,10 +130,15 @@ class DriverHistoryController {
     try {
       const { date_from, date_to, company_id } = req.query;
 
-      const filters = { payment_status: 'pending' };
+      // CAMBIO: Filtros basados en Orders
+      const filters = { 
+        shipday_status: 'delivered',
+        shipday_driver_id: { $exists: true, $ne: null },
+        driver_payment_status: { $ne: 'paid' }
+      };
       
       if (company_id) {
-        filters.company_id = new mongoose.Types.ObjectId(company_id);
+        filters.company = new mongoose.Types.ObjectId(company_id);
       }
       
       if (date_from || date_to) {
@@ -129,27 +147,28 @@ class DriverHistoryController {
         if (date_to) filters.delivered_at.$lte = new Date(date_to + 'T23:59:59.999Z');
       }
 
-      const summary = await DriverHistory.aggregate([
+      // CAMBIO: Aggregation en Orders
+      const summary = await Order.aggregate([
         { $match: filters },
         {
           $lookup: {
             from: 'companies',
-            localField: 'company_id',
+            localField: 'company',
             foreignField: '_id',
-            as: 'company'
+            as: 'company_info'
           }
         },
         {
           $group: {
             _id: {
-              driver_id: '$driver_id',
-              driver_name: '$driver_name',
-              driver_email: '$driver_email'
+              driver_id: '$shipday_driver_id',
+              driver_name: '$shipday_driver_name',
+              driver_email: '$shipday_driver_email'
             },
             total_deliveries: { $sum: 1 },
-            total_amount: { $sum: '$payment_amount' },
-            companies_served: { $addToSet: '$company_id' },
-            company_names: { $addToSet: { $arrayElemAt: ['$company.name', 0] } },
+            total_amount: { $sum: { $ifNull: ['$shipping_cost', 1800] } }, // CAMBIO: shipping_cost
+            companies_served: { $addToSet: '$company' },
+            company_names: { $addToSet: { $arrayElemAt: ['$company_info.name', 0] } },
             oldest_delivery: { $min: '$delivered_at' },
             newest_delivery: { $max: '$delivered_at' }
           }
@@ -210,36 +229,43 @@ class DriverHistoryController {
       const start = startDate ? new Date(startDate) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
       const end = endDate ? new Date(endDate) : new Date();
 
-      const activeDrivers = await DriverHistory.aggregate([
+      // CAMBIO: Aggregation en Orders
+      const activeDrivers = await Order.aggregate([
         {
           $match: {
+            shipday_status: 'delivered',
+            shipday_driver_id: { $exists: true, $ne: null },
             delivered_at: { $gte: start, $lte: end }
           }
         },
         {
           $lookup: {
             from: 'companies',
-            localField: 'company_id',
+            localField: 'company',
             foreignField: '_id',
-            as: 'company'
+            as: 'company_info'
           }
         },
         {
           $group: {
             _id: {
-              driver_id: '$driver_id',
-              driver_name: '$driver_name',
-              driver_email: '$driver_email'
+              driver_id: '$shipday_driver_id',
+              driver_name: '$shipday_driver_name',
+              driver_email: '$shipday_driver_email'
             },
             total_deliveries: { $sum: 1 },
-            total_earnings: { $sum: '$payment_amount' },
+            total_earnings: { $sum: { $ifNull: ['$shipping_cost', 1800] } },
             pending_amount: {
               $sum: {
-                $cond: [{ $eq: ['$payment_status', 'pending'] }, '$payment_amount', 0]
+                $cond: [
+                  { $ne: ['$driver_payment_status', 'paid'] }, 
+                  { $ifNull: ['$shipping_cost', 1800] }, 
+                  0
+                ]
               }
             },
-            companies_served: { $addToSet: '$company_id' },
-            companies_names: { $addToSet: { $arrayElemAt: ['$company.name', 0] } },
+            companies_served: { $addToSet: '$company' },
+            companies_names: { $addToSet: { $arrayElemAt: ['$company_info.name', 0] } },
             last_delivery: { $max: '$delivered_at' },
             first_delivery: { $min: '$delivered_at' }
           }
@@ -301,14 +327,16 @@ class DriverHistoryController {
         payment_status = 'pending' 
       } = req.query;
 
-      console.log('📦 Obteniendo entregas de empresa específica:', { 
-        companyId,
-        date_from, 
-        date_to, 
-        driver_id 
+      console.log('📦 Obteniendo pedidos de empresa específica:', { 
+        companyId, date_from, date_to, driver_id 
       });
 
-      const filters = { company_id: new mongoose.Types.ObjectId(companyId) };
+      // CAMBIO: Filtros basados en Orders por empresa
+      const filters = { 
+        company: new mongoose.Types.ObjectId(companyId),
+        shipday_status: 'delivered',
+        shipday_driver_id: { $exists: true, $ne: null }
+      };
 
       if (date_from || date_to) {
         filters.delivered_at = {};
@@ -317,16 +345,25 @@ class DriverHistoryController {
       }
 
       if (driver_id) {
-        filters.driver_id = driver_id;
+        filters.shipday_driver_id = driver_id;
       }
 
-      if (payment_status && payment_status !== 'all') {
-        filters.payment_status = payment_status;
+      if (payment_status === 'pending') {
+        filters.driver_payment_status = { $ne: 'paid' };
+      } else if (payment_status === 'paid') {
+        filters.driver_payment_status = 'paid';
       }
 
-      const deliveries = await DriverHistory.find(filters)
-        .populate('company_id', 'name')
-        .populate('order_id', 'order_number customer_name total_amount')
+      const deliveries = await Order.find(filters)
+        .populate('company', 'name')
+        .populate('customer', 'first_name last_name email phone')
+        .select(`
+          order_number customer company 
+          shipping_address shipping_commune
+          total_amount shipping_cost
+          delivered_at shipday_driver_id shipday_driver_name
+          driver_payment_status driver_payment_date
+        `)
         .sort({ delivered_at: -1 })
         .lean();
 
@@ -342,22 +379,24 @@ class DriverHistoryController {
           drivers: driverGroups,
           deliveries: deliveries.map(delivery => ({
             id: delivery._id,
-            driver_id: delivery.driver_id,
-            driver_name: delivery.driver_name,
+            driver_id: delivery.shipday_driver_id,
+            driver_name: delivery.shipday_driver_name,
             order_number: delivery.order_number,
-            customer_name: delivery.customer_name,
-            delivery_address: delivery.delivery_address,
+            customer_name: delivery.customer ? 
+              `${delivery.customer.first_name} ${delivery.customer.last_name}` : 
+              'Cliente Desconocido',
+            delivery_address: delivery.shipping_address,
             delivered_at: delivery.delivered_at,
-            payment_amount: delivery.payment_amount,
-            payment_status: delivery.payment_status,
-            paid_at: delivery.paid_at
+            payment_amount: delivery.shipping_cost || 1800, // CAMBIO: shipping_cost
+            payment_status: delivery.driver_payment_status || 'pending',
+            paid_at: delivery.driver_payment_date
           }))
         },
         timestamp: new Date().toISOString()
       });
 
     } catch (error) {
-      console.error('❌ Error obteniendo entregas de empresa:', error);
+      console.error('❌ Error obteniendo pedidos de empresa:', error);
       res.status(500).json({ 
         success: false, 
         error: 'Error obteniendo entregas para pagos',
@@ -366,107 +405,48 @@ class DriverHistoryController {
     }
   }
 
-  // ==================== MÉTODOS ORIGINALES ====================
+  // ==================== MÉTODOS DE PAGOS ====================
 
-  async getDriverHistory(req, res) {
-    try {
-      const { driverId } = req.params;
-      const { startDate, endDate, page = 1, limit = 50 } = req.query;
-
-      const filters = { driver_id: driverId };
-      
-      if (startDate && endDate) {
-        filters.delivered_at = {
-          $gte: new Date(startDate),
-          $lte: new Date(endDate)
-        };
-      }
-
-      const skip = (page - 1) * limit;
-
-      const [deliveries, total, stats] = await Promise.all([
-        DriverHistory.find(filters)
-          .populate('order_id', 'order_number customer_name')
-          .populate('company_id', 'name')
-          .sort({ delivered_at: -1 })
-          .skip(skip)
-          .limit(parseInt(limit)),
-        
-        DriverHistory.countDocuments(filters),
-        
-        DriverHistoryService.getDriverStats(
-          driverId, 
-          startDate ? new Date(startDate) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
-          endDate ? new Date(endDate) : new Date()
-        )
-      ]);
-
-      res.json({
-        success: true,
-        data: {
-          deliveries,
-          stats,
-          pagination: {
-            current_page: parseInt(page),
-            total_pages: Math.ceil(total / limit),
-            total_records: total,
-            per_page: parseInt(limit)
-          }
-        }
-      });
-
-    } catch (error) {
-      console.error('❌ Error obteniendo historial del conductor:', error);
-      res.status(500).json({ 
-        success: false, 
-        error: 'Error obteniendo historial del conductor' 
-      });
-    }
-  }
-
-  async getPendingPayments(req, res) {
-    try {
-      const { driverId } = req.params;
-      const { companyId } = req.query;
-
-      const result = await DriverHistoryService.getPendingPayments(driverId, companyId);
-
-      res.json({
-        success: true,
-        data: result
-      });
-
-    } catch (error) {
-      console.error('❌ Error obteniendo pagos pendientes:', error);
-      res.status(500).json({ 
-        success: false, 
-        error: 'Error obteniendo pagos pendientes' 
-      });
-    }
-  }
-
+  /**
+   * Marca pedidos como pagadas (MODIFICADO)
+   */
   async markDeliveriesAsPaid(req, res) {
     try {
-      const { deliveryIds } = req.body;
+      const { deliveryIds } = req.body; // Son order IDs ahora
       const paidBy = req.user.id;
 
       if (!deliveryIds || !Array.isArray(deliveryIds) || deliveryIds.length === 0) {
         return res.status(400).json({
           success: false,
-          error: 'Se requiere un array de IDs de entregas'
+          error: 'Se requiere un array de IDs de pedidos'
         });
       }
 
-      const result = await DriverHistoryService.markAsPaid(deliveryIds, paidBy);
+      // CAMBIO: Actualizar Orders en lugar de DriverHistory
+      const result = await Order.updateMany(
+        { 
+          _id: { $in: deliveryIds },
+          shipday_status: 'delivered',
+          driver_payment_status: { $ne: 'paid' }
+        },
+        {
+          $set: {
+            driver_payment_status: 'paid',
+            driver_payment_date: new Date(),
+            driver_payment_by: paidBy,
+            driver_payment_amount: 1800 // O usar el shipping_cost existente
+          }
+        }
+      );
 
       res.json({
         success: true,
-        message: `${result.modifiedCount} entregas marcadas como pagadas`,
+        message: `${result.modifiedCount} pedidos marcados como pagados`,
         data: { modified_count: result.modifiedCount }
       });
 
     } catch (error) {
-      console.error('❌ Error marcando entregas como pagadas:', error);
+      console.error('❌ Error marcando pedidos como pagados:', error);
       res.status(500).json({ 
         success: false, 
         error: 'Error procesando pagos' 
@@ -474,30 +454,58 @@ class DriverHistoryController {
     }
   }
 
+  /**
+   * Pagar todos los pedidos pendientes de un conductor (MODIFICADO)
+   */
   async payAllPendingToDriver(req, res) {
     try {
       const { driverId } = req.params;
       const { companyId } = req.body;
       const paidBy = req.user.id;
 
-      const pendingResult = await DriverHistoryService.getPendingPayments(driverId, companyId);
+      // CAMBIO: Filtros en Orders
+      const filters = {
+        shipday_status: 'delivered',
+        shipday_driver_id: driverId,
+        driver_payment_status: { $ne: 'paid' }
+      };
+
+      if (companyId) {
+        filters.company = new mongoose.Types.ObjectId(companyId);
+      }
+
+      const pendingOrders = await Order.find(filters);
       
-      if (pendingResult.deliveries.length === 0) {
+      if (pendingOrders.length === 0) {
         return res.status(400).json({
           success: false,
-          error: 'No hay entregas pendientes de pago para este conductor'
+          error: 'No hay pedidos pendientes de pago para este conductor'
         });
       }
 
-      const deliveryIds = pendingResult.deliveries.map(d => d._id);
-      const result = await DriverHistoryService.markAsPaid(deliveryIds, paidBy);
+      const totalAmount = pendingOrders.reduce((sum, order) => {
+        return sum + (order.shipping_cost || 1800);
+      }, 0);
+
+      const orderIds = pendingOrders.map(order => order._id);
+      const result = await Order.updateMany(
+        { _id: { $in: orderIds } },
+        {
+          $set: {
+            driver_payment_status: 'paid',
+            driver_payment_date: new Date(),
+            driver_payment_by: paidBy,
+            driver_payment_amount: 1800
+          }
+        }
+      );
 
       res.json({
         success: true,
-        message: `Pagadas ${result.modifiedCount} entregas por un total de $${pendingResult.summary.total_amount}`,
+        message: `Pagados ${result.modifiedCount} pedidos por un total de $${totalAmount.toLocaleString('es-CL')}`,
         data: {
           driver_id: driverId,
-          total_amount: pendingResult.summary.total_amount,
+          total_amount: totalAmount,
           deliveries_paid: result.modifiedCount
         }
       });
@@ -511,177 +519,20 @@ class DriverHistoryController {
     }
   }
 
-  async getMonthlyPaymentReport(req, res) {
-    try {
-      const { companyId } = req.params;
-      const { year, month } = req.query;
-
-      const currentDate = new Date();
-      const reportYear = parseInt(year) || currentDate.getFullYear();
-      const reportMonth = parseInt(month) || currentDate.getMonth() + 1;
-
-      const report = await DriverHistoryService.getMonthlyPaymentReport(
-        companyId, 
-        reportYear, 
-        reportMonth
-      );
-
-      res.json({
-        success: true,
-        data: report
-      });
-
-    } catch (error) {
-      console.error('❌ Error generando reporte mensual:', error);
-      res.status(500).json({ 
-        success: false, 
-        error: 'Error generando reporte mensual' 
-      });
-    }
-  }
-
-  async getActiveDrivers(req, res) {
-    try {
-      const { companyId } = req.params;
-      const { startDate, endDate } = req.query;
-
-      const start = startDate ? new Date(startDate) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-      const end = endDate ? new Date(endDate) : new Date();
-
-      const activeDrivers = await DriverHistoryService.getActiveDrivers(companyId, start, end);
-
-      res.json({
-        success: true,
-        data: {
-          drivers: activeDrivers,
-          period: {
-            start_date: start,
-            end_date: end
-          }
-        }
-      });
-
-    } catch (error) {
-      console.error('❌ Error obteniendo conductores activos:', error);
-      res.status(500).json({ 
-        success: false, 
-        error: 'Error obteniendo conductores activos' 
-      });
-    }
-  }
-
-  async getCompanyDeliveryStats(req, res) {
-    try {
-      const { companyId } = req.params;
-      const { startDate, endDate } = req.query;
-
-      const start = startDate ? new Date(startDate) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-      const end = endDate ? new Date(endDate) : new Date();
-
-      const stats = await DriverHistory.getCompanyStats(companyId, start, end);
-
-      res.json({
-        success: true,
-        data: {
-          stats: stats[0] || {
-            total_deliveries: 0,
-            total_paid_to_drivers: 0,
-            unique_drivers_count: 0,
-            pending_payments: 0,
-            paid_payments: 0
-          },
-          period: {
-            start_date: start,
-            end_date: end
-          }
-        }
-      });
-
-    } catch (error) {
-      console.error('❌ Error obteniendo estadísticas de empresa:', error);
-      res.status(500).json({ 
-        success: false, 
-        error: 'Error obteniendo estadísticas' 
-      });
-    }
-  }
-
-  async exportToExcel(req, res) {
-    try {
-      const { company_id, date_from, date_to, payment_status = 'pending' } = req.query;
-
-      const filters = { payment_status };
-      if (company_id) {
-        filters.company_id = new mongoose.Types.ObjectId(company_id);
-      }
-      
-      if (date_from || date_to) {
-        filters.delivered_at = {};
-        if (date_from) filters.delivered_at.$gte = new Date(date_from);
-        if (date_to) filters.delivered_at.$lte = new Date(date_to + 'T23:59:59.999Z');
-      }
-
-      const deliveries = await DriverHistory.find(filters)
-        .populate('order_id', 'order_number customer_name')
-        .populate('company_id', 'name')
-        .sort({ delivered_at: -1 })
-        .lean();
-
-      const excelData = deliveries.map(delivery => ({
-        'Conductor': delivery.driver_name,
-        'Email': delivery.driver_email,
-        'N° Pedido': delivery.order_number,
-        'Cliente': delivery.customer_name,
-        'Empresa': delivery.company_id?.name || 'Empresa Desconocida',
-        'Dirección': delivery.delivery_address,
-        'Fecha Entrega': delivery.delivered_at.toLocaleDateString('es-CL'),
-        'Monto': delivery.payment_amount,
-        'Estado Pago': delivery.payment_status === 'paid' ? 'Pagado' : 'Pendiente',
-        'Fecha Pago': delivery.paid_at ? delivery.paid_at.toLocaleDateString('es-CL') : ''
-      }));
-
-      const totalAmount = deliveries.reduce((sum, d) => sum + d.payment_amount, 0);
-      const uniqueDrivers = new Set(deliveries.map(d => d.driver_id)).size;
-      const uniqueCompanies = new Set(deliveries.map(d => d.company_id?._id?.toString()).filter(Boolean)).size;
-
-      const summary = {
-        total_drivers: uniqueDrivers,
-        total_deliveries: deliveries.length,
-        total_companies: uniqueCompanies,
-        total_amount_to_pay: totalAmount,
-        period: { date_from, date_to }
-      };
-
-      const ExcelService = require('../services/excel.service');
-      const excelBuffer = await ExcelService.generateDriverPaymentReport(excelData, summary);
-
-      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-      res.setHeader('Content-Disposition', `attachment; filename=pagos_conductores_${date_from}_${date_to}.xlsx`);
-      return res.send(excelBuffer);
-
-    } catch (error) {
-      console.error('❌ Error exportando a Excel:', error);
-      res.status(500).json({ 
-        success: false, 
-        error: 'Error exportando reporte' 
-      });
-    }
-  }
-
-  // ================ MÉTODOS AUXILIARES ================
+  // ================ MÉTODOS AUXILIARES MODIFICADOS ================
 
   groupDeliveriesByDriver(deliveries) {
     const drivers = {};
 
     deliveries.forEach(delivery => {
-      const driverId = delivery.driver_id;
-      const driverName = delivery.driver_name;
+      const driverId = delivery.shipday_driver_id;
+      const driverName = delivery.shipday_driver_name;
 
       if (!drivers[driverId]) {
         drivers[driverId] = {
           driver_id: driverId,
           driver_name: driverName,
-          driver_email: delivery.driver_email,
+          driver_email: delivery.shipday_driver_email,
           total_deliveries: 0,
           total_amount: 0,
           pending_amount: 0,
@@ -690,13 +541,14 @@ class DriverHistoryController {
         };
       }
 
+      const paymentAmount = delivery.shipping_cost || 1800; // CAMBIO: shipping_cost
       drivers[driverId].total_deliveries += 1;
-      drivers[driverId].total_amount += delivery.payment_amount;
+      drivers[driverId].total_amount += paymentAmount;
       
-      if (delivery.payment_status === 'pending') {
-        drivers[driverId].pending_amount += delivery.payment_amount;
+      if (delivery.driver_payment_status === 'paid') {
+        drivers[driverId].paid_amount += paymentAmount;
       } else {
-        drivers[driverId].paid_amount += delivery.payment_amount;
+        drivers[driverId].pending_amount += paymentAmount;
       }
 
       drivers[driverId].deliveries.push(delivery._id);
@@ -709,9 +561,9 @@ class DriverHistoryController {
     const drivers = {};
 
     deliveries.forEach(delivery => {
-      const driverId = delivery.driver_id;
-      const driverName = delivery.driver_name;
-      const driverEmail = delivery.driver_email;
+      const driverId = delivery.shipday_driver_id;
+      const driverName = delivery.shipday_driver_name;
+      const driverEmail = delivery.shipday_driver_email;
 
       if (!drivers[driverId]) {
         drivers[driverId] = {
@@ -727,17 +579,18 @@ class DriverHistoryController {
         };
       }
 
+      const paymentAmount = delivery.shipping_cost || 1800; // CAMBIO: shipping_cost
       drivers[driverId].total_deliveries += 1;
-      drivers[driverId].total_amount += delivery.payment_amount;
+      drivers[driverId].total_amount += paymentAmount;
       
-      if (delivery.payment_status === 'pending') {
-        drivers[driverId].pending_amount += delivery.payment_amount;
+      if (delivery.driver_payment_status === 'paid') {
+        drivers[driverId].paid_amount += paymentAmount;
       } else {
-        drivers[driverId].paid_amount += delivery.payment_amount;
+        drivers[driverId].pending_amount += paymentAmount;
       }
 
-      if (delivery.company_id) {
-        drivers[driverId].companies_served.add(delivery.company_id.name || 'Empresa Desconocida');
+      if (delivery.company) {
+        drivers[driverId].companies_served.add(delivery.company.name || 'Empresa Desconocida');
       }
 
       drivers[driverId].deliveries.push(delivery._id);
@@ -752,12 +605,12 @@ class DriverHistoryController {
 
   calculateDeliveryStats(deliveries) {
     const totalDeliveries = deliveries.length;
-    const totalAmount = deliveries.reduce((sum, d) => sum + d.payment_amount, 0);
+    const totalAmount = deliveries.reduce((sum, d) => sum + (d.shipping_cost || 1800), 0);
     
-    const pendingDeliveries = deliveries.filter(d => d.payment_status === 'pending');
-    const pendingAmount = pendingDeliveries.reduce((sum, d) => sum + d.payment_amount, 0);
+    const pendingDeliveries = deliveries.filter(d => d.driver_payment_status !== 'paid');
+    const pendingAmount = pendingDeliveries.reduce((sum, d) => sum + (d.shipping_cost || 1800), 0);
     
-    const uniqueDrivers = new Set(deliveries.map(d => d.driver_id)).size;
+    const uniqueDrivers = new Set(deliveries.map(d => d.shipday_driver_id)).size;
 
     return {
       total_deliveries: totalDeliveries,
@@ -773,13 +626,13 @@ class DriverHistoryController {
 
   calculateGlobalDriverStats(deliveries) {
     const totalDeliveries = deliveries.length;
-    const totalAmount = deliveries.reduce((sum, d) => sum + d.payment_amount, 0);
+    const totalAmount = deliveries.reduce((sum, d) => sum + (d.shipping_cost || 1800), 0);
     
-    const pendingDeliveries = deliveries.filter(d => d.payment_status === 'pending');
-    const pendingAmount = pendingDeliveries.reduce((sum, d) => sum + d.payment_amount, 0);
+    const pendingDeliveries = deliveries.filter(d => d.driver_payment_status !== 'paid');
+    const pendingAmount = pendingDeliveries.reduce((sum, d) => sum + (d.shipping_cost || 1800), 0);
     
-    const uniqueDrivers = new Set(deliveries.map(d => d.driver_id)).size;
-    const uniqueCompanies = new Set(deliveries.map(d => d.company_id?._id?.toString()).filter(Boolean)).size;
+    const uniqueDrivers = new Set(deliveries.map(d => d.shipday_driver_id)).size;
+    const uniqueCompanies = new Set(deliveries.map(d => d.company?._id?.toString()).filter(Boolean)).size;
 
     return {
       total_deliveries: totalDeliveries,
@@ -793,6 +646,32 @@ class DriverHistoryController {
       average_per_delivery: totalDeliveries > 0 ? totalAmount / totalDeliveries : 0,
       average_per_driver: uniqueDrivers > 0 ? totalAmount / uniqueDrivers : 0
     };
+  }
+
+  // ==================== MÉTODOS LEGACY (mantener por compatibilidad) ====================
+  
+  async getDriverHistory(req, res) {
+    return res.json({ success: false, error: 'Método no implementado en versión Orders' });
+  }
+
+  async getPendingPayments(req, res) {
+    return res.json({ success: false, error: 'Método no implementado en versión Orders' });
+  }
+
+  async getMonthlyPaymentReport(req, res) {
+    return res.json({ success: false, error: 'Método no implementado en versión Orders' });
+  }
+
+  async getActiveDrivers(req, res) {
+    return res.json({ success: false, error: 'Método no implementado en versión Orders' });
+  }
+
+  async getCompanyDeliveryStats(req, res) {
+    return res.json({ success: false, error: 'Método no implementado en versión Orders' });
+  }
+
+  async exportToExcel(req, res) {
+    return res.json({ success: false, error: 'Método no implementado en versión Orders' });
   }
 }
 
