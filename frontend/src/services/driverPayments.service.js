@@ -1,4 +1,6 @@
-// frontend/src/services/driverPayments.js
+// frontend/src/services/driverPayments.service.js
+// VERSIÓN ACTUALIZADA Y CORREGIDA
+
 import { api } from './api'
 
 export const driverPaymentsService = {
@@ -12,6 +14,22 @@ export const driverPaymentsService = {
   getAllDeliveries: (params = {}) => {
     console.log('📦 API: Obteniendo entregas globales de EnviGo');
     return api.get('/driver-history/all-deliveries', { params });
+  },
+
+  /**
+   * Método de test para debuggear
+   */
+  testDriverSystem: (params = {}) => {
+    console.log('🧪 API: Ejecutando test del sistema de conductores');
+    return api.get('/driver-history/test', { params });
+  },
+
+  /**
+   * Crear registros en DriverHistory desde órdenes existentes
+   */
+  createHistoryFromOrders: () => {
+    console.log('🔄 API: Creando registros históricos desde órdenes');
+    return api.post('/driver-history/create-from-orders');
   },
 
   /**
@@ -103,63 +121,66 @@ export const driverPaymentsService = {
    * Marcar entregas específicas como pagadas
    * Solo para admins
    */
-  markDeliveriesAsPaid: (deliveryIds, notes = '') => {
+  markDeliveriesAsPaid: (deliveryIds, paymentNote = '') => {
     console.log('✅ API: Marcando entregas como pagadas');
-    return api.post('/driver-history/mark-paid', { 
+    return api.post('/driver-history/mark-as-paid', {
       deliveryIds,
-      notes 
+      paymentNote
     });
   },
 
-  // ==================== EXPORTACIÓN ====================
+  /**
+   * Obtener historial de pagos
+   * Solo para admins
+   */
+  getPaymentHistory: (params = {}) => {
+    console.log('📜 API: Obteniendo historial de pagos');
+    return api.get('/driver-history/payment-history', { params });
+  },
+
+  // ==================== EXPORTACIÓN Y REPORTES ====================
 
   /**
-   * Exportar reporte a Excel
+   * Exportar reporte de pagos a Excel
    * Solo para admins
    */
   exportPaymentsToExcel: (params = {}) => {
-    console.log('📊 API: Exportando pagos a Excel');
+    console.log('📊 API: Exportando reporte a Excel');
     return api.get('/driver-history/export-excel', { 
       params,
       responseType: 'blob'
     });
   },
 
-  // ==================== MÉTODOS HELPER ====================
+  /**
+   * Generar reporte de pagos en PDF
+   * Solo para admins
+   */
+  generatePaymentReportPDF: (params = {}) => {
+    console.log('📄 API: Generando reporte PDF');
+    return api.get('/driver-history/export-pdf', { 
+      params,
+      responseType: 'blob'
+    });
+  },
+
+  // ==================== MÉTODOS DE CONFIGURACIÓN ====================
 
   /**
-   * Método inteligente que decide qué endpoint usar según el rol del usuario
-   * Para mantener compatibilidad con componentes existentes
+   * Obtener configuración de pagos
+   * Solo para admins
    */
-  getDeliveredOrders: (params = {}, userRole = 'admin', companyId = null) => {
-    if (userRole === 'admin') {
-      // Los admins ven todo globalmente
-      console.log('📦 API: Admin - obteniendo entregas globales');
-      return api.get('/driver-history/all-deliveries', { params });
-    } else if (userRole === 'company_owner' && companyId) {
-      // Los company_owners solo ven su empresa
-      console.log('🏢 API: Company Owner - obteniendo entregas de su empresa');
-      return api.get(`/driver-history/company/${companyId}/deliveries`, { params });
-    } else {
-      throw new Error('Rol no autorizado para ver entregas');
-    }
+  getPaymentSettings: () => {
+    console.log('⚙️ API: Obteniendo configuración de pagos');
+    return api.get('/driver-history/settings');
   },
 
   /**
-   * Método inteligente para resumen de pagos
+   * Actualizar configuración de pagos
+   * Solo para admins
    */
-  getPaymentSummary: (params = {}, userRole = 'admin', companyId = null) => {
-    if (userRole === 'admin') {
-      console.log('💰 API: Admin - obteniendo resumen global');
-      return api.get('/driver-history/global-payment-summary', { params });
-    } else if (userRole === 'company_owner' && companyId) {
-      console.log('🏢 API: Company Owner - obteniendo resumen de su empresa');
-      // Para company_owners, usar el endpoint de empresa pero solo para vista
-      return api.get(`/driver-history/company/${companyId}/deliveries`, { 
-        params: { ...params, payment_status: 'pending' }
-      });
-    } else {
-      throw new Error('Rol no autorizado para ver resumen de pagos');
-    }
+  updatePaymentSettings: (settings) => {
+    console.log('⚙️ API: Actualizando configuración de pagos');
+    return api.put('/driver-history/settings', settings);
   }
-};
+}
