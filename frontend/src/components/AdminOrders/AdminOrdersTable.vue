@@ -591,7 +591,6 @@ function deleteOrder(order) {
 
 .table-container {
   overflow-x: auto;
-  min-height: 400px;
 }
 
 .orders-table {
