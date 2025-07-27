@@ -1,20 +1,19 @@
-// backend/src/controllers/auth.controller.js
+// backend/src/controllers/auth.controller.js - ESTRUCTURA CORREGIDA
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
-const nodemailer = require('nodemailer'); // npm install nodemailer
+const nodemailer = require('nodemailer');
 const User = require('../models/User');
 const Company = require('../models/Company');
 const { ERRORS, ROLES } = require('../config/constants');
 
 class AuthController {
-  // Login mejorado con throttling y logging
+  // Login mejorado
   async login(req, res) {
     try {
       const { email, password, remember_me = false } = req.body;
       const clientIP = req.ip || req.connection.remoteAddress;
 
-      // Verificar intentos fallidos recientes (opcional: implementar en Redis)
       const user = await User.findOne({ email, is_active: true }).populate('company_id');
       if (!user) {
         this.logFailedAttempt(email, clientIP, 'USER_NOT_FOUND');
@@ -40,7 +39,7 @@ class AuthController {
       // Login exitoso - resetear contadores de fallo
       await this.handleSuccessfulLogin(user, clientIP);
 
-      // Generar token con tiempo de vida personalizable
+      // Generar token
       const tokenExpiry = remember_me ? '30d' : (process.env.JWT_EXPIRE || '7d');
       const token = jwt.sign(
         { 
@@ -48,13 +47,12 @@ class AuthController {
           email: user.email, 
           role: user.role, 
           company_id: user.company_id?._id || null,
-          session_id: crypto.randomUUID() // Para invalidar sesiones específicas
+          session_id: crypto.randomUUID()
         },
         process.env.JWT_SECRET,
         { expiresIn: tokenExpiry }
       );
 
-      // Respuesta mejorada con información adicional
       res.json({
         token,
         expires_in: tokenExpiry,
@@ -74,17 +72,16 @@ class AuthController {
       res.status(500).json({ error: ERRORS.SERVER_ERROR });
     }
   }
+
   // Registro de usuario
   async register(req, res) {
     try {
       const { email, password, full_name, company_id, role = ROLES.COMPANY_EMPLOYEE } = req.body;
 
-      // Validar que el rol sea permitido
       if (!Object.values(ROLES).includes(role)) {
         return res.status(400).json({ error: 'Rol no válido' });
       }
 
-      // Si no es admin, debe tener una empresa
       if (role !== ROLES.ADMIN) {
         if (!company_id) {
           return res.status(400).json({ error: 'Se requiere empresa para este rol' });
@@ -150,29 +147,26 @@ class AuthController {
       res.status(500).json({ error: ERRORS.SERVER_ERROR });
     }
   }
+
   // Solicitar reset de contraseña
   async requestPasswordReset(req, res) {
-      try {
+    try {
       const { email } = req.body;
 
       const user = await User.findOne({ email, is_active: true });
       if (!user) {
-        // Por seguridad, siempre devolver respuesta exitosa
         return res.json({ 
           message: 'Si el email existe, recibirás instrucciones para resetear tu contraseña' 
         });
       }
 
-      // Generar token seguro
       const resetToken = crypto.randomBytes(32).toString('hex');
       const resetTokenHash = crypto.createHash('sha256').update(resetToken).digest('hex');
 
-      // Guardar token con expiración (1 hora)
       user.password_reset_token = resetTokenHash;
       user.password_reset_expires = new Date(Date.now() + 60 * 60 * 1000);
       await user.save();
 
-      // Enviar email
       await this.sendPasswordResetEmail(user.email, resetToken, user.full_name);
 
       res.json({ 
@@ -193,7 +187,6 @@ class AuthController {
         return res.status(400).json({ error: 'Token y nueva contraseña son requeridos' });
       }
 
-      // Hashear token para comparar
       const resetTokenHash = crypto.createHash('sha256').update(token).digest('hex');
 
       const user = await User.findOne({
@@ -206,7 +199,6 @@ class AuthController {
         return res.status(400).json({ error: 'Token inválido o expirado' });
       }
 
-      // Validar que la nueva contraseña no sea igual a la anterior
       const isSamePassword = await bcrypt.compare(new_password, user.password_hash);
       if (isSamePassword) {
         return res.status(400).json({ 
@@ -214,7 +206,6 @@ class AuthController {
         });
       }
 
-      // Actualizar contraseña
       user.password_hash = await bcrypt.hash(new_password, 12);
       user.password_reset_token = undefined;
       user.password_reset_expires = undefined;
@@ -231,7 +222,7 @@ class AuthController {
     }
   }
 
-  // Cambiar contraseña (usuario logueado)
+  // Cambiar contraseña
   async changePassword(req, res) {
     try {
       const { current_password, new_password } = req.body;
@@ -240,13 +231,11 @@ class AuthController {
       const user = await User.findById(userId);
       if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
 
-      // Verificar contraseña actual
       const validPassword = await bcrypt.compare(current_password, user.password_hash);
       if (!validPassword) {
         return res.status(401).json({ error: 'Contraseña actual incorrecta' });
       }
 
-      // Validar que la nueva contraseña sea diferente
       const isSamePassword = await bcrypt.compare(new_password, user.password_hash);
       if (isSamePassword) {
         return res.status(400).json({ 
@@ -254,7 +243,6 @@ class AuthController {
         });
       }
 
-      // Actualizar contraseña
       user.password_hash = await bcrypt.hash(new_password, 12);
       user.password_change_required = false;
       user.password_changed_at = new Date();
@@ -292,12 +280,11 @@ class AuthController {
     }
   }
 
-  // Métodos auxiliares
+  // ✅ MÉTODOS AUXILIARES - CORRECTAMENTE DENTRO DE LA CLASE
   async handleFailedLogin(user, clientIP) {
     user.failed_login_attempts = (user.failed_login_attempts || 0) + 1;
     user.last_failed_login = new Date();
 
-    // Bloquear después de 5 intentos por 15 minutos
     if (user.failed_login_attempts >= 5) {
       user.locked_until = new Date(Date.now() + 15 * 60 * 1000);
     }
@@ -306,17 +293,16 @@ class AuthController {
     this.logFailedAttempt(user.email, clientIP, 'INVALID_PASSWORD');
   }
 
-async handleSuccessfulLogin(user, clientIP) {
-  user.last_login = new Date();
-  user.failed_login_attempts = 0;
-  user.locked_until = undefined;
-  user.last_login_ip = clientIP;
-  await user.save();
-}
+  async handleSuccessfulLogin(user, clientIP) {
+    user.last_login = new Date();
+    user.failed_login_attempts = 0;
+    user.locked_until = undefined;
+    user.last_login_ip = clientIP;
+    await user.save();
+  }
 
   logFailedAttempt(email, ip, reason) {
     console.warn(`Failed login attempt - Email: ${email}, IP: ${ip}, Reason: ${reason}, Time: ${new Date().toISOString()}`);
-    // Aquí podrías enviar a un servicio de logging como Winston o Sentry
   }
 
   getUserPermissions(role) {
@@ -329,46 +315,51 @@ async handleSuccessfulLogin(user, clientIP) {
   }
 
   async sendPasswordResetEmail(email, token, fullName) {
-    // Configurar nodemailer (ajustar según tu proveedor)
-    const transporter = nodemailer.createTransporter({
-      host: process.env.SMTP_HOST,
-      port: process.env.SMTP_PORT,
-      secure: process.env.SMTP_SECURE === 'true',
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS
-      }
-    });
-
-    const resetUrl = `${process.env.FRONTEND_URL}/reset-password?token=${token}`;
-
-    const mailOptions = {
-      from: `"enviGo" <${process.env.SMTP_FROM}>`,
-      to: email,
-      subject: 'Restablecer tu contraseña de enviGo',
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <h2>Hola ${fullName},</h2>
-          <p>Recibimos una solicitud para restablecer tu contraseña en enviGo.</p>
-          <p>Haz clic en el siguiente enlace para crear una nueva contraseña:</p>
-          <a href="${resetUrl}" style="background: #007bff; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block;">
-            Restablecer Contraseña
-          </a>
-          <p>Este enlace expirará en 1 hora.</p>
-          <p>Si no solicitaste este cambio, puedes ignorar este email.</p>
-          <hr>
-          <p><small>enviGo - Gestión Logística de Última Milla</small></p>
-        </div>
-      `
-    };
-
     try {
+      // Si no tienes configurado SMTP, simplemente log por ahora
+      if (!process.env.SMTP_HOST) {
+        console.log(`Password reset solicitado para ${email} con token: ${token}`);
+        return;
+      }
+
+      const transporter = nodemailer.createTransporter({
+        host: process.env.SMTP_HOST,
+        port: process.env.SMTP_PORT,
+        secure: process.env.SMTP_SECURE === 'true',
+        auth: {
+          user: process.env.SMTP_USER,
+          pass: process.env.SMTP_PASS
+        }
+      });
+
+      const resetUrl = `${process.env.FRONTEND_URL}/reset-password?token=${token}`;
+
+      const mailOptions = {
+        from: `"enviGo" <${process.env.SMTP_FROM}>`,
+        to: email,
+        subject: 'Restablecer tu contraseña de enviGo',
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2>Hola ${fullName},</h2>
+            <p>Recibimos una solicitud para restablecer tu contraseña en enviGo.</p>
+            <p>Haz clic en el siguiente enlace para crear una nueva contraseña:</p>
+            <a href="${resetUrl}" style="background: #007bff; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block;">
+              Restablecer Contraseña
+            </a>
+            <p>Este enlace expirará en 1 hora.</p>
+            <p>Si no solicitaste este cambio, puedes ignorar este email.</p>
+            <hr>
+            <p><small>enviGo - Gestión Logística de Última Milla</small></p>
+          </div>
+        `
+      };
+
       await transporter.sendMail(mailOptions);
       console.log(`Password reset email sent to ${email}`);
     } catch (error) {
       console.error('Error sending password reset email:', error);
     }
   }
-}
+} // ✅ CIERRE CORRECTO DE LA CLASE
 
 module.exports = new AuthController();
