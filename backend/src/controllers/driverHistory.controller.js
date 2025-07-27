@@ -374,7 +374,9 @@ async getAllDeliveriesForPayments(req, res) {
         delivery_address: delivery.delivery_address || delivery.shipping_address,
         delivered_at: delivery.delivered_at || delivery.delivery_date,
         payment_amount: paymentAmount,
-        company_name: delivery.company_id?.name
+        company_name: delivery.company_id?.name,
+         payment_status: delivery.payment_status, // 'paid' o 'pending'
+      paid_at: delivery.paid_at,
       });
     });
 
