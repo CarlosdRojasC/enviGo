@@ -412,6 +412,17 @@ watch(() => availableCommunes.value, (newCommunes) => {
   })
 }, { immediate: true })
 
+
+watch(filters, (newFilters) => {
+  logger.dev('[AdminOrders] 🕵️‍♂️ Filtros cambiaron, recargando datos...');
+  
+  // Reinicia la paginación a la página 1
+  pagination.value.page = 1; 
+  
+  // Llama a la función principal para buscar con los nuevos filtros
+  fetchOrders(newFilters);
+
+}, { deep: true });
 // ==================== FUNCIÓN DE DEBUG MANUAL ====================
 function debugCurrentState() {
   logger.group('[AdminOrders] 🔍 Current State Debug')

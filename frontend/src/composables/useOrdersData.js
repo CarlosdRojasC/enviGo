@@ -1,5 +1,5 @@
 // composables/useOrdersData.js
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, reactive } from 'vue'
 import { useToast } from 'vue-toastification'
 import { apiService } from '../services/api'
 import { useAuthStore } from '../store/auth'
@@ -20,6 +20,8 @@ export function useOrdersData() {
     total: 0, 
     totalPages: 1 
   })
+  const lastAppliedFilters = ref({})
+
   
   const loadingStates = ref({
     fetching: false,
@@ -150,6 +152,7 @@ export function useOrdersData() {
     try {
       loadingOrders.value = true
       loadingStates.value.fetching = true
+      lastAppliedFilters.value = filters
 
       // ✅ LIMPIAR Y VALIDAR FILTROS ANTES DE ENVIAR
       const cleanedFilters = cleanAndValidateFilters(filters)
@@ -247,24 +250,20 @@ export function useOrdersData() {
    * Change page
    */
 function goToPage(page) {
-  if (page >= 1 && page <= pagination.value.totalPages && page !== pagination.value.page) { // Añade una comprobación extra
+  if (page >= 1 && page <= pagination.value.totalPages) {
     pagination.value.page = page
-    refreshOrders() // <-- USA LA FUNCIÓN refreshOrders
-    logger.dev('📄 Changed to page:', page)
+    fetchOrders(lastAppliedFilters.value) // <-- USA LOS FILTROS GUARDADOS
   }
 }
+
 
   /**
    * Change page size
    */
- function changePageSize(newLimit) {
-  const size = parseInt(newLimit);
-  if (size !== pagination.value.limit) {
-      pagination.value.limit = size
-      pagination.value.page = 1 // Reset to first page
-      refreshOrders() // <-- USA LA FUNCIÓN refreshOrders
-      logger.dev('📏 Changed page size to:', newLimit)
-  }
+function changePageSize(newLimit) {
+  pagination.value.limit = parseInt(newLimit)
+  pagination.value.page = 1
+  fetchOrders(lastAppliedFilters.value) // <-- USA LOS FILTROS GUARDADOS
 }
 
   /**
