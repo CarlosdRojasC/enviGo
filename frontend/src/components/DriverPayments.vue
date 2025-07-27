@@ -1,13 +1,12 @@
 <!-- frontend/src/components/DriverPayments.vue -->
-<!-- VERSIÓN ACTUALIZADA Y CORREGIDA -->
+<!-- VERSIÓN MÍNIMA QUE FUNCIONA CON TUS RUTAS ACTUALES -->
 
 <template>
   <div class="driver-payments-container">
     
-    <!-- FILTROS -->
+    <!-- FILTROS BÁSICOS -->
     <div class="filters-section">
       <div class="filters-row">
-        <!-- Filtro de Fechas -->
         <div class="filter-group">
           <label>📅 Desde:</label>
           <input 
@@ -28,7 +27,6 @@
           />
         </div>
 
-        <!-- Filtro de Estado de Pago -->
         <div class="filter-group">
           <label>💰 Estado:</label>
           <select 
@@ -42,43 +40,21 @@
           </select>
         </div>
 
-        <!-- Filtro de Empresa (Solo para admins) -->
-        <div class="filter-group" v-if="authStore.user.role === 'admin'">
-          <label>🏢 Empresa:</label>
-          <select 
-            v-model="selectedCompany" 
-            class="form-select"
-            @change="fetchDriverPayments"
-          >
-            <option value="">Todas las empresas</option>
-            <option 
-              v-for="company in companies" 
-              :key="company._id" 
-              :value="company._id"
-            >
-              {{ company.name }}
-            </option>
-          </select>
-        </div>
-
-        <!-- Botones de Acción -->
         <div class="filter-actions">
           <button @click="refreshData" class="btn-refresh">
             🔄 Actualizar
           </button>
           
           <button 
-            v-if="authStore.user.role === 'admin'" 
-            @click="exportToExcel" 
-            class="btn-export"
+            @click="runTest" 
+            class="btn-test"
             :disabled="loading"
           >
-            📊 Exportar Excel
+            🧪 Test Sistema
           </button>
 
           <button 
-            v-if="authStore.user.role === 'admin'" 
-            @click="migrateHistoryData" 
+            @click="migrateData" 
             class="btn-migrate"
             :disabled="loading"
           >
@@ -88,30 +64,55 @@
       </div>
     </div>
 
+    <!-- RESULTADOS DEL TEST -->
+    <div v-if="testResults" class="test-results">
+      <div class="test-card">
+        <h3>🧪 Resultados del Test</h3>
+        <div class="test-stats">
+          <div class="test-stat">
+            <span>Total Pedidos:</span>
+            <span>{{ testResults.debug_info?.total_orders }}</span>
+          </div>
+          <div class="test-stat">
+            <span>Pedidos Entregados:</span>
+            <span>{{ testResults.debug_info?.delivered_orders }}</span>
+          </div>
+          <div class="test-stat">
+            <span>Con Conductor:</span>
+            <span>{{ testResults.debug_info?.delivered_with_driver }}</span>
+          </div>
+          <div class="test-stat">
+            <span>Conductores Únicos:</span>
+            <span>{{ testResults.payment_report?.summary?.total_drivers }}</span>
+          </div>
+          <div class="test-stat">
+            <span>Total a Pagar:</span>
+            <span class="amount">${{ formatCurrency(testResults.payment_report?.summary?.total_amount || 0) }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- RESUMEN ESTADÍSTICAS -->
-    <div v-if="stats" class="stats-summary">
+    <div v-if="summary" class="stats-summary">
       <div class="summary-card">
-        <h3>{{ authStore.user.role === 'admin' ? 'Resumen Global EnviGo' : 'Resumen de tu Empresa' }}</h3>
+        <h3>💰 Resumen de Pagos</h3>
         <div class="summary-stats">
           <div class="stat">
-            <span class="stat-label">Total Conductores:</span>
-            <span class="stat-value">{{ stats.total_drivers || stats.unique_drivers }}</span>
+            <span class="stat-label">Conductores:</span>
+            <span class="stat-value">{{ summary.unique_drivers }}</span>
           </div>
           <div class="stat">
-            <span class="stat-label">Total Entregas:</span>
-            <span class="stat-value">{{ stats.total_deliveries }}</span>
-          </div>
-          <div class="stat" v-if="authStore.user.role === 'admin' && stats.unique_companies">
-            <span class="stat-label">Empresas Servidas:</span>
-            <span class="stat-value">{{ stats.unique_companies }}</span>
+            <span class="stat-label">Entregas:</span>
+            <span class="stat-value">{{ summary.total_deliveries }}</span>
           </div>
           <div class="stat">
-            <span class="stat-label">Total a Pagar:</span>
-            <span class="stat-value total-amount">${{ formatCurrency(stats.total_amount) }}</span>
+            <span class="stat-label">Total:</span>
+            <span class="stat-value amount">${{ formatCurrency(summary.total_amount) }}</span>
           </div>
-          <div class="stat" v-if="stats.data_source">
-            <span class="stat-label">Fuente de Datos:</span>
-            <span class="stat-value">{{ stats.data_source === 'driver_history' ? '📋 DriverHistory' : '📦 Orders' }}</span>
+          <div class="stat">
+            <span class="stat-label">Fuente:</span>
+            <span class="stat-value">{{ summary.data_source === 'driver_history' ? '📋 DriverHistory' : '📦 Orders' }}</span>
           </div>
         </div>
       </div>
@@ -120,22 +121,20 @@
     <!-- LOADING -->
     <div v-if="loading" class="loading-container">
       <div class="spinner"></div>
-      <p>Cargando datos de conductores...</p>
+      <p>{{ loadingMessage }}</p>
     </div>
 
     <!-- MENSAJE SI NO HAY DATOS -->
-    <div v-else-if="drivers.length === 0" class="no-data-message">
+    <div v-else-if="drivers.length === 0 && !testResults" class="no-data-message">
       <div class="no-data-card">
         <h3>📭 No hay entregas registradas</h3>
         <p>No se encontraron entregas para los filtros seleccionados.</p>
-        <p v-if="authStore.user.role === 'admin'">
-          <strong>Sugerencia:</strong> Intenta migrar los datos históricos usando el botón "Migrar Datos"
-        </p>
+        <p><strong>Sugerencia:</strong> Ejecuta primero el "Test Sistema" y luego "Migrar Datos"</p>
       </div>
     </div>
 
     <!-- LISTA DE CONDUCTORES -->
-    <div v-else class="drivers-list">
+    <div v-else-if="drivers.length > 0" class="drivers-list">
       <div 
         v-for="driver in drivers" 
         :key="driver.driver_id"
@@ -145,7 +144,7 @@
           <div class="driver-info">
             <h3>🚗 {{ driver.driver_name }}</h3>
             <div class="driver-details">
-              <span class="driver-id">🆔 ID: {{ driver.driver_id }}</span>
+              <span class="driver-id">🆔 {{ driver.driver_id }}</span>
               <span class="driver-email">📧 {{ driver.driver_email }}</span>
             </div>
             <div class="driver-stats">
@@ -157,15 +156,6 @@
           </div>
           <div class="driver-actions">
             <button 
-              v-if="authStore.user.role === 'admin' && paymentStatus === 'pending' && driver.total_amount > 0"
-              @click="payAllToDriver(driver.driver_id, driver.driver_name, driver.total_amount)"
-              class="btn-pay-all"
-              :disabled="payingDriver === driver.driver_id"
-            >
-              <span v-if="payingDriver === driver.driver_id">⏳ Procesando...</span>
-              <span v-else>💸 Pagar Todo (${{ formatCurrency(driver.total_amount) }})</span>
-            </button>
-            <button 
               @click="toggleDriverDetails(driver.driver_id)"
               class="toggle-btn"
             >
@@ -174,21 +164,19 @@
           </div>
         </div>
 
-        <!-- DETALLE DE ENTREGAS DEL CONDUCTOR -->
+        <!-- DETALLE DE ENTREGAS -->
         <div 
           v-if="expandedDrivers.has(driver.driver_id)" 
           class="driver-orders"
         >
-          <!-- Tabla de Entregas -->
           <div class="orders-table">
             <div class="table-header">
               <div class="col">N° Pedido</div>
               <div class="col">Cliente</div>
-              <div class="col" v-if="authStore.user.role === 'admin'">Empresa</div>
+              <div class="col">Empresa</div>
               <div class="col">Dirección</div>
-              <div class="col">Fecha Entrega</div>
+              <div class="col">Fecha</div>
               <div class="col">Monto</div>
-              <div v-if="authStore.user.role === 'admin' && paymentStatus === 'pending'" class="col">Acción</div>
             </div>
             
             <div 
@@ -198,39 +186,36 @@
             >
               <div class="col order-number">{{ delivery.order_number }}</div>
               <div class="col customer">{{ delivery.customer_name }}</div>
-              <div class="col company" v-if="authStore.user.role === 'admin'">
-                {{ delivery.company_name || 'Sin empresa' }}
-              </div>
+              <div class="col company">{{ delivery.company_name || 'N/A' }}</div>
               <div class="col address" :title="delivery.delivery_address">
                 {{ truncateText(delivery.delivery_address, 30) }}
               </div>
               <div class="col date">{{ formatDate(delivery.delivered_at) }}</div>
               <div class="col amount">${{ formatCurrency(delivery.payment_amount) }}</div>
-              <div 
-                v-if="authStore.user.role === 'admin' && paymentStatus === 'pending'" 
-                class="col action"
-              >
-                <button 
-                  @click="markAsPaid([delivery.order_number])"
-                  class="btn-pay-single"
-                  :disabled="payingDeliveries.includes(delivery.order_number)"
-                >
-                  {{ payingDeliveries.includes(delivery.order_number) ? '⏳' : '💰' }}
-                </button>
-              </div>
             </div>
           </div>
         </div>
+      </div>
+    </div>
+
+    <!-- MODAL DE MIGRACIÓN -->
+    <div v-if="migrationResult" class="migration-modal" @click="migrationResult = null">
+      <div class="migration-content" @click.stop>
+        <h3>✅ Migración Completada</h3>
+        <p><strong>{{ migrationResult.created }}</strong> registros creados</p>
+        <p><strong>{{ migrationResult.skipped }}</strong> registros omitidos</p>
+        <p><strong>{{ migrationResult.total_processed }}</strong> órdenes procesadas</p>
+        <button @click="migrationResult = null" class="btn-close">Cerrar</button>
       </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useAuthStore } from '../store/auth'
 import { useToast } from 'vue-toastification'
-import { driverPaymentsService } from '../services/driverPayments.service'
+import { api } from '../services/api'
 
 // ==================== STORES & COMPOSABLES ====================
 const authStore = useAuthStore()
@@ -238,26 +223,19 @@ const toast = useToast()
 
 // ==================== REACTIVE DATA ====================
 const loading = ref(false)
+const loadingMessage = ref('Cargando datos...')
 const drivers = ref([])
-const deliveries = ref([])
-const stats = ref(null)
-const companies = ref([])
+const summary = ref(null)
+const testResults = ref(null)
+const migrationResult = ref(null)
 
 // Filtros
 const dateFrom = ref('')
 const dateTo = ref('')
 const paymentStatus = ref('pending')
-const selectedCompany = ref('')
 
 // UI State
 const expandedDrivers = ref(new Set())
-const payingDriver = ref(null)
-const payingDeliveries = ref([])
-
-// ==================== COMPUTED ====================
-const filteredDrivers = computed(() => {
-  return drivers.value || []
-})
 
 // ==================== LIFECYCLE ====================
 onMounted(async () => {
@@ -268,14 +246,40 @@ onMounted(async () => {
   dateFrom.value = lastMonth.toISOString().split('T')[0]
   dateTo.value = today.toISOString().split('T')[0]
   
-  await loadCompanies()
+  // Cargar datos automáticamente
   await fetchDriverPayments()
 })
 
-// ==================== MÉTODOS PRINCIPALES ====================
+// ==================== API CALLS ====================
+async function runTest() {
+  try {
+    loading.value = true
+    loadingMessage.value = 'Ejecutando test del sistema...'
+    
+    const response = await api.get('/driver-history/test', {
+      params: {
+        date_from: dateFrom.value,
+        date_to: dateTo.value,
+        payment_status: paymentStatus.value
+      }
+    })
+    
+    testResults.value = response.data
+    toast.success('Test ejecutado correctamente')
+    console.log('🧪 Resultados del test:', response.data)
+    
+  } catch (error) {
+    console.error('❌ Error en test:', error)
+    toast.error('Error ejecutando test: ' + (error.response?.data?.error || error.message))
+  } finally {
+    loading.value = false
+  }
+}
+
 async function fetchDriverPayments() {
   try {
     loading.value = true
+    loadingMessage.value = 'Cargando entregas de conductores...'
     
     const params = {
       date_from: dateFrom.value,
@@ -283,120 +287,59 @@ async function fetchDriverPayments() {
       payment_status: paymentStatus.value
     }
 
-    // Si hay filtro de empresa seleccionado, agregarlo
-    if (selectedCompany.value) {
-      params.company_id = selectedCompany.value
-    }
-
     console.log('📡 Solicitando entregas con parámetros:', params)
 
-    let response
-    
-    // Usar el método correcto según el rol del usuario
-    if (authStore.user.role === 'admin') {
-      // Los admins ven todo globalmente
-      response = await driverPaymentsService.getAllDeliveries(params)
-    } else if (authStore.user.role === 'company_owner') {
-      // Los company_owners solo ven su empresa
-      response = await driverPaymentsService.getCompanyDeliveries(
-        authStore.user.company_id, 
-        params
-      )
-    } else {
-      throw new Error('Rol no autorizado')
-    }
-    
-    const { data } = response
+    const response = await api.get('/driver-history/all-deliveries', { params })
+    const { data } = response.data
     
     drivers.value = data.drivers || []
-    deliveries.value = data.all_deliveries || []
-    stats.value = data.summary || null
+    summary.value = data.summary || null
     
     console.log('✅ Datos cargados:', {
       drivers: drivers.value.length,
-      deliveries: deliveries.value.length,
-      stats: stats.value
+      summary: summary.value
     })
+    
+    if (drivers.value.length === 0) {
+      toast.info('No se encontraron entregas. Intenta ejecutar la migración de datos.')
+    } else {
+      toast.success(`Cargados ${drivers.value.length} conductores`)
+    }
     
   } catch (error) {
     console.error('❌ Error cargando pagos:', error)
-    toast.error('Error al cargar los pagos de conductores')
+    toast.error('Error al cargar los pagos: ' + (error.response?.data?.error || error.message))
   } finally {
     loading.value = false
   }
 }
 
-async function loadCompanies() {
-  // Solo cargar empresas si es admin
-  if (authStore.user.role === 'admin') {
-    try {
-      // TODO: Implementar servicio de empresas
-      console.log('📋 Cargando lista de empresas para filtro...')
-      companies.value = []
-    } catch (error) {
-      console.error('❌ Error cargando empresas:', error)
-    }
-  }
-}
-
-// ==================== MÉTODOS DE PAGO ====================
-async function markAsPaid(orderNumbers) {
+async function migrateData() {
   try {
-    // Solo los admins pueden marcar como pagado
-    if (authStore.user.role !== 'admin') {
-      toast.error('Solo los administradores pueden marcar pagos')
+    if (!confirm('¿Deseas migrar los datos históricos? Esto creará registros en DriverHistory desde las órdenes entregadas.')) {
       return
     }
+
+    loading.value = true
+    loadingMessage.value = 'Migrando datos históricos...'
+
+    const response = await api.post('/driver-history/create-from-orders')
     
-    payingDeliveries.value.push(...orderNumbers)
+    migrationResult.value = response.data.data
+    toast.success(response.data.message)
     
-    // TODO: Implementar método markAsPaid en el servicio
-    // await driverPaymentsService.markDeliveriesAsPaid(orderNumbers, 'Pago manual desde panel')
-    
-    toast.success(`${orderNumbers.length} entrega(s) marcada(s) como pagada(s)`)
-    
-    // Recargar datos
+    // Recargar datos después de la migración
     await fetchDriverPayments()
-    
+
   } catch (error) {
-    console.error('❌ Error marcando como pagado:', error)
-    toast.error('Error al marcar entregas como pagadas')
+    console.error('❌ Error en migración:', error)
+    toast.error('Error en migración: ' + (error.response?.data?.error || error.message))
   } finally {
-    payingDeliveries.value = payingDeliveries.value.filter(id => !orderNumbers.includes(id))
+    loading.value = false
   }
 }
 
-async function payAllToDriver(driverId, driverName, totalAmount) {
-  try {
-    payingDriver.value = driverId
-    
-    // Solo los admins pueden pagar conductores
-    if (authStore.user.role !== 'admin') {
-      toast.error('Solo los administradores pueden pagar conductores')
-      return
-    }
-    
-    // Confirmar acción
-    if (!confirm(`¿Estás seguro de pagar todas las entregas pendientes de ${driverName} por $${formatCurrency(totalAmount)}?`)) {
-      return
-    }
-    
-    await driverPaymentsService.payAllPendingToDriver(driverId)
-    
-    toast.success(`Todas las entregas de ${driverName} han sido pagadas`)
-    
-    // Recargar datos
-    await fetchDriverPayments()
-    
-  } catch (error) {
-    console.error('❌ Error pagando conductor:', error)
-    toast.error('Error al pagar todas las entregas del conductor')
-  } finally {
-    payingDriver.value = null
-  }
-}
-
-// ==================== MÉTODOS DE UI ====================
+// ==================== UI METHODS ====================
 function toggleDriverDetails(driverId) {
   if (expandedDrivers.value.has(driverId)) {
     expandedDrivers.value.delete(driverId)
@@ -409,80 +352,6 @@ function refreshData() {
   fetchDriverPayments()
 }
 
-// ==================== MIGRACIÓN DE DATOS ====================
-async function migrateHistoryData() {
-  try {
-    if (authStore.user.role !== 'admin') {
-      toast.error('Solo los administradores pueden migrar datos')
-      return
-    }
-
-    if (!confirm('¿Deseas migrar los datos históricos de entregas a DriverHistory? Esto puede tomar unos minutos.')) {
-      return
-    }
-
-    loading.value = true
-    toast.info('Iniciando migración de datos históricos...')
-
-    const response = await driverPaymentsService.createHistoryFromOrders()
-    
-    toast.success(`Migración completada: ${response.data.created} registros creados, ${response.data.skipped} omitidos`)
-    
-    // Recargar datos
-    await fetchDriverPayments()
-
-  } catch (error) {
-    console.error('❌ Error en migración:', error)
-    toast.error('Error al migrar datos históricos')
-  } finally {
-    loading.value = false
-  }
-}
-
-// ==================== EXPORTACIÓN ====================
-async function exportToExcel() {
-  try {
-    loading.value = true
-    toast.info('Preparando archivo Excel...')
-    
-    // Solo los admins pueden exportar
-    if (authStore.user.role !== 'admin') {
-      toast.error('Solo los administradores pueden exportar reportes')
-      return
-    }
-    
-    const params = {
-      date_from: dateFrom.value,
-      date_to: dateTo.value,
-      payment_status: paymentStatus.value
-    }
-    
-    if (selectedCompany.value) {
-      params.company_id = selectedCompany.value
-    }
-    
-    const response = await driverPaymentsService.exportPaymentsToExcel(params)
-    
-    // Descargar archivo
-    const url = window.URL.createObjectURL(new Blob([response.data]))
-    const link = document.createElement('a')
-    link.href = url
-    link.download = `pagos-conductores-${dateFrom.value}-${dateTo.value}.xlsx`
-    document.body.appendChild(link)
-    link.click()
-    link.remove()
-    window.URL.revokeObjectURL(url)
-    
-    toast.success('Archivo Excel descargado')
-    
-  } catch (error) {
-    console.error('❌ Error exportando:', error)
-    toast.error('Error al exportar a Excel')
-  } finally {
-    loading.value = false
-  }
-}
-
 // ==================== UTILS ====================
 function formatCurrency(amount) {
   return new Intl.NumberFormat('es-CL').format(amount || 0)
@@ -491,16 +360,16 @@ function formatCurrency(amount) {
 function formatDate(date) {
   if (!date) return 'Sin fecha'
   return new Date(date).toLocaleDateString('es-CL', {
-    year: 'numeric',
-    month: '2-digit',
     day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
     hour: '2-digit',
     minute: '2-digit'
   })
 }
 
 function truncateText(text, maxLength) {
-  if (!text) return ''
+  if (!text) return 'N/A'
   return text.length > maxLength ? text.substring(0, maxLength) + '...' : text
 }
 </script>
@@ -553,7 +422,7 @@ function truncateText(text, maxLength) {
   margin-left: auto;
 }
 
-.btn-refresh, .btn-export, .btn-migrate {
+.btn-refresh, .btn-test, .btn-migrate {
   padding: 8px 16px;
   border: none;
   border-radius: 6px;
@@ -568,14 +437,52 @@ function truncateText(text, maxLength) {
   color: white;
 }
 
-.btn-export {
-  background: #10b981;
+.btn-test {
+  background: #8b5cf6;
   color: white;
 }
 
 .btn-migrate {
   background: #f59e0b;
   color: white;
+}
+
+.btn-refresh:hover, .btn-test:hover, .btn-migrate:hover {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+
+/* Test Results */
+.test-results {
+  margin-bottom: 20px;
+}
+
+.test-card {
+  background: #f8fafc;
+  border: 2px solid #e2e8f0;
+  padding: 20px;
+  border-radius: 8px;
+}
+
+.test-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 15px;
+  margin-top: 15px;
+}
+
+.test-stat {
+  display: flex;
+  justify-content: space-between;
+  padding: 10px;
+  background: white;
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
+}
+
+.test-stat .amount {
+  color: #059669;
+  font-weight: 700;
 }
 
 /* Estadísticas */
@@ -592,7 +499,7 @@ function truncateText(text, maxLength) {
 
 .summary-stats {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 15px;
   margin-top: 15px;
 }
@@ -615,12 +522,12 @@ function truncateText(text, maxLength) {
   color: #111827;
 }
 
-.stat-value.total-amount {
+.stat-value.amount {
   color: #059669;
-  font-size: 18px;
+  font-size: 16px;
 }
 
-/* Lista de conductores */
+/* Conductores */
 .drivers-list {
   space-y: 20px;
 }
@@ -652,7 +559,7 @@ function truncateText(text, maxLength) {
   display: flex;
   gap: 15px;
   margin-bottom: 8px;
-  font-size: 14px;
+  font-size: 13px;
   color: #6b7280;
 }
 
@@ -679,27 +586,6 @@ function truncateText(text, maxLength) {
   font-weight: 700;
 }
 
-.driver-actions {
-  display: flex;
-  gap: 10px;
-}
-
-.btn-pay-all {
-  background: #059669;
-  color: white;
-  padding: 8px 16px;
-  border: none;
-  border-radius: 6px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.btn-pay-all:disabled {
-  background: #9ca3af;
-  cursor: not-allowed;
-}
-
 .toggle-btn {
   background: #6b7280;
   color: white;
@@ -710,7 +596,7 @@ function truncateText(text, maxLength) {
   cursor: pointer;
 }
 
-/* Tabla de entregas */
+/* Tabla */
 .driver-orders {
   padding: 20px;
 }
@@ -721,7 +607,7 @@ function truncateText(text, maxLength) {
 
 .table-header {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr 2fr 1fr 80px 80px;
+  grid-template-columns: 1fr 1fr 1fr 2fr 1fr 80px;
   gap: 10px;
   padding: 10px;
   background: #f3f4f6;
@@ -732,7 +618,7 @@ function truncateText(text, maxLength) {
 
 .table-row {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr 2fr 1fr 80px 80px;
+  grid-template-columns: 1fr 1fr 1fr 2fr 1fr 80px;
   gap: 10px;
   padding: 12px 10px;
   border-bottom: 1px solid #e5e7eb;
@@ -758,17 +644,7 @@ function truncateText(text, maxLength) {
   color: #059669;
 }
 
-.btn-pay-single {
-  padding: 4px 8px;
-  background: #f59e0b;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 12px;
-}
-
-/* Loading y mensajes */
+/* Loading */
 .loading-container {
   display: flex;
   flex-direction: column;
@@ -793,6 +669,7 @@ function truncateText(text, maxLength) {
   100% { transform: rotate(360deg); }
 }
 
+/* No data */
 .no-data-message {
   display: flex;
   justify-content: center;
@@ -816,5 +693,42 @@ function truncateText(text, maxLength) {
 .no-data-card p {
   color: #9ca3af;
   margin-bottom: 10px;
+}
+
+/* Migration Modal */
+.migration-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.migration-content {
+  background: white;
+  padding: 30px;
+  border-radius: 8px;
+  text-align: center;
+  max-width: 400px;
+}
+
+.migration-content h3 {
+  color: #059669;
+  margin-bottom: 15px;
+}
+
+.btn-close {
+  background: #3b82f6;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  margin-top: 15px;
 }
 </style>

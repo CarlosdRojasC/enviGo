@@ -1,5 +1,5 @@
 // backend/src/controllers/driverHistory.controller.js
-// VERSIÓN CORREGIDA - El problema era la consulta incorrecta
+// VERSIÓN CORREGIDA SIN ERRORES
 
 const DriverHistoryService = require('../services/driverHistory.service');
 const DriverHistory = require('../models/DriveryHistory');
@@ -9,7 +9,7 @@ const mongoose = require('mongoose');
 class DriverHistoryController {
 
   /**
-   * Método de prueba CORREGIDO
+   * Método de prueba para debuggear el sistema
    */
   async testMethod(req, res) {
     try {
@@ -135,53 +135,19 @@ class DriverHistoryController {
 
       console.log(`📊 Órdenes encontradas: ${deliveredOrders.length}`);
 
-      // Agrupar por conductor
-      const driverGroups = {};
-      
-      deliveredOrders.forEach(order => {
-        const driverId = order.shipday_driver_id;
-        const driverName = order.driver_info?.name || 'Conductor sin nombre';
-        const driverEmail = order.driver_info?.email || 'sin-email@shipday.com';
-
-        if (!driverId) return; // Saltar si no hay driver_id
-
-        if (!driverGroups[driverId]) {
-          driverGroups[driverId] = {
-            driver_id: driverId,
-            driver_name: driverName,
-            driver_email: driverEmail,
-            total_deliveries: 0,
-            total_amount: 0,
-            deliveries: []
-          };
-        }
-
-        const paymentAmount = 1700; // Precio fijo por entrega
-        driverGroups[driverId].total_deliveries++;
-        driverGroups[driverId].total_amount += paymentAmount;
-        driverGroups[driverId].deliveries.push({
-          order_number: order.order_number,
-          customer_name: order.customer_name,
-          delivery_address: order.shipping_address,
-          delivered_at: order.delivery_date,
-          payment_amount: paymentAmount,
-          company_name: order.company_id?.name
-        });
-      });
-
-      const driversArray = Object.values(driverGroups)
-        .sort((a, b) => b.total_amount - a.total_amount);
+      // Agrupar por conductor usando método estático
+      const driverGroups = DriverHistoryController.groupDeliveriesByDriverStatic(deliveredOrders);
 
       const summary = {
-        total_drivers: driversArray.length,
+        total_drivers: driverGroups.length,
         total_deliveries: deliveredOrders.length,
-        total_amount: driversArray.reduce((sum, driver) => sum + driver.total_amount, 0),
+        total_amount: driverGroups.reduce((sum, driver) => sum + driver.total_amount, 0),
         period: { from: dateFrom, to: dateTo }
       };
 
       return {
         summary,
-        drivers: driversArray,
+        drivers: driverGroups,
         raw_orders_found: deliveredOrders.length
       };
 
@@ -288,8 +254,8 @@ class DriverHistoryController {
       const finalDeliveries = deliveriesFromHistory.length > 0 ? deliveriesFromHistory : deliveriesFromOrders;
       const dataSource = deliveriesFromHistory.length > 0 ? 'driver_history' : 'orders';
 
-      // Agrupar por conductor
-      const driverGroups = this.groupDeliveriesByDriver(finalDeliveries);
+      // Agrupar por conductor usando método estático
+      const driverGroups = DriverHistoryController.groupDeliveriesByDriverStatic(finalDeliveries);
 
       const summary = {
         total_deliveries: finalDeliveries.length,
@@ -316,43 +282,6 @@ class DriverHistoryController {
         error: error.message 
       });
     }
-  }
-
-  /**
-   * Agrupar entregas por conductor
-   */
-  groupDeliveriesByDriver(deliveries) {
-    const grouped = {};
-    
-    deliveries.forEach(delivery => {
-      const driverId = delivery.driver_id;
-      if (!driverId) return;
-
-      if (!grouped[driverId]) {
-        grouped[driverId] = {
-          driver_id: driverId,
-          driver_name: delivery.driver_name,
-          driver_email: delivery.driver_email,
-          total_deliveries: 0,
-          total_amount: 0,
-          deliveries: []
-        };
-      }
-
-      const amount = delivery.payment_amount || 1700;
-      grouped[driverId].total_deliveries++;
-      grouped[driverId].total_amount += amount;
-      grouped[driverId].deliveries.push({
-        order_number: delivery.order_number,
-        customer_name: delivery.customer_name,
-        delivery_address: delivery.delivery_address,
-        delivered_at: delivery.delivered_at,
-        payment_amount: amount,
-        company_name: delivery.company_id?.name
-      });
-    });
-
-    return Object.values(grouped).sort((a, b) => b.total_amount - a.total_amount);
   }
 
   /**
@@ -424,6 +353,60 @@ class DriverHistoryController {
         error: error.message 
       });
     }
+  }
+
+  // ==================== MÉTODOS ESTÁTICOS AUXILIARES ====================
+
+  /**
+   * Agrupar entregas por conductor - MÉTODO ESTÁTICO
+   */
+  static groupDeliveriesByDriverStatic(deliveries) {
+    const grouped = {};
+    
+    deliveries.forEach(delivery => {
+      let driverId, driverName, driverEmail, paymentAmount;
+      
+      // Si viene de DriverHistory
+      if (delivery.driver_id) {
+        driverId = delivery.driver_id;
+        driverName = delivery.driver_name;
+        driverEmail = delivery.driver_email;
+        paymentAmount = delivery.payment_amount || 1700;
+      } 
+      // Si viene de Order
+      else if (delivery.shipday_driver_id) {
+        driverId = delivery.shipday_driver_id;
+        driverName = delivery.driver_info?.name || 'Conductor';
+        driverEmail = delivery.driver_info?.email || 'no-email@shipday.com';
+        paymentAmount = 1700;
+      } else {
+        return; // Saltar si no hay driver_id
+      }
+
+      if (!grouped[driverId]) {
+        grouped[driverId] = {
+          driver_id: driverId,
+          driver_name: driverName,
+          driver_email: driverEmail,
+          total_deliveries: 0,
+          total_amount: 0,
+          deliveries: []
+        };
+      }
+
+      grouped[driverId].total_deliveries++;
+      grouped[driverId].total_amount += paymentAmount;
+      grouped[driverId].deliveries.push({
+        order_number: delivery.order_number,
+        customer_name: delivery.customer_name,
+        delivery_address: delivery.delivery_address || delivery.shipping_address,
+        delivered_at: delivery.delivered_at || delivery.delivery_date,
+        payment_amount: paymentAmount,
+        company_name: delivery.company_id?.name
+      });
+    });
+
+    return Object.values(grouped).sort((a, b) => b.total_amount - a.total_amount);
   }
 }
 
