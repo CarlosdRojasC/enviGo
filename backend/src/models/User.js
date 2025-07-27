@@ -1,3 +1,4 @@
+// backend/src/models/User.js - VERSIÓN ACTUALIZADA
 const mongoose = require('mongoose');
 
 const userSchema = new mongoose.Schema({
@@ -17,13 +18,21 @@ const userSchema = new mongoose.Schema({
       return this.role !== 'admin' && this.role !== 'driver';
     }
   },
-  // --- NUEVO CAMPO PARA EL ID DE SHIPDAY ---
+  
+  // --- CAMPOS PARA SHIPDAY ---
   shipday_driver_id: { type: Number, index: true },
-  is_active: { type: Boolean, default: true },
-  last_login: { type: Date },
-  created_at: { type: Date, default: Date.now },
-  updated_at: { type: Date, default: Date.now },
-
+  
+  // --- 🆕 CAMPOS PARA SEGURIDAD Y LOGIN MEJORADO ---
+  failed_login_attempts: { type: Number, default: 0 },
+  locked_until: { type: Date },
+  last_login_ip: { type: String },
+  password_reset_token: { type: String },
+  password_reset_expires: { type: Date },
+  password_change_required: { type: Boolean, default: false },
+  password_changed_at: { type: Date },
+  last_failed_login: { type: Date },
+  
+  // --- CAMPOS EXISTENTES ---
   is_active: { type: Boolean, default: true },
   last_login: { type: Date },
   created_at: { type: Date, default: Date.now },
@@ -36,7 +45,9 @@ userSchema.pre('save', function(next) {
   next();
 });
 
-// Índice para mejorar consultas
+// Índices para mejorar consultas
 userSchema.index({ company_id: 1, role: 1 });
+userSchema.index({ email: 1 }); // Para búsquedas por email
+userSchema.index({ password_reset_token: 1 }); // Para password reset
 
 module.exports = mongoose.model('User', userSchema);
