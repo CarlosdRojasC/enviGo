@@ -368,6 +368,7 @@ async getAllDeliveriesForPayments(req, res) {
       grouped[driverId].total_deliveries++;
       grouped[driverId].total_amount += paymentAmount;
       grouped[driverId].deliveries.push({
+        _id: delivery._id,
         order_number: delivery.order_number,
         customer_name: delivery.customer_name,
         delivery_address: delivery.delivery_address || delivery.shipping_address,
