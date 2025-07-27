@@ -1,44 +1,72 @@
 // backend/src/controllers/auth.controller.js
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
+const nodemailer = require('nodemailer'); // npm install nodemailer
 const User = require('../models/User');
 const Company = require('../models/Company');
 const { ERRORS, ROLES } = require('../config/constants');
 
 class AuthController {
-  // Login
+  // Login mejorado con throttling y logging
   async login(req, res) {
     try {
-      const { email, password } = req.body;
+      const { email, password, remember_me = false } = req.body;
+      const clientIP = req.ip || req.connection.remoteAddress;
 
+      // Verificar intentos fallidos recientes (opcional: implementar en Redis)
       const user = await User.findOne({ email, is_active: true }).populate('company_id');
-      if (!user) return res.status(401).json({ error: ERRORS.INVALID_CREDENTIALS });
+      if (!user) {
+        this.logFailedAttempt(email, clientIP, 'USER_NOT_FOUND');
+        return res.status(401).json({ error: ERRORS.INVALID_CREDENTIALS });
+      }
+
+      // Verificar si la cuenta está bloqueada
+      if (user.locked_until && user.locked_until > new Date()) {
+        const lockTimeRemaining = Math.ceil((user.locked_until - new Date()) / 1000 / 60);
+        return res.status(423).json({ 
+          error: 'Cuenta bloqueada',
+          details: `Intentalo de nuevo en ${lockTimeRemaining} minutos`,
+          locked_until: user.locked_until
+        });
+      }
 
       const validPassword = await bcrypt.compare(password, user.password_hash);
-      if (!validPassword) return res.status(401).json({ error: ERRORS.INVALID_CREDENTIALS });
+      if (!validPassword) {
+        await this.handleFailedLogin(user, clientIP);
+        return res.status(401).json({ error: ERRORS.INVALID_CREDENTIALS });
+      }
 
-      user.last_login = new Date();
-      await user.save();
+      // Login exitoso - resetear contadores de fallo
+      await this.handleSuccessfulLogin(user, clientIP);
 
+      // Generar token con tiempo de vida personalizable
+      const tokenExpiry = remember_me ? '30d' : (process.env.JWT_EXPIRE || '7d');
       const token = jwt.sign(
         { 
           id: user._id, 
           email: user.email, 
           role: user.role, 
-          company_id: user.company_id?._id || null
+          company_id: user.company_id?._id || null,
+          session_id: crypto.randomUUID() // Para invalidar sesiones específicas
         },
         process.env.JWT_SECRET,
-        { expiresIn: process.env.JWT_EXPIRE || '7d' }
+        { expiresIn: tokenExpiry }
       );
 
+      // Respuesta mejorada con información adicional
       res.json({
         token,
+        expires_in: tokenExpiry,
         user: {
           id: user._id,
           email: user.email,
           full_name: user.full_name,
           role: user.role,
           company: user.company_id,
+          permissions: this.getUserPermissions(user.role),
+          last_login: user.last_login,
+          requires_password_change: user.password_change_required || false
         },
       });
     } catch (error) {
@@ -46,7 +74,6 @@ class AuthController {
       res.status(500).json({ error: ERRORS.SERVER_ERROR });
     }
   }
-
   // Registro de usuario
   async register(req, res) {
     try {
@@ -102,28 +129,6 @@ class AuthController {
     }
   }
 
-  // Cambiar contraseña
-  async changePassword(req, res) {
-    try {
-      const { current_password, new_password } = req.body;
-      const userId = req.user.id;
-
-      const user = await User.findById(userId);
-      if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
-
-      const validPassword = await bcrypt.compare(current_password, user.password_hash);
-      if (!validPassword) return res.status(401).json({ error: 'Contraseña actual incorrecta' });
-
-      user.password_hash = await bcrypt.hash(new_password, 10);
-      await user.save();
-
-      res.json({ message: 'Contraseña actualizada exitosamente' });
-    } catch (error) {
-      console.error('Error cambiando contraseña:', error);
-      res.status(500).json({ error: ERRORS.SERVER_ERROR });
-    }
-  }
-
   // Obtener perfil
   async getProfile(req, res) {
     try {
@@ -143,6 +148,225 @@ class AuthController {
     } catch (error) {
       console.error('Error obteniendo perfil:', error);
       res.status(500).json({ error: ERRORS.SERVER_ERROR });
+    }
+  }
+  // Solicitar reset de contraseña
+  async requestPasswordReset(req, res) {
+    try {
+      const { email } = req.body;
+
+      const user = await User.findOne({ email, is_active: true });
+      if (!user) {
+        // Por seguridad, siempre devolver respuesta exitosa
+        return res.json({ 
+          message: 'Si el email existe, recibirás instrucciones para resetear tu contraseña' 
+        });
+      }
+
+      // Generar token seguro
+      const resetToken = crypto.randomBytes(32).toString('hex');
+      const resetTokenHash = crypto.createHash('sha256').update(resetToken).digest('hex');
+
+      // Guardar token con expiración (1 hora)
+      user.password_reset_token = resetTokenHash;
+      user.password_reset_expires = new Date(Date.now() + 60 * 60 * 1000);
+      await user.save();
+
+      // Enviar email
+      await this.sendPasswordResetEmail(user.email, resetToken, user.full_name);
+
+      res.json({ 
+        message: 'Si el email existe, recibirás instrucciones para resetear tu contraseña' 
+      });
+    } catch (error) {
+      console.error('Error en password reset request:', error);
+      res.status(500).json({ error: ERRORS.SERVER_ERROR });
+    }
+  }
+
+  // Resetear contraseña con token
+  async resetPassword(req, res) {
+    try {
+      const { token, new_password } = req.body;
+
+      if (!token || !new_password) {
+        return res.status(400).json({ error: 'Token y nueva contraseña son requeridos' });
+      }
+
+      // Hashear token para comparar
+      const resetTokenHash = crypto.createHash('sha256').update(token).digest('hex');
+
+      const user = await User.findOne({
+        password_reset_token: resetTokenHash,
+        password_reset_expires: { $gt: new Date() },
+        is_active: true
+      });
+
+      if (!user) {
+        return res.status(400).json({ error: 'Token inválido o expirado' });
+      }
+
+      // Validar que la nueva contraseña no sea igual a la anterior
+      const isSamePassword = await bcrypt.compare(new_password, user.password_hash);
+      if (isSamePassword) {
+        return res.status(400).json({ 
+          error: 'La nueva contraseña debe ser diferente a la anterior' 
+        });
+      }
+
+      // Actualizar contraseña
+      user.password_hash = await bcrypt.hash(new_password, 12);
+      user.password_reset_token = undefined;
+      user.password_reset_expires = undefined;
+      user.password_change_required = false;
+      user.failed_login_attempts = 0;
+      user.locked_until = undefined;
+      user.password_changed_at = new Date();
+      await user.save();
+
+      res.json({ message: 'Contraseña actualizada exitosamente' });
+    } catch (error) {
+      console.error('Error en password reset:', error);
+      res.status(500).json({ error: ERRORS.SERVER_ERROR });
+    }
+  }
+
+  // Cambiar contraseña (usuario logueado)
+  async changePassword(req, res) {
+    try {
+      const { current_password, new_password } = req.body;
+      const userId = req.user.id;
+
+      const user = await User.findById(userId);
+      if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
+
+      // Verificar contraseña actual
+      const validPassword = await bcrypt.compare(current_password, user.password_hash);
+      if (!validPassword) {
+        return res.status(401).json({ error: 'Contraseña actual incorrecta' });
+      }
+
+      // Validar que la nueva contraseña sea diferente
+      const isSamePassword = await bcrypt.compare(new_password, user.password_hash);
+      if (isSamePassword) {
+        return res.status(400).json({ 
+          error: 'La nueva contraseña debe ser diferente a la actual' 
+        });
+      }
+
+      // Actualizar contraseña
+      user.password_hash = await bcrypt.hash(new_password, 12);
+      user.password_change_required = false;
+      user.password_changed_at = new Date();
+      await user.save();
+
+      res.json({ message: 'Contraseña actualizada exitosamente' });
+    } catch (error) {
+      console.error('Error cambiando contraseña:', error);
+      res.status(500).json({ error: ERRORS.SERVER_ERROR });
+    }
+  }
+
+  // Verificar token
+  async verifyToken(req, res) {
+    try {
+      const user = await User.findById(req.user.id).populate('company_id');
+      if (!user || !user.is_active) {
+        return res.status(401).json({ error: 'Usuario inválido' });
+      }
+
+      res.json({
+        valid: true,
+        user: {
+          id: user._id,
+          email: user.email,
+          full_name: user.full_name,
+          role: user.role,
+          company: user.company_id,
+          permissions: this.getUserPermissions(user.role)
+        }
+      });
+    } catch (error) {
+      console.error('Error verificando token:', error);
+      res.status(401).json({ error: 'Token inválido' });
+    }
+  }
+
+  // Métodos auxiliares
+  async handleFailedLogin(user, clientIP) {
+    user.failed_login_attempts = (user.failed_login_attempts || 0) + 1;
+    user.last_failed_login = new Date();
+
+    // Bloquear después de 5 intentos por 15 minutos
+    if (user.failed_login_attempts >= 5) {
+      user.locked_until = new Date(Date.now() + 15 * 60 * 1000);
+    }
+
+    await user.save();
+    this.logFailedAttempt(user.email, clientIP, 'INVALID_PASSWORD');
+  }
+
+  async handleSuccessfulLogin(user, clientIP) {
+    user.last_login = new Date();
+    user.failed_login_attempts = 0;
+    user.locked_until = undefined;
+    user.last_login_ip = clientIP;
+    await user.save();
+  }
+
+  logFailedAttempt(email, ip, reason) {
+    console.warn(`Failed login attempt - Email: ${email}, IP: ${ip}, Reason: ${reason}, Time: ${new Date().toISOString()}`);
+    // Aquí podrías enviar a un servicio de logging como Winston o Sentry
+  }
+
+  getUserPermissions(role) {
+    const permissions = {
+      admin: ['manage_companies', 'manage_users', 'view_all_orders', 'system_settings'],
+      company_owner: ['manage_company_users', 'view_company_orders', 'company_settings'],
+      company_employee: ['view_orders', 'create_orders', 'view_reports']
+    };
+    return permissions[role] || [];
+  }
+
+  async sendPasswordResetEmail(email, token, fullName) {
+    // Configurar nodemailer (ajustar según tu proveedor)
+    const transporter = nodemailer.createTransporter({
+      host: process.env.SMTP_HOST,
+      port: process.env.SMTP_PORT,
+      secure: process.env.SMTP_SECURE === 'true',
+      auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS
+      }
+    });
+
+    const resetUrl = `${process.env.FRONTEND_URL}/reset-password?token=${token}`;
+
+    const mailOptions = {
+      from: `"enviGo" <${process.env.SMTP_FROM}>`,
+      to: email,
+      subject: 'Restablecer tu contraseña de enviGo',
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2>Hola ${fullName},</h2>
+          <p>Recibimos una solicitud para restablecer tu contraseña en enviGo.</p>
+          <p>Haz clic en el siguiente enlace para crear una nueva contraseña:</p>
+          <a href="${resetUrl}" style="background: #007bff; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block;">
+            Restablecer Contraseña
+          </a>
+          <p>Este enlace expirará en 1 hora.</p>
+          <p>Si no solicitaste este cambio, puedes ignorar este email.</p>
+          <hr>
+          <p><small>enviGo - Gestión Logística de Última Milla</small></p>
+        </div>
+      `
+    };
+
+    try {
+      await transporter.sendMail(mailOptions);
+      console.log(`Password reset email sent to ${email}`);
+    } catch (error) {
+      console.error('Error sending password reset email:', error);
     }
   }
 }
