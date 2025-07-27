@@ -246,23 +246,26 @@ export function useOrdersData() {
   /**
    * Change page
    */
-  function goToPage(page) {
-    if (page >= 1 && page <= pagination.value.totalPages) {
-      pagination.value.page = page
-      fetchOrders(dataCache.value.lastFilters || {})
-      logger.dev('📄 Changed to page:', page)
-    }
+function goToPage(page) {
+  if (page >= 1 && page <= pagination.value.totalPages && page !== pagination.value.page) { // Añade una comprobación extra
+    pagination.value.page = page
+    refreshOrders() // <-- USA LA FUNCIÓN refreshOrders
+    logger.dev('📄 Changed to page:', page)
   }
+}
 
   /**
    * Change page size
    */
-  function changePageSize(newLimit) {
-    pagination.value.limit = parseInt(newLimit)
-    pagination.value.page = 1 // Reset to first page
-    fetchOrders(dataCache.value.lastFilters || {})
-    logger.dev('📏 Changed page size to:', newLimit)
+ function changePageSize(newLimit) {
+  const size = parseInt(newLimit);
+  if (size !== pagination.value.limit) {
+      pagination.value.limit = size
+      pagination.value.page = 1 // Reset to first page
+      refreshOrders() // <-- USA LA FUNCIÓN refreshOrders
+      logger.dev('📏 Changed page size to:', newLimit)
   }
+}
 
   /**
    * Refresh current page
