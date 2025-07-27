@@ -16,7 +16,7 @@ router.get('/company/:companyId',
   authenticateToken, 
   isAdmin, 
   validateMongoId('companyId'), 
-  userController.getByCompany
+  userController.getCompanyUsers
 );
 
 // Actualizar usuario (solo admin)
