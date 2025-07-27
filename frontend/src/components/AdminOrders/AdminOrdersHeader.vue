@@ -40,7 +40,7 @@
         >
           <span class="btn-icon">{{ isExporting ? '⏳' : '📤' }}</span>
           <span class="btn-text">
-            {{ isExporting ? 'Exportando...' : 'Exportar OptiRoute' }}
+            {{ isExporting ? 'Exportando...' : 'Exportar Pedidos' }}
           </span>
         </button>
       </div>

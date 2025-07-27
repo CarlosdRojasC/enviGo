@@ -24,7 +24,7 @@
         
         <button 
   @click="$emit('export')" 
-  class="btn-header export"
+  class="action-btn export-btn"
   :disabled="isExporting"
   title="Exportar pedidos a Excel"
 >

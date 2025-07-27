@@ -689,8 +689,6 @@ watch(() => auth.user?.id, () => {
 // ==================== LIFECYCLE ====================
 onMounted(async () => {
   console.log('🔔 Header dinámico montado')
-  console.log('🔧 DEBUG - apiService:', apiService)
-  console.log('🔧 DEBUG - apiService.get:', typeof apiService?.get)
   
   // Configurar eventos con throttling
   window.addEventListener('scroll', handleScroll, { passive: true })
