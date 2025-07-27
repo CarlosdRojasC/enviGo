@@ -1,43 +1,88 @@
-// backend/src/middlewares/validators/user.validator.js
 const { body, validationResult } = require('express-validator');
-const { ROLES } = require('../../config/constants');
 
 const validateRegistration = [
-  // El email debe ser un correo válido.
   body('email')
-    .isEmail().withMessage('Debe ser un correo electrónico válido.')
-    .normalizeEmail(),
-
-  // La contraseña debe tener al menos 8 caracteres.
-  body('password')
-    .isLength({ min: 8 }).withMessage('La contraseña debe tener al menos 8 caracteres.'),
-
-  // El nombre completo no puede estar vacío.
-  body('full_name')
-    .not().isEmpty().withMessage('El nombre completo es requerido.')
-    .trim()
-    .escape(),
+    .isEmail()
+    .normalizeEmail()
+    .withMessage('Email inválido'),
   
-  // El rol debe ser uno de los roles permitidos.
+  body('password')
+    .isLength({ min: 8 })
+    .withMessage('La contraseña debe tener al menos 8 caracteres')
+    .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/)
+    .withMessage('La contraseña debe contener al menos una mayúscula, una minúscula y un número'),
+  
+  body('full_name')
+    .trim()
+    .isLength({ min: 2, max: 100 })
+    .withMessage('El nombre debe tener entre 2 y 100 caracteres'),
+  
   body('role')
     .optional()
-    .isIn(Object.values(ROLES)).withMessage('El rol proporcionado no es válido.'),
+    .isIn(['admin', 'company_owner', 'company_employee'])
+    .withMessage('Rol inválido'),
 
-  // Si se proporciona un company_id, debe ser un ID de Mongo válido.
-  body('company_id')
-    .if(body('role').not().equals('admin')) // Se aplica si el rol no es admin
-    .isMongoId().withMessage('El ID de la empresa no es válido.'),
-
-  // Middleware que revisa los resultados de la validación.
   (req, res, next) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
+      return res.status(400).json({
+        error: 'Datos inválidos',
+        details: errors.array()
+      });
     }
     next();
-  },
+  }
+];
+
+const validatePasswordReset = [
+  body('token')
+    .notEmpty()
+    .isLength({ min: 64, max: 64 })
+    .withMessage('Token inválido'),
+  
+  body('new_password')
+    .isLength({ min: 8 })
+    .withMessage('La contraseña debe tener al menos 8 caracteres')
+    .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/)
+    .withMessage('La contraseña debe contener al menos una mayúscula, una minúscula y un número'),
+
+  (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        error: 'Datos inválidos',
+        details: errors.array()
+      });
+    }
+    next();
+  }
+];
+
+const validatePasswordChange = [
+  body('current_password')
+    .notEmpty()
+    .withMessage('Contraseña actual requerida'),
+  
+  body('new_password')
+    .isLength({ min: 8 })
+    .withMessage('La nueva contraseña debe tener al menos 8 caracteres')
+    .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/)
+    .withMessage('La nueva contraseña debe contener al menos una mayúscula, una minúscula y un número'),
+
+  (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        error: 'Datos inválidos',
+        details: errors.array()
+      });
+    }
+    next();
+  }
 ];
 
 module.exports = {
   validateRegistration,
+  validatePasswordReset,
+  validatePasswordChange
 };

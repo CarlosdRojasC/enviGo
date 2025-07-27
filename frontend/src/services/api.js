@@ -46,15 +46,31 @@ api.interceptors.response.use(
 
 // Servicios de autenticación
 const auth = {
-  login: (email, password) => api.post('/auth/login', { email, password }),
-  register: (userData) => api.post('/auth/register', userData),
-  getProfile: () => api.get('/auth/profile'),
-  changePassword: (passwordData) => api.post('/auth/change-password', passwordData),
+ login: (email, password, remember_me = false) => 
+    api.post('/auth/login', { email, password, remember_me }),
+  
+  register: (userData) => 
+    api.post('/auth/register', userData),
+  
+  getProfile: () => 
+    api.get('/auth/profile'),
+  
+  changePassword: (passwordData) => 
+    api.post('/auth/change-password', passwordData),
+  
+  // NUEVOS MÉTODOS PARA PASSWORD RESET
+  requestPasswordReset: (email) => 
+    api.post('/auth/request-password-reset', { email }),
+  
+  resetPassword: (token, newPassword) => 
+    api.post('/auth/reset-password', { token, new_password: newPassword }),
+  
   logout: () => {
     localStorage.removeItem('token')
     localStorage.removeItem('user')
   }
 }
+
 
 const communes = {
   // Llama a la ruta /api/communes/envigo que creaste
@@ -73,9 +89,34 @@ const companies = {
 }
 
 const users = {
-  getByCompany: (companyId) => api.get(`/users/company/${companyId}`),
-  create: (userData) => api.post('/auth/register', userData),
-  updateUser: (id, userData) => api.patch(`/users/${id}`, userData)
+    // Obtener usuarios de la empresa
+  getCompanyUsers: (params = {}) => 
+    api.get('/users/company', { params }),
+  
+  // Crear nuevo usuario
+  create: (userData) => 
+    api.post('/users', userData),
+  
+  // Actualizar usuario
+  update: (userId, userData) => 
+    api.put(`/users/${userId}`, userData),
+  
+  // Cambiar estado activo/inactivo
+  toggleStatus: (userId) => 
+    api.patch(`/users/${userId}/toggle-status`),
+  
+  // Restablecer contraseña de usuario
+  resetPassword: (userId) => 
+    api.post(`/users/${userId}/reset-password`),
+  
+  // Desbloquear usuario
+  unlock: (userId) => 
+    api.post(`/users/${userId}/unlock`),
+  
+  // Eliminar usuario
+  delete: (userId) => 
+    api.delete(`/users/${userId}`)
+
 }
 
 // Servicios de pedidos
