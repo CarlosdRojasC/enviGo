@@ -913,6 +913,16 @@ watch(companyId, (newId, oldId) => {
                   // Si el ID ya está en el store de auth, se ejecuta al instante.
                   // Si no, esperará hasta que el ID aparezca.
 });
+watch(filters, (newFilters) => {
+  logger.dev('[Orders] 🕵️‍♂️ Filtros cambiaron, recargando datos...');
+  
+  // Reinicia la paginación a la página 1
+  pagination.value.page = 1; 
+  
+  // Llama a la función principal para buscar con los nuevos filtros
+  fetchOrders(newFilters);
+
+}, { deep: true });
 
 // ==================== LIFECYCLE ====================
 
