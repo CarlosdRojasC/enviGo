@@ -37,6 +37,22 @@ router.post('/create-from-orders',
   driverHistoryController.createHistoryFromOrders
 );
 
+router.post('/mark-paid', 
+  authenticateToken, 
+  isAdmin, 
+  driverHistoryController.markDeliveriesAsPaid
+);
+
+/**
+ * POST /api/driver-history/driver/:driverId/pay-all
+ * Pagar todas las entregas pendientes de un conductor
+ */
+router.post('/driver/:driverId/pay-all', 
+  authenticateToken, 
+  isAdmin, 
+  driverHistoryController.payAllPendingToDriver
+);
+
 // ==================== RUTAS QUE HAY QUE IMPLEMENTAR DESPUÉS ====================
 // (Comentadas hasta que implementemos los métodos en el controlador)
 

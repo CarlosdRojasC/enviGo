@@ -165,36 +165,98 @@
         </div>
 
         <!-- DETALLE DE ENTREGAS -->
-        <div 
-          v-if="expandedDrivers.has(driver.driver_id)" 
-          class="driver-orders"
+<!-- DETALLE DE ENTREGAS -->
+<div 
+  v-if="expandedDrivers.has(driver.driver_id)" 
+  class="driver-orders"
+>
+  <!-- Botón pagar todo el conductor -->
+  <div 
+    v-if="paymentStatus === 'pending' && driver.total_deliveries > 0" 
+    class="driver-payment-actions"
+  >
+    <button 
+      @click="payAllToDriver(driver.driver_id, driver.driver_name, driver.total_amount)"
+      class="btn-pay-all-driver"
+      :disabled="payingDriver === driver.driver_id"
+    >
+      <span v-if="payingDriver === driver.driver_id">⏳ Procesando...</span>
+      <span v-else>💸 Pagar Todo al Conductor (${{ formatCurrency(driver.total_amount) }})</span>
+    </button>
+  </div>
+
+  <div class="orders-table">
+    <div class="table-header">
+      <div class="col">N° Pedido</div>
+      <div class="col">Cliente</div>
+      <div class="col">Empresa</div>
+      <div class="col">Dirección</div>
+      <div class="col">Fecha</div>
+      <div class="col">Monto</div>
+      <div class="col">Estado</div>
+      <div v-if="paymentStatus === 'pending'" class="col">Acción</div>
+    </div>
+    
+    <div 
+      v-for="delivery in driver.deliveries" 
+      :key="delivery.order_number"
+      class="table-row"
+      :class="{ 'paid-row': delivery.payment_status === 'paid' }"
+    >
+      <div class="col order-number">{{ delivery.order_number }}</div>
+      <div class="col customer">{{ delivery.customer_name }}</div>
+      <div class="col company">{{ delivery.company_name || 'N/A' }}</div>
+      <div class="col address" :title="delivery.delivery_address">
+        {{ truncateText(delivery.delivery_address, 30) }}
+      </div>
+      <div class="col date">{{ formatDate(delivery.delivered_at) }}</div>
+      <div class="col amount">${{ formatCurrency(delivery.payment_amount) }}</div>
+      <div class="col status">
+        <span 
+          class="status-badge" 
+          :class="delivery.payment_status"
         >
-          <div class="orders-table">
-            <div class="table-header">
-              <div class="col">N° Pedido</div>
-              <div class="col">Cliente</div>
-              <div class="col">Empresa</div>
-              <div class="col">Dirección</div>
-              <div class="col">Fecha</div>
-              <div class="col">Monto</div>
-            </div>
-            
-            <div 
-              v-for="delivery in driver.deliveries" 
-              :key="delivery.order_number"
-              class="table-row"
-            >
-              <div class="col order-number">{{ delivery.order_number }}</div>
-              <div class="col customer">{{ delivery.customer_name }}</div>
-              <div class="col company">{{ delivery.company_name || 'N/A' }}</div>
-              <div class="col address" :title="delivery.delivery_address">
-                {{ truncateText(delivery.delivery_address, 30) }}
-              </div>
-              <div class="col date">{{ formatDate(delivery.delivered_at) }}</div>
-              <div class="col amount">${{ formatCurrency(delivery.payment_amount) }}</div>
-            </div>
-          </div>
+          {{ delivery.payment_status === 'paid' ? '✅ Pagado' : '⏳ Pendiente' }}
+        </span>
+        <div v-if="delivery.paid_at" class="paid-date">
+          {{ formatDate(delivery.paid_at) }}
         </div>
+      </div>
+      <div 
+        v-if="paymentStatus === 'pending'" 
+        class="col action"
+      >
+        <button 
+          @click="markAsPaid([delivery._id], driver.driver_name)"
+          class="btn-pay-single"
+          :disabled="payingDeliveries.includes(delivery._id)"
+        >
+          <span v-if="payingDeliveries.includes(delivery._id)">⏳</span>
+          <span v-else>💰 Pagar</span>
+        </button>
+      </div>
+    </div>
+  </div>
+  <!-- Resumen del conductor -->
+  <div class="driver-summary">
+    <div class="summary-item">
+      <span>Total Entregas:</span>
+      <span>{{ driver.total_deliveries }}</span>
+    </div>
+    <div class="summary-item">
+      <span>Total a Pagar:</span>
+      <span class="amount">${{ formatCurrency(driver.total_amount) }}</span>
+    </div>
+    <div v-if="paymentStatus === 'all'" class="summary-item">
+      <span>Pendientes:</span>
+      <span>{{ driver.deliveries.filter(d => d.payment_status === 'pending').length }}</span>
+    </div>
+    <div v-if="paymentStatus === 'all'" class="summary-item">
+      <span>Pagadas:</span>
+      <span>{{ driver.deliveries.filter(d => d.payment_status === 'paid').length }}</span>
+    </div>
+  </div>
+</div>
       </div>
     </div>
 
@@ -236,6 +298,10 @@ const paymentStatus = ref('pending')
 
 // UI State
 const expandedDrivers = ref(new Set())
+
+// ==================== REACTIVE DATA (AGREGAR) ====================
+const payingDriver = ref(null)
+const payingDeliveries = ref([])
 
 // ==================== LIFECYCLE ====================
 onMounted(async () => {
@@ -350,6 +416,62 @@ function toggleDriverDetails(driverId) {
 
 function refreshData() {
   fetchDriverPayments()
+}
+// ==================== MÉTODOS DE PAGO (AGREGAR) ====================
+async function markAsPaid(orderIds, driverName = '') {
+  try {
+    if (!Array.isArray(orderIds)) {
+      orderIds = [orderIds];
+    }
+
+    console.log('💰 Marcando como pagadas las órdenes:', orderIds);
+
+    // Agregar a la lista de "procesando"
+    payingDeliveries.value.push(...orderIds);
+    
+    const response = await api.post('/driver-history/mark-paid', {
+      orderIds: orderIds,
+      paymentNote: `Pago manual desde panel${driverName ? ` - ${driverName}` : ''}`
+    });
+    
+    toast.success(`${response.data.data.orders_updated} entrega(s) marcada(s) como pagada(s)`);
+    
+    // Recargar datos para ver los cambios
+    await fetchDriverPayments();
+    
+  } catch (error) {
+    console.error('❌ Error marcando como pagado:', error);
+    toast.error('Error al marcar entregas como pagadas: ' + (error.response?.data?.error || error.message));
+  } finally {
+    // Remover de la lista de "procesando"
+    payingDeliveries.value = payingDeliveries.value.filter(id => !orderIds.includes(id));
+  }
+}
+
+async function payAllToDriver(driverId, driverName, totalAmount) {
+  try {
+    payingDriver.value = driverId;
+    
+    // Confirmación
+    if (!confirm(`¿Estás seguro de pagar todas las entregas pendientes de ${driverName} por $${formatCurrency(totalAmount)}?`)) {
+      return;
+    }
+    
+    const response = await api.post(`/driver-history/driver/${driverId}/pay-all`, {
+      paymentNote: `Pago completo - ${driverName}`
+    });
+    
+    toast.success(response.data.message);
+    
+    // Recargar datos para ver los cambios
+    await fetchDriverPayments();
+    
+  } catch (error) {
+    console.error('❌ Error pagando conductor:', error);
+    toast.error('Error al pagar conductor: ' + (error.response?.data?.error || error.message));
+  } finally {
+    payingDriver.value = null;
+  }
 }
 
 // ==================== UTILS ====================
@@ -730,5 +852,150 @@ function truncateText(text, maxLength) {
   border-radius: 6px;
   cursor: pointer;
   margin-top: 15px;
+}
+/* Acciones de pago del conductor */
+.driver-payment-actions {
+  margin-bottom: 15px;
+  text-align: center;
+}
+
+.btn-pay-all-driver {
+  background: #059669;
+  color: white;
+  padding: 12px 24px;
+  border: none;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  font-size: 16px;
+  transition: all 0.2s;
+}
+
+.btn-pay-all-driver:hover:not(:disabled) {
+  background: #047857;
+  transform: translateY(-1px);
+}
+
+.btn-pay-all-driver:disabled {
+  background: #9ca3af;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* Actualizar tabla header para incluir Estado y Acción */
+.table-header {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr 2fr 1fr 80px 100px 80px;
+  gap: 10px;
+  padding: 10px;
+  background: #f3f4f6;
+  font-weight: 600;
+  color: #374151;
+  border-radius: 6px 6px 0 0;
+}
+
+.table-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr 2fr 1fr 80px 100px 80px;
+  gap: 10px;
+  padding: 12px 10px;
+  border-bottom: 1px solid #e5e7eb;
+  align-items: center;
+}
+
+.table-row.paid-row {
+  background: #f0fdf4;
+  opacity: 0.8;
+}
+
+/* Estados de pago */
+.status-badge {
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.status-badge.pending {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.status-badge.paid {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.paid-date {
+  font-size: 10px;
+  color: #6b7280;
+  margin-top: 2px;
+}
+
+/* Botón pagar individual */
+.btn-pay-single {
+  padding: 6px 12px;
+  background: #f59e0b;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  transition: all 0.2s;
+}
+
+.btn-pay-single:hover:not(:disabled) {
+  background: #d97706;
+}
+
+.btn-pay-single:disabled {
+  background: #9ca3af;
+  cursor: not-allowed;
+}
+
+/* Resumen del conductor */
+.driver-summary {
+  margin-top: 15px;
+  padding: 15px;
+  background: #f8fafc;
+  border-radius: 6px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 15px;
+}
+
+.summary-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px;
+  background: white;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.summary-item .amount {
+  font-weight: 700;
+  color: #059669;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .table-header,
+  .table-row {
+    grid-template-columns: 1fr;
+    gap: 5px;
+  }
+  
+  .col {
+    padding: 5px;
+    border-bottom: 1px solid #f3f4f6;
+  }
+  
+  .col:before {
+    content: attr(data-label) ": ";
+    font-weight: 600;
+    margin-right: 10px;
+  }
 }
 </style>

@@ -114,6 +114,24 @@ const orderSchema = new mongoose.Schema({
   type: String,
   default: null
 },
+isPaid: { 
+  type: Boolean, 
+  default: false,
+  index: true 
+},
+paidAt: { 
+  type: Date, 
+  default: null 
+},
+paidBy: { 
+  type: mongoose.Schema.Types.ObjectId, 
+  ref: 'User',
+  default: null 
+},
+paymentNote: { 
+  type: String, 
+  default: null 
+},
 
   // 🆕 NUEVOS CAMPOS PARA SHIPDAY (datos de pickup)
   pickup_address: { type: String }, // Dirección de recogida (restaurante/tienda)
