@@ -152,7 +152,7 @@ class AuthController {
   }
   // Solicitar reset de contraseña
   async requestPasswordReset(req, res) {
-    try {
+      try {
       const { email } = req.body;
 
       const user = await User.findOne({ email, is_active: true });
@@ -306,13 +306,13 @@ class AuthController {
     this.logFailedAttempt(user.email, clientIP, 'INVALID_PASSWORD');
   }
 
-  async handleSuccessfulLogin(user, clientIP) {
-    user.last_login = new Date();
-    user.failed_login_attempts = 0;
-    user.locked_until = undefined;
-    user.last_login_ip = clientIP;
-    await user.save();
-  }
+async handleSuccessfulLogin(user, clientIP) {
+  user.last_login = new Date();
+  user.failed_login_attempts = 0;
+  user.locked_until = undefined;
+  user.last_login_ip = clientIP;
+  await user.save();
+}
 
   logFailedAttempt(email, ip, reason) {
     console.warn(`Failed login attempt - Email: ${email}, IP: ${ip}, Reason: ${reason}, Time: ${new Date().toISOString()}`);
