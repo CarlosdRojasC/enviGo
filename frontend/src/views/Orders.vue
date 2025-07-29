@@ -967,7 +967,6 @@ onBeforeUnmount(() => {
   margin: 0 auto;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   background: #f8fafc;
-  min-height: 100vh;
 }
 
 /* Loading States */

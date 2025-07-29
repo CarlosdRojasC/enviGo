@@ -19,20 +19,17 @@ import Header from '../components/Header.vue'
 <style scoped>
 .dashboard-layout {
   display: flex;
-  height: 100vh;
-  overflow: hidden;
+ min-height: 100vh;
 }
 
 .main-content {
   flex: 1;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
 }
 
 .content-area {
   flex: 1;
-  overflow-y: auto;
   padding: 2rem;
   background-color: #f8fafc;
 }
