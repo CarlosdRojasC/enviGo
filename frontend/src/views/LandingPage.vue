@@ -2,25 +2,98 @@
 <template>
   <div class="landing-page">
     <!-- Navigation -->
-    <nav class="navbar" :class="{ scrolled: isScrolled }">
-      <div class="nav-container">
-        <div class="logo">
-      <h2 class="logo">
-        <img class="imagelogo" src="../assets/envigoLogo.png" alt="" srcset="">
-      </h2>
-        </div>
-        <ul class="nav-links">
-          <li><a href="#inicio" @click="scrollTo('inicio')">Inicio</a></li>
-          <li><a href="#funcionalidades" @click="scrollTo('funcionalidades')">Funcionalidades</a></li>
-          <li><a href="#integraciones" @click="scrollTo('integraciones')">Integraciones</a></li>
-          <li><a href="#contacto" @click="scrollTo('contacto')">Contacto</a></li>
-        </ul>
-        <div class="nav-actions">
-          <router-link to="/login" class="nav-login">Iniciar Sesión</router-link>
-          <a href="#contacto" class="cta-button" @click="scrollTo('contacto')">Solicitar Demo</a>
+    <!-- REEMPLAZA TU SECCIÓN <nav> COMPLETA CON ESTO -->
+<nav class="navbar" :class="{ scrolled: isScrolled }">
+  <div class="nav-container">
+    <!-- Logo -->
+    <div class="logo">
+      <img class="imagelogo" src="../assets/envigoLogo.png" alt="enviGo Logistics" />
+    </div>
+    
+    <!-- Desktop Navigation -->
+    <ul class="nav-links desktop-only">
+      <li><a href="#inicio" @click="scrollTo('inicio')">Inicio</a></li>
+      <li><a href="#funcionalidades" @click="scrollTo('funcionalidades')">Funcionalidades</a></li>
+      <li><a href="#integraciones" @click="scrollTo('integraciones')">Integraciones</a></li>
+      <li><a href="#contacto" @click="scrollTo('contacto')">Contacto</a></li>
+    </ul>
+    
+    <!-- Desktop Actions -->
+    <div class="nav-actions desktop-only">
+      <router-link to="/login" class="nav-login">Iniciar Sesión</router-link>
+      <a href="#contacto" class="cta-button" @click="scrollTo('contacto')">Demo</a>
+    </div>
+    
+    <!-- Mobile Menu Button -->
+    <button 
+      class="mobile-menu-btn mobile-only" 
+      @click="toggleMobileMenu"
+      :class="{ active: mobileMenuOpen }"
+      aria-label="Menú"
+    >
+      <span></span>
+      <span></span>
+      <span></span>
+    </button>
+  </div>
+  
+  <!-- Mobile Menu Overlay -->
+  <div 
+    class="mobile-overlay" 
+    :class="{ active: mobileMenuOpen }" 
+    @click="closeMobileMenu"
+  ></div>
+  
+  <!-- Mobile Menu -->
+  <div class="mobile-menu" :class="{ active: mobileMenuOpen }">
+    <div class="mobile-header">
+      <img src="../assets/envigoLogo.png" alt="enviGo" class="mobile-logo" />
+      <button class="mobile-close" @click="closeMobileMenu">✕</button>
+    </div>
+    
+    <div class="mobile-content">
+      <nav class="mobile-nav">
+        <a href="#inicio" @click="mobileScrollTo('inicio')" class="mobile-link">
+          <span class="mobile-icon">🏠</span>
+          <span>Inicio</span>
+        </a>
+        <a href="#funcionalidades" @click="mobileScrollTo('funcionalidades')" class="mobile-link">
+          <span class="mobile-icon">⚙️</span>
+          <span>Funcionalidades</span>
+        </a>
+        <a href="#integraciones" @click="mobileScrollTo('integraciones')" class="mobile-link">
+          <span class="mobile-icon">🔗</span>
+          <span>Integraciones</span>
+        </a>
+        <a href="#contacto" @click="mobileScrollTo('contacto')" class="mobile-link">
+          <span class="mobile-icon">📞</span>
+          <span>Contacto</span>
+        </a>
+      </nav>
+      
+      <div class="mobile-actions">
+        <router-link to="/login" class="mobile-login" @click="closeMobileMenu">
+          Iniciar Sesión
+        </router-link>
+        <a href="#contacto" class="mobile-cta" @click="mobileScrollTo('contacto')">
+          🎯 Solicitar Demo
+        </a>
+      </div>
+      
+      <div class="mobile-contact">
+        <p><strong>¿Necesitas ayuda inmediata?</strong></p>
+        <div class="contact-buttons">
+          <a href="mailto:contacto@envigo.cl" class="contact-email">
+            ✉️ Email
+          </a>
+          <a href="tel:+56912345678" class="contact-phone">
+            📱 Llamar
+          </a>
         </div>
       </div>
-    </nav>
+    </div>
+  </div>
+</nav>
 
     <!-- Hero Section -->
     <section class="hero" id="inicio">
@@ -172,10 +245,14 @@
 </template>
 
 <script setup>
+// REEMPLAZA TU <script setup> COMPLETO CON ESTO:
+
 import { ref, onMounted, onUnmounted } from 'vue'
 
-// Estado reactivo
+// ==================== ESTADO REACTIVO ====================
 const isScrolled = ref(false)
+const mobileMenuOpen = ref(false)
+
 const demoStats = ref([
   { value: '1,247', label: 'Entregas Activas' },
   { value: '98.2%', label: 'Tasa de Éxito' },
@@ -183,7 +260,7 @@ const demoStats = ref([
   { value: '2.3h', label: 'Tiempo Promedio' }
 ])
 
-// Datos de funcionalidades usando emojis en lugar de FontAwesome
+// Datos de funcionalidades usando emojis
 const features = ref([
   {
     emoji: '🔄',
@@ -232,7 +309,7 @@ const integrations = ref([
   { name: 'WhatsApp API', emoji: '💬', status: '🚀 Próximamente', statusClass: 'coming-soon' }
 ])
 
-// Métodos
+// ==================== MÉTODOS PRINCIPALES ====================
 const scrollTo = (elementId) => {
   const element = document.getElementById(elementId)
   if (element) {
@@ -244,13 +321,47 @@ const handleScroll = () => {
   isScrolled.value = window.scrollY > 50
 }
 
-// Lifecycle hooks
+// ==================== MOBILE MENU ====================
+const toggleMobileMenu = () => {
+  mobileMenuOpen.value = !mobileMenuOpen.value
+  document.body.style.overflow = mobileMenuOpen.value ? 'hidden' : ''
+}
+
+const closeMobileMenu = () => {
+  mobileMenuOpen.value = false
+  document.body.style.overflow = ''
+}
+
+const mobileScrollTo = (elementId) => {
+  closeMobileMenu()
+  setTimeout(() => scrollTo(elementId), 300)
+}
+
+// ==================== EVENT HANDLERS ====================
+const handleResize = () => {
+  if (window.innerWidth > 768 && mobileMenuOpen.value) {
+    closeMobileMenu()
+  }
+}
+
+const handleKeydown = (event) => {
+  if (event.key === 'Escape' && mobileMenuOpen.value) {
+    closeMobileMenu()
+  }
+}
+
+// ==================== LIFECYCLE ====================
 onMounted(() => {
   window.addEventListener('scroll', handleScroll)
+  window.addEventListener('resize', handleResize)
+  window.addEventListener('keydown', handleKeydown)
 })
 
 onUnmounted(() => {
   window.removeEventListener('scroll', handleScroll)
+  window.removeEventListener('resize', handleResize)
+  window.removeEventListener('keydown', handleKeydown)
+  document.body.style.overflow = ''
 })
 </script>
 
@@ -292,6 +403,7 @@ onUnmounted(() => {
   border-bottom: 1px solid rgba(0, 0, 0, 0.1);
   z-index: 1000;
   transition: all 0.3s ease;
+  height: 100px;
 }
 
 .navbar.scrolled {
@@ -306,6 +418,7 @@ onUnmounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  height: 100% !important;
 }
 
 .logo {
@@ -381,7 +494,7 @@ onUnmounted(() => {
   align-items: center;
   position: relative;
   overflow: hidden;
-  padding-top: 80px;
+  padding-top: 100px !important;
 }
 
 .hero::before {
@@ -991,5 +1104,435 @@ onUnmounted(() => {
 .cta-content h2,
 .cta-content p {
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+.desktop-only { display: flex; }
+.mobile-only { display: none; }
+
+/* Mobile Menu Button */
+.mobile-menu-btn {
+  background: none;
+  border: none;
+  width: 44px;
+  height: 44px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 4px;
+  border-radius: 8px;
+  transition: all 0.3s ease;
+  position: relative;
+  z-index: 1001;
+}
+
+.mobile-menu-btn span {
+  width: 25px;
+  height: 2px;
+  background: var(--dark);
+  border-radius: 1px;
+  transition: all 0.3s ease;
+  transform-origin: center;
+}
+
+.mobile-menu-btn:hover {
+  background: rgba(139, 197, 63, 0.1);
+}
+
+/* Hamburger Animation */
+.mobile-menu-btn.active span:nth-child(1) {
+  transform: rotate(45deg) translate(5px, 5px);
+}
+
+.mobile-menu-btn.active span:nth-child(2) {
+  opacity: 0;
+  transform: translateX(-25px);
+}
+
+.mobile-menu-btn.active span:nth-child(3) {
+  transform: rotate(-45deg) translate(7px, -6px);
+}
+
+/* Mobile Overlay */
+.mobile-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  z-index: 999;
+  opacity: 0;
+  visibility: hidden;
+  transition: all 0.3s ease;
+}
+
+.mobile-overlay.active {
+  opacity: 1;
+  visibility: visible;
+}
+
+/* Mobile Menu */
+.mobile-menu {
+  position: fixed;
+  top: 0;
+  right: -100%;
+  width: 100%;
+  max-width: 380px;
+  height: 100vh;
+  background: white;
+  z-index: 1000;
+  transition: right 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  box-shadow: -8px 0 32px rgba(0, 0, 0, 0.2);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+.mobile-menu.active {
+  right: 0;
+}
+
+/* Mobile Header */
+.mobile-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.5rem;
+  border-bottom: 1px solid #f1f5f9;
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.mobile-logo {
+  height: 36px;
+  width: auto;
+}
+
+.mobile-close {
+  background: none;
+  border: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 20px;
+  color: var(--gray);
+  transition: all 0.2s ease;
+}
+
+.mobile-close:hover {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+}
+
+/* Mobile Content */
+.mobile-content {
+  flex: 1;
+  padding: 2rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 2.5rem;
+}
+
+/* Mobile Navigation */
+.mobile-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.mobile-link {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.25rem 1rem;
+  color: var(--dark);
+  text-decoration: none;
+  font-weight: 500;
+  font-size: 1.1rem;
+  border-radius: 12px;
+  transition: all 0.3s ease;
+  border-left: 4px solid transparent;
+  position: relative;
+}
+
+.mobile-link:hover {
+  background: linear-gradient(135deg, rgba(139, 197, 63, 0.05) 0%, rgba(164, 214, 94, 0.05) 100%);
+  border-left-color: var(--primary);
+  color: var(--primary);
+  transform: translateX(4px);
+}
+
+.mobile-icon {
+  font-size: 1.3rem;
+  width: 24px;
+  text-align: center;
+}
+
+/* Mobile Actions */
+.mobile-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding-top: 1rem;
+  border-top: 2px solid #f1f5f9;
+}
+
+.mobile-login {
+  padding: 1rem;
+  text-align: center;
+  color: var(--dark);
+  text-decoration: none;
+  font-weight: 600;
+  border: 2px solid #e2e8f0;
+  border-radius: 12px;
+  transition: all 0.3s ease;
+  background: white;
+}
+
+.mobile-login:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+  background: rgba(139, 197, 63, 0.02);
+}
+
+.mobile-cta {
+  padding: 1.25rem 1rem;
+  text-align: center;
+  background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+  color: white;
+  text-decoration: none;
+  font-weight: 700;
+  font-size: 1.05rem;
+  border-radius: 12px;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 16px rgba(139, 197, 63, 0.3);
+  position: relative;
+  overflow: hidden;
+}
+
+.mobile-cta::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  transition: left 0.5s ease;
+}
+
+.mobile-cta:hover::before {
+  left: 100%;
+}
+
+.mobile-cta:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(139, 197, 63, 0.4);
+}
+
+/* Mobile Contact */
+.mobile-contact {
+  margin-top: auto;
+  padding-top: 2rem;
+  border-top: 2px solid #f1f5f9;
+}
+
+.mobile-contact p {
+  text-align: center;
+  color: var(--gray);
+  margin-bottom: 1.5rem;
+  font-size: 0.95rem;
+}
+
+.contact-buttons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.contact-email,
+.contact-phone {
+  padding: 1rem 0.75rem;
+  text-align: center;
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 0.9rem;
+  border-radius: 10px;
+  transition: all 0.3s ease;
+}
+
+.contact-email {
+  background: rgba(59, 130, 246, 0.1);
+  color: #3b82f6;
+  border: 2px solid rgba(59, 130, 246, 0.2);
+}
+
+.contact-phone {
+  background: rgba(34, 197, 94, 0.1);
+  color: #22c55e;
+  border: 2px solid rgba(34, 197, 94, 0.2);
+}
+
+.contact-email:hover,
+.contact-phone:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.contact-email:hover {
+  background: rgba(59, 130, 246, 0.15);
+  border-color: #3b82f6;
+}
+
+.contact-phone:hover {
+  background: rgba(34, 197, 94, 0.15);
+  border-color: #22c55e;
+}
+/* AGREGA ESTO AL FINAL DE TU CSS - DESPUÉS DE TODO LO QUE TIENES */
+
+/* ==================== MOBILE VISIBILITY FIX ==================== */
+
+/* Override de los media queries existentes */
+@media (max-width: 768px) {
+  /* Ocultar navegación desktop COMPLETAMENTE */
+  .nav-links, 
+  .nav-actions {
+    display: none !important;
+  }
+  
+  /* Mostrar elementos mobile */
+  .desktop-only {
+    display: none !important;
+  }
+  
+  .mobile-only {
+    display: flex !important;
+  }
+  
+  /* Ajustar container de navegación */
+  .nav-container {
+    justify-content: space-between !important;
+    padding: 1rem 1.5rem !important;
+  }
+  
+  /* Logo más pequeño en mobile */
+  .imagelogo {
+    width: 120px !important;
+  }
+  
+  /* Hero ajustes mobile */
+  .hero {
+    padding-top: 100px !important;
+  }
+
+  .hero-container {
+    grid-template-columns: 1fr !important;
+    gap: 2rem !important;
+    text-align: center !important;
+  }
+
+  .hero-content h1 {
+    font-size: 2.5rem !important;
+  }
+
+  .features-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .hero-buttons {
+    justify-content: center !important;
+  }
+
+  .stats-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .cta-content h2 {
+    font-size: 2rem !important;
+  }
+
+  .section-title {
+    font-size: 2rem !important;
+  }
+
+  .container {
+    padding: 0 1rem !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .imagelogo {
+    width: 100px !important;
+  }
+  
+  .mobile-menu {
+    width: 90vw !important;
+    max-width: 300px !important;
+  }
+  
+  .hero-content h1 {
+    font-size: 2rem !important;
+  }
+
+  .hero-content p {
+    font-size: 1rem !important;
+  }
+
+  .btn-primary,
+  .btn-secondary {
+    padding: 0.75rem 1.5rem !important;
+    font-size: 0.9rem !important;
+  }
+
+  .feature-card {
+    padding: 2rem !important;
+  }
+
+  .section-title {
+    font-size: 1.75rem !important;
+  }
+
+  .cta-content h2 {
+    font-size: 1.75rem !important;
+  }
+
+  .dashboard-preview {
+    padding: 1.5rem !important;
+  }
+
+  .stat-card {
+    padding: 0.75rem !important;
+  }
+
+  .stat-number {
+    font-size: 1.25rem !important;
+  }
+}
+
+/* ==================== DESKTOP VISIBILITY FIX ==================== */
+@media (min-width: 769px) {
+  .desktop-only {
+    display: flex !important;
+  }
+  
+  .mobile-only {
+    display: none !important;
+  }
+  
+  .mobile-menu {
+    display: none !important;
+  }
+  
+  .mobile-overlay {
+    display: none !important;
+  }
 }
 </style>
