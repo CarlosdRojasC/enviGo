@@ -6,7 +6,9 @@
 </template>
 
 <style scoped>
-
+body{
+  overflow-y: hidden;
+}
 .logo {
   height: 6em;
   padding: 1.5em;
