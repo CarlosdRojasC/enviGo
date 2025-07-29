@@ -110,7 +110,7 @@ function logout() {
   color: #94a3b8;
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  min-height: 100vh;
   flex-shrink: 0;
   transition: width 0.3s ease;
   border-right: 1px solid #3A3A3A;
