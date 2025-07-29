@@ -233,7 +233,7 @@ class SyncSchedulerService {
   }
 
   // Sincronizar un canal específico - MEJORADO
-  async syncChannel(channel) {
+async syncChannel(channel) {
     const channelId = channel._id.toString();
     const startTime = new Date();
     let ordersImported = 0;
@@ -245,9 +245,8 @@ class SyncSchedulerService {
     try {
       console.log(`🔄 Sincronizando ${channel.channel_name} (${channel.channel_type})`);
 
-      // Marcar como en proceso
-      channel.sync_status = 'pending';
-      await channel.save();
+      // Marcar como en proceso en la base de datos
+      await Channel.findByIdAndUpdate(channelId, { sync_status: 'pending' });
 
       // ✅ PARÁMETROS DE SINCRONIZACIÓN CONSERVADORES
       const syncParams = this.getSyncParameters(channel);
@@ -278,7 +277,8 @@ class SyncSchedulerService {
       this.syncErrors.delete(channelId);
 
       // Actualizar estadísticas
-      await channel.updateSyncStats(true, ordersImported);
+      // ✅ CORRECCIÓN: Usar el método del servicio que sí funciona
+      await this.updateChannelSyncStats(channel, true, ordersImported);
 
       console.log(`✅ ${channel.channel_name}: ${ordersImported} pedidos importados`);
 
@@ -300,7 +300,8 @@ class SyncSchedulerService {
       this.syncErrors.set(channelId, currentErrors + 1);
       
       // Actualizar con error
-      await channel.updateSyncStats(false, 0, error.message);
+      // ✅ CORRECCIÓN: Usar el método del servicio que sí funciona
+      await this.updateChannelSyncStats(channel, false, 0, error.message);
       
       // ✅ LÓGICA MEJORADA DE MANEJO DE ERRORES
       if (error.message.includes('validation failed')) {
@@ -428,74 +429,45 @@ class SyncSchedulerService {
       throw error;
     }
   }
-   async syncChannelById(channelId) {
+async syncChannelById(channelId) {
     try {
       console.log(`🔄 Sincronización forzada del canal ${channelId}...`);
       
-      // Obtener el canal
-      const channel = await Channel.findById(channelId);
+      const channel = await Channel.findById(channelId).populate('company_id');
       if (!channel) {
         throw new Error(`Canal ${channelId} no encontrado`);
       }
 
       if (!channel.is_active) {
-        throw new Error(`Canal ${channel.channel_name} está inactivo`);
+        throw new Error(`El canal ${channel.channel_name} está inactivo y no puede ser sincronizado.`);
       }
 
-      // Verificar configuración
-      const configCheck = channel.isConfiguredCorrectly();
-      if (!configCheck.valid) {
-        throw new Error(`Canal mal configurado: ${configCheck.error}`);
+      // ✅ VERIFICACIÓN DE SEGURIDAD: Evita syncs simultáneos
+      if (this.syncInProgress.has(channel._id.toString())) {
+        console.log(`⏭️ ${channel.channel_name} ya está sincronizando, la solicitud manual será omitida.`);
+        throw new Error(`El canal ${channel.channel_name} ya tiene una sincronización en curso.`);
       }
 
-      // Ejecutar sincronización según el tipo
-      let result;
-      const syncParams = {
-        dateFrom: new Date(Date.now() - (7 * 24 * 60 * 60 * 1000)), // Últimos 7 días
-        dateTo: new Date(),
-        limit: 100
-      };
+      // ✅ REUTILIZAR LA LÓGICA PRINCIPAL Y ROBUSTA DE SYNC
+      const result = await this.syncChannel(channel);
 
-      switch (channel.channel_type) {
-        case 'shopify':
-          result = await this.syncShopifyOrders(channel, syncParams);
-          break;
-        case 'woocommerce':
-          result = await this.syncWooCommerceOrders(channel, syncParams);
-          break;
-        case 'mercadolibre':
-          result = await this.syncMercadoLibreOrders(channel, syncParams);
-          break;
-        default:
-          throw new Error(`Tipo de canal no soportado: ${channel.channel_type}`);
-      }
-
-      // Actualizar estadísticas del canal
-      await this.updateChannelSyncStats(channel, true, result);
-
-      console.log(`✅ Sincronización de ${channel.channel_name} completada: ${result} pedidos`);
+      console.log(`✅ Sincronización forzada de ${channel.channel_name} completada.`);
       
+      // Construir una respuesta consistente
       return {
-        success: true,
-        channel_name: channel.channel_name,
-        orders_synced: result,
-        sync_time: new Date().toISOString(),
-        message: `${result} pedidos sincronizados exitosamente`
+        success: result.success,
+        channel_name: result.channel,
+        orders_synced: result.ordersImported,
+        duration_ms: result.duration,
+        message: result.success 
+          ? `${result.ordersImported} pedidos sincronizados exitosamente.`
+          : `Falló la sincronización. Revisa los logs.`
       };
 
     } catch (error) {
-      console.error(`❌ Error sincronizando canal ${channelId}:`, error);
-      
-      // Actualizar canal con error
-      if (channelId) {
-        await this.updateChannelSyncStats(
-          await Channel.findById(channelId), 
-          false, 
-          0, 
-          error.message
-        );
-      }
-
+      console.error(`❌ Error en la sincronización forzada del canal ${channelId}:`, error.message);
+      // El error ya fue manejado y logueado dentro de syncChannel,
+      // aquí solo lo relanzamos para que el controlador de la API lo capture.
       throw error;
     }
   }
