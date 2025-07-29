@@ -372,6 +372,9 @@ onUnmounted(() => {
   padding: 0;
   box-sizing: border-box;
 }
+body{
+  overflow-y: auto;
+}
 
 .landing-page {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
