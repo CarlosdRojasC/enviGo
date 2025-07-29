@@ -26,7 +26,7 @@ const passwordResetLimiter = rateLimit({
 });
 
 // ==================== RUTAS PÚBLICAS ====================
-router.post('/login', loginLimiter, authController.login);
+router.post('/login', loginLimiter, authController.login.bind(authController));
 router.post('/register', validateRegistration, authController.register);
 
 // Password reset
