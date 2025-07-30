@@ -23,20 +23,6 @@ const createAdminUser = async () => {
       updatedAt: new Date()
     };
 
-    // Verificar si ya existe un admin
-    const existingAdmin = await User.findOne({ 
-      $or: [
-        { email: adminData.email },
-        { role: 'admin' }
-      ]
-    });
-
-    if (existingAdmin) {
-      console.log('⚠️  Ya existe un usuario admin en el sistema');
-      console.log(`📧 Email: ${existingAdmin.email}`);
-      process.exit(0);
-    }
-
     // Hashear contraseña
     const saltRounds = 12;
     adminData.password = await bcrypt.hash(adminData.password, saltRounds);
