@@ -11,21 +11,25 @@ const createAdminUser = async () => {
     await mongoose.connect(MONGODB_URI);
     console.log('📦 Conectado a MongoDB');
 
-    // Datos del admin
+    // Datos del admin - ADAPTADO A TU MODELO
+    const tempPassword = '12345678.!'; // Tu contraseña
+    
     const adminData = {
       email: 'contacto@envigo.cl',
-      password: 'AdminEnvigo2025.!', // Cambiar por una contraseña segura
-      firstName: 'Super',
-      lastName: 'Admin',
+      password_hash: '', // Se asignará después del hash
+      full_name: 'Super Admin EnviGo',
       role: 'admin',
-      isActive: true,
-      createdAt: new Date(),
-      updatedAt: new Date()
+      company_id: null, // Admin no tiene empresa
+      is_active: true,
+      password_change_required: false,
+      failed_login_attempts: 0,
+      phone: '+56912345678' // Opcional, puedes cambiarlo o eliminarlo
     };
+
 
     // Hashear contraseña
     const saltRounds = 12;
-    adminData.password = await bcrypt.hash(adminData.password, saltRounds);
+    adminData.password_hash = await bcrypt.hash(tempPassword, saltRounds);
 
     // Crear usuario admin
     const admin = new User(adminData);
@@ -33,11 +37,24 @@ const createAdminUser = async () => {
 
     console.log('✅ Usuario admin creado exitosamente');
     console.log('📧 Email:', adminData.email);
-    console.log('🔑 Contraseña temporal: Admin123! (¡CÁMBIALA!)');
+    console.log(`🔑 Contraseña: ${tempPassword}`);
+    console.log('👤 Nombre:', adminData.full_name);
     console.log('👤 Rol: admin');
+    console.log('🆔 ID:', admin._id);
+    console.log('');
+    console.log('🔐 IMPORTANTE: Guarda estas credenciales en un lugar seguro');
+    console.log('⚠️  Cambia la contraseña después de hacer login');
 
   } catch (error) {
     console.error('❌ Error creando usuario admin:', error.message);
+    
+    // Mostrar detalles específicos del error si es de validación
+    if (error.name === 'ValidationError') {
+      console.log('📋 Detalles del error:');
+      Object.keys(error.errors).forEach(key => {
+        console.log(`   - ${key}: ${error.errors[key].message}`);
+      });
+    }
   } finally {
     await mongoose.disconnect();
     console.log('📦 Desconectado de MongoDB');
