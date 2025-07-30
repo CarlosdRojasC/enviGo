@@ -802,6 +802,13 @@ function deleteOrder(order) {
   font-weight: 600; 
   text-transform: uppercase; 
   letter-spacing: 0.5px;}
+.status-out_for_delivery {
+  background: #f0fdf4;
+  color: #166534;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
 
 /* Priority Badge */
 .priority-badge {

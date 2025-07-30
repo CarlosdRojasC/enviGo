@@ -897,6 +897,18 @@ function isOrderSelectable(order) {
   letter-spacing: 0.5px;
   box-shadow: 0 2px 4px rgba(40, 167, 69, 0.3);
 }
+.status-badge.status-out_for_delivery {
+  background: linear-gradient(135deg, #ffc107, #ffca2c);
+  color: white;
+  border: none;
+  font-weight: 600;
+  padding: 6px 14px;
+  border-radius: 16px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  box-shadow: 0 2px 4px rgba(255, 193, 7, 0.3);
+}
 
 /* Animación sutil para estados activos */
 .status-badge.status-warehouse_received,
