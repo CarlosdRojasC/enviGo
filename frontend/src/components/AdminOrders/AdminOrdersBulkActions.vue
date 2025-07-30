@@ -319,6 +319,7 @@ function getStatusName(status) {
     pending: 'Pendiente',
     processing: 'Procesando',
     shipped: 'Enviado',
+    out_for_delivery: 'En Entrega',
     delivered: 'Entregado',
     invoiced: 'Facturado',
     cancelled: 'Cancelado',

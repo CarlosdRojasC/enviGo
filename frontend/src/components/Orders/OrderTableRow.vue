@@ -363,7 +363,8 @@ function getStatusIcon(status) {
     shipped: '🚚',
     delivered: '✅',
     cancelled: '❌',
-    warehouse_received: '🏭'
+    warehouse_received: '🏭',
+    out_for_delivery: '📦',
   }
   return icons[status] || '📦'
 }
@@ -374,6 +375,7 @@ function getStatusName(status) {
     processing: 'Procesando',
     ready_for_pickup: 'Listo',
     shipped: 'En Tránsito',
+    out_for_delivery: 'En Entrega',
     delivered: 'Entregado',
     invoiced: 'Facturado',
     cancelled: 'Cancelado',

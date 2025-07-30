@@ -496,6 +496,7 @@ function getStatusIcon(status) {
     processing: '⚙️',
     shipped: '🚚',
     delivered: '✅',
+    out_for_delivery: '📦',
     cancelled: '❌'
   };
   return icons[status] || '📦';
@@ -507,6 +508,7 @@ function getStatusName(status) {
     processing: 'Procesando',
     shipped: 'En Tránsito',
     delivered: 'Entregado',
+    out_for_delivery: 'En Entrega',
     invoiced: 'Facturado',
     cancelled: 'Cancelado'
   };

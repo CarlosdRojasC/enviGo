@@ -548,6 +548,7 @@ function getStatusDisplayName(status) {
     'processing': 'Procesando',
     'ready_for_pickup': 'Listo',
     'assigned': 'Asignado',
+    'out_for_delivery': 'En Entrega',
     'shipped': 'Enviado',
     'delivered': 'Entregado',
     'cancelled': 'Cancelado'

@@ -521,6 +521,7 @@ function getStatusName(status) {
     invoiced: 'Facturado',
     cancelled: 'Cancelado',
     ready_for_pickup: 'Listo para recoger',
+    out_for_delivery: 'En Entrega',
     warehouse_received: 'Recibido en bodega',
   }
   return statusMap[status] || status
