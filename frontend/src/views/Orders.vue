@@ -523,7 +523,7 @@ async function handleCreateOrderSubmit() {
     const orderData = {
       ...newOrder.value,
       channel_id: channels.value[0]._id, // Usar el primer canal disponible
-      order_number: `MANUAL-${Date.now()}`,
+      order_number: newOrder.value.order_number,
       external_order_id: `manual-company-${Date.now()}`,
       order_date: new Date().toISOString(),
       status: 'pending'
