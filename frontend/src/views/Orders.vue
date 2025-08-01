@@ -1468,37 +1468,64 @@ onBeforeUnmount(() => {
 <style scoped>
 /* ==================== ESTILOS PARA SELECTOR DE CANAL ==================== */
 
+/* ==================== ESTILOS MEJORADOS PARA SELECTOR DE CANAL ==================== */
+
 .section-description {
-  color: #6b7280;
+  color: #64748b; /* Slate 500 */
   font-size: 14px;
-  margin: 0 0 16px 0;
-  font-weight: normal;
+  margin-top: -8px;
+  margin-bottom: 16px;
 }
 
-.channel-loading {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 12px;
-  background: #f9fafb;
-  border: 1px solid #e5e7eb;
-  border-radius: 6px;
-  color: #6b7280;
+/* Container for the pickup point selection */
+.pickup-point-group {
+  background-color: #f8fafc; /* Slate 50 */
+  border: 1px solid #e2e8f0; /* Slate 200 */
+  border-radius: 12px;
+  padding: 20px;
+  transition: all 0.3s ease;
 }
 
+.pickup-point-group label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569; /* Slate 600 */
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+}
+
+/* Skeleton loader for a better loading UX */
+.channel-loading-skeleton {
+  height: 50px;
+  width: 100%;
+  border-radius: 8px;
+  background: linear-gradient(90deg, #e2e8f0 25%, #f1f5f9 50%, #e2e8f0 75%);
+  background-size: 200% 100%;
+  animation: pulse-bg 1.5s infinite ease-in-out;
+}
+
+@keyframes pulse-bg {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+
+/* Warning message for when no channels are available */
 .no-channels-warning {
   display: flex;
   gap: 12px;
   padding: 16px;
-  background: #fef3c7;
-  border: 1px solid #f59e0b;
+  background-color: #fffbeb; /* Amber 50 */
+  border: 1px solid #fcd34d; /* Amber 300 */
   border-radius: 8px;
-  color: #92400e;
+  color: #92400e; /* Amber 800 */
 }
 
 .warning-icon {
-  font-size: 20px;
+  font-size: 24px;
   flex-shrink: 0;
+  margin-top: 2px;
 }
 
 .warning-content {
@@ -1506,52 +1533,99 @@ onBeforeUnmount(() => {
 }
 
 .warning-content p {
-  margin: 0 0 8px 0;
+  margin: 0 0 10px 0;
+  line-height: 1.5;
 }
 
-.warning-content p:last-child {
-  margin-bottom: 0;
+.warning-content strong {
+  color: #78350f; /* Amber 900 */
 }
 
 .btn-link {
   background: none;
   border: none;
-  color: #3b82f6;
-  text-decoration: underline;
+  color: #2563eb; /* Blue 600 */
+  text-decoration: none;
   cursor: pointer;
   font-size: 14px;
   padding: 0;
-  font-weight: 500;
+  font-weight: 600;
+  transition: color 0.2s ease;
 }
 
 .btn-link:hover {
-  color: #1d4ed8;
+  color: #1d4ed8; /* Blue 700 */
+  text-decoration: underline;
 }
 
+/* Modern custom select dropdown */
 .channel-selector {
-  margin-bottom: 12px;
+  appearance: none;
+  background-color: #ffffff;
+  border: 1px solid #cbd5e1; /* Slate 300 */
+  border-radius: 8px;
+  padding: 12px 40px 12px 16px;
+  font-size: 16px;
+  width: 100%;
+  cursor: pointer;
+  color: #1e293b; /* Slate 800 */
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%2364748b' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+  background-repeat: no-repeat;
+  background-position: right 1rem center;
+  background-size: 1.5em 1.5em;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
+.channel-selector:hover {
+  border-color: #94a3b8; /* Slate 400 */
+}
+
+.channel-selector:focus {
+  outline: none;
+  border-color: #4f46e5; /* Indigo 600 */
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.15);
+}
+
+.channel-selector:disabled {
+  background-color: #f1f5f9; /* Slate 100 */
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+/* Preview of the selected channel */
 .channel-preview {
-  margin-top: 12px;
+  margin-top: 16px;
+  animation: fadeIn 0.5s ease-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .channel-info-card {
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
+  background-color: #ffffff;
+  border: 1px solid #e2e8f0; /* Slate 200 */
   border-radius: 8px;
-  padding: 12px;
+  padding: 16px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.03);
 }
 
 .channel-header {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-bottom: 8px;
 }
 
 .channel-icon {
-  font-size: 20px;
+  font-size: 28px;
+  line-height: 1;
 }
 
 .channel-details {
@@ -1560,43 +1634,54 @@ onBeforeUnmount(() => {
 
 .channel-name {
   font-weight: 600;
-  color: #1f2937;
-  font-size: 14px;
+  color: #1e293b; /* Slate 800 */
+  font-size: 16px;
 }
 
 .channel-type {
-  color: #6b7280;
+  color: #64748b; /* Slate 500 */
   font-size: 12px;
+  font-weight: 500;
 }
 
 .channel-meta {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+  margin-top: 12px;
+  padding-top: 8px;
+  border-top: 1px dashed #e2e8f0; /* Slate 200 */
 }
 
 .meta-item {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: #4b5563;
+  gap: 8px;
+  font-size: 13px;
+  color: #475569; /* Slate 600 */
 }
 
 .meta-icon {
-  font-size: 12px;
+  font-size: 14px;
 }
 
 .meta-text {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  color: #0ea5e9; /* Sky 500 */
 }
+
+.help-text {
+  font-size: 13px;
+  color: #64748b; /* Slate 500 */
+  margin-top: 12px;
+  display: block;
+}
+
+
 .orders-page {
   padding: 24px;
   max-width: 1600px;
   margin: 0 auto;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
   background: #f8fafc;
 }
 
