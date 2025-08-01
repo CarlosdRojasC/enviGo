@@ -140,7 +140,7 @@
     </div>
 
     <!-- Pagination -->
-    <div v-if="pagination.totalPages > 1" class="pagination-container">
+    <div class="pagination-container">
       <div class="pagination-info">
         <span class="info-text">
           Mostrando {{ ((pagination.page - 1) * pagination.limit) + 1 }} - 
@@ -160,7 +160,7 @@
 </select>
       </div>
       
-      <div class="pagination-controls">
+      <div v-if="pagination.totalPages > 1" class="pagination-controls">
         <button 
           @click="$emit('go-to-page', 1)" 
           :disabled="pagination.page <= 1"
