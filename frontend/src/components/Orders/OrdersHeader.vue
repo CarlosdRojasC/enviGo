@@ -267,7 +267,7 @@ function formatLastUpdate(timestamp) {
 <style scoped>
 /* ==================== ORDERS HEADER BASE ==================== */
 .orders-header {
-  background: linear-gradient(135deg, #8BC53F 0%, #A4D65E 100%);
+  background: linear-gradient(135deg, #0d446f, #243678);
   border-radius: 16px;
   padding: 24px;
   margin-bottom: 24px;
