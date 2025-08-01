@@ -1032,6 +1032,7 @@ onUnmounted(() => {
   margin: 0;
   line-height: 1.2;
   position: relative;
+    font-family: 'Inter', sans-serif !important;
 }
 
 .page-title::before {
@@ -1044,6 +1045,7 @@ onUnmounted(() => {
   background: linear-gradient(135deg, #8BC53F 0%, #A4D65E 100%);
   border-radius: 1px;
   opacity: 0.7;
+  font-family: 'Inter', sans-serif !important;
 }
 
 .breadcrumb {
