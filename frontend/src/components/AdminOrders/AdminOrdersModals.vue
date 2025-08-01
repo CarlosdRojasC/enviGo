@@ -795,7 +795,7 @@ import Modal from '../Modal.vue'
 import OrderDetails from '../OrderDetails.vue'
 import UpdateOrderStatus from '../UpdateOrderStatus.vue'
 import { useRouter } from 'vue-router'
-import { useToast } from '../composables/useToast'
+import { useToast } from 'vue-toastification';
 import { apiService } from '../services/api'
 
 // ==================== PROPS ====================
