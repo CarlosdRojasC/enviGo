@@ -121,6 +121,164 @@
   :manifestId="currentManifestId"
   @close="showManifestModal = false"
 />
+<Modal v-model="showCreateOrderModal" title="➕ Crear Nuevo Pedido" width="800px">
+  <div v-if="showCreateOrderModal" class="create-order-form">
+    <form @submit.prevent="handleCreateOrderSubmit">
+      <!-- Información del Cliente -->
+      <div class="form-section">
+        <h4>👤 Información del Cliente</h4>
+        <div class="form-grid">
+          <div class="form-group">
+            <label class="required">Nombre del Cliente</label>
+            <input 
+              v-model="newOrder.customer_name" 
+              type="text" 
+              required 
+              placeholder="Juan Pérez"
+            />
+          </div>
+          
+          <div class="form-group">
+            <label>Email del Cliente</label>
+            <input 
+              v-model="newOrder.customer_email" 
+              type="email" 
+              placeholder="cliente@email.com"
+            />
+          </div>
+          
+          <div class="form-group">
+            <label>Teléfono del Cliente</label>
+            <input 
+              v-model="newOrder.customer_phone" 
+              type="tel" 
+              placeholder="+56 9 1234 5678"
+            />
+          </div>
+        </div>
+      </div>
+
+      <!-- Dirección de Entrega -->
+      <div class="form-section">
+        <h4>📍 Dirección de Entrega</h4>
+        <div class="form-grid">
+          <div class="form-group full-width">
+            <label class="required">Dirección Completa</label>
+            <input 
+              v-model="newOrder.shipping_address" 
+              type="text" 
+              required 
+              placeholder="Av. Providencia 1234, Dpto 567"
+            />
+          </div>
+          
+          <div class="form-group">
+            <label class="required">Comuna</label>
+            <input 
+              v-model="newOrder.shipping_commune" 
+              type="text" 
+              required 
+              placeholder="Providencia"
+            />
+          </div>
+          
+          <div class="form-group">
+            <label>Región</label>
+            <input 
+              v-model="newOrder.shipping_state" 
+              type="text" 
+              value="Región Metropolitana"
+              placeholder="Región Metropolitana"
+            />
+          </div>
+        </div>
+      </div>
+
+      <!-- Información del Pedido -->
+      <div class="form-section">
+  <h4>📦 Información del Pedido</h4>
+  <div class="form-grid">
+    <div class="form-group">
+      <label class="required">Número de Pedido</label>
+      <input 
+        v-model="newOrder.order_number" 
+        type="text" 
+        required 
+        placeholder="Ej: PED-001, #12345, ORDER-ABC"
+        maxlength="50"
+      />
+      <small class="help-text">Ingresa tu número de pedido interno</small>
+    </div>
+    
+    <div class="form-group">
+      <label>ID Externo (Opcional)</label>
+      <input 
+        v-model="newOrder.external_order_id" 
+        type="text" 
+        placeholder="ID de tu sistema de ventas"
+        maxlength="100"
+      />
+      <small class="help-text">ID de tu tienda online, sistema POS, etc.</small>
+    </div>
+    
+    <div class="form-group">
+      <label class="required">Monto Total</label>
+      <input 
+        v-model.number="newOrder.total_amount" 
+        type="number" 
+        required 
+        min="0" 
+        step="0.01"
+        placeholder="15000"
+      />
+      <small class="help-text">Valor total del pedido en pesos</small>
+    </div>
+    
+    <div class="form-group">
+      <label>Costo de Envío</label>
+      <input 
+        v-model.number="newOrder.shipping_cost" 
+        type="number" 
+        min="0" 
+        step="0.01"
+        placeholder="2500"
+      />
+      <small class="help-text">Costo del despacho (opcional)</small>
+    </div>
+    
+    <div class="form-group full-width">
+      <label>Notas del Pedido</label>
+      <textarea 
+        v-model="newOrder.notes" 
+        rows="3"
+        placeholder="Instrucciones especiales para la entrega..."
+        maxlength="500"
+      ></textarea>
+      <small class="help-text">Información adicional para el delivery</small>
+    </div>
+  </div>
+</div>
+
+      <!-- Botones -->
+      <div class="modal-actions">
+        <button 
+          type="button" 
+          @click="closeCreateOrderModal" 
+          class="btn-cancel"
+        >
+          Cancelar
+        </button>
+        <button 
+          type="submit" 
+          :disabled="isCreatingOrder" 
+          class="btn-save"
+        >
+          {{ isCreatingOrder ? '⏳ Creando...' : '💾 Crear Pedido' }}
+        </button>
+      </div>
+    </form>
+  </div>
+</Modal>
   </div>
   
 </template>
@@ -235,6 +393,10 @@ const selectedProofOrder = ref(null)
 const showProofModal = ref(false)
 const supportOrder = ref(null)
 const showSupportModal = ref(false)
+// Variables para crear pedido - AGREGAR ESTAS
+const showCreateOrderModal = ref(false)
+const newOrder = ref({})
+const isCreatingOrder = ref(false)
 
 // ⚡ TIEMPO REAL: Estado para actualización automática
 const realTimeEnabled = ref(true)
@@ -292,8 +454,99 @@ async function handleExport(exportConfig = {}) {
 }
 
 function handleCreateOrder() {
-  // Navegar a crear pedido o abrir modal
-  router.push('/orders/create')
+  console.log('➕ Abriendo modal crear pedido')
+  
+  // Inicializar formulario
+  newOrder.value = {
+    order_number: '',        // ← CAMBIO: Ahora vacío para que lo complete el usuario
+    external_order_id: '',   // ← NUEVO: Campo para ID externo
+    customer_name: '',
+    customer_email: '',
+    customer_phone: '',
+    shipping_address: '',
+    shipping_commune: '',
+    shipping_state: 'Región Metropolitana',
+    total_amount: 0,
+    shipping_cost: 0,
+    notes: ''
+  }
+  
+  showCreateOrderModal.value = true
+}
+// Función para cerrar modal - AGREGAR
+function closeCreateOrderModal() {
+  showCreateOrderModal.value = false
+  newOrder.value = {}
+  isCreatingOrder.value = false
+}
+
+// Función para crear pedido - AGREGAR
+async function handleCreateOrderSubmit() {
+  
+   // Validación básica
+  if (!newOrder.value.order_number?.trim()) {
+    toast.warning('Por favor, ingrese el número de pedido')
+    return
+  }
+  if (!newOrder.value.customer_name?.trim()) {
+    toast.warning('Por favor, ingrese el nombre del cliente')
+    return
+  }
+  
+  if (!newOrder.value.shipping_address?.trim()) {
+    toast.warning('Por favor, ingrese la dirección de envío')
+    return
+  }
+  
+  if (!newOrder.value.shipping_commune?.trim()) {
+    toast.warning('Por favor, ingrese la comuna')
+    return
+  }
+  
+  if (!newOrder.value.total_amount || newOrder.value.total_amount <= 0) {
+    toast.warning('Por favor, ingrese un monto total válido')
+    return
+  }
+  
+  isCreatingOrder.value = true
+  
+  try {
+    console.log('➕ Creando pedido:', newOrder.value)
+    
+    // Verificar que la empresa tenga canales
+    if (!channels.value || channels.value.length === 0) {
+      toast.warning('Su empresa no tiene canales configurados. Configure uno primero en la sección Canales.')
+      return
+    }
+    
+    // Preparar datos del pedido
+    const orderData = {
+      ...newOrder.value,
+      channel_id: channels.value[0]._id, // Usar el primer canal disponible
+      order_number: `MANUAL-${Date.now()}`,
+      external_order_id: `manual-company-${Date.now()}`,
+      order_date: new Date().toISOString(),
+      status: 'pending'
+    }
+    
+    console.log('📦 Datos del pedido a crear:', orderData)
+    
+    // Crear el pedido
+    const response = await apiService.orders.create(orderData)
+    
+    console.log('✅ Pedido creado exitosamente:', response.data)
+    toast.success(`✅ Pedido #${response.data.order_number} creado exitosamente`)
+    
+    // Cerrar modal y refrescar lista
+    closeCreateOrderModal()
+    await fetchOrders()
+    
+  } catch (error) {
+    console.error('❌ Error creando pedido:', error)
+    toast.error('Error al crear el pedido: ' + (error.response?.data?.error || error.message))
+  } finally {
+    isCreatingOrder.value = false
+  }
 }
 
 function handleSearchEvent(newSearchTerm) {
@@ -1388,6 +1641,139 @@ onBeforeUnmount(() => {
   
   .real-time-status {
     border: 2px solid white;
+  }
+}
+/* Estilos para modal de crear pedido */
+.create-order-form {
+  max-height: 70vh;
+  overflow-y: auto;
+  padding: 20px;
+}
+
+.form-section {
+  margin-bottom: 24px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 20px;
+}
+
+.form-section h4 {
+  margin: 0 0 16px 0;
+  color: #1f2937;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.form-group.full-width {
+  grid-column: 1 / -1;
+}
+
+.form-group label {
+  margin-bottom: 6px;
+  font-weight: 500;
+  color: #374151;
+  font-size: 14px;
+}
+
+.form-group label.required::after {
+  content: ' *';
+  color: #ef4444;
+}
+
+.form-group input,
+.form-group textarea {
+  padding: 10px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 14px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.form-group input:focus,
+.form-group textarea:focus {
+  outline: none;
+  border-color: #6366f1;
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.1);
+}
+.help-text {
+  font-size: 12px;
+  color: #6b7280;
+  margin-top: 4px;
+  font-style: italic;
+}
+
+.form-group input:focus + .help-text,
+.form-group textarea:focus + .help-text {
+  color: #3b82f6;
+}
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.btn-cancel {
+  background: #f3f4f6;
+  color: #374151;
+  border: 1px solid #d1d5db;
+  padding: 10px 20px;
+  border-radius: 6px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.btn-cancel:hover {
+  background: #e5e7eb;
+}
+
+.btn-save {
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 6px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.btn-save:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+}
+
+.btn-save:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+@media (max-width: 768px) {
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .modal-actions {
+    flex-direction: column;
+  }
+  
+  .btn-cancel,
+  .btn-save {
+    width: 100%;
   }
 }
 </style>
