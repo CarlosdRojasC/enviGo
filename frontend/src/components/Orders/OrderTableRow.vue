@@ -252,6 +252,7 @@ const rowClasses = computed(() => {
   if (props.order.status === 'shipped') classes.push('shipped-row')
   if (props.order.shipday_tracking_url) classes.push('live-tracking-row')
   if (props.order.status === 'warehouse_received') classes.push('warehouse-received-row')
+  if (props.order.status === 'invoiced') classes.push('invoiced-row')
   if (isUrgent.value) classes.push('urgent-row')
   
   return classes.join(' ')
@@ -365,6 +366,7 @@ function getStatusIcon(status) {
     cancelled: '❌',
     warehouse_received: '🏭',
     out_for_delivery: '📦',
+    invoiced: '💰',
   }
   return icons[status] || '📦'
 }
