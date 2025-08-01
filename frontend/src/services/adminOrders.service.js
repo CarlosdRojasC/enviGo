@@ -9,7 +9,7 @@ export function useAdminOrders() {
   const orders = ref([]);
   const companies = ref([]);
   const availableCommunes = ref([]);
-  const pagination = ref({ page: 1, limit: 15, total: 0, totalPages: 1 });
+  const pagination = ref({ page: 1, limit: 50, total: 0, totalPages: 1 });
   const filters = ref({ company_id: '', status: '', shipping_commune: '', date_from: '', date_to: '', search: '' });
   const loading = ref(true);
   const selectedOrders = ref([]);
@@ -61,6 +61,7 @@ export function useAdminOrders() {
       fetchOrders();
     }
   }
+  
 
   function toggleSelectAll() {
     const selectableOrders = orders.value.filter(order => !order.shipday_order_id).map(o => o._id);
