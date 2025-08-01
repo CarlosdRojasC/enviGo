@@ -61,16 +61,24 @@ async function exportOrders(filters = {}) {
   /**
    * Create new order manually
    */
-  async function handleCreateOrder() {
+async function handleCreateOrder() {
 
-    console.group('🐛 DEBUG - Create Order Form Data')
+  console.group('🐛 DEBUG - Create Order Form Data')
   console.log('newOrder.value completo:', newOrder.value)
   console.log('company_id:', newOrder.value.company_id)
+  console.log('channel_id:', newOrder.value.channel_id) // ✅ NUEVO LOG
   console.log('customer_name:', newOrder.value.customer_name)
   console.log('shipping_address:', newOrder.value.shipping_address)
   console.log('shipping_commune:', newOrder.value.shipping_commune)
   console.log('total_amount:', newOrder.value.total_amount)
   console.groupEnd()
+
+  // ✅ NUEVA VALIDACIÓN: Canal requerido
+  if (!newOrder.value.channel_id) {
+    console.error('❌ channel_id is missing:', newOrder.value.channel_id)
+    toast.warning('Por favor, selecciona el canal de retiro')
+    return false
+  }
 
   // Validation con mensajes más específicos
   if (!newOrder.value.company_id) {
@@ -85,118 +93,117 @@ async function exportOrders(filters = {}) {
     return false
   }
 
-    // Validation
-    if (!newOrder.value.company_id) {
-      toast.warning('Por favor, seleccione una empresa')
-      return false
-    }
-    
-    if (!newOrder.value.customer_name?.trim()) {
-      toast.warning('Por favor, ingrese el nombre del cliente')
-      return false
-    }
-    
-    if (!newOrder.value.shipping_address?.trim()) {
-      toast.warning('Por favor, ingrese la dirección de envío')
-      return false
-    }
-    
-    if (!newOrder.value.shipping_commune?.trim()) {
-      toast.warning('Por favor, ingrese la comuna')
-      return false
-    }
-    
-    if (!newOrder.value.total_amount || newOrder.value.total_amount <= 0) {
-      toast.warning('Por favor, ingrese un monto total válido')
-      return false
-    }
-    
-    isCreatingOrder.value = true
-    
-    try {
-      console.log('➕ Creating new order:', newOrder.value)
-      
-      // Get company channels
-      const channelsResponse = await apiService.channels.getByCompany(newOrder.value.company_id)
-console.log('📡 Channels response:', channelsResponse)
-
-// ✅ EXTRAER CANALES CORRECTAMENTE
-let channels = []
-if (channelsResponse?.data?.data && Array.isArray(channelsResponse.data.data)) {
-  channels = channelsResponse.data.data
-} else if (channelsResponse?.data && Array.isArray(channelsResponse.data)) {
-  channels = channelsResponse.data
-}
-
-console.log('📡 Extracted channels:', channels)
-
-if (!channels || channels.length === 0) {
-  toast.warning('La empresa seleccionada no tiene canales configurados. Configure uno primero.')
-  return false
-}
-      
-      // Prepare order data
-      const orderData = {
-  ...newOrder.value,
-  channel_id: channels[0]._id,  // ✅ USAR EL ARRAY EXTRAÍDO
-  order_number: `MANUAL-${Date.now()}`,
-  external_order_id: `manual-admin-${Date.now()}`,
-        
-        // Ensure numeric fields are properly typed
-        total_amount: parseFloat(newOrder.value.total_amount) || 0,
-        shipping_cost: parseFloat(newOrder.value.shipping_cost) || 0,
-        serviceTime: parseInt(newOrder.value.serviceTime) || 5,
-        load1Packages: parseInt(newOrder.value.load1Packages) || 1,
-        load2WeightKg: parseFloat(newOrder.value.load2WeightKg) || 1,
-        
-        // Trim string fields
-        customer_name: newOrder.value.customer_name?.trim(),
-        customer_email: newOrder.value.customer_email?.trim(),
-        customer_phone: newOrder.value.customer_phone?.trim(),
-        shipping_address: newOrder.value.shipping_address?.trim(),
-        shipping_commune: newOrder.value.shipping_commune?.trim(),
-        shipping_state: newOrder.value.shipping_state?.trim() || 'Región Metropolitana',
-        notes: newOrder.value.notes?.trim()
-      }
-      
-      console.log('📦 Prepared order data:', orderData)
-      
-      // Create order
-      const response = await apiService.orders.create(orderData)
-      
-      toast.success('✅ Pedido manual creado exitosamente')
-      console.log('✅ Order created:', response.data)
-      
-      // Refresh orders list
-      await fetchOrders()
-      
-      // Reset form
-      resetNewOrderForm()
-      
-      return true
-      
-    } catch (error) {
-      console.error('❌ Error creating order:', error)
-      
-      let errorMessage = 'No se pudo crear el pedido'
-      
-      if (error.response?.data?.errors?.[0]?.msg) {
-        errorMessage = error.response.data.errors[0].msg
-      } else if (error.response?.data?.error) {
-        errorMessage = error.response.data.error
-      } else if (error.response?.data?.message) {
-        errorMessage = error.response.data.message
-      } else if (error.message) {
-        errorMessage = error.message
-      }
-      
-      toast.error(`Error al crear pedido: ${errorMessage}`)
-      return false
-      
-    } finally {
-      isCreatingOrder.value = false
-    }
+  // Validation
+  if (!newOrder.value.shipping_address?.trim()) {
+    toast.warning('Por favor, ingrese la dirección de envío')
+    return false
   }
+  
+  if (!newOrder.value.shipping_commune?.trim()) {
+    toast.warning('Por favor, ingrese la comuna')
+    return false
+  }
+  
+  if (!newOrder.value.total_amount || newOrder.value.total_amount <= 0) {
+    toast.warning('Por favor, ingrese un monto total válido')
+    return false
+  }
+  
+  isCreatingOrder.value = true
+  
+  try {
+    console.log('➕ Creating new order:', newOrder.value)
+    
+    // ✅ VALIDACIÓN ADICIONAL: Verificar que el canal pertenece a la empresa
+    const channelsResponse = await apiService.channels.getByCompany(newOrder.value.company_id)
+    console.log('📡 Channels response:', channelsResponse)
+
+    // ✅ EXTRAER CANALES CORRECTAMENTE
+    let channels = []
+    if (channelsResponse?.data?.data && Array.isArray(channelsResponse.data.data)) {
+      channels = channelsResponse.data.data
+    } else if (channelsResponse?.data && Array.isArray(channelsResponse.data)) {
+      channels = channelsResponse.data
+    }
+
+    console.log('📡 Extracted channels:', channels)
+
+    if (!channels || channels.length === 0) {
+      toast.warning('La empresa seleccionada no tiene canales configurados. Configure uno primero.')
+      return false
+    }
+
+    // ✅ VALIDAR QUE EL CANAL SELECCIONADO PERTENECE A LA EMPRESA
+    const selectedChannel = channels.find(c => c._id === newOrder.value.channel_id)
+    if (!selectedChannel) {
+      toast.error('El canal seleccionado no es válido para esta empresa')
+      return false
+    }
+
+    console.log('✅ Canal validado:', selectedChannel.channel_name)
+    
+    // Prepare order data
+    const orderData = {
+      ...newOrder.value,
+      channel_id: newOrder.value.channel_id,  // ✅ USAR EL CANAL SELECCIONADO
+      order_number: `MANUAL-${Date.now()}`,
+      external_order_id: `manual-admin-${Date.now()}`,
+      
+      // Ensure numeric fields are properly typed
+      total_amount: parseFloat(newOrder.value.total_amount) || 0,
+      shipping_cost: parseFloat(newOrder.value.shipping_cost) || 0,
+      serviceTime: parseInt(newOrder.value.serviceTime) || 5,
+      load1Packages: parseInt(newOrder.value.load1Packages) || 1,
+      load2WeightKg: parseFloat(newOrder.value.load2WeightKg) || 1,
+      
+      // Trim string fields
+      customer_name: newOrder.value.customer_name?.trim(),
+      customer_email: newOrder.value.customer_email?.trim(),
+      customer_phone: newOrder.value.customer_phone?.trim(),
+      shipping_address: newOrder.value.shipping_address?.trim(),
+      shipping_commune: newOrder.value.shipping_commune?.trim(),
+      shipping_state: newOrder.value.shipping_state?.trim() || 'Región Metropolitana',
+      notes: newOrder.value.notes?.trim()
+    }
+    
+    console.log('📦 Prepared order data:', orderData)
+    
+    // Create order
+    const response = await apiService.orders.create(orderData)
+    
+    toast.success(`✅ Pedido manual creado exitosamente para ${selectedChannel.channel_name}`)
+    console.log('✅ Order created:', response.data)
+    
+    // Refresh orders list
+    await fetchOrders()
+    
+    // Reset form
+    resetNewOrderForm()
+    
+    return true
+    
+  } catch (error) {
+    console.error('❌ Error creating order:', error)
+    
+    let errorMessage = 'No se pudo crear el pedido'
+    
+    if (error.response?.data?.errors?.[0]?.msg) {
+      errorMessage = error.response.data.errors[0].msg
+    } else if (error.response?.data?.error) {
+      errorMessage = error.response.data.error
+    } else if (error.response?.data?.message) {
+      errorMessage = error.response.data.message
+    } else if (error.message) {
+      errorMessage = error.message
+    }
+    
+    toast.error(`Error al crear pedido: ${errorMessage}`)
+    return false
+    
+  } finally {
+    isCreatingOrder.value = false
+  }
+}
 
   /**
    * Handle order status update
@@ -310,23 +317,21 @@ if (!channels || channels.length === 0) {
   /**
    * Reset new order form
    */
-  async function resetNewOrderForm() {
-    Object.assign(newOrder.value, {
-      company_id: '',
-      customer_name: '',
-      customer_email: '',
-      customer_phone: '',
-      shipping_address: '',
-      shipping_commune: '',
-      shipping_state: 'Región Metropolitana',
-      total_amount: 0,
-      shipping_cost: 0,
-      notes: '',
-
-    })
-    
-    console.log('🔄 New order form reset')
+function resetNewOrderForm() {
+  newOrder.value = {
+    company_id: '',
+    channel_id: '', // ✅ AGREGAR ESTA LÍNEA
+    customer_name: '',
+    customer_email: '',
+    customer_phone: '',
+    shipping_address: '',
+    shipping_commune: '',
+    shipping_state: 'Región Metropolitana',
+    total_amount: 0,
+    shipping_cost: 0,
+    notes: '',
   }
+}
 
   /**
    * Format currency for display

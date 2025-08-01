@@ -127,6 +127,45 @@ async sendDeliveredEmail(order, webhookData) {
     throw error;
   }
 }
+/**
+   * Enviar un email de resumen para múltiples pedidos marcados como listos
+   */
+  async sendBulkReadyForPickupEmail(orders, adminEmail) {
+    try {
+      const ordersCount = orders.length;
+      if (ordersCount === 0) return; // No hacer nada si no hay pedidos
+
+      console.log(`📧 Preparando notificación masiva para ${ordersCount} pedidos listos para retirar.`);
+
+      // 1. Preparar los datos para la plantilla
+      // No es necesario popular cada pedido aquí si los datos ya vienen
+      const templateData = {
+        orders: orders, // El array completo
+        orders_count: ordersCount,
+        frontend_url: process.env.FRONTEND_URL,
+        formatted_date: new Date().toLocaleString('es-CL')
+      };
+
+      // 2. Cargar y compilar la plantilla masiva
+      const template = await this.getTemplate('bulk-ready-for-pickup.hbs');
+      const html = template(templateData);
+
+      // 3. Configurar las opciones del correo
+      const mailOptions = {
+        from: `"Resúmenes enviGo" <${process.env.EMAIL_USER}>`,
+        to: adminEmail,
+        subject: `[RESUMEN] ${ordersCount} nuevos pedidos listos para retirar`,
+        html: html
+      };
+      
+      // 4. Enviar el correo único
+      await this.emailTransporter.sendMail(mailOptions);
+      console.log(`✅ Notificación masiva enviada a: ${adminEmail}`);
+
+    } catch (error) {
+      console.error(`❌ Error enviando email de resumen masivo:`, error);
+    }
+  }
 
 /**
  * Preparar datos específicos para email de entrega
@@ -229,6 +268,7 @@ async prepareTemplateData(order, webhookData) {
     })
   };
 }
+
 
   async getTemplate(templateName) {
     if (this.templateCache.has(templateName)) {

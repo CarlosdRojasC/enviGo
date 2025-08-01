@@ -37,6 +37,8 @@
     >
       <div class="create-order-content">
         <form @submit.prevent="$emit('create-order')" class="order-form">
+          
+          <!-- SECCIÓN: Información de la Empresa (Solo Admin) -->
           <div class="form-section">
             <div class="section-header">
               <h4 class="section-title">
@@ -48,7 +50,12 @@
             <div class="form-grid">
               <div class="form-group full-width">
                 <label class="form-label required">Empresa</label>
-                <select v-model="newOrder.company_id" class="form-select" required>
+                <select 
+                  v-model="newOrder.company_id" 
+                  @change="handleCompanyChange"
+                  class="form-select" 
+                  required
+                >
                   <option value="" disabled>Seleccione una empresa...</option>
                   <option 
                     v-for="company in companies" 
@@ -58,6 +65,95 @@
                     {{ company.name }}
                   </option>
                 </select>
+              </div>
+            </div>
+          </div>
+
+          <!-- 🆕 NUEVA SECCIÓN: Selección de Canal/Punto de Retiro -->
+          <div class="form-section" v-if="newOrder.company_id">
+            <div class="section-header">
+              <h4 class="section-title">
+                <span class="section-icon">🏪</span>
+                Canal de Retiro
+              </h4>
+              <p class="section-description">
+                Selecciona dónde el conductor retirará este pedido
+              </p>
+            </div>
+            
+            <div class="form-grid">
+              <div class="form-group full-width">
+                <label class="form-label required">Punto de Retiro *</label>
+                
+                <!-- Loading state -->
+                <div v-if="loadingChannels" class="channel-loading">
+                  <div class="loading-spinner"></div>
+                  <span>Cargando canales...</span>
+                </div>
+                
+                <!-- No channels available -->
+                <div v-else-if="!availableChannels.length" class="no-channels-warning">
+                  <div class="warning-icon">⚠️</div>
+                  <div class="warning-content">
+                    <p><strong>No hay canales configurados</strong></p>
+                    <p>Esta empresa necesita tener al menos un canal configurado para crear pedidos.</p>
+                    <button 
+                      type="button" 
+                      @click="redirectToChannels" 
+                      class="btn-link"
+                    >
+                      → Configurar canales ahora
+                    </button>
+                  </div>
+                </div>
+                
+                <!-- Channel selector -->
+                <select 
+                  v-else
+                  v-model="newOrder.channel_id" 
+                  class="form-select channel-selector" 
+                  required
+                >
+                  <option value="" disabled>Selecciona dónde se retirará...</option>
+                  <option 
+                    v-for="channel in availableChannels" 
+                    :key="channel._id" 
+                    :value="channel._id"
+                  >
+                    {{ getChannelDisplayName(channel) }}
+                  </option>
+                </select>
+                
+                <!-- Channel info preview -->
+                <div v-if="selectedChannelInfo" class="channel-preview">
+                  <div class="channel-info-card">
+                    <div class="channel-header">
+                      <span class="channel-icon">{{ getChannelIcon(selectedChannelInfo.channel_type) }}</span>
+                      <div class="channel-details">
+                        <div class="channel-name">{{ selectedChannelInfo.channel_name }}</div>
+                        <div class="channel-type">{{ getChannelTypeName(selectedChannelInfo.channel_type) }}</div>
+                      </div>
+                    </div>
+                    <div class="channel-meta">
+                      <div class="meta-item" v-if="selectedChannelInfo.pickup_address">
+                        <span class="meta-icon">📍</span>
+                        <span class="meta-text">{{ selectedChannelInfo.pickup_address }}</span>
+                      </div>
+                      <div class="meta-item" v-if="selectedChannelInfo.pickup_hours">
+                        <span class="meta-icon">🕒</span>
+                        <span class="meta-text">{{ selectedChannelInfo.pickup_hours }}</span>
+                      </div>
+                      <div class="meta-item" v-if="selectedChannelInfo.contact_phone">
+                        <span class="meta-icon">📞</span>
+                        <span class="meta-text">{{ selectedChannelInfo.contact_phone }}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                
+                <small class="form-help">
+                  💡 El conductor recibirá las instrucciones de retiro para este canal específico
+                </small>
               </div>
             </div>
           </div>
@@ -698,6 +794,9 @@
 import Modal from '../Modal.vue'
 import OrderDetails from '../OrderDetails.vue'
 import UpdateOrderStatus from '../UpdateOrderStatus.vue'
+import { useRouter } from 'vue-router'
+import { useToast } from '../composables/useToast'
+import { apiService } from '../services/api'
 
 // ==================== PROPS ====================
 const props = defineProps({
@@ -758,9 +857,113 @@ const emit = defineEmits([
   'update:selectedDriverId',
   'update:bulkSelectedDriverId'
 ])
+const router = useRouter()
+const toast = useToast()
+
+const availableChannels = ref([])
+const loadingChannels = ref(false)
+
+
+const selectedChannelInfo = computed(() => {
+  if (!props.newOrder.channel_id) return null
+  return availableChannels.value.find(channel => channel._id === props.newOrder.channel_id)
+})
+
+const isFormValid = computed(() => {
+  return props.newOrder.company_id && 
+         props.newOrder.channel_id && // ✅ NUEVA VALIDACIÓN
+         props.newOrder.customer_name && 
+         props.newOrder.shipping_address &&
+         props.newOrder.shipping_commune &&
+         props.newOrder.total_amount > 0
+})
 
 // ==================== METHODS ====================
+// ==================== MÉTODOS (Agregar estos) ====================
+async function handleCompanyChange() {
+  console.log('🏢 Company changed to:', props.newOrder.company_id)
+  
+  // Reset channel selection
+  props.newOrder.channel_id = ''
+  availableChannels.value = []
+  
+  if (!props.newOrder.company_id) return
+  
+  await loadCompanyChannels(props.newOrder.company_id)
+}
 
+async function loadCompanyChannels(companyId) {
+  loadingChannels.value = true
+  
+  try {
+    console.log('🔍 Loading channels for company:', companyId)
+    
+    const response = await apiService.channels.getByCompany(companyId)
+    
+    // Extract channels from response
+    let channels = []
+    if (response?.data?.data && Array.isArray(response.data.data)) {
+      channels = response.data.data
+    } else if (response?.data && Array.isArray(response.data)) {
+      channels = response.data
+    }
+    
+    console.log('📡 Channels loaded:', channels)
+    
+    availableChannels.value = channels.filter(channel => channel.is_active)
+    
+    if (availableChannels.value.length === 0) {
+      toast.warning('Esta empresa no tiene canales configurados')
+    } else {
+      toast.success(`${availableChannels.value.length} canales cargados`)
+    }
+    
+  } catch (error) {
+    console.error('❌ Error loading channels:', error)
+    toast.error('Error al cargar los canales de la empresa')
+    availableChannels.value = []
+  } finally {
+    loadingChannels.value = false
+  }
+}
+
+function getChannelDisplayName(channel) {
+  const typeLabels = {
+    'shopify': '🛍️ Shopify',
+    'woocommerce': '🏪 WooCommerce', 
+    'mercadolibre': '🛒 MercadoLibre',
+    'general_store': '🏬 Tienda General'
+  }
+  
+  const typeLabel = typeLabels[channel.channel_type] || '📦'
+  return `${typeLabel} - ${channel.channel_name}`
+}
+
+function getChannelIcon(channelType) {
+  const icons = {
+    'shopify': '🛍️',
+    'woocommerce': '🏪',
+    'mercadolibre': '🛒', 
+    'general_store': '🏬'
+  }
+  return icons[channelType] || '📦'
+}
+
+function getChannelTypeName(channelType) {
+  const names = {
+    'shopify': 'Shopify Store',
+    'woocommerce': 'WooCommerce',
+    'mercadolibre': 'MercadoLibre',
+    'general_store': 'Tienda General'
+  }
+  return names[channelType] || channelType
+}
+
+function redirectToChannels() {
+  router.push('/app/admin/channels')
+  emit('close-create')
+  toast.info('Redirigiendo a la configuración de canales...')
+}
 /**
  * Clear selected file
  */
@@ -851,10 +1054,170 @@ function getFailedAssignments() {
 function getFailedResults() {
   return props.bulkAssignmentResults.filter(result => !result.success)
 }
+
+// ==================== WATCHERS (Agregar este) ====================
+watch(() => props.newOrder?.company_id, (newCompanyId) => {
+  if (newCompanyId) {
+    handleCompanyChange()
+  } else {
+    // Reset when no company is selected
+    availableChannels.value = []
+    if (props.newOrder) {
+      props.newOrder.channel_id = ''
+    }
+  }
+})
 </script>
 
 <style scoped>
+/* ==================== AGREGAR AL FINAL DEL <style scoped> ==================== */
 
+/* ESTILOS PARA EL SELECTOR DE CANAL */
+.section-description {
+  color: #6b7280;
+  font-size: 14px;
+  margin: 0;
+  font-weight: normal;
+}
+
+.channel-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  color: #6b7280;
+}
+
+.loading-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid #e5e7eb;
+  border-top: 2px solid #3b82f6;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.no-channels-warning {
+  display: flex;
+  gap: 12px;
+  padding: 16px;
+  background: #fef3c7;
+  border: 1px solid #f59e0b;
+  border-radius: 8px;
+  color: #92400e;
+}
+
+.warning-icon {
+  font-size: 20px;
+  flex-shrink: 0;
+}
+
+.warning-content {
+  flex: 1;
+}
+
+.warning-content p {
+  margin: 0 0 8px 0;
+}
+
+.warning-content p:last-child {
+  margin-bottom: 0;
+}
+
+.btn-link {
+  background: none;
+  border: none;
+  color: #3b82f6;
+  text-decoration: underline;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 0;
+  font-weight: 500;
+}
+
+.btn-link:hover {
+  color: #1d4ed8;
+}
+
+.channel-selector {
+  margin-bottom: 12px;
+}
+
+.channel-preview {
+  margin-top: 12px;
+}
+
+.channel-info-card {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.channel-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.channel-icon {
+  font-size: 20px;
+}
+
+.channel-details {
+  flex: 1;
+}
+
+.channel-name {
+  font-weight: 600;
+  color: #1f2937;
+  font-size: 14px;
+}
+
+.channel-type {
+  color: #6b7280;
+  font-size: 12px;
+}
+
+.channel-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.meta-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #4b5563;
+}
+
+.meta-icon {
+  font-size: 12px;
+}
+
+.meta-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.form-help {
+  color: #6b7280;
+  font-size: 12px;
+  margin-top: 6px;
+  display: block;
+}
 /* ==================== FORM STYLES ==================== */
 .create-order-content,
 .bulk-upload-content,

@@ -11,19 +11,12 @@
       </div>
       
       <div class="bulk-actions">
-        <button 
-          @click="$emit('bulk-mark-ready')" 
-          class="bulk-btn ready-btn"
-          :disabled="!canMarkAsReady"
-        >
-          📦 Marcar como Listos
-        </button>
-        
+
         <button 
           @click="$emit('generate-manifest')" 
           class="bulk-btn manifest-btn"
         >
-          📋 Generar Manifiesto
+          📋 Marcar como listos
         </button>
         
         <button 
