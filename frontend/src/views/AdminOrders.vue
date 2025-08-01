@@ -282,6 +282,10 @@ const {
 // ==================== LOCAL STATE ====================
 const showNotification = ref(false)
 const isInitialLoad = ref(true)
+// ==================== NUEVO STATE PARA CANALES ====================
+const availableChannels = ref([])
+const loadingChannels = ref(false)
+
 
 // ⚡ TIEMPO REAL: Estado para actualización automática
 const lastUpdateTime = ref(new Date())
@@ -289,7 +293,20 @@ const autoRefreshEnabled = ref(true)
 const pendingUpdates = ref(new Set()) // IDs de órdenes con actualizaciones pendientes
 
 // ==================== COMPUTED ====================
+// ==================== COMPUTED ====================
+const selectedChannelInfo = computed(() => {
+  if (!props.newOrder?.channel_id) return null
+  return availableChannels.value.find(channel => channel._id === props.newOrder.channel_id)
+})
 
+const isFormValid = computed(() => {
+  return props.newOrder?.company_id && 
+         props.newOrder?.channel_id && 
+         props.newOrder?.customer_name && 
+         props.newOrder?.shipping_address &&
+         props.newOrder?.shipping_commune &&
+         props.newOrder?.total_amount > 0
+})
 /**
  * Estadísticas de pedidos para el header
  */
@@ -411,7 +428,17 @@ watch(() => availableCommunes.value, (newCommunes) => {
     communes: newCommunes.slice(0, 10) // Mostrar solo las primeras 10
   })
 }, { immediate: true })
-
+watch(() => props.newOrder?.company_id, (newCompanyId) => {
+  if (newCompanyId) {
+    handleCompanyChange()
+  } else {
+    // Reset when no company is selected
+    availableChannels.value = []
+    if (props.newOrder) {
+      props.newOrder.channel_id = ''
+    }
+  }
+})
 
 watch(filters, (newFilters) => {
   logger.dev('[AdminOrders] 🕵️‍♂️ Filtros cambiaron, recargando datos...');
@@ -473,7 +500,94 @@ setTimeout(() => {
 }, 3000)
 
 // ==================== METHODS ====================
+// ==================== MÉTODOS ====================
+async function handleCompanyChange() {
+  console.log('🏢 Company changed to:', props.newOrder.company_id)
+  
+  // Reset channel selection
+  if (props.newOrder) {
+    props.newOrder.channel_id = ''
+  }
+  availableChannels.value = []
+  
+  if (!props.newOrder?.company_id) return
+  
+  await loadCompanyChannels(props.newOrder.company_id)
+}
 
+async function loadCompanyChannels(companyId) {
+  loadingChannels.value = true
+  
+  try {
+    console.log('🔍 Loading channels for company:', companyId)
+    
+    const response = await apiService.channels.getByCompany(companyId)
+    console.log('📡 Raw response:', response)
+    
+    // Extract channels from response
+    let channels = []
+    if (response?.data?.data && Array.isArray(response.data.data)) {
+      channels = response.data.data
+    } else if (response?.data && Array.isArray(response.data)) {
+      channels = response.data
+    }
+    
+    console.log('📡 Extracted channels:', channels)
+    
+    availableChannels.value = channels.filter(channel => channel.is_active)
+    
+    if (availableChannels.value.length === 0) {
+      toast.warning('Esta empresa no tiene canales configurados')
+    } else {
+      toast.success(`${availableChannels.value.length} canales cargados`)
+    }
+    
+  } catch (error) {
+    console.error('❌ Error loading channels:', error)
+    toast.error('Error al cargar los canales de la empresa')
+    availableChannels.value = []
+  } finally {
+    loadingChannels.value = false
+  }
+}
+
+function getChannelDisplayName(channel) {
+  const typeLabels = {
+    'shopify': '🛍️ Shopify',
+    'woocommerce': '🏪 WooCommerce', 
+    'mercadolibre': '🛒 MercadoLibre',
+    'general_store': '🏬 Tienda General'
+  }
+  
+  const typeLabel = typeLabels[channel.channel_type] || '📦'
+  return `${typeLabel} - ${channel.channel_name}`
+}
+
+function getChannelIcon(channelType) {
+  const icons = {
+    'shopify': '🛍️',
+    'woocommerce': '🏪',
+    'mercadolibre': '🛒', 
+    'general_store': '🏬'
+  }
+  return icons[channelType] || '📦'
+}
+
+function getChannelTypeName(channelType) {
+  const names = {
+    'shopify': 'Shopify Store',
+    'woocommerce': 'WooCommerce',
+    'mercadolibre': 'MercadoLibre',
+    'general_store': 'Tienda General'
+  }
+  return names[channelType] || channelType
+}
+
+function redirectToChannels() {
+  router.push('/app/admin/channels')
+  emit('close-create')
+  toast.info('Redirigiendo a la configuración de canales...')
+}
 const handleOpenModalFromGlobalSearch = async (orderId) => {
   if (!orderId) return;
   
