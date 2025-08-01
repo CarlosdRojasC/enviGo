@@ -445,6 +445,9 @@ function shareOrder() {
   border-left: 3px solid #ef4444;
   background: #fef2f2;
 }
+.order-row.warehouse-received-row {
+  background: #f3f4f6;
+}
 
 .order-row td {
   padding: 12px;
@@ -535,7 +538,8 @@ function shareOrder() {
 .status-shipped { background: #dcfce7; color: #166534; }
 .status-delivered { background: #d1fae5; color: #065f46; }
 .status-cancelled { background: #fee2e2; color: #991b1b; }
-
+.status-warehouse_received { background: #f3f4f6; color: #6b7280; }
+.status-invoiced { background: #fef9c3; color: #b45309; }
 .driver-info {
   display: flex;
   align-items: center;
