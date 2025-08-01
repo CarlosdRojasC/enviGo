@@ -16,7 +16,7 @@ export function useOrdersData() {
   const loadingOrders = ref(true)
   const pagination = ref({ 
     page: 1, 
-    limit: 50, 
+    limit: 30, 
     total: 0, 
     totalPages: 1 
   })
