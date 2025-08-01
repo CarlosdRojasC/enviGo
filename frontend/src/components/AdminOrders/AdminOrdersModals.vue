@@ -796,7 +796,7 @@ import OrderDetails from '../OrderDetails.vue'
 import UpdateOrderStatus from '../UpdateOrderStatus.vue'
 import { useRouter } from 'vue-router'
 import { useToast } from 'vue-toastification';
-import { apiService } from '../services/api'
+import { apiService } from '../../services/api'
 
 // ==================== PROPS ====================
 const props = defineProps({
