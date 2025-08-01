@@ -124,6 +124,78 @@
 <Modal v-model="showCreateOrderModal" title="➕ Crear Nuevo Pedido" width="800px">
   <div v-if="showCreateOrderModal" class="create-order-form">
     <form @submit.prevent="handleCreateOrderSubmit">
+      <div class="form-section">
+  <h4>🏪 Canal de Retiro</h4>
+  <p class="section-description">Selecciona dónde el conductor retirará este pedido</p>
+  
+  <div class="form-grid">
+    <div class="form-group full-width">
+      <label class="required">Punto de Retiro</label>
+      
+      <!-- Loading state -->
+      <div v-if="loadingChannels" class="channel-loading">
+        <div class="loading-spinner"></div>
+        <span>Cargando canales...</span>
+      </div>
+      
+      <!-- No channels available -->
+      <div v-else-if="!availableChannels.length" class="no-channels-warning">
+        <div class="warning-icon">⚠️</div>
+        <div class="warning-content">
+          <p><strong>No hay canales configurados</strong></p>
+          <p>Tu empresa necesita tener al menos un canal configurado para crear pedidos.</p>
+          <button 
+            type="button" 
+            @click="redirectToChannels" 
+            class="btn-link"
+          >
+            → Configurar canales ahora
+          </button>
+        </div>
+      </div>
+      
+      <!-- Channel selector -->
+      <select 
+        v-else
+        v-model="newOrder.channel_id" 
+        class="channel-selector" 
+        required
+      >
+        <option value="" disabled>Selecciona dónde se retirará...</option>
+        <option 
+          v-for="channel in availableChannels" 
+          :key="channel._id" 
+          :value="channel._id"
+        >
+          {{ getChannelDisplayName(channel) }}
+        </option>
+      </select>
+      
+      <!-- Channel info preview -->
+      <div v-if="selectedChannelInfo" class="channel-preview">
+        <div class="channel-info-card">
+          <div class="channel-header">
+            <span class="channel-icon">{{ getChannelIcon(selectedChannelInfo.channel_type) }}</span>
+            <div class="channel-details">
+              <div class="channel-name">{{ selectedChannelInfo.channel_name }}</div>
+              <div class="channel-type">{{ getChannelTypeName(selectedChannelInfo.channel_type) }}</div>
+            </div>
+          </div>
+          <div class="channel-meta">
+            <div class="meta-item" v-if="selectedChannelInfo.store_url">
+              <span class="meta-icon">🌐</span>
+              <span class="meta-text">{{ selectedChannelInfo.store_url }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <small class="help-text">
+        💡 El conductor recibirá las instrucciones de retiro para este canal específico
+      </small>
+    </div>
+  </div>
+</div>
       <!-- Información del Cliente -->
       <div class="form-section">
         <h4>👤 Información del Cliente</h4>
@@ -316,6 +388,8 @@ const toast = useToast()
 const router = useRouter()
 const auth = useAuthStore()
 
+
+
 // ==================== COMPOSABLES ====================
 
 // Datos principales
@@ -383,7 +457,9 @@ const loadingOrderDetails = ref(false)
 const orderTrackingRef = ref(null)
 const showManifestModal = ref(false);
 const currentManifestId = ref(null);
-
+// ==================== NUEVO STATE PARA CANALES ====================
+const availableChannels = ref([])
+const loadingChannels = ref(false)
 // Estados de modales (mantener los existentes)
 const selectedOrder = ref(null)
 const showOrderDetailsModal = ref(false)
@@ -405,7 +481,11 @@ const pendingOrderUpdates = ref(new Map()) // orderId -> updateData
 const orderUpdateQueue = ref([]) // Cola de notificaciones para mostrar
 
 // ==================== COMPUTED ====================
-
+// ==================== COMPUTED PARA CANALES ====================
+const selectedChannelInfo = computed(() => {
+  if (!newOrder.value.channel_id) return null
+  return availableChannels.value.find(channel => channel._id === newOrder.value.channel_id)
+})
 /**
  * Estadísticas para el header
  */
@@ -458,8 +538,9 @@ function handleCreateOrder() {
   
   // Inicializar formulario
   newOrder.value = {
-    order_number: '',        // ← CAMBIO: Ahora vacío para que lo complete el usuario
-    external_order_id: '',   // ← NUEVO: Campo para ID externo
+    channel_id: '',         // ✅ NUEVO
+    order_number: '',       
+    external_order_id: '',  
     customer_name: '',
     customer_email: '',
     customer_phone: '',
@@ -472,6 +553,9 @@ function handleCreateOrder() {
   }
   
   showCreateOrderModal.value = true
+  
+  // ✅ NUEVO: Cargar canales cuando abre el modal
+  loadUserChannels()
 }
 // Función para cerrar modal - AGREGAR
 function closeCreateOrderModal() {
@@ -507,6 +591,17 @@ async function handleCreateOrderSubmit() {
     toast.warning('Por favor, ingrese un monto total válido')
     return
   }
+  // ✅ NUEVA VALIDACIÓN: Canal requerido
+  if (!newOrder.value.channel_id) {
+    toast.warning('Por favor, selecciona el canal de retiro')
+    return
+  }
+  
+  // Validación básica (mantener las existentes)
+  if (!newOrder.value.order_number?.trim()) {
+    toast.warning('Por favor, ingrese el número de pedido')
+    return
+  }
   
   isCreatingOrder.value = true
   
@@ -522,7 +617,7 @@ async function handleCreateOrderSubmit() {
     // Preparar datos del pedido
     const orderData = {
       ...newOrder.value,
-      channel_id: channels.value[0]._id, // Usar el primer canal disponible
+      channel_id: newOrder.value.channel_id, // Usar el primer canal disponible
       order_number: newOrder.value.order_number,
       external_order_id: `manual-company-${Date.now()}`,
       order_date: new Date().toISOString(),
@@ -1177,6 +1272,82 @@ watch(filters, (newFilters) => {
 
 }, { deep: true });
 
+async function loadUserChannels() {
+  if (!auth.user?.company_id) return
+  
+  loadingChannels.value = true
+  
+  try {
+    console.log('🔍 Loading channels for user company:', auth.user.company_id)
+    
+    const response = await apiService.channels.getByCompany(auth.user.company_id)
+    console.log('📡 Channels response:', response)
+    
+    // Extract channels from response
+    let channels = []
+    if (response?.data?.data && Array.isArray(response.data.data)) {
+      channels = response.data.data
+    } else if (response?.data && Array.isArray(response.data)) {
+      channels = response.data
+    }
+    
+    console.log('📡 Extracted channels:', channels)
+    
+    availableChannels.value = channels.filter(channel => channel.is_active)
+    
+    if (availableChannels.value.length === 0) {
+      toast.warning('Tu empresa no tiene canales configurados')
+    } else {
+      toast.success(`${availableChannels.value.length} canales cargados`)
+    }
+    
+  } catch (error) {
+    console.error('❌ Error loading channels:', error)
+    toast.error('Error al cargar los canales')
+    availableChannels.value = []
+  } finally {
+    loadingChannels.value = false
+  }
+}
+
+function getChannelDisplayName(channel) {
+  const typeLabels = {
+    'shopify': '🛍️ Shopify',
+    'woocommerce': '🏪 WooCommerce', 
+    'mercadolibre': '🛒 MercadoLibre',
+    'general_store': '🏬 Tienda General'
+  }
+  
+  const typeLabel = typeLabels[channel.channel_type] || '📦'
+  return `${typeLabel} - ${channel.channel_name}`
+}
+
+function getChannelIcon(channelType) {
+  const icons = {
+    'shopify': '🛍️',
+    'woocommerce': '🏪',
+    'mercadolibre': '🛒', 
+    'general_store': '🏬'
+  }
+  return icons[channelType] || '📦'
+}
+
+function getChannelTypeName(channelType) {
+  const names = {
+    'shopify': 'Shopify Store',
+    'woocommerce': 'WooCommerce',
+    'mercadolibre': 'MercadoLibre',
+    'general_store': 'Tienda General'
+  }
+  return names[channelType] || channelType
+}
+
+function redirectToChannels() {
+  router.push('/app/channels')
+  closeCreateOrderModal()
+  toast.info('Redirigiendo a la configuración de canales...')
+}
+
 // ==================== LIFECYCLE ====================
 
 onMounted(async () => {
@@ -1214,6 +1385,132 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+/* ==================== ESTILOS PARA SELECTOR DE CANAL ==================== */
+
+.section-description {
+  color: #6b7280;
+  font-size: 14px;
+  margin: 0 0 16px 0;
+  font-weight: normal;
+}
+
+.channel-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  color: #6b7280;
+}
+
+.no-channels-warning {
+  display: flex;
+  gap: 12px;
+  padding: 16px;
+  background: #fef3c7;
+  border: 1px solid #f59e0b;
+  border-radius: 8px;
+  color: #92400e;
+}
+
+.warning-icon {
+  font-size: 20px;
+  flex-shrink: 0;
+}
+
+.warning-content {
+  flex: 1;
+}
+
+.warning-content p {
+  margin: 0 0 8px 0;
+}
+
+.warning-content p:last-child {
+  margin-bottom: 0;
+}
+
+.btn-link {
+  background: none;
+  border: none;
+  color: #3b82f6;
+  text-decoration: underline;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 0;
+  font-weight: 500;
+}
+
+.btn-link:hover {
+  color: #1d4ed8;
+}
+
+.channel-selector {
+  margin-bottom: 12px;
+}
+
+.channel-preview {
+  margin-top: 12px;
+}
+
+.channel-info-card {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.channel-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.channel-icon {
+  font-size: 20px;
+}
+
+.channel-details {
+  flex: 1;
+}
+
+.channel-name {
+  font-weight: 600;
+  color: #1f2937;
+  font-size: 14px;
+}
+
+.channel-type {
+  color: #6b7280;
+  font-size: 12px;
+}
+
+.channel-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.meta-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #4b5563;
+}
+
+.meta-icon {
+  font-size: 12px;
+}
+
+.meta-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .orders-page {
   padding: 24px;
   max-width: 1600px;
