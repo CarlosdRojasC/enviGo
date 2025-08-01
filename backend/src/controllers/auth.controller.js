@@ -9,7 +9,7 @@ const { ERRORS, ROLES } = require('../config/constants');
 
 class AuthController {
   // Login mejorado
-  async login(req, res) {
+  login = async(req, res) => {
     try {
       const { email, password, remember_me = false } = req.body;
       const clientIP = req.ip || req.connection.remoteAddress;
@@ -74,7 +74,7 @@ class AuthController {
   }
 
   // Registro de usuario
-  async register(req, res) {
+  register = async(req, res) => {
     try {
       const { email, password, full_name, company_id, role = ROLES.COMPANY_EMPLOYEE } = req.body;
 
@@ -127,7 +127,7 @@ class AuthController {
   }
 
   // Obtener perfil
-  async getProfile(req, res) {
+  getProfile = async(req, res) =>  {
     try {
       const userId = req.user.id;
 
@@ -149,7 +149,8 @@ class AuthController {
   }
 
   // Solicitar reset de contraseña
-  async requestPasswordReset(req, res) {
+requestPasswordReset = async (req, res) => {
+    
     try {
       const { email } = req.body;
 
@@ -179,7 +180,7 @@ class AuthController {
   }
 
   // Resetear contraseña con token
-  async resetPassword(req, res) {
+  resetPassword = async(req, res) => {
     try {
       const { token, new_password } = req.body;
 
@@ -223,7 +224,7 @@ class AuthController {
   }
 
   // Cambiar contraseña
-  async changePassword(req, res) {
+  changePassword = async(req, res) => {
     try {
       const { current_password, new_password } = req.body;
       const userId = req.user.id;
@@ -256,7 +257,7 @@ class AuthController {
   }
 
   // Verificar token
-  async verifyToken(req, res) {
+  verifyToken = async(req, res) => {
     try {
       const user = await User.findById(req.user.id).populate('company_id');
       if (!user || !user.is_active) {
@@ -314,7 +315,7 @@ class AuthController {
     return permissions[role] || [];
   }
 
-  async sendPasswordResetEmail(email, token, fullName) {
+  sendPasswordResetEmail = async(email, token, fullName) => {
     try {
       // Si no tienes configurado SMTP, simplemente log por ahora
       if (!process.env.SMTP_HOST) {
