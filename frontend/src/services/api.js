@@ -427,7 +427,11 @@ getAllForAdmin: () => api.get('/channels/admin/all'),
   getCommunes: (channelId) => api.get(`/channels/${channelId}/communes`),
     updateCommunes: (channelId, data) => api.put(`/channels/${channelId}/communes`, data),
     testCommune: (channelId, data) => api.post(`/channels/${channelId}/communes/test`, data),
-    syncWithCommunes: (channelId, data) => api.post(`/channels/${channelId}/sync-with-communes`, data)
+    syncWithCommunes: (channelId, data) => api.post(`/channels/${channelId}/sync-with-communes`, data),
+    getChannels: (companyId) => {
+    console.log('🏢 API: Obteniendo canales para empresa:', companyId);
+    return api.get(`/companies/${companyId}/channels`);
+  }
 }
 const notifications = {
   /**

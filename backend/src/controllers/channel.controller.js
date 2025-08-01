@@ -12,40 +12,82 @@ async getByCompany(req, res) {
   try {
     const { companyId } = req.params;
 
+    // Verificar permisos
     if (req.user.role !== 'admin' && req.user.company_id.toString() !== companyId) {
       return res.status(403).json({ error: ERRORS.FORBIDDEN });
     }
 
-    // Buscar canales activos de la empresa
-    const channels = await Channel.find({ company_id: companyId, is_active: true });
+    console.log(`🔍 [Channel Controller] Obteniendo canales para empresa: ${companyId}`);
+
+    // ✅ CAMBIO PRINCIPAL: Buscar TODOS los canales (no solo activos)
+    // El filtrado de activos se hace en el frontend
+    const channels = await Channel.find({ 
+      company_id: companyId 
+      // Removemos: is_active: true
+    }).sort({ created_at: -1 });
+
+    console.log(`📊 [Channel Controller] Encontrados ${channels.length} canales para empresa ${companyId}`);
 
     // Para cada canal, calcular estadísticas completas
     const channelsWithStats = await Promise.all(channels.map(async (channel) => {
       const totalOrders = await Order.countDocuments({ channel_id: channel._id });
       const lastOrder = await Order.findOne({ channel_id: channel._id }).sort({ order_date: -1 });
       
-      // 🆕 AGREGAR: Calcular revenue total
+      // Calcular revenue total
       const totalRevenueAgg = await Order.aggregate([
         { $match: { channel_id: channel._id } },
         { $group: { _id: null, total: { $sum: '$total_amount' } } }
       ]);
       const totalRevenue = totalRevenueAgg.length > 0 ? totalRevenueAgg[0].total : 0;
 
-      return {
+      // ✅ MEJORAR: Más información del canal
+      const channelData = {
         ...channel.toObject(),
         total_orders: totalOrders,
         total_revenue: totalRevenue,
         last_order_date: lastOrder ? lastOrder.order_date : null,
-        // 🔧 CORREGIR: Asegurar que last_sync_at existe
-        last_sync_at: channel.last_sync || channel.last_sync_at || null
+        last_sync_at: channel.last_sync || channel.last_sync_at || null,
+        
+        // ✅ NUEVO: Información adicional útil para el frontend
+        has_orders: totalOrders > 0,
+        is_configured: !!(channel.api_key || channel.store_url),
+        status_info: {
+          is_active: channel.is_active,
+          has_credentials: !!(channel.api_key && channel.api_secret),
+          last_sync_success: channel.last_sync_status === 'success',
+          sync_enabled: channel.sync_enabled !== false
+        }
       };
+
+      console.log(`📋 [Channel Controller] Canal ${channel._id}: ${channel.channel_name} - Activo: ${channel.is_active}, Pedidos: ${totalOrders}`);
+
+      return channelData;
     }));
 
-    // 🔧 CORREGIR: Envolver en data object
-    res.json({ data: channelsWithStats });
+    // Separar canales activos vs inactivos para logs
+    const activeChannels = channelsWithStats.filter(c => c.is_active);
+    const inactiveChannels = channelsWithStats.filter(c => !c.is_active);
+
+    console.log(`✅ [Channel Controller] Enviando respuesta: ${activeChannels.length} activos, ${inactiveChannels.length} inactivos`);
+
+    // ✅ MANTENER: Envolver en data object (esto ya estaba correcto)
+    res.json({ 
+      success: true,
+      data: channelsWithStats,
+      meta: {
+        total: channelsWithStats.length,
+        active: activeChannels.length,
+        inactive: inactiveChannels.length,
+        company_id: companyId
+      }
+    });
+
   } catch (error) {
-    console.error('Error obteniendo canales:', error);
-    res.status(500).json({ error: ERRORS.SERVER_ERROR });
+    console.error('❌ [Channel Controller] Error obteniendo canales:', error);
+    res.status(500).json({ 
+      error: ERRORS.SERVER_ERROR,
+      details: error.message 
+    });
   }
 }
 
