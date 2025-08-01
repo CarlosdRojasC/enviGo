@@ -1299,7 +1299,8 @@ async function loadUserChannels() {
     console.log(`🔍 [loadUserChannels] Cargando canales para empresa: ${companyId}`)
     
     // ✅ USAR companyId (no auth.user.company_id)
-    const response = await apiService.companies.getChannels(companyId)
+    const response = await apiService.channels.getChannels(companyId)
+
     
     console.log('📡 [loadUserChannels] Respuesta de la API:', response)
     
