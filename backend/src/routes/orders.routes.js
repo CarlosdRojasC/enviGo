@@ -88,13 +88,44 @@ router.get('/communes', authenticateToken, async (req, res) => {
   }
 });
 
-router.post('/', authenticateToken, validateOrderCreation, orderController.create);
+// Middleware personalizado para validar permisos de creación
+const validateOrderPermissions = (req, res, next) => {
+  const user = req.user;
+  
+  // Admin puede crear para cualquier empresa
+  if (user.role === 'admin') {
+    return next();
+  }
+  
+  // Company owner/employee solo para su empresa
+  if (['company_owner', 'company_employee'].includes(user.role)) {
+    if (!user.company_id) {
+      return res.status(403).json({ error: 'Usuario no asociado a ninguna empresa' });
+    }
+    
+    // Si especifica company_id en el body, debe coincidir con la del usuario
+    if (req.body.company_id && req.body.company_id !== user.company_id.toString()) {
+      return res.status(403).json({ error: 'No puedes crear pedidos para otra empresa' });
+    }
+    
+    // Si no especifica company_id, usar la empresa del usuario
+    if (!req.body.company_id) {
+      req.body.company_id = user.company_id;
+    }
+    
+    return next();
+  }
+  
+  return res.status(403).json({ error: 'Sin permisos para crear pedidos' });
+};
+
+router.post('/', authenticateToken, validateOrderPermissions, validateOrderCreation, orderController.create);
 router.get('/:id', authenticateToken, validateMongoId('id'), orderController.getById);
 router.patch('/:id/status', authenticateToken, validateMongoId('id'), isAdmin, orderController.updateStatus);
 
 router.patch('/:id/ready', authenticateToken, validateMongoId('id'), async (req, res) => {
   try {
-    const order = await Order.findById(req.params.id);
+    const order = await Order.findById(req.params.id).populate('company_id', 'name email phone');
     if (!order) return res.status(404).json({ error: 'Pedido no encontrado' });
 
     // Solo la empresa dueña puede marcar como listo
@@ -107,7 +138,25 @@ router.patch('/:id/ready', authenticateToken, validateMongoId('id'), async (req,
     }
 
     order.status = 'ready_for_pickup';
+    order.ready_for_pickup_at = new Date(); // ← AGREGAR TIMESTAMP
     await order.save();
+
+    // 🔔 ENVIAR NOTIFICACIÓN
+    try {
+      console.log(`🚚 PEDIDO LISTO PARA RETIRO:
+📦 Pedido: ${order.order_number}
+🏢 Empresa: ${order.company_id.name}
+👤 Cliente: ${order.customer_name}
+📍 ${order.shipping_commune}
+💰 $${order.total_amount}
+🕐 ${new Date().toLocaleString('es-CL')}
+👨‍💼 Marcado por: ${req.user.full_name || req.user.email}`);
+      
+      // TODO: Aquí irán las notificaciones reales por email/WhatsApp
+    } catch (notificationError) {
+      console.error('❌ Error enviando notificaciones:', notificationError);
+    }
+
     res.json({ message: 'Pedido marcado como listo para retiro', order });
   } catch (error) {
     res.status(500).json({ error: 'Error actualizando el pedido' });
@@ -166,6 +215,22 @@ router.post('/bulk-ready', authenticateToken, async (req, res) => {
     });
 
     console.log(`✅ ${result.modifiedCount} pedidos actualizados exitosamente`);
+
+    // 🔔 ENVIAR NOTIFICACIÓN MASIVA
+if (result.modifiedCount > 0) {
+  try {
+    console.log(`🚚 PEDIDOS MASIVOS LISTOS PARA RETIRO:
+📦 Cantidad: ${result.modifiedCount} pedidos
+🏢 Empresa: ${req.user.company_id ? 'Una empresa específica' : 'Múltiples empresas'}
+🕐 ${new Date().toLocaleString('es-CL')}
+👨‍💼 Marcado por: ${req.user.full_name || req.user.email}
+📋 Pedidos: ${matchingOrders.map(o => o.order_number).join(', ')}`);
+    
+    // TODO: Aquí irán las notificaciones reales por email/WhatsApp
+  } catch (notificationError) {
+    console.error('❌ Error enviando notificación masiva:', notificationError);
+  }
+}
 
     res.json({
       message: `${result.modifiedCount} pedidos marcados como listos para retiro.`,
