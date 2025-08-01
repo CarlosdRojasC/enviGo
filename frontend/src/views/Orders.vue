@@ -1273,121 +1273,80 @@ watch(filters, (newFilters) => {
 }, { deep: true });
 
 async function loadUserChannels() {
-  console.log('🚀 [loadUserChannels] INICIANDO...')
+  console.log('🚀 [loadUserChannels] INICIANDO DEBUG ESPECÍFICO...')
   
-  if (!auth.user?.company_id) {
-    console.log('❌ [loadUserChannels] No company_id found in user')
-    toast.warning('Error: Usuario sin empresa asignada')
+  // ✅ DEBUG SUPER DETALLADO
+  console.log('🔍 [DEBUG] auth object completo:', auth)
+  console.log('🔍 [DEBUG] auth.user:', auth.user)
+  console.log('🔍 [DEBUG] auth.user?.company_id:', auth.user?.company_id)
+  console.log('🔍 [DEBUG] typeof auth.user?.company_id:', typeof auth.user?.company_id)
+  console.log('🔍 [DEBUG] auth.companyId computed:', auth.companyId)
+  
+  // Verificar localStorage
+  const storedUser = localStorage.getItem('user')
+  console.log('🔍 [DEBUG] localStorage user (raw):', storedUser)
+  
+  if (storedUser) {
+    try {
+      const parsedUser = JSON.parse(storedUser)
+      console.log('🔍 [DEBUG] localStorage user (parsed):', parsedUser)
+      console.log('🔍 [DEBUG] localStorage user company_id:', parsedUser.company_id)
+    } catch (e) {
+      console.error('❌ [DEBUG] Error parsing localStorage:', e)
+    }
+  }
+  
+  // Verificar token
+  const token = localStorage.getItem('token')
+  console.log('🔍 [DEBUG] localStorage token exists:', !!token)
+  
+  // ✅ CONDICIÓN ESPECÍFICA
+  const hasCompanyId = auth.user?.company_id
+  console.log('🔍 [DEBUG] Evaluación de condición:', {
+    'auth.user exists': !!auth.user,
+    'auth.user?.company_id': auth.user?.company_id,
+    'hasCompanyId evaluates to': hasCompanyId,
+    'boolean conversion': !!hasCompanyId
+  })
+  
+  if (!hasCompanyId) {
+    console.log('❌ [DEBUG] La condición falló - auth.user?.company_id no existe o es falsy')
+    
+    // Intentar alternativas
+    const alternatives = {
+      'auth.companyId': auth.companyId,
+      'parsed localStorage': (() => {
+        try {
+          return JSON.parse(localStorage.getItem('user') || '{}').company_id
+        } catch {
+          return null
+        }
+      })()
+    }
+    
+    console.log('🔍 [DEBUG] Alternativas disponibles:', alternatives)
+    
+    toast.warning('Error: No se pudo obtener company_id')
     return
   }
   
+  console.log('✅ [DEBUG] company_id encontrado:', auth.user.company_id)
+  
+  // Continuar con el resto...
   loadingChannels.value = true
   
   try {
-    const companyId = auth.user.company_id
-    console.log(`🔍 [loadUserChannels] Cargando canales para empresa: ${companyId}`)
+    const response = await apiService.companies.getChannels(auth.user.company_id)
+    console.log('📡 [DEBUG] Respuesta de la API:', response)
     
-    // Hacer la llamada a la API
-    const response = await apiService.companies.getChannels(companyId)
-    
-    console.log('📡 [loadUserChannels] Respuesta completa:', {
-      status: response?.status,
-      data: response?.data,
-      meta: response?.data?.meta
-    })
-    
-    // Procesar respuesta - ahora sabemos el formato exacto
-    let allChannels = []
-    
-    if (response?.data?.data && Array.isArray(response.data.data)) {
-      allChannels = response.data.data
-      console.log('✅ [loadUserChannels] Formato correcto detectado')
-    } else {
-      console.log('❓ [loadUserChannels] Formato inesperado:', response?.data)
-      allChannels = []
-    }
-    
-    console.log('📊 [loadUserChannels] Análisis de canales:', {
-      total: allChannels.length,
-      activos: allChannels.filter(c => c.is_active).length,
-      inactivos: allChannels.filter(c => !c.is_active).length,
-      configurados: allChannels.filter(c => c.is_configured).length
-    })
-    
-    // ✅ FILTRADO INTELIGENTE: Solo canales activos Y bien configurados
-    const usableChannels = allChannels.filter(channel => {
-      const isActive = channel.is_active === true
-      const hasName = channel.channel_name && channel.channel_name.trim() !== ''
-      const isConfigured = channel.is_configured || (channel.api_key || channel.store_url)
-      const belongsToCompany = channel.company_id?.toString() === companyId.toString()
-      
-      console.log(`🔍 [loadUserChannels] Evaluando canal "${channel.channel_name}":`, {
-        id: channel._id,
-        is_active: channel.is_active,
-        has_name: hasName,
-        is_configured: isConfigured,
-        belongs_to_company: belongsToCompany,
-        will_include: isActive && hasName && isConfigured && belongsToCompany
-      })
-      
-      return isActive && hasName && isConfigured && belongsToCompany
-    })
-    
-    availableChannels.value = usableChannels
-    
-    // ✅ MENSAJES MEJORADOS basados en el estado real
-    if (allChannels.length === 0) {
-      console.log('⚠️ [loadUserChannels] No hay canales configurados')
-      toast.warning('Tu empresa no tiene canales configurados')
-    } else if (usableChannels.length === 0) {
-      const inactiveCount = allChannels.filter(c => !c.is_active).length
-      const unconfiguredCount = allChannels.filter(c => !c.is_configured).length
-      
-      console.log('⚠️ [loadUserChannels] Canales no utilizables:', {
-        inactivos: inactiveCount,
-        no_configurados: unconfiguredCount
-      })
-      
-      if (inactiveCount > 0) {
-        toast.warning(`Tienes ${inactiveCount} canal(es) inactivo(s). Actívalos en la sección Canales.`)
-      } else if (unconfiguredCount > 0) {
-        toast.warning(`Tienes ${unconfiguredCount} canal(es) sin configurar completamente.`)
-      } else {
-        toast.warning('No hay canales utilizables para crear pedidos')
-      }
-    } else {
-      console.log('✅ [loadUserChannels] Canales utilizables cargados:', 
-        usableChannels.map(c => `${c.channel_name} (${c.channel_type})`).join(', ')
-      )
-      // Solo mostrar success si realmente hay canales utilizables
-      toast.success(`${usableChannels.length} canal(es) disponible(s) para crear pedidos`)
-    }
+    // ... resto de tu lógica
     
   } catch (error) {
-    console.error('❌ [loadUserChannels] Error completo:', {
-      error: error,
-      message: error.message,
-      response: error.response,
-      status: error.response?.status,
-      data: error.response?.data
-    })
-    
-    // Manejo de errores específicos
-    if (error.response?.status === 404) {
-      toast.error('No se encontraron canales para tu empresa')
-    } else if (error.response?.status === 403) {
-      toast.error('No tienes permisos para ver los canales de esta empresa')
-    } else {
-      toast.error('Error cargando canales: ' + (error.response?.data?.error || error.message))
-    }
-    
-    availableChannels.value = []
+    console.error('❌ [DEBUG] Error en API call:', error)
   } finally {
     loadingChannels.value = false
-    console.log('🏁 [loadUserChannels] FINALIZADO')
   }
 }
-
 function getChannelDisplayName(channel) {
   const typeLabels = {
     'shopify': '🛍️ Shopify',
