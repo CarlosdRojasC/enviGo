@@ -288,13 +288,62 @@ const loadingDriverStatus = ref(false);
 
 let refreshInterval = null;
 
+/**
+ * Extraer ID de Shipday de la URL de tracking y construir URL personalizada
+ * ⚡ IDÉNTICA a extractShipdayIdAndBuildUrl del notification.service.js
+ */
+function extractShipdayIdAndBuildUrl(order) {
+  let shipdayTrackingId = null;
+  
+  // Intentar extraer de shipday_tracking_url (equivalente a webhookData.trackingUrl)
+  if (order.shipday_tracking_url) {
+    // trackingUrl: "https://dispatch.shipday.com/trackingPage/bHBueG54cHk=&lang=es"
+    const match = order.shipday_tracking_url.match(/trackingPage\/([^&?]+)/);
+    if (match) {
+      shipdayTrackingId = match[1];
+      console.log(`🔗 ID extraído de shipday_tracking_url: ${shipdayTrackingId}`);
+    }
+  }
+  
+  // Si no se encontró, intentar desde el shipday_order_id (equivalente a webhookData.order?.id)
+  if (!shipdayTrackingId && order.shipday_order_id) {
+    shipdayTrackingId = order.shipday_order_id;
+    console.log(`🔗 Usando shipday_order_id como ID: ${shipdayTrackingId}`);
+  }
+  
+  // Construir URL personalizada CON IDIOMA ESPAÑOL
+  if (shipdayTrackingId) {
+    return `https://www.ordertracking.io/enviGo/delivery/${shipdayTrackingId}&lang=es`;
+  }
+  
+  // Fallback a tu frontend
+  console.warn('⚠️ No se pudo extraer ID de Shipday, usando fallback');
+  const frontendUrl = window.location.origin;
+  return `${frontendUrl}/tracking/${order.order_number}`;
+}
+
 // COMPUTED PROPERTIES PARA TRACKING
 const hasTrackingUrl = computed(() => {
-  return !!(tracking.value?.tracking_url || tracking.value?.shipday_tracking_url);
+  if (!tracking.value) return false;
+  
+  // Verificar si tenemos datos suficientes para construir la URL
+  return !!(
+    tracking.value.shipday_tracking_url || 
+    tracking.value.shipday_order_id ||
+    tracking.value.custom_tracking_url
+  );
 });
 
 const getTrackingUrl = computed(() => {
-  return tracking.value?.tracking_url || tracking.value?.shipday_tracking_url || '';
+  if (!tracking.value) return '';
+  
+  // Si ya tenemos custom_tracking_url guardada, usarla
+  if (tracking.value.custom_tracking_url) {
+    return tracking.value.custom_tracking_url;
+  }
+  
+  // 🎯 USAR LA MISMA LÓGICA QUE notification.service.js
+  return extractShipdayIdAndBuildUrl(tracking.value);
 });
 
 const hasProofOfDelivery = computed(() => {
@@ -657,28 +706,37 @@ function orderHasProofOfDelivery(order) {
 async function openLiveTrackingFromExternal(order, updateCallback) {
   console.log('📍 Abriendo tracking externo para orden:', order.order_number);
   
-  if (order.shipday_tracking_url) {
-    console.log('✅ Abriendo tracking URL directa:', order.shipday_tracking_url);
-    window.open(order.shipday_tracking_url, '_blank');
-  } else if (order.shipday_order_id) {
-    console.log('⚠️ No hay tracking URL, intentando refrescar datos...');
+  // 🎯 USAR LA MISMA LÓGICA QUE notification.service.js
+  const trackingUrl = extractShipdayIdAndBuildUrl(order);
+  
+  if (trackingUrl) {
+    console.log('✅ Abriendo tracking URL:', trackingUrl);
+    window.open(trackingUrl, '_blank');
+    return;
+  }
+  
+  // Si no se pudo construir URL, intentar refrescar datos
+  if (order._id) {
+    console.log('⚠️ No se pudo construir URL, intentando refrescar datos...');
     try {
       const { data } = await apiService.orders.getById(order._id);
       
-      if (data.shipday_tracking_url) {
-        console.log('✅ URL obtenida después de refresh:', data.shipday_tracking_url);
+      const refreshedUrl = extractShipdayIdAndBuildUrl(data);
+      
+      if (refreshedUrl) {
+        console.log('✅ URL construida después de refresh:', refreshedUrl);
         if (updateCallback) {
           updateCallback(data);
         }
-        window.open(data.shipday_tracking_url, '_blank');
+        window.open(refreshedUrl, '_blank');
       } else {
-        console.log('⚠️ No se encontró URL de tracking después del refresh');
+        console.log('⚠️ No se encontró información de tracking después del refresh');
       }
     } catch (error) {
       console.error('❌ Error al refrescar datos de la orden:', error);
     }
   } else {
-    console.log('⚠️ No hay información de Shipday para esta orden');
+    console.log('⚠️ No hay información suficiente para construir URL de tracking');
   }
 }
 
@@ -713,7 +771,8 @@ defineExpose({
   openLiveTrackingFromExternal,
   getActionButton,
   refreshDriverStatus,
-  refreshTracking
+  refreshTracking,
+  extractShipdayIdAndBuildUrl
 });
 </script>
 
