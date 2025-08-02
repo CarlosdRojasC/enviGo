@@ -341,34 +341,37 @@ const validateToken = async () => {
 };
 
 const handleResetPassword = async () => {
-  if (loading.value || !isFormValid.value) return
+  if (loading.value || !isFormValid.value) return;
 
-  clearMessages()
-  loading.value = true
+  clearMessages();
+  loading.value = true;
 
   try {
-    const response = await auth.resetPassword(token.value, newPassword.value)
-    
+    // La acción de la tienda siempre devuelve un objeto, por lo que no debería saltar al catch
+    const result = await auth.resetPassword(token.value, newPassword.value);
+
     if (result.success) {
-      resetSuccess.value = true
-      successMessage.value = "¡Contraseña actualizada exitosamente!"
+      resetSuccess.value = true;
+      successMessage.value = "¡Tu contraseña ha sido actualizada con éxito!";
+    } else {
+      // Si success es false, la tienda nos da el mensaje de error en result.error
+      const errorMessage = result.error || 'Error al actualizar la contraseña.';
+
+      // Lógica para mostrar el mensaje de token expirado si el error lo indica
+      if (errorMessage.includes('Token inválido') || errorMessage.includes('expirado')) {
+        tokenStatus.value = 'expired';
+      } else {
+        error.value = errorMessage;
+      }
     }
   } catch (err) {
-    console.error('Error resetting password:', err)
-    
-    const errorMessage = err.response?.data?.error || 'Error al actualizar la contraseña'
-    
-    if (errorMessage.includes('Token inválido') || errorMessage.includes('expirado')) {
-      tokenStatus.value = 'expired'
-    } else if (errorMessage.includes('misma contraseña')) {
-      error.value = 'La nueva contraseña debe ser diferente a la anterior'
-    } else {
-      error.value = errorMessage
-    }
+    // Este catch ahora es solo para errores inesperados de programación, no de la API
+    console.error('Error inesperado al resetear contraseña:', err);
+    error.value = 'Ocurrió un error inesperado en la aplicación.';
   } finally {
-    loading.value = false
+    loading.value = false;
   }
-}
+};
 
 // Lifecycle
 onMounted(() => {
