@@ -61,6 +61,9 @@ const auth = {
   // NUEVOS MÉTODOS PARA PASSWORD RESET
   requestPasswordReset: (email) => 
     api.post('/auth/request-password-reset', { email }),
+
+  validateResetToken: (token) =>
+    api.get(`/auth/reset-password/validate/${token}`),
   
   resetPassword: (token, newPassword) => 
     api.post('/auth/reset-password', { token, new_password: newPassword }),

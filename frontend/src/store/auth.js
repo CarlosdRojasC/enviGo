@@ -185,7 +185,17 @@ export const useAuthStore = defineStore('auth', () => {
       return false
     }
   }
-
+async function validateResetToken(token) {
+  try {
+    // Llama al servicio que acabamos de modificar
+    await apiService.auth.validateResetToken(token);
+  } catch (err) {
+    // Si el servicio falla (ej. error 400), relanzamos el error
+    // para que el componente lo atrape.
+    console.error('Error al validar token desde la tienda:', err);
+    throw err;
+  }
+}
   function logout() {
     user.value = null
     token.value = null
@@ -346,6 +356,7 @@ export const useAuthStore = defineStore('auth', () => {
     requestPasswordReset,
     resetPassword,
     getProfile,
+    validateResetToken,
     changePassword,
     verifyToken,
     updateUser,

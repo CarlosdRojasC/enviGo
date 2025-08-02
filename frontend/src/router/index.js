@@ -26,6 +26,12 @@ const routes = [
         name: 'Login',
         component: Login,
         meta: { guest: true }
+      },
+      {
+        path: 'reset-password',
+        name: 'ResetPassword',
+        component: () => import('../components/ResetPassword.vue'),
+        meta: { guest: true }
       }
     ]
   },

@@ -314,7 +314,31 @@ requestPasswordReset = async (req, res) => {
     };
     return permissions[role] || [];
   }
+validateResetToken = async (req, res) => {
+  try {
+    const { token } = req.params;
 
+    // Hashea el token que viene del cliente para buscarlo en la BD
+    const resetTokenHash = crypto.createHash('sha256').update(token).digest('hex');
+
+    const user = await User.findOne({
+      password_reset_token: resetTokenHash,
+      password_reset_expires: { $gt: Date.now() } // Revisa que no haya expirado
+    });
+
+    // Si no se encuentra un usuario, el token es inválido o expiró
+    if (!user) {
+      return res.status(400).json({ error: 'Token inválido o expirado' });
+    }
+
+    // Si se encuentra, el token es válido
+    res.json({ message: 'Token válido' });
+
+  } catch (error) {
+    console.error('Error validando token:', error);
+    res.status(500).json({ error: 'Error del servidor' });
+  }
+}
   sendPasswordResetEmail = async(email, token, fullName) => {
     try {
       // Si no tienes configurado SMTP, simplemente log por ahora
