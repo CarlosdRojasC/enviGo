@@ -4,9 +4,7 @@
       <!-- Header mejorado -->
       <div class="login-header">
         <div class="logo-container">
-          <svg class="logo-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
-          </svg>
+         <img src="../assets/envigoLogo.png" alt="enviGo Logo" class="logo-icon">
         </div>
         <h1 class="login-title">
           {{ currentView === 'login' ? 'Iniciar Sesión' : 'Restablecer Contraseña' }}
@@ -358,43 +356,69 @@ onMounted(() => {
 </script>
 
 <style scoped>
-/* Estilos base manteniendo tu diseño original */
+/* ==================== PARTE 1: LAYOUT PRINCIPAL Y VARIABLES ==================== */
+
+/* Layout principal de la página de login */
 .login-page {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
   min-height: 100vh;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   padding: 20px;
+  background: linear-gradient(135deg, var(--dark) 0%, var(--dark-lighter) 50%, #4A4A4A 100%);
+  font-family: var(--font-family);
 }
 
+/* Tarjeta principal del login */
 .login-card {
-  background: white;
-  padding: 0;
-  border-radius: 16px;
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
-  border: none;
   width: 100%;
   max-width: 420px;
-  transition: all 0.3s ease;
+  background: var(--white);
+  border-radius: 16px;
   overflow: hidden;
+  box-shadow: var(--shadow-hover);
+  border: 1px solid rgba(139, 197, 63, 0.1);
 }
 
-.login-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 25px 30px -5px rgba(0, 0, 0, 0.15), 0 15px 15px -5px rgba(0, 0, 0, 0.08);
+/* Animación de entrada */
+.login-card {
+  animation: fadeInUp 0.5s ease-out;
 }
 
-/* Header mejorado */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+/* ==================== PARTE 2: HEADER CON COLORES ENVIGO ==================== */
+
+/* Header con gradiente de enviGo */
 .login-header {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
+  background: var(--gradient);
+  color: var(--white);
   padding: 2rem 1.5rem;
   text-align: center;
+  position: relative;
 }
 
+/* Efecto adicional al header */
+.login-header::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(135deg, transparent 0%, rgba(255, 255, 255, 0.1) 100%);
+  pointer-events: none;
+}
+
+/* Contenedor del logo */
 .logo-container {
   display: inline-flex;
   align-items: center;
@@ -405,30 +429,44 @@ onMounted(() => {
   border-radius: 12px;
   margin-bottom: 1rem;
   backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  transition: all 0.3s ease;
 }
 
+.logo-container:hover {
+  background: rgba(255, 255, 255, 0.3);
+  transform: scale(1.05);
+}
+
+/* Icono del logo */
 .logo-icon {
   width: 1.5rem;
   height: 1.5rem;
-  color: white;
+  color: var(--white);
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
 }
 
+/* Título del login */
 .login-title {
   font-size: 28px;
   font-weight: 700;
-  color: white;
+  color: var(--white);
   margin: 0 0 0.5rem 0;
   letter-spacing: -0.025em;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
+/* Subtítulo */
 .login-subtitle {
   margin: 0;
   opacity: 0.9;
   font-size: 14px;
   font-weight: 400;
+  color: var(--white);
 }
+/* ==================== PARTE 3: FORMULARIO E INPUTS ==================== */
 
-/* Formulario */
+/* Formulario principal */
 .login-form {
   display: flex;
   flex-direction: column;
@@ -436,23 +474,26 @@ onMounted(() => {
   padding: 2rem 1.5rem;
 }
 
+/* Grupo de campos */
 .form-group {
   width: 100%;
 }
 
+/* Etiquetas de campos */
 .form-label {
   display: block;
   margin-bottom: 8px;
-  color: #374151;
+  color: var(--dark);
   font-weight: 500;
   font-size: 14px;
 }
 
-/* Contenedor de input mejorado */
+/* Contenedor de input */
 .input-container {
   position: relative;
 }
 
+/* Inputs principales */
 .form-input {
   width: 100%;
   padding: 14px 16px;
@@ -462,35 +503,41 @@ onMounted(() => {
   font-size: 16px;
   box-sizing: border-box;
   transition: all 0.2s ease;
-  background: white;
+  background: var(--white);
+  font-family: var(--font-family);
 }
 
+/* Input de contraseña con padding derecho */
 .password-input {
   padding-right: 44px;
 }
 
+/* Placeholder */
 .form-input::placeholder {
-  color: #9ca3af;
+  color: var(--gray);
 }
 
+/* Estado focus con colores de enviGo */
 .form-input:focus {
   outline: none;
-  border-color: #667eea;
-  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(139, 197, 63, 0.1);
 }
 
+/* Estado deshabilitado */
 .form-input:disabled {
-  background-color: #f9fafb;
-  color: #6b7280;
+  background-color: var(--gray-light);
+  color: var(--gray);
   cursor: not-allowed;
 }
 
+/* Input con error */
 .input-error {
   border-color: #ef4444 !important;
   box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1) !important;
 }
 
-/* Iconos de input */
+/* Iconos dentro de inputs */
 .input-icon {
   position: absolute;
   left: 14px;
@@ -502,8 +549,16 @@ onMounted(() => {
 .input-icon svg {
   width: 18px;
   height: 18px;
-  color: #9ca3af;
+  color: var(--gray);
+  transition: color 0.2s ease;
 }
+
+/* Cambiar color del icono cuando el input tiene focus */
+.form-input:focus + .input-icon svg,
+.form-input:focus ~ .input-icon svg {
+  color: var(--primary);
+}
+/* ==================== PARTE 4: TOGGLE CONTRASEÑA Y OPCIONES ==================== */
 
 /* Botón para mostrar/ocultar contraseña */
 .password-toggle {
@@ -520,13 +575,18 @@ onMounted(() => {
 }
 
 .password-toggle:hover {
-  background-color: #f3f4f6;
+  background-color: rgba(139, 197, 63, 0.1);
 }
 
 .password-toggle svg {
   width: 18px;
   height: 18px;
-  color: #6b7280;
+  color: var(--gray);
+  transition: color 0.2s ease;
+}
+
+.password-toggle:hover svg {
+  color: var(--primary);
 }
 
 /* Opciones del formulario */
@@ -538,39 +598,52 @@ onMounted(() => {
   gap: 12px;
 }
 
+/* Recordarme */
 .remember-me {
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
+/* Checkbox personalizado con colores de enviGo */
 .checkbox {
   width: 16px;
   height: 16px;
-  accent-color: #667eea;
+  accent-color: var(--primary);
+  cursor: pointer;
 }
 
 .checkbox-label {
   font-size: 14px;
-  color: #374151;
+  color: var(--dark);
   cursor: pointer;
+  transition: color 0.2s ease;
 }
 
+.checkbox-label:hover {
+  color: var(--primary);
+}
+
+/* Botón de olvidar contraseña */
 .forgot-password-btn {
   background: none;
   border: none;
-  color: #667eea;
+  color: var(--primary);
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
   text-decoration: none;
-  transition: color 0.2s;
+  transition: all 0.2s ease;
+  padding: 4px 8px;
+  border-radius: 4px;
 }
 
 .forgot-password-btn:hover {
-  color: #5a67d8;
+  color: var(--primary-dark);
   text-decoration: underline;
+  background: rgba(139, 197, 63, 0.1);
 }
+/* ==================== PARTE 5: MENSAJES DE ERROR Y ÉXITO ==================== */
 
 /* Mensajes de error y éxito */
 .error-message, .success-message {
@@ -581,20 +654,26 @@ onMounted(() => {
   border-radius: 8px;
   font-size: 14px;
   font-weight: 500;
+  animation: slideIn 0.3s ease-out;
 }
 
+/* Mensaje de error */
 .error-message {
   color: #b91c1c;
   background-color: #fef2f2;
   border: 1px solid #fecaca;
+  border-left: 4px solid #ef4444;
 }
 
+/* Mensaje de éxito con colores de enviGo */
 .success-message {
-  color: #166534;
-  background-color: #f0fdf4;
-  border: 1px solid #bbf7d0;
+  color: var(--accent);
+  background-color: rgba(139, 197, 63, 0.1);
+  border: 1px solid rgba(139, 197, 63, 0.3);
+  border-left: 4px solid var(--primary);
 }
 
+/* Iconos de mensajes */
 .error-icon svg, .success-icon svg {
   width: 18px;
   height: 18px;
@@ -607,7 +686,7 @@ onMounted(() => {
 }
 
 .success-icon svg {
-  color: #22c55e;
+  color: var(--primary);
 }
 
 /* Error de campo específico */
@@ -623,10 +702,23 @@ onMounted(() => {
 .input-help {
   margin-top: 6px;
   font-size: 12px;
-  color: #6b7280;
+  color: var(--gray);
 }
 
-/* Botones */
+/* Animación de aparición de mensajes */
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+/* ==================== PARTE 6: BOTONES CON GRADIENTE ENVIGO ==================== */
+
+/* Botón principal de submit */
 .submit-btn {
   width: 100%;
   padding: 14px 20px;
@@ -635,8 +727,8 @@ onMounted(() => {
   cursor: pointer;
   font-size: 16px;
   font-weight: 600;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
+  background: var(--gradient);
+  color: var(--white);
   transition: all 0.2s ease;
   margin-top: 10px;
   position: relative;
@@ -645,44 +737,62 @@ onMounted(() => {
   justify-content: center;
   gap: 8px;
   min-height: 48px;
+  font-family: var(--font-family);
+  box-shadow: var(--shadow-green);
 }
 
+/* Hover del botón principal */
 .submit-btn:hover:not(:disabled) {
-  background: linear-gradient(135deg, #5a67d8 0%, #6b46c1 100%);
+  background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary) 100%);
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+  box-shadow: var(--shadow-hover);
 }
 
+/* Estado activo del botón */
+.submit-btn:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: var(--shadow);
+}
+
+/* Estado deshabilitado */
 .submit-btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
   transform: none;
   box-shadow: none;
+  background: var(--gray-light);
+  color: var(--gray);
 }
 
+/* Grupo de botones */
 .button-group {
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
 
+/* Botón secundario */
 .secondary-btn {
   width: 100%;
   padding: 12px 20px;
-  border: 2px solid #e5e7eb;
+  border: 2px solid rgba(139, 197, 63, 0.3);
   border-radius: 8px;
   cursor: pointer;
   font-size: 14px;
   font-weight: 500;
-  background: white;
-  color: #374151;
+  background: var(--white);
+  color: var(--primary);
   transition: all 0.2s ease;
+  font-family: var(--font-family);
 }
 
+/* Hover del botón secundario */
 .secondary-btn:hover {
-  background: #f9fafb;
-  border-color: #d1d5db;
+  background: rgba(139, 197, 63, 0.1);
+  border-color: var(--primary);
+  color: var(--primary-dark);
 }
+/* ==================== PARTE 7: SPINNER Y ESTADOS DE CARGA ==================== */
 
 /* Spinner de carga */
 .loading-spinner {
@@ -694,52 +804,60 @@ onMounted(() => {
   width: 18px;
   height: 18px;
   animation: spin 1s linear infinite;
+  color: var(--white);
 }
 
+/* Animación de rotación */
 @keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
-/* Animaciones */
-.login-card {
-  animation: fadeInUp 0.5s ease-out;
-}
-
-@keyframes fadeInUp {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
+  from { 
+    transform: rotate(0deg); 
   }
-  to {
-    opacity: 1;
-    transform: translateY(0);
+  to { 
+    transform: rotate(360deg); 
   }
 }
 
-.error-message, .success-message {
-  animation: slideIn 0.3s ease-out;
+/* Estados de focus mejorados con colores de enviGo */
+.form-input:focus,
+.checkbox:focus,
+.submit-btn:focus,
+.secondary-btn:focus,
+.forgot-password-btn:focus,
+.password-toggle:focus {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
 }
 
-@keyframes slideIn {
-  from {
-    opacity: 0;
-    transform: translateY(-10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+/* Focus visible para accesibilidad */
+.form-input:focus-visible,
+.checkbox:focus-visible,
+.submit-btn:focus-visible,
+.secondary-btn:focus-visible,
+.forgot-password-btn:focus-visible,
+.password-toggle:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
 }
 
-/* Responsive */
+/* Estado loading para inputs */
+.form-input:disabled {
+  background-color: var(--gray-light);
+  color: var(--gray);
+  cursor: not-allowed;
+  border-color: #e5e7eb;
+}
+/* ==================== PARTE 8: RESPONSIVE DESIGN ==================== */
+
+/* Responsive para móviles */
 @media (max-width: 480px) {
   .login-page {
     padding: 16px;
+    background: linear-gradient(135deg, var(--dark) 0%, var(--dark-lighter) 100%);
   }
   
   .login-card {
     max-width: 100%;
+    border-radius: 12px;
   }
   
   .login-header {
@@ -759,16 +877,56 @@ onMounted(() => {
     align-items: flex-start;
     gap: 8px;
   }
+  
+  .form-input {
+    font-size: 16px; /* Evita zoom en iOS */
+  }
 }
 
-/* Estados de focus mejorados */
-.form-input:focus,
-.checkbox:focus,
-.submit-btn:focus,
-.secondary-btn:focus,
-.forgot-password-btn:focus,
-.password-toggle:focus {
-  outline: 2px solid #667eea;
-  outline-offset: 2px;
+/* Responsive para tablets */
+@media (max-width: 768px) and (min-width: 481px) {
+  .login-page {
+    padding: 24px;
+  }
+  
+  .login-card {
+    max-width: 400px;
+  }
+}
+
+/* Estados hover solo en dispositivos que lo soportan */
+@media (hover: hover) {
+  .logo-container:hover {
+    background: rgba(255, 255, 255, 0.3);
+    transform: scale(1.05);
+  }
+  
+  .password-toggle:hover {
+    background-color: rgba(139, 197, 63, 0.1);
+  }
+  
+  .checkbox-label:hover {
+    color: var(--primary);
+  }
+  
+  .forgot-password-btn:hover {
+    color: var(--primary-dark);
+    background: rgba(139, 197, 63, 0.1);
+  }
+  
+  .submit-btn:hover:not(:disabled) {
+    transform: translateY(-1px);
+  }
+  
+  .secondary-btn:hover {
+    background: rgba(139, 197, 63, 0.1);
+  }
+}
+
+/* Modo oscuro (si está habilitado en el sistema) */
+@media (prefers-color-scheme: dark) {
+  .login-page {
+    background: linear-gradient(135deg, #1a1a1a 0%, #2a2a2a 100%);
+  }
 }
 </style>
