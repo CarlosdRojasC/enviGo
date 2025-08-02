@@ -230,11 +230,11 @@
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { auth } from '../store/auth'
+import { useAuthStore } from '../store/auth'
 
 const route = useRoute()
 const router = useRouter()
-
+const auth = useAuthStore()
 // Estado del componente
 const token = ref('')
 const newPassword = ref('')
