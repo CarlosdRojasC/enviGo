@@ -349,9 +349,9 @@ const handleResetPassword = async () => {
   try {
     const response = await auth.resetPassword(token.value, newPassword.value)
     
-    if (response.data.message) {
+    if (result.success) {
       resetSuccess.value = true
-      successMessage.value = response.data.message
+      successMessage.value = "¡Contraseña actualizada exitosamente!"
     }
   } catch (err) {
     console.error('Error resetting password:', err)
