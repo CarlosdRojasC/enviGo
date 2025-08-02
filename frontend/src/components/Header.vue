@@ -470,13 +470,23 @@ function toggleUserMenu() {
 }
 
 function goToProfile() {
-  router.push('/app/profile')
   showUserMenu.value = false
+  
+  if (auth.isAdmin) {
+    router.push({ name: 'AdminProfile' })
+  } else {
+    router.push({ name: 'Profile' })
+  }
 }
 
 function goToSettings() {
-  router.push('/app/settings')
   showUserMenu.value = false
+  
+  if (auth.isAdmin) {
+    router.push({ name: 'AdminSettings' })
+  } else {
+    router.push({ name: 'Settings' })
+  }
 }
 
 async function handleLogout() {
@@ -597,26 +607,8 @@ function formatRole(role) {
   }
   return roles[role] || role
 }
-const goToProfile = () => {
-  showUserMenu.value = false
-  
-  if (auth.isAdmin) {
-    router.push({ name: 'AdminProfile' })
-  } else {
-    router.push({ name: 'Profile' })
-  }
-}
 
-// Función para ir a configuración
-const goToSettings = () => {
-  showUserMenu.value = false
-  
-  if (auth.isAdmin) {
-    router.push({ name: 'AdminSettings' })
-  } else {
-    router.push({ name: 'Settings' })
-  }
-}
+
 
 function getNotificationIcon(type) {
   const icons = {
