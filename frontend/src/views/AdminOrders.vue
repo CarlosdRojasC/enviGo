@@ -295,17 +295,17 @@ const pendingUpdates = ref(new Set()) // IDs de órdenes con actualizaciones pen
 // ==================== COMPUTED ====================
 // ==================== COMPUTED ====================
 const selectedChannelInfo = computed(() => {
-  if (!props.newOrder?.channel_id) return null
-  return availableChannels.value.find(channel => channel._id === props.newOrder.channel_id)
+  if (!newOrder.value?.channel_id) return null
+  return availableChannels.value.find(channel => channel._id === newOrder.value.channel_id)
 })
 
 const isFormValid = computed(() => {
-  return props.newOrder?.company_id && 
-         props.newOrder?.channel_id && 
-         props.newOrder?.customer_name && 
-         props.newOrder?.shipping_address &&
-         props.newOrder?.shipping_commune &&
-         props.newOrder?.total_amount > 0
+  return newOrder.value?.company_id && 
+         newOrder.value?.channel_id && 
+         newOrder.value?.customer_name && 
+         newOrder.value?.shipping_address &&
+         newOrder.value?.shipping_commune &&
+         newOrder.value?.total_amount > 0
 })
 /**
  * Estadísticas de pedidos para el header
@@ -428,14 +428,14 @@ watch(() => availableCommunes.value, (newCommunes) => {
     communes: newCommunes.slice(0, 10) // Mostrar solo las primeras 10
   })
 }, { immediate: true })
-watch(() => props.newOrder?.company_id, (newCompanyId) => {
+watch(() => newOrder.value?.company_id, (newCompanyId) => {
   if (newCompanyId) {
     handleCompanyChange()
   } else {
     // Reset when no company is selected
     availableChannels.value = []
-    if (props.newOrder) {
-      props.newOrder.channel_id = ''
+    if (newOrder.value) {
+      newOrder.value.channel_id = ''
     }
   }
 })
@@ -502,17 +502,17 @@ setTimeout(() => {
 // ==================== METHODS ====================
 // ==================== MÉTODOS ====================
 async function handleCompanyChange() {
-  console.log('🏢 Company changed to:', props.newOrder.company_id)
+  console.log('🏢 Company changed to:', newOrder.value.company_id)
   
   // Reset channel selection
-  if (props.newOrder) {
-    props.newOrder.channel_id = ''
+  if (newOrder.value) {
+    newOrder.value.channel_id = ''
   }
   availableChannels.value = []
   
-  if (!props.newOrder?.company_id) return
+  if (!newOrder.value?.company_id) return
   
-  await loadCompanyChannels(props.newOrder.company_id)
+  await loadCompanyChannels(newOrder.value.company_id)
 }
 
 async function loadCompanyChannels(companyId) {
