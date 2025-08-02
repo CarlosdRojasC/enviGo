@@ -71,7 +71,12 @@ const auth = {
   logout: () => {
     localStorage.removeItem('token')
     localStorage.removeItem('user')
-  }
+  },
+  updateProfile: (profileData) => api.put('/auth/profile', profileData),
+  getSettings: () => api.get('/auth/settings'),
+  updateSettings: (settingsData) => api.put('/auth/settings', settingsData),
+  getActiveSessions: () => api.get('/auth/sessions'),
+  terminateSession: (sessionId) => api.delete(`/auth/sessions/${sessionId}`)
 }
 
 

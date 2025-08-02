@@ -330,6 +330,77 @@ async function validateResetToken(token) {
       profileRefreshInterval = null
     }
   }
+  // ==================== MÉTODOS PARA PROFILE (NUEVOS) ==================== 
+async function updateProfile(profileData) {
+  loading.value = true
+  error.value = null
+
+  try {
+    const { data } = await apiService.auth.updateProfile(profileData)
+    
+    // Actualizar datos del usuario en el store
+    user.value = { ...user.value, ...data.user }
+    localStorage.setItem('user', JSON.stringify(user.value))
+    return { success: true }
+  } catch (err) {
+    const errorMessage = err.response?.data?.error || 'Error al actualizar el perfil'
+    error.value = errorMessage
+    return { success: false, error: errorMessage }
+  } finally {
+    loading.value = false
+  }
+}
+
+// ==================== MÉTODOS PARA SETTINGS (NUEVOS) ====================
+async function getSettings() {
+  try {
+    const { data } = await apiService.auth.getSettings()
+    return data.settings
+  } catch (err) {
+    const errorMessage = err.response?.data?.error || 'Error al obtener la configuración'
+    error.value = errorMessage
+    throw new Error(errorMessage)
+  }
+}
+
+async function updateSettings(settingsData) {
+  loading.value = true
+  error.value = null
+
+  try {
+    await apiService.auth.updateSettings(settingsData)
+    return { success: true }
+  } catch (err) {
+    const errorMessage = err.response?.data?.error || 'Error al actualizar la configuración'
+    error.value = errorMessage
+    return { success: false, error: errorMessage }
+  } finally {
+    loading.value = false
+  }
+}
+
+// ==================== MÉTODOS PARA SESIONES (NUEVOS) ====================
+async function getActiveSessions() {
+  try {
+    const { data } = await apiService.auth.getActiveSessions()
+    return data.sessions
+  } catch (err) {
+    const errorMessage = err.response?.data?.error || 'Error al obtener sesiones activas'
+    error.value = errorMessage
+    throw new Error(errorMessage)
+  }
+}
+
+async function terminateSession(sessionId) {
+  try {
+    await apiService.auth.terminateSession(sessionId)
+    return { success: true }
+  } catch (err) {
+    const errorMessage = err.response?.data?.error || 'Error al terminar la sesión'
+    error.value = errorMessage
+    return { success: false, error: errorMessage }
+  }
+}
 
   return {
     // Estado
@@ -362,6 +433,11 @@ async function validateResetToken(token) {
     updateUser,
     clearError,
     initializeAuth,
+    updateProfile,
+  getSettings,
+  updateSettings,
+  getActiveSessions,
+  terminateSession,
 
     // Métodos de permisos
     hasPermission,

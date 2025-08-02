@@ -8,6 +8,7 @@ import { useEnvigoToast } from '../services/toast.service'
 import wsManager from '../services/websocket.service'
 import UtilsService, { useDebouncedSearch, useCache } from '../services/utils.service'
 import { emitter } from '../services/eventBus.service';
+
 // ==================== SETUP ====================
 const emit = defineEmits(['toggle-mobile-menu'])
 const route = useRoute()
@@ -595,6 +596,26 @@ function formatRole(role) {
     'company_employee': 'Empleado'
   }
   return roles[role] || role
+}
+const goToProfile = () => {
+  showUserMenu.value = false
+  
+  if (auth.isAdmin) {
+    router.push({ name: 'AdminProfile' })
+  } else {
+    router.push({ name: 'Profile' })
+  }
+}
+
+// Función para ir a configuración
+const goToSettings = () => {
+  showUserMenu.value = false
+  
+  if (auth.isAdmin) {
+    router.push({ name: 'AdminSettings' })
+  } else {
+    router.push({ name: 'Settings' })
+  }
 }
 
 function getNotificationIcon(type) {

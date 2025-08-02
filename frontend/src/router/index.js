@@ -76,10 +76,16 @@ const routes = [
         meta: { roles: ['company_owner', 'company_employee'], requiresCompany: true }
       },
       {
-  path: '/driver-payments',
-  name: 'DriverPayments',
-  component: () => import('../components/DriverPayments.vue'),
-  meta: { requiresAuth: true, roles: ['admin', 'company_owner'] }
+  path: 'profile',
+  name: 'Profile',
+  component: () => import('../components/Profile.vue'),
+  meta: { roles: ['company_owner', 'company_employee'], requiresCompany: true }
+},
+{
+  path: 'settings',
+  name: 'Settings',
+  component: () => import('../components/Settings.vue'),
+  meta: { roles: ['company_owner', 'company_employee'], requiresCompany: true }
 },
       {
   path: 'manifests',
@@ -101,6 +107,18 @@ const routes = [
         component: () => import('../views/AdminDashboard.vue'),
         meta: { roles: ['admin'] }
       },
+      {
+  path: 'admin/profile',
+  name: 'AdminProfile',
+  component: () => import('../components/Profile.vue'),
+  meta: { roles: ['admin'] }
+},
+{
+  path: 'admin/settings',
+  name: 'AdminSettings',
+  component: () => import('../components/Settings.vue'),
+  meta: { roles: ['admin'] }
+},
       {
         path: 'admin/companies',
         name: 'AdminCompanies',
