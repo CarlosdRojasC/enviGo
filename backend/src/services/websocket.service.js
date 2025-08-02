@@ -52,6 +52,13 @@ class WebSocketService extends EventEmitter {
       ttl: 5 * 60 * 1000 // 5 minutos
     };
 
+    // 🔧 FIX: Inicializar intervals (ESTO FALTABA!)
+    this.intervals = {
+      heartbeat: null,
+      cleanup: null,
+      stats: null
+    };
+
     // Métricas avanzadas
     this.metrics = {
       connections: {
@@ -104,6 +111,10 @@ class WebSocketService extends EventEmitter {
       }
     };
 
+    // 🔧 FIX: Inicializar estructuras para notificaciones inteligentes
+    this.pendingNotifications = new Map();
+    this.notificationRates = new Map();
+
     // Inicializar
     this.setupEventHandlers();
     this.startHeartbeat();
@@ -113,7 +124,6 @@ class WebSocketService extends EventEmitter {
     console.log('🚀 WebSocket Service iniciado para PRODUCCIÓN');
     console.log(`📊 Config: heartbeat=${this.config.heartbeat.interval}ms, rate=${this.config.rateLimit.messagesPerMinute}/min`);
   }
-
   // Verificación avanzada para producción
   verifyClient(info) {
     try {
