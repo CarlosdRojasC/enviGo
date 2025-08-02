@@ -323,20 +323,18 @@ requestPasswordReset = async (req, res) => {
         return;
       }
 
-      const transporter = nodemailer.createTransporter({
-        host: process.env.SMTP_HOST,
-        port: process.env.SMTP_PORT,
-        secure: process.env.SMTP_SECURE === 'true',
-        auth: {
-          user: process.env.SMTP_USER,
-          pass: process.env.SMTP_PASS
-        }
-      });
+       const transporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        user: process.env.EMAIL_USER,    // Ahora usas la variable correcta
+        pass: process.env.EMAIL_PASSWORD // Ahora usas la variable correcta
+      }
+    });
 
       const resetUrl = `${process.env.FRONTEND_URL}/reset-password?token=${token}`;
 
       const mailOptions = {
-        from: `"enviGo" <${process.env.SMTP_FROM}>`,
+        from: `"enviGo" <${process.env.EMAIL_USER}>`,
         to: email,
         subject: 'Restablecer tu contraseña de enviGo',
         html: `
