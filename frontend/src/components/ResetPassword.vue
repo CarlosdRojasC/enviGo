@@ -387,27 +387,45 @@ onMounted(() => {
 </script>
 
 <style scoped>
-/* Reutilizamos los estilos base de login.vue y agregamos específicos */
+/* ==================== RESETPASSWORD - PARTE 1: LAYOUT PRINCIPAL ==================== */
+
+/* Layout principal con gradiente de enviGo */
 .auth-main {
   min-height: 100vh;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, var(--dark) 0%, var(--dark-lighter) 50%, #4A4A4A 100%);
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 20px;
+  font-family: var(--font-family);
 }
 
+/* Contenedor principal */
 .auth-container {
-  background: white;
+  background: var(--white);
   border-radius: 16px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--shadow-hover);
   padding: 40px;
   width: 100%;
   max-width: 480px;
   animation: slideUp 0.6s ease-out;
+  border: 1px solid rgba(139, 197, 63, 0.1);
 }
 
-/* Logo y header */
+/* Animación de entrada */
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+/* ==================== RESETPASSWORD - PARTE 2: HEADER Y LOGO ENVIGO ==================== */
+
+/* Header principal */
 .auth-header {
   text-align: center;
   margin-bottom: 32px;
@@ -417,62 +435,89 @@ onMounted(() => {
   margin-bottom: 24px;
 }
 
+/* Logo con colores de enviGo */
 .logo {
   display: inline-flex;
   align-items: center;
   gap: 8px;
   font-size: 28px;
   font-weight: 700;
+  transition: transform 0.3s ease;
 }
 
+.logo:hover {
+  transform: scale(1.05);
+}
+
+/* Icono del logo con gradiente de enviGo */
 .logo-icon {
   font-size: 32px;
+  background: var(--gradient);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  filter: drop-shadow(0 2px 4px rgba(139, 197, 63, 0.3));
 }
 
+/* Texto del logo */
 .logo-text {
-  color: #1f2937;
+  color: var(--dark);
 }
 
+/* Acento del logo en verde enviGo */
 .logo-accent {
-  color: #667eea;
+  color: var(--primary);
+  background: var(--gradient);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
+/* Título principal */
 .auth-title {
   font-size: 28px;
   font-weight: 700;
-  color: #1f2937;
+  color: var(--dark);
   margin: 0 0 8px 0;
+  letter-spacing: -0.025em;
 }
 
+/* Subtítulo */
 .auth-subtitle {
-  color: #6b7280;
+  color: var(--gray);
   font-size: 16px;
   margin: 0;
+  line-height: 1.5;
 }
+/* ==================== RESETPASSWORD - PARTE 3: FORMULARIO E INPUTS ==================== */
 
-/* Formulario */
+/* Formulario principal */
 .auth-form {
   display: flex;
   flex-direction: column;
   gap: 24px;
 }
 
+/* Grupos de campos */
 .form-group {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 
+/* Etiquetas */
 .form-label {
   font-weight: 600;
-  color: #374151;
+  color: var(--dark);
   font-size: 14px;
 }
 
+/* Contenedor de inputs */
 .input-container {
   position: relative;
 }
 
+/* Inputs principales con colores de enviGo */
 .form-input {
   width: 100%;
   padding: 14px 16px 14px 48px;
@@ -480,31 +525,38 @@ onMounted(() => {
   border-radius: 8px;
   font-size: 16px;
   transition: all 0.2s;
-  background: white;
+  background: var(--white);
   box-sizing: border-box;
+  font-family: var(--font-family);
 }
 
+/* Focus con colores de enviGo */
 .form-input:focus {
   outline: none;
-  border-color: #667eea;
-  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(139, 197, 63, 0.15);
 }
 
+/* Input con error */
 .form-input.input-error {
   border-color: #ef4444;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);
 }
 
+/* Input de contraseña */
 .password-input {
   padding-right: 48px;
 }
 
+/* Iconos de input */
 .input-icon {
   position: absolute;
   left: 16px;
   top: 50%;
   transform: translateY(-50%);
-  color: #9ca3af;
+  color: var(--gray);
   pointer-events: none;
+  transition: color 0.2s ease;
 }
 
 .input-icon svg {
@@ -512,6 +564,12 @@ onMounted(() => {
   height: 20px;
 }
 
+/* Cambiar color del icono en focus */
+.form-input:focus + .input-icon {
+  color: var(--primary);
+}
+
+/* Botón toggle de contraseña */
 .password-toggle {
   position: absolute;
   right: 16px;
@@ -522,24 +580,31 @@ onMounted(() => {
   cursor: pointer;
   padding: 4px;
   border-radius: 4px;
-  transition: background-color 0.2s;
+  transition: all 0.2s ease;
 }
 
 .password-toggle:hover {
-  background-color: #f3f4f6;
+  background-color: rgba(139, 197, 63, 0.1);
 }
 
 .password-toggle svg {
   width: 18px;
   height: 18px;
-  color: #6b7280;
+  color: var(--gray);
+  transition: color 0.2s ease;
 }
 
-/* Password strength */
+.password-toggle:hover svg {
+  color: var(--primary);
+}
+/* ==================== RESETPASSWORD - PARTE 4: FORTALEZA DE CONTRASEÑA ==================== */
+
+/* Indicador de fortaleza */
 .password-strength {
   margin-top: 8px;
 }
 
+/* Medidor de fortaleza */
 .strength-meter {
   height: 4px;
   background-color: #e5e7eb;
@@ -548,28 +613,31 @@ onMounted(() => {
   margin-bottom: 4px;
 }
 
+/* Barra de fortaleza con colores progresivos */
 .strength-bar {
   height: 100%;
   transition: all 0.3s ease;
   border-radius: 2px;
 }
 
+/* Niveles de fortaleza con colores enviGo progresivos */
 .strength-weak { 
-  background-color: #ef4444; 
+  background: linear-gradient(135deg, #ef4444 0%, #f87171 100%);
 }
 
 .strength-fair { 
-  background-color: #f59e0b; 
+  background: linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%);
 }
 
 .strength-good { 
-  background-color: #3b82f6; 
+  background: linear-gradient(135deg, #3b82f6 0%, #60a5fa 100%);
 }
 
 .strength-strong { 
-  background-color: #10b981; 
+  background: var(--gradient); /* Usar el gradiente de enviGo para contraseñas fuertes */
 }
 
+/* Texto de fortaleza */
 .strength-text {
   font-size: 12px;
   font-weight: 500;
@@ -578,23 +646,27 @@ onMounted(() => {
 .strength-text.strength-weak { color: #ef4444; }
 .strength-text.strength-fair { color: #f59e0b; }
 .strength-text.strength-good { color: #3b82f6; }
-.strength-text.strength-strong { color: #10b981; }
+.strength-text.strength-strong { color: var(--primary); } /* Verde enviGo para fuerte */
+/* ==================== RESETPASSWORD - PARTE 5: REQUISITOS DE CONTRASEÑA ==================== */
 
-/* Password requirements */
+/* Contenedor de requisitos */
 .password-requirements {
-  background-color: #f9fafb;
-  border: 1px solid #e5e7eb;
+  background: rgba(139, 197, 63, 0.05);
+  border: 1px solid rgba(139, 197, 63, 0.2);
   border-radius: 8px;
   padding: 16px;
+  border-left: 4px solid var(--primary);
 }
 
+/* Título de requisitos */
 .requirements-title {
   font-size: 14px;
   font-weight: 600;
-  color: #374151;
+  color: var(--dark);
   margin: 0 0 12px 0;
 }
 
+/* Lista de requisitos */
 .requirements-list {
   list-style: none;
   padding: 0;
@@ -604,26 +676,43 @@ onMounted(() => {
   gap: 8px;
 }
 
+/* Items de requisitos */
 .requirements-list li {
   display: flex;
   align-items: center;
   gap: 8px;
   font-size: 13px;
-  color: #6b7280;
-  transition: color 0.2s;
+  color: var(--gray);
+  transition: all 0.2s ease;
 }
 
+/* Requisito cumplido con color de enviGo */
 .requirements-list li.requirement-met {
-  color: #059669;
+  color: var(--accent);
+  background: rgba(139, 197, 63, 0.1);
+  padding: 4px 8px;
+  border-radius: 4px;
 }
 
+/* Iconos de requisitos */
 .requirements-list li svg {
   width: 16px;
   height: 16px;
   flex-shrink: 0;
 }
 
-/* Mensajes */
+/* Icono de requisito cumplido */
+.requirements-list li.requirement-met svg {
+  color: var(--primary);
+}
+
+/* Icono de requisito no cumplido */
+.requirements-list li:not(.requirement-met) svg {
+  color: #ef4444;
+}
+/* ==================== RESETPASSWORD - PARTE 6: MENSAJES Y ESTADOS ==================== */
+
+/* Mensajes base */
 .error-message, 
 .success-message, 
 .warning-message, 
@@ -635,32 +724,42 @@ onMounted(() => {
   border-radius: 8px;
   font-size: 14px;
   margin-bottom: 24px;
+  animation: slideIn 0.3s ease-out;
 }
 
+/* Mensaje de error */
 .error-message {
   color: #b91c1c;
   background-color: #fef2f2;
   border: 1px solid #fecaca;
+  border-left: 4px solid #ef4444;
 }
 
+/* Mensaje de éxito con colores de enviGo */
 .success-message {
-  color: #166534;
-  background-color: #f0fdf4;
-  border: 1px solid #bbf7d0;
+  color: var(--accent);
+  background: rgba(139, 197, 63, 0.1);
+  border: 1px solid rgba(139, 197, 63, 0.3);
+  border-left: 4px solid var(--primary);
 }
 
+/* Mensaje de advertencia */
 .warning-message {
   color: #92400e;
   background-color: #fffbeb;
   border: 1px solid #fed7aa;
+  border-left: 4px solid #f59e0b;
 }
 
+/* Mensaje de carga con toque de enviGo */
 .loading-message {
-  color: #1d4ed8;
-  background-color: #eff6ff;
-  border: 1px solid #bfdbfe;
+  color: var(--primary-dark);
+  background: rgba(139, 197, 63, 0.05);
+  border: 1px solid rgba(139, 197, 63, 0.2);
+  border-left: 4px solid var(--primary);
 }
 
+/* Iconos de mensajes */
 .error-icon svg, 
 .success-icon svg, 
 .warning-icon svg {
@@ -670,6 +769,11 @@ onMounted(() => {
   margin-top: 1px;
 }
 
+.success-icon svg {
+  color: var(--primary);
+}
+
+/* Títulos y textos */
 .warning-title, 
 .error-title {
   font-weight: 600;
@@ -681,24 +785,41 @@ onMounted(() => {
   margin-bottom: 12px;
 }
 
+/* Enlaces */
 .link-button {
-  color: #667eea;
+  color: var(--primary);
   text-decoration: none;
   font-weight: 500;
   font-size: 14px;
+  transition: color 0.2s ease;
 }
 
 .link-button:hover {
+  color: var(--primary-dark);
   text-decoration: underline;
 }
 
+/* Errores de campo */
 .field-error {
   color: #ef4444;
   font-size: 12px;
   font-weight: 500;
 }
 
-/* Botones */
+/* Animación de mensajes */
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+/* ==================== RESETPASSWORD - PARTE 7: BOTONES CON GRADIENTE ENVIGO ==================== */
+
+/* Botón principal de submit */
 .submit-btn {
   width: 100%;
   padding: 16px 24px;
@@ -707,27 +828,36 @@ onMounted(() => {
   cursor: pointer;
   font-size: 16px;
   font-weight: 600;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
+  background: var(--gradient);
+  color: var(--white);
   transition: all 0.2s ease;
   position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
+  font-family: var(--font-family);
+  box-shadow: var(--shadow-green);
 }
 
+/* Hover del botón principal */
 .submit-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary) 100%);
   transform: translateY(-1px);
-  box-shadow: 0 8px 25px rgba(102, 126, 234, 0.3);
+  box-shadow: 0 8px 25px rgba(139, 197, 63, 0.4);
 }
 
+/* Estado deshabilitado */
 .submit-btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
   transform: none;
+  background: var(--gray-light);
+  color: var(--gray);
+  box-shadow: none;
 }
 
+/* Spinner del botón */
 .btn-spinner {
   width: 18px;
   height: 18px;
@@ -737,56 +867,84 @@ onMounted(() => {
   animation: spin 1s linear infinite;
 }
 
+/* Botón primario (para éxito) */
 .primary-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   padding: 12px 24px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
+  background: var(--gradient);
+  color: var(--white);
   text-decoration: none;
   border-radius: 8px;
   font-weight: 600;
   transition: all 0.2s ease;
+  font-family: var(--font-family);
+  box-shadow: var(--shadow-green);
 }
 
 .primary-btn:hover {
+  background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary) 100%);
   transform: translateY(-1px);
-  box-shadow: 0 8px 25px rgba(102, 126, 234, 0.3);
+  box-shadow: 0 8px 25px rgba(139, 197, 63, 0.4);
 }
 
-/* Success container */
+/* Animación de rotación */
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+/* ==================== RESETPASSWORD - PARTE 8: ESTADOS DE ÉXITO Y FOOTER ==================== */
+
+/* Contenedor de éxito */
 .success-container {
   text-align: center;
   padding: 40px 20px;
+  animation: successScale 0.6s ease-out;
 }
 
+/* Icono grande de éxito con colores de enviGo */
 .success-icon-large {
   width: 80px;
   height: 80px;
-  background-color: #dcfce7;
+  background: rgba(139, 197, 63, 0.1);
+  border: 3px solid rgba(139, 197, 63, 0.3);
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   margin: 0 auto 24px;
+  position: relative;
+}
+
+.success-icon-large::before {
+  content: '';
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+  background: var(--gradient);
+  opacity: 0.2;
+  z-index: -1;
 }
 
 .success-icon-large svg {
   width: 40px;
   height: 40px;
-  color: #16a34a;
+  color: var(--primary);
 }
 
+/* Título de éxito */
 .success-container h2 {
   font-size: 24px;
   font-weight: 700;
-  color: #1f2937;
+  color: var(--dark);
   margin: 0 0 12px 0;
 }
 
+/* Texto de éxito */
 .success-container p {
-  color: #6b7280;
+  color: var(--gray);
   font-size: 16px;
   margin: 0 0 32px 0;
   line-height: 1.5;
@@ -798,47 +956,49 @@ onMounted(() => {
   margin-top: 24px;
 }
 
+/* Link de regreso */
 .back-link {
-  color: #6b7280;
+  color: var(--gray);
   text-decoration: none;
   font-size: 14px;
   font-weight: 500;
-  transition: color 0.2s;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-radius: 6px;
 }
 
 .back-link:hover {
-  color: #667eea;
+  color: var(--primary);
+  background: rgba(139, 197, 63, 0.1);
 }
 
-/* Spinner */
+/* Spinner de carga */
 .spinner {
   width: 20px;
   height: 20px;
   border: 2px solid #e5e7eb;
-  border-top: 2px solid #667eea;
+  border-top: 2px solid var(--primary);
   border-radius: 50%;
   animation: spin 1s linear infinite;
 }
 
-/* Animaciones */
-@keyframes slideUp {
+/* Animación de éxito */
+@keyframes successScale {
   from {
     opacity: 0;
-    transform: translateY(30px);
+    transform: scale(0.9);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: scale(1);
   }
 }
+/* ==================== RESETPASSWORD - PARTE 9: RESPONSIVE Y MEJORAS FINALES ==================== */
 
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-/* Responsive */
+/* Responsive para móviles */
 @media (max-width: 640px) {
   .auth-container {
     padding: 24px;
@@ -855,6 +1015,99 @@ onMounted(() => {
   
   .logo-icon {
     font-size: 28px;
+  }
+  
+  .password-requirements {
+    padding: 12px;
+  }
+  
+  .requirements-list li {
+    font-size: 12px;
+  }
+  
+  .submit-btn {
+    padding: 14px 20px;
+  }
+}
+
+/* Estados de focus mejorados */
+.form-input:focus,
+.submit-btn:focus,
+.primary-btn:focus,
+.back-link:focus,
+.password-toggle:focus {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+/* Modo de movimiento reducido */
+@media (prefers-reduced-motion: reduce) {
+  .auth-container,
+  .success-container,
+  .error-message,
+  .success-message,
+  .warning-message,
+  .loading-message {
+    animation: none;
+  }
+  
+  .submit-btn:hover,
+  .primary-btn:hover {
+    transform: none;
+  }
+}
+
+/* Alto contraste */
+@media (prefers-contrast: high) {
+  .logo-icon,
+  .logo-accent {
+    background: var(--dark);
+    -webkit-background-clip: unset;
+    -webkit-text-fill-color: unset;
+    color: var(--dark);
+  }
+  
+  .password-requirements {
+    border: 2px solid var(--primary);
+  }
+  
+  .success-message {
+    border: 2px solid var(--primary);
+  }
+}
+
+/* Pantallas grandes */
+@media (min-width: 1024px) {
+  .auth-container:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 20px 40px rgba(139, 197, 63, 0.15);
+  }
+  
+  .auth-container {
+    transition: all 0.3s ease;
+  }
+}
+
+/* Mejoras de accesibilidad */
+.password-toggle:focus-visible,
+.submit-btn:focus-visible,
+.primary-btn:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+/* Estados hover solo en dispositivos que lo soportan */
+@media (hover: hover) {
+  .logo:hover {
+    transform: scale(1.05);
+  }
+  
+  .password-toggle:hover {
+    background-color: rgba(139, 197, 63, 0.1);
+  }
+  
+  .submit-btn:hover:not(:disabled) {
+    transform: translateY(-1px);
   }
 }
 </style>
