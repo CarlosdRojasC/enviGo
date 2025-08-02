@@ -318,10 +318,6 @@ requestPasswordReset = async (req, res) => {
   sendPasswordResetEmail = async(email, token, fullName) => {
     try {
       // Si no tienes configurado SMTP, simplemente log por ahora
-      if (!process.env.SMTP_HOST) {
-        console.log(`Password reset solicitado para ${email} con token: ${token}`);
-        return;
-      }
 
        const transporter = nodemailer.createTransport({
       service: 'gmail',
