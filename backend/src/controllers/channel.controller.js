@@ -243,26 +243,18 @@ async create(req, res) {
         };
 
         // Añadir credenciales solo si NO es MercadoLibre
-        if (channel_type !== CHANNEL_TYPES.MERCADOLIBRE) {
-    if (channel_type === CHANNEL_TYPES.JUMPSELLER) {
-        // Jumpseller solo requiere api_key
-        if (!api_key) {
-            return res.status(400).json({ 
-                error: 'El Token de API es obligatorio para Jumpseller.' 
-            });
-        }
-        channelPayload.api_key = api_key.trim();
-    } else {
-        // Otros canales (Shopify, WooCommerce) requieren api_key y api_secret
-        if (!api_key || !api_secret) {
-            return res.status(400).json({ 
-                error: `El canal de tipo '${channel_type}' requiere credenciales de API.` 
-            });
-        }
-        channelPayload.api_key = api_key.trim();
-        channelPayload.api_secret = api_secret.trim();
+if (channel_type !== CHANNEL_TYPES.MERCADOLIBRE && channel_type !== CHANNEL_TYPES.JUMPSELLER) {
+    // Solo Shopify y WooCommerce requieren credenciales iniciales
+    if (!api_key || !api_secret) {
+        return res.status(400).json({ 
+            error: `El canal de tipo '${channel_type}' requiere credenciales de API.` 
+        });
     }
+    channelPayload.api_key = api_key.trim();
+    channelPayload.api_secret = api_secret.trim();
 }
+
+// Para canales OAuth2 (MercadoLibre y Jumpseller), las credenciales se configuran después de la autorización
 
         // Crear el canal
         const channel = new Channel(channelPayload);
@@ -318,7 +310,43 @@ async create(req, res) {
                 });
             }
         }
-
+// Después de crear el canal, antes de la respuesta final:
+if (channel.channel_type === CHANNEL_TYPES.JUMPSELLER) {
+    try {
+        const authorizationUrl = JumpsellerService.getAuthorizationUrl(channel._id);
+        
+        console.log(`🔐 [Jumpseller] URL de autorización generada para canal ${channel._id}`);
+        
+        return res.status(201).json({
+            success: true,
+            message: 'Canal de Jumpseller creado exitosamente. Procede con la autorización.',
+            channel: {
+                id: channel._id,
+                channel_name: channel.channel_name,
+                channel_type: channel.channel_type,
+                store_url: channel.store_url,
+                sync_status: channel.sync_status,
+                created_at: channel.created_at
+            },
+            authorizationUrl,
+            next_steps: [
+                'Haz clic en "Autorizar" para conectar con Jumpseller',
+                'Inicia sesión en tu cuenta de Jumpseller',
+                'Autoriza el acceso a enviGo',
+                'Serás redirigido de vuelta a la plataforma'
+            ]
+        });
+    } catch (authError) {
+        console.error('❌ [Jumpseller] Error generando URL de autorización:', authError);
+        
+        await Channel.findByIdAndDelete(channel._id);
+        
+        return res.status(500).json({ 
+            error: 'Error al generar la URL de autorización de Jumpseller.',
+            details: authError.message
+        });
+    }
+}
         // Respuesta para otros tipos de canal
         res.status(201).json({ 
             success: true,
@@ -619,7 +647,65 @@ async handleMLCallback(req, res) {
   }
 }
 
+// En channel.controller.js, agregar método:
+async handleJumpsellerCallback(req, res) {
+    try {
+        const { code, state, error: oauthError } = req.query;
+        
+        if (oauthError) {
+            return res.status(400).json({ 
+                error: `Error en autorización: ${oauthError}` 
+            });
+        }
 
+        if (!code || !state) {
+            return res.status(400).json({ 
+                error: 'Código de autorización o state faltante' 
+            });
+        }
+
+        // state contiene el ID del canal
+        const channel = await Channel.findById(state);
+        if (!channel) {
+            return res.status(404).json({ 
+                error: 'Canal no encontrado' 
+            });
+        }
+
+        // Intercambiar código por tokens
+        const tokens = await JumpsellerService.exchangeCodeForTokens(code);
+        
+        // Guardar tokens en el canal
+        channel.api_key = tokens.access_token;
+        channel.settings = {
+            ...channel.settings,
+            refresh_token: tokens.refresh_token,
+            expires_in: tokens.expires_in,
+            scope: tokens.scope,
+            oauth_configured: true,
+            token_updated_at: new Date()
+        };
+        channel.sync_status = 'success';
+        
+        await channel.save();
+
+        // Probar conexión
+        const testResult = await JumpsellerService.testConnection(channel);
+        
+        if (testResult.success) {
+            console.log(`✅ [Jumpseller] Canal ${channel._id} autorizado exitosamente`);
+            
+            // Redirigir al frontend con éxito
+            res.redirect(`${process.env.FRONTEND_URL}/dashboard/channels?jumpseller_success=true&channel_id=${channel._id}`);
+        } else {
+            throw new Error(testResult.message);
+        }
+
+    } catch (error) {
+        console.error('❌ [Jumpseller] Error en callback:', error);
+        res.redirect(`${process.env.FRONTEND_URL}/dashboard/channels?jumpseller_error=${encodeURIComponent(error.message)}`);
+    }
+}
   // NUEVO: Obtener historial de sincronizaciones
   async getSyncLogs(req, res) {
     try {

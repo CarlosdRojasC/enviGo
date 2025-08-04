@@ -2,8 +2,8 @@
 
 const express = require('express');
 const router = express.Router();
-const ChannelController = require('../controllers/channel.controller');
 const { authenticateToken, isAdmin } = require('../middlewares/auth.middleware');
+const ChannelController = require('../controllers/channel.controller');
 
 // Todas las rutas requieren autenticación
 router.use(authenticateToken);
@@ -44,5 +44,6 @@ router.post('/mercadolibre/authorize', authenticateToken, ChannelController.getM
 
 // Ruta para manejar el callback de Mercado Libre después de la autorización
 router.post('/mercadolibre/callback', authenticateToken, ChannelController.handleMLCallback);
-
+// En las rutas (routes/channels.js):
+router.get('/jumpseller/callback', authenticateToken, ChannelController.handleJumpsellerCallback.bind(ChannelController));
 module.exports = router;
