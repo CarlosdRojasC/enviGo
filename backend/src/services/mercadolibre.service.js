@@ -266,7 +266,7 @@ static async syncOrders(channelId, options = {}) {
 
   try {
     // Obtener access token
-    const accessToken = await this.getValidAccessToken(channel);
+const accessToken = await this.getAccessToken(channel);
     
     // Construir URL de la API de pedidos
     const apiUrl = `${this.API_BASE_URL}/orders/search`;
@@ -334,19 +334,22 @@ static async syncOrders(channelId, options = {}) {
     throw error;
   }
 }
-  static async getValidAccessToken(channel) {
-    console.log('🔑 [ML Auth] Verificando access token...');
-    
-    if (!channel.settings?.access_token) {
-      throw new Error('Canal no tiene access token configurado');
-    }
-
-    // Por ahora usar el token actual (más adelante agregar lógica de refresh)
-    const accessToken = channel.settings.access_token;
-    
-    console.log('✅ [ML Auth] Access token obtenido');
-    return accessToken;
+static async getValidAccessToken(channel) {
+  console.log('🔑 [ML Auth] Verificando access token...');
+  
+  if (!channel.settings?.access_token) {
+    throw new Error('Canal no tiene access token configurado. Requiere reautorización.');
   }
+
+  // ✅ USAR LA LÓGICA DE RENOVACIÓN QUE YA TIENES EN getAccessToken
+  try {
+    return await this.getAccessToken(channel);
+  } catch (error) {
+    console.error('❌ [ML Auth] Error obteniendo token válido:', error.message);
+    throw new Error('Token de MercadoLibre expirado. Reautoriza el canal desde la página de canales.');
+  }
+}
+
 
 static async processOrder(mlOrder, channel) {
   console.log(`📦 [ML Process] Procesando pedido ${mlOrder.id}`);
