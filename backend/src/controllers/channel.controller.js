@@ -243,7 +243,10 @@ async create(req, res) {
         };
 
         // Añadir credenciales solo si NO es MercadoLibre
-if (channel_type !== CHANNEL_TYPES.MERCADOLIBRE && channel_type !== CHANNEL_TYPES.JUMPSELLER) {
+// Añadir credenciales solo si NO requiere OAuth2
+if (channel_type !== CHANNEL_TYPES.MERCADOLIBRE && 
+    channel_type !== CHANNEL_TYPES.JUMPSELLER && 
+    channel_type !== CHANNEL_TYPES.GENERAL_STORE) {
     // Solo Shopify y WooCommerce requieren credenciales iniciales
     if (!api_key || !api_secret) {
         return res.status(400).json({ 
@@ -253,6 +256,7 @@ if (channel_type !== CHANNEL_TYPES.MERCADOLIBRE && channel_type !== CHANNEL_TYPE
     channelPayload.api_key = api_key.trim();
     channelPayload.api_secret = api_secret.trim();
 }
+
 
 // Para canales OAuth2 (MercadoLibre y Jumpseller), las credenciales se configuran después de la autorización
 
