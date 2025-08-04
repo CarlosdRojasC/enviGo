@@ -640,63 +640,79 @@ async handleMLCallback(req, res) {
 }
 
 // En channel.controller.js, agregar método:
+// Después del método handleMLCallback, agregar:
+
 async handleJumpsellerCallback(req, res) {
-    try {
-        const { code, state, error: oauthError } = req.query;
-        
-        if (oauthError) {
-            return res.status(400).json({ 
-                error: `Error en autorización: ${oauthError}` 
-            });
-        }
-
-        if (!code || !state) {
-            return res.status(400).json({ 
-                error: 'Código de autorización o state faltante' 
-            });
-        }
-
-        // state contiene el ID del canal
-        const channel = await Channel.findById(state);
-        if (!channel) {
-            return res.status(404).json({ 
-                error: 'Canal no encontrado' 
-            });
-        }
-
-        // Intercambiar código por tokens
-        const tokens = await JumpsellerService.exchangeCodeForTokens(code);
-        
-        // Guardar tokens en el canal
-        channel.api_key = tokens.access_token;
-        channel.settings = {
-            ...channel.settings,
-            refresh_token: tokens.refresh_token,
-            expires_in: tokens.expires_in,
-            scope: tokens.scope,
-            oauth_configured: true,
-            token_updated_at: new Date()
-        };
-        channel.sync_status = 'success';
-        
-        await channel.save();
-
-        // Probar conexión
-        const testResult = await JumpsellerService.testConnection(channel);
-        
-        if (testResult.success) {
-            console.log(`✅ [Jumpseller] Canal ${channel._id} autorizado exitosamente`);
-            
-            // Redirigir al frontend con éxito
-            res.redirect(`${process.env.FRONTEND_URL}/dashboard/channels?jumpseller_success=true&channel_id=${channel._id}`);
-        } else {
-            throw new Error(testResult.message);
-        }
-
-    } catch (error) {
-        console.error('❌ [Jumpseller] Error en callback:', error);
-        res.redirect(`${process.env.FRONTEND_URL}/dashboard/channels?jumpseller_error=${encodeURIComponent(error.message)}`);
+  try {
+    const { code, state, error: oauthError } = req.query;
+    
+    if (oauthError) {
+      return res.status(400).json({ 
+        error: `Error en autorización: ${oauthError}` 
+      });
     }
+
+    if (!code || !state) {
+      return res.status(400).json({ 
+        error: 'Código de autorización o state faltante' 
+      });
+    }
+
+    // state contiene el ID del canal
+    const channel = await Channel.findById(state);
+    if (!channel) {
+      return res.status(404).json({ 
+        error: 'Canal no encontrado' 
+      });
+    }
+
+    // Intercambiar código por tokens
+    const tokens = await JumpsellerService.exchangeCodeForTokens(code);
+    
+    // Guardar tokens en el canal
+    channel.api_key = tokens.access_token;
+    channel.settings = {
+      ...channel.settings,
+      refresh_token: tokens.refresh_token,
+      expires_in: tokens.expires_in,
+      scope: tokens.scope,
+      oauth_configured: true,
+      token_updated_at: new Date()
+    };
+    channel.sync_status = 'success';
+    
+    await channel.save();
+
+    // Probar conexión
+    const testResult = await JumpsellerService.testConnection(channel);
+    
+    if (testResult.success) {
+      console.log(`✅ [Jumpseller] Canal ${channel._id} autorizado exitosamente`);
+      
+      // Redirigir al frontend con éxito
+      res.redirect(`${process.env.FRONTEND_URL}/dashboard/channels?jumpseller_success=true&channel_id=${channel._id}`);
+    } else {
+      throw new Error(testResult.message);
+    }
+
+  } catch (error) {
+    console.error('❌ [Jumpseller] Error en callback:', error);
+    res.redirect(`${process.env.FRONTEND_URL}/dashboard/channels?jumpseller_error=${encodeURIComponent(error.message)}`);
+  }
+}
+
+// Y agregar método para generar URL de autorización:
+async getJumpsellerAuthorizationUrl(req, res) {
+  try {
+    const { channelId } = req.body;
+    
+    const authUrl = JumpsellerService.getAuthorizationUrl(channelId);
+    
+    res.status(200).json({ authUrl });
+  } catch (error) {
+    console.error('[Controller] Error obteniendo URL de autorización de Jumpseller:', error);
+    res.status(500).json({ error: 'No se pudo generar la URL de autorización.' });
+  }
 }
   // NUEVO: Obtener historial de sincronizaciones
   async getSyncLogs(req, res) {
