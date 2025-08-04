@@ -377,9 +377,11 @@ static async processOrder(mlOrder, channel) {
     customer_phone: mlOrder.buyer?.phone || '',
     total_amount: mlOrder.total_amount || 0,
     shipping_cost: mlOrder.shipping?.cost || 0,
+    // ✅ CORRECCIÓN: Usar el método que SÍ existe
     status: MercadoLibreService.mapOrderStatus(mlOrder),
     order_date: new Date(mlOrder.date_created),
-    shipping_address: MercadoLibreService.extractShippingAddress(mlOrder),
+    // ✅ CORRECCIÓN: Extraer dirección directamente en lugar de usar método inexistente
+    shipping_address: MercadoLibreService.extractShippingAddressSimple(mlOrder),
     items: mlOrder.order_items?.map(item => ({
       name: item.item?.title || 'Producto ML',
       quantity: item.quantity || 1,
@@ -392,6 +394,27 @@ static async processOrder(mlOrder, channel) {
 
   console.log(`✅ [ML Process] Pedido ${mlOrder.id} creado exitosamente`);
   return newOrder;
+}
+
+// ✅ AGREGAR este nuevo método estático simple:
+static extractShippingAddressSimple(mlOrder) {
+  if (!mlOrder.shipping) {
+    return 'Sin información de envío';
+  }
+  
+  // Si hay información de dirección en el shipping
+  if (mlOrder.shipping.receiver_address) {
+    const addr = mlOrder.shipping.receiver_address;
+    let address = '';
+    
+    if (addr.street_name) address += addr.street_name;
+    if (addr.street_number) address += ` ${addr.street_number}`;
+    if (addr.comment) address += `, ${addr.comment}`;
+    
+    return address.trim() || 'Dirección no especificada';
+  }
+  
+  return 'Información de envío no disponible';
 }
   
   /**

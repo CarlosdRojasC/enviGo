@@ -50,8 +50,8 @@ router.get('/jumpseller/callback', (req, res, next) => {
   console.log('🔄 [DEBUG] Query params:', req.query);
   console.log('🔄 [DEBUG] Method exists:', typeof ChannelController.handleJumpsellerCallback);
   next();
-}, ChannelController.handleJumpsellerCallback.bind(ChannelController));
+}, authenticateToken, ChannelController.handleJumpsellerCallback.bind(ChannelController));
 // En routes/channels.js o donde tengas las rutas:
-router.post('/jumpseller/auth-url', ChannelController.getJumpsellerAuthorizationUrl.bind(ChannelController));
+router.post('/jumpseller/auth-url', authenticateToken, ChannelController.getJumpsellerAuthorizationUrl.bind(ChannelController));
 
 module.exports = router;
