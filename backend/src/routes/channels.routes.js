@@ -45,7 +45,8 @@ router.post('/mercadolibre/authorize', authenticateToken, ChannelController.getM
 // Ruta para manejar el callback de Mercado Libre después de la autorización
 router.post('/mercadolibre/callback', authenticateToken, ChannelController.handleMLCallback);
 // En las rutas (routes/channels.js):
-router.get('/jumpseller/callback', authenticateToken, ChannelController.handleJumpsellerCallback.bind(ChannelController));
+router.get('/jumpseller/callback', ChannelController.handleJumpsellerCallback.bind(ChannelController));
+
 // En routes/channels.js o donde tengas las rutas:
 router.post('/jumpseller/auth-url', authenticateToken, ChannelController.getJumpsellerAuthorizationUrl.bind(ChannelController));
 module.exports = router;
