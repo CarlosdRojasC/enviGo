@@ -301,13 +301,19 @@ const accessToken = await this.getAccessToken(channel);
 
     for (const mlOrder of orders) {
       try {
-        await this.processOrder(mlOrder, channel);
-        syncedCount++;
+        const result = await MercadoLibreService.processOrder(mlOrder, channel);
+        if (result !== null) {
+          syncedCount++;
+        } else {
+          console.log(`⏭️ [ML Sync] Pedido ${mlOrder.id} omitido (no es Flex)`);
+          // No contar como error, solo como omitido
+        }
       } catch (error) {
         console.error(`❌ [ML Sync] Error procesando pedido ${mlOrder.id}:`, error.message);
         errorCount++;
       }
     }
+
 
     // Actualizar última sincronización
     channel.last_sync_at = new Date();
@@ -353,6 +359,14 @@ static async getValidAccessToken(channel) {
 
 static async processOrder(mlOrder, channel) {
   console.log(`📦 [ML Process] Procesando pedido ${mlOrder.id}`);
+  
+  // ✅ FILTRO: Solo procesar pedidos Flex
+  if (!MercadoLibreService.isFlexOrder(mlOrder)) {
+    console.log(`⏭️ [ML Process] Pedido ${mlOrder.id} no es Flex, omitiendo...`);
+    return null; // Retornar null para que no se cuente como error
+  }
+  
+  console.log(`✅ [ML Process] Pedido ${mlOrder.id} es Flex, procesando...`);
   
   // Verificar si el pedido ya existe
   const existingOrder = await Order.findOne({
@@ -438,9 +452,9 @@ static extractShippingAddressSimple(mlOrder) {
     const mlOrder = orderResponse.data;
 
     // --- ✅ FILTRO PRINCIPAL PARA MERCADO LIBRE FLEX ---
-    if (mlOrder.shipping?.logistics_type !== 'self_service') {
-      console.log(`[ML Webhook] Pedido #${mlOrder.id} ignorado (Logística: ${mlOrder.shipping?.logistics_type}).`);
-      return true; // Es importante devolver true para que ML no reintente
+    if (!MercadoLibreService.isFlexOrder(mlOrder)) {
+      console.log(`[ML Webhook] Pedido #${mlOrder.id} ignorado (no es Flex).`);
+      return true;
     }
 
     const existingOrder = await Order.findOne({ channel_id: channelId, external_order_id: mlOrder.id.toString() });
@@ -512,21 +526,91 @@ static extractShippingAddressSimple(mlOrder) {
       return { address: 'Error al obtener dirección' };
     }
   }
-
+/**
+ * Verifica si un pedido es de tipo Flex
+ * @param {Object} mlOrder - Pedido de MercadoLibre
+ * @returns {boolean} - true si es Flex, false si no
+ */
+static isFlexOrder(mlOrder) {
+  // Un pedido es Flex si:
+  // 1. Tiene shipping y el shipping tiene logistic_type "flex" o "self_service"
+  // 2. O tiene tags que incluyen "flex"
+  // 3. O el shipping mode es "me2" (MercadoEnvios 2.0 que incluye Flex)
+  
+  if (mlOrder.shipping) {
+    // Verificar logistic_type (puede ser "flex" o "self_service")
+    if (mlOrder.shipping.logistic_type === 'flex' || 
+        mlOrder.shipping.logistic_type === 'self_service' ||
+        mlOrder.shipping.logistics_type === 'self_service') {
+      return true;
+    }
+    
+    // Verificar mode me2
+    if (mlOrder.shipping.mode === 'me2') {
+      return true;
+    }
+  }
+  
+  // Verificar tags
+  if (mlOrder.tags && Array.isArray(mlOrder.tags)) {
+    return mlOrder.tags.some(tag => 
+      tag.toLowerCase().includes('flex') || 
+      tag.toLowerCase().includes('me2') ||
+      tag.toLowerCase().includes('self_service')
+    );
+  }
+  
+  return false;
+}
   /**
    * Mapea los estados de Mercado Libre a los estados de tu sistema.
    */
-  static mapOrderStatus(mlOrder) {
-    if (mlOrder.shipping?.status) {
-      const statusMap = {
-        'pending': 'pending', 'handling': 'processing', 'ready_to_ship': 'processing',
-        'shipped': 'shipped', 'delivered': 'delivered', 'not_delivered': 'shipped',
-        'cancelled': 'cancelled',
-      };
-      return statusMap[mlOrder.shipping.status] || 'pending';
+static mapOrderStatus(mlOrder) {
+  console.log(`🔍 [ML Status] Procesando order: ${mlOrder.id}, status: ${mlOrder.status}, shipping: ${JSON.stringify(mlOrder.shipping?.status)}`);
+  
+  // PRIORIDAD 1: Estados de shipping (para envíos Flex)
+  if (mlOrder.shipping?.status) {
+    const statusMap = {
+      // Estados principales de MercadoLibre Flex según documentación
+      'pending': 'pending',                   // Pendiente
+      'handling': 'ready_for_pickup',         // Preparando - listo para recoger
+      'ready_to_ship': 'ready_for_pickup',   // Listo para enviar
+      'shipped': 'shipped',                   // Enviado (substatus puede ser null)
+      'out_for_delivery': 'out_for_delivery', // En camino para entrega (substatus del shipped)
+      'delivered': 'delivered',               // Entregado
+      'not_delivered': 'cancelled',           // No entregado - cancelar
+      'cancelled': 'cancelled',               // Cancelado
+    };
+    
+    const mappedStatus = statusMap[mlOrder.shipping.status];
+    if (mappedStatus) {
+      console.log(`📦 [ML Status] Shipping status ${mlOrder.shipping.status} -> ${mappedStatus}`);
+      return mappedStatus;
     }
-    return mlOrder.status === 'paid' ? 'processing' : 'pending';
   }
+  
+  // PRIORIDAD 2: Estados generales del pedido
+  if (mlOrder.status) {
+    const generalStatusMap = {
+      'confirmed': 'ready_for_pickup',        // Confirmado - listo para procesar
+      'payment_required': 'pending',          // Requiere pago
+      'payment_in_process': 'pending',        // Pago en proceso
+      'paid': 'ready_for_pickup',             // Pagado - listo para procesar
+      'cancelled': 'cancelled',               // Cancelado
+      'invalid': 'cancelled',                 // Inválido - cancelar
+    };
+    
+    const mappedStatus = generalStatusMap[mlOrder.status];
+    if (mappedStatus) {
+      console.log(`📦 [ML Status] General status ${mlOrder.status} -> ${mappedStatus}`);
+      return mappedStatus;
+    }
+  }
+  
+  // Fallback por defecto
+  console.log(`⚠️ [ML Status] No se pudo mapear el status, usando 'pending' por defecto. Status: ${mlOrder.status}, Shipping: ${mlOrder.shipping?.status}`);
+  return 'pending';
+}
 }
 
 module.exports = MercadoLibreService;
