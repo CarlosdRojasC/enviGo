@@ -13,6 +13,7 @@ module.exports = {
     SHOPIFY: 'shopify',
     WOOCOMMERCE: 'woocommerce',
     MERCADOLIBRE: 'mercadolibre',
+    JUMPSELLER: 'jumpseller',
     FALABELLA: 'falabella',
     RIPLEY: 'ripley',
     GENERAL_STORE: 'general_store'

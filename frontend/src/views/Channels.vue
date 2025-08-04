@@ -64,6 +64,7 @@
               <option value="woocommerce">WooCommerce</option>
               <option value="mercadolibre">MercadoLibre</option>
               <option value="general_store">Tienda General</option>
+              <option value="jumpseller">Jumpseller</option>
             </select>
           </div>
           
@@ -252,6 +253,7 @@
         <option value="woocommerce">WooCommerce</option>
         <option value="mercadolibre">MercadoLibre</option>
         <option value="general_store">Tienda General</option>
+        <option value="jumpseller">Jumpseller</option>
       </select>
     </div>
     
@@ -581,7 +583,8 @@ function getChannelIcon(type) {
     shopify: '🛍️',
     woocommerce: '🛒',
     mercadolibre: '🏪',
-    general_store: '📱'
+    general_store: '📱',
+    jumpseller: '🛒'
   }
   return icons[type] || '📦'
 }
@@ -591,7 +594,8 @@ function getChannelTypeName(type) {
     shopify: 'Shopify',
     woocommerce: 'WooCommerce',
     mercadolibre: 'MercadoLibre',
-    general_store: 'Tienda General'
+    general_store: 'Tienda General',
+    jumpseller: 'Jumpseller'
   }
   return names[type] || type
 }
@@ -900,7 +904,8 @@ function getChannelNamePlaceholder(type) {
     shopify: 'Mi Tienda Shopify',
     woocommerce: 'Mi Tienda WooCommerce',
     mercadolibre: 'Mi Tienda MercadoLibre',
-    general_store: 'Mi Tienda General'
+    general_store: 'Mi Tienda General',
+    jumpseller: 'Mi Tienda Jumpseller'
   }
   return placeholders[type] || 'Mi Tienda'
 }

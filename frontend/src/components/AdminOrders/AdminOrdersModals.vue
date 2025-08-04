@@ -933,7 +933,8 @@ function getChannelDisplayName(channel) {
     'shopify': '🛍️ Shopify',
     'woocommerce': '🏪 WooCommerce', 
     'mercadolibre': '🛒 MercadoLibre',
-    'general_store': '🏬 Tienda General'
+    'general_store': '🏬 Tienda General',
+    'Jumpseller': '🛒 Jumpseller',
   }
   
   const typeLabel = typeLabels[channel.channel_type] || '📦'
@@ -945,7 +946,8 @@ function getChannelIcon(channelType) {
     'shopify': '🛍️',
     'woocommerce': '🏪',
     'mercadolibre': '🛒', 
-    'general_store': '🏬'
+    'general_store': '🏬',
+    'jumpseller': '🛒'
   }
   return icons[channelType] || '📦'
 }
@@ -955,7 +957,8 @@ function getChannelTypeName(channelType) {
     'shopify': 'Shopify Store',
     'woocommerce': 'WooCommerce',
     'mercadolibre': 'MercadoLibre',
-    'general_store': 'Tienda General'
+    'general_store': 'Tienda General',
+    'jumpseller': 'Jumpseller'
   }
   return names[channelType] || channelType
 }

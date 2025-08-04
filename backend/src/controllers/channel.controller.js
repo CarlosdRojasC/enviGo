@@ -5,7 +5,7 @@ const { ERRORS, CHANNEL_TYPES } = require('../config/constants');
 const ShopifyService = require('../services/shopify.service');
 const WooCommerceService = require('../services/woocommerce.service');
 const MercadoLibreService = require('../services/mercadolibre.service');
-
+const JumpsellerService = require('../services/jumpseller.service'); // ✅ AÑADIR
 class ChannelController {
   // Obtener canales de una empresa con total_orders y last_order_date
 async getByCompany(req, res) {
@@ -197,6 +197,27 @@ async create(req, res) {
 
             console.log(`✅ [ML] URL válida para MercadoLibre: ${store_url}`);
         }
+        if (channel_type === CHANNEL_TYPES.JUMPSELLER) {
+    if (!api_key) {
+        return res.status(400).json({ 
+            error: 'El Token de API es obligatorio para Jumpseller.' 
+        });
+    }
+    
+    if (!store_url) {
+        return res.status(400).json({ 
+            error: 'La URL de la tienda es obligatoria para Jumpseller.' 
+        });
+    }
+
+    if (api_key.length < 20) {
+        return res.status(400).json({ 
+            error: 'El Token de API debe tener al menos 20 caracteres.' 
+        });
+    }
+
+    console.log(`✅ [Jumpseller] Creando canal para tienda: ${store_url}`);
+}
 
         // --- CONSTRUCCIÓN DEL OBJETO DEL CANAL ---
         const channelPayload = {
@@ -223,14 +244,25 @@ async create(req, res) {
 
         // Añadir credenciales solo si NO es MercadoLibre
         if (channel_type !== CHANNEL_TYPES.MERCADOLIBRE) {
-            if (!api_key || !api_secret) {
-                return res.status(400).json({ 
-                    error: `El canal de tipo '${channel_type}' requiere credenciales de API.` 
-                });
-            }
-            channelPayload.api_key = api_key.trim();
-            channelPayload.api_secret = api_secret.trim();
+    if (channel_type === CHANNEL_TYPES.JUMPSELLER) {
+        // Jumpseller solo requiere api_key
+        if (!api_key) {
+            return res.status(400).json({ 
+                error: 'El Token de API es obligatorio para Jumpseller.' 
+            });
         }
+        channelPayload.api_key = api_key.trim();
+    } else {
+        // Otros canales (Shopify, WooCommerce) requieren api_key y api_secret
+        if (!api_key || !api_secret) {
+            return res.status(400).json({ 
+                error: `El canal de tipo '${channel_type}' requiere credenciales de API.` 
+            });
+        }
+        channelPayload.api_key = api_key.trim();
+        channelPayload.api_secret = api_secret.trim();
+    }
+}
 
         // Crear el canal
         const channel = new Channel(channelPayload);
@@ -427,6 +459,8 @@ async syncOrders(req, res) {
         case CHANNEL_TYPES.MERCADOLIBRE:
           syncResult = await MercadoLibreService.syncOrders(channel, date_from, date_to);
           break;
+        case CHANNEL_TYPES.JUMPSELLER:
+          syncResult = await JumpsellerService.syncOrders(channel, date_from, date_to);
         default:
           throw new Error(`Sincronización no implementada para: "${channel.channel_type}"`);
       }
@@ -523,6 +557,8 @@ async syncOrders(req, res) {
         case CHANNEL_TYPES.MERCADOLIBRE:
           testResult = await MercadoLibreService.testConnection(channel);
           break;
+        case CHANNEL_TYPES.JUMPSELLER:
+          testResult = await JumpsellerService.testConnection(channel);
         default:
           testResult.message = `Prueba no implementada para el tipo de canal: "${channel.channel_type}"`;
       }
