@@ -377,9 +377,9 @@ static async processOrder(mlOrder, channel) {
     customer_phone: mlOrder.buyer?.phone || '',
     total_amount: mlOrder.total_amount || 0,
     shipping_cost: mlOrder.shipping?.cost || 0,
-    status: this.mapMercadoLibreStatus(mlOrder.status),
+    status: MercadoLibreService.mapOrderStatus(mlOrder),
     order_date: new Date(mlOrder.date_created),
-    shipping_address: this.extractShippingAddress(mlOrder),
+    shipping_address: MercadoLibreService.extractShippingAddress(mlOrder),
     items: mlOrder.order_items?.map(item => ({
       name: item.item?.title || 'Producto ML',
       quantity: item.quantity || 1,
