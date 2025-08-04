@@ -198,24 +198,12 @@ async create(req, res) {
             console.log(`✅ [ML] URL válida para MercadoLibre: ${store_url}`);
         }
         if (channel_type === CHANNEL_TYPES.JUMPSELLER) {
-    if (!api_key) {
-        return res.status(400).json({ 
-            error: 'El Token de API es obligatorio para Jumpseller.' 
-        });
-    }
     
     if (!store_url) {
         return res.status(400).json({ 
             error: 'La URL de la tienda es obligatoria para Jumpseller.' 
         });
     }
-
-    if (api_key.length < 20) {
-        return res.status(400).json({ 
-            error: 'El Token de API debe tener al menos 20 caracteres.' 
-        });
-    }
-
     console.log(`✅ [Jumpseller] Creando canal para tienda: ${store_url}`);
 }
 
