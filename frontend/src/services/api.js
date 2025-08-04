@@ -441,6 +441,13 @@ getAllForAdmin: () => api.get('/channels/admin/all'),
     return api.get(`/companies/${companyId}/channels`);
   }
 }
+const mercadolibre = {
+  getAuthorizationUrl: (data) => api.post('/channels/mercadolibre/auth-url', data)
+}
+
+const jumpseller = {
+  getAuthorizationUrl: (data) => api.post('/channels/jumpseller/auth-url', data)
+}
 const notifications = {
   /**
    * Obtener todas las notificaciones con paginación
@@ -462,6 +469,7 @@ const notifications = {
    */
   markAllAsRead: () => api.post('/notifications/mark-all-read')
 };
+
 // Servicios de facturación
 const billing = {
   // Obtener resumen financiero para admin dashboard
@@ -895,7 +903,9 @@ export const apiService = {
   shipday,
   notifications,
   search,
-  manifests
+  manifests,
+  mercadolibre,
+  jumpseller
 }
 
 // Exportar instancia de axios para casos especiales
