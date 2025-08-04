@@ -52,5 +52,6 @@ router.get('/jumpseller/callback', (req, res, next) => {
   next();
 }, ChannelController.handleJumpsellerCallback.bind(ChannelController));
 // En routes/channels.js o donde tengas las rutas:
-router.post('/jumpseller/auth-url', authenticateToken, ChannelController.getJumpsellerAuthorizationUrl.bind(ChannelController));
+router.post('/jumpseller/auth-url', ChannelController.getJumpsellerAuthorizationUrl.bind(ChannelController));
+
 module.exports = router;
