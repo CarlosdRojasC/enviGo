@@ -100,7 +100,6 @@
       <div class="loading-spinner"></div>
       <p>Cargando canales...</p>
     </div>
-
     <!-- Contenido principal -->
     <div v-else class="channels-container">
       <!-- Vista de grid -->
@@ -170,15 +169,18 @@
               <span class="btn-icon">{{ syncingChannels.includes(channel._id) ? '⏳' : '🔄' }}</span>
               {{ syncingChannels.includes(channel._id) ? 'Sincronizando...' : 'Sincronizar' }}
             </button>
+            
+            <!-- Botón de autorización para canales OAuth sin token -->
             <button
-    v-if="channel.channel_type === 'mercadolibre' && !channel.api_key"
-    @click="authorizeMercadoLibre(channel)"
-    class="action-btn details"
-    title="Autorizar este canal con Mercado Libre"
-  >
-    <span class="btn-icon">🔗</span>
-    Autorizar
-  </button>
+              v-if="requiresOAuth(channel.channel_type) && !channel.api_key"
+              @click="authorizeOAuthChannel(channel)"
+              class="action-btn details"
+              :title="'Autorizar este canal con ' + getChannelTypeName(channel.channel_type)"
+            >
+              <span class="btn-icon">🔗</span>
+              Autorizar
+            </button>
+            
             <button 
               @click="showChannelDetails(channel)" 
               class="action-btn details"
@@ -210,7 +212,6 @@
           </button>
         </div>
       </div>
-
       <!-- Estado vacío -->
       <div v-if="filteredChannels.length === 0 && !loading" class="empty-state">
         <div class="empty-icon">📡</div>
@@ -242,111 +243,107 @@
       </div>
     </div>
 
-    <!-- Modal para agregar canal (simplificado) -->
-  <Modal v-model="showAddChannelModal" title="Agregar Nuevo Canal" width="500px">
-  <form @submit.prevent="addChannel">
-    <div class="form-group">
-      <label>Tipo de Canal:</label>
-      <select v-model="channelData.channel_type" required>
-        <option value="" disabled>Seleccionar...</option>
-        <option value="shopify">Shopify</option>
-        <option value="woocommerce">WooCommerce</option>
-        <option value="mercadolibre">MercadoLibre</option>
-        <option value="general_store">Tienda General</option>
-        <option value="jumpseller">Jumpseller</option>
-      </select>
-    </div>
-    
-    <div v-if="channelData.channel_type">
-      <div class="form-group">
-        <label>Nombre del Canal:</label>
-        <input 
-          v-model="channelData.channel_name" 
-          type="text" 
-          required 
-          :placeholder="getChannelNamePlaceholder(channelData.channel_type)"
-        >
-      </div>
-      
-      <div class="form-group">
-        <label>URL de la Tienda:</label>
-        <input 
-          v-model="channelData.store_url" 
-          type="text" 
-          required 
-          :placeholder="getUrlPlaceholder(channelData.channel_type)"
-        >
-        <small class="form-help">{{ getUrlHelp(channelData.channel_type) }}</small>
-      </div>
-      
-      <!-- ✅ CAMPOS CONDICIONALES: Solo para Shopify y WooCommerce -->
-      <div v-if="channelData.channel_type !== 'mercadolibre'">
+    <!-- Modal para agregar canal -->
+    <Modal v-model="showAddChannelModal" title="Agregar Nuevo Canal" width="500px">
+      <form @submit.prevent="addChannel">
         <div class="form-group">
-          <label>{{ channelData.channel_type === 'shopify' ? 'Token de Acceso (API Secret)' : 'Consumer Key' }}</label>
-          <input 
-            v-model="channelData.api_key" 
-            type="text" 
-            :required="channelData.channel_type !== 'mercadolibre'"
-            :placeholder="getApiKeyPlaceholder(channelData.channel_type)"
-          >
+          <label>Tipo de Canal:</label>
+          <select v-model="channelData.channel_type" required>
+            <option value="" disabled>Seleccionar...</option>
+            <option value="shopify">Shopify</option>
+            <option value="woocommerce">WooCommerce</option>
+            <option value="mercadolibre">MercadoLibre</option>
+            <option value="general_store">Tienda General</option>
+            <option value="jumpseller">Jumpseller</option>
+          </select>
         </div>
         
-        <div class="form-group">
-          <label>{{ channelData.channel_type === 'shopify' ? 'API Key' : 'Consumer Secret' }}</label>
-          <input 
-            v-model="channelData.api_secret" 
-            type="password" 
-            :required="channelData.channel_type !== 'mercadolibre'"
-            :placeholder="getApiSecretPlaceholder(channelData.channel_type)"
-          >
-        </div>
-      </div>
-      
-      <!-- ✅ INFO ESPECIAL PARA MERCADOLIBRE -->
-      <div v-if="channelData.channel_type === 'mercadolibre'" class="oauth-info">
-        <div class="info-box">
-          <div class="info-icon">🔐</div>
-          <div class="info-content">
-            <h4>Autenticación OAuth 2.0</h4>
-            <p>MercadoLibre utiliza OAuth para mayor seguridad. Después de crear el canal, serás redirigido a MercadoLibre para autorizar la conexión.</p>
-            <ul>
-              <li>✅ No necesitas credenciales manuales</li>
-              <li>✅ Conexión segura y automática</li>
-              <li>✅ Solo pedidos Flex serán importados</li>
-            </ul>
+        <div v-if="channelData.channel_type">
+          <div class="form-group">
+            <label>Nombre del Canal:</label>
+            <input 
+              v-model="channelData.channel_name" 
+              type="text" 
+              required 
+              :placeholder="getChannelNamePlaceholder(channelData.channel_type)"
+            >
+          </div>
+          
+          <div class="form-group">
+            <label>URL de la Tienda:</label>
+            <input 
+              v-model="channelData.store_url" 
+              type="text" 
+              required 
+              :placeholder="getUrlPlaceholder(channelData.channel_type)"
+            >
+            <small class="form-help">{{ getUrlHelp(channelData.channel_type) }}</small>
+          </div>
+          
+          <!-- ✅ CAMPOS CONDICIONALES: Solo para Shopify y WooCommerce -->
+          <div v-if="!requiresOAuth(channelData.channel_type) && channelData.channel_type !== 'general_store'">
+            <div class="form-group">
+              <label>{{ getApiKeyLabel(channelData.channel_type) }}</label>
+              <input 
+                v-model="channelData.api_key" 
+                type="text" 
+                required
+                :placeholder="getApiKeyPlaceholder(channelData.channel_type)"
+              >
+            </div>
+            
+            <div class="form-group">
+              <label>{{ getApiSecretLabel(channelData.channel_type) }}</label>
+              <input 
+                v-model="channelData.api_secret" 
+                type="password" 
+                required
+                :placeholder="getApiSecretPlaceholder(channelData.channel_type)"
+              >
+            </div>
+          </div>
+          
+          <!-- ✅ INFO ESPECIAL PARA OAUTH (MercadoLibre y Jumpseller) -->
+          <div v-if="requiresOAuth(channelData.channel_type)" class="oauth-info">
+            <div class="info-box">
+              <div class="info-icon">🔐</div>
+              <div class="info-content">
+                <h4>Autenticación OAuth 2.0</h4>
+                <p>{{ getOAuthDescription(channelData.channel_type) }}</p>
+                <ul>
+                  <li v-for="step in getOAuthSteps(channelData.channel_type)" :key="step">{{ step }}</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Selector de empresa para admin -->
+          <div v-if="isAdmin" class="form-group">
+            <label>Empresa:</label>
+            <select v-model="channelData.company_id" required>
+              <option value="" disabled>Seleccionar empresa...</option>
+              <option v-for="company in companies" :key="company._id" :value="company._id">
+                {{ company.name }}
+              </option>
+            </select>
           </div>
         </div>
-      </div>
-      
-      <!-- Selector de empresa para admin -->
-      <div v-if="isAdmin" class="form-group">
-        <label>Empresa:</label>
-        <select v-model="channelData.company_id" required>
-          <option value="" disabled>Seleccionar empresa...</option>
-          <option v-for="company in companies" :key="company._id" :value="company._id">
-            {{ company.name }}
-          </option>
-        </select>
-      </div>
-    </div>
-    
-    <div class="modal-actions">
-      <button type="button" @click="showAddChannelModal = false" class="btn-cancel">
-        Cancelar
-      </button>
-      <button 
-        type="submit" 
-        :disabled="addingChannel || !isFormValid" 
-        class="btn-save"
-        :class="{ 'btn-ml': channelData.channel_type === 'mercadolibre' }"
-      >
-        {{ getButtonText() }}
-      </button>
-    </div>
-  </form>
-</Modal>
-
-
+        
+        <div class="modal-actions">
+          <button type="button" @click="showAddChannelModal = false" class="btn-cancel">
+            Cancelar
+          </button>
+          <button 
+            type="submit" 
+            :disabled="addingChannel || !isFormValid" 
+            class="btn-save"
+            :class="{ 'btn-oauth': requiresOAuth(channelData.channel_type) }"
+          >
+            {{ getButtonText() }}
+          </button>
+        </div>
+      </form>
+    </Modal>
     <!-- Modal de detalles simplificado -->
     <Modal v-model="showChannelDetailsModal" :title="`Detalles de ${selectedChannel?.channel_name}`" width="600px">
       <div v-if="selectedChannel" class="channel-details-simple">
@@ -399,7 +396,6 @@
     </Modal>
   </div>
 </template>
-
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useToast } from 'vue-toastification'
@@ -455,6 +451,7 @@ const isAdmin = computed(() => auth.isAdmin)
 const canAddChannel = computed(() => {
   return auth.isCompanyOwner || auth.isAdmin
 })
+
 const getCompanyId = computed(() => {
   if (auth.isAdmin) return null
   
@@ -490,6 +487,31 @@ const totalRevenue = computed(() => {
   if (!Array.isArray(channels.value)) return 0
   return channels.value.reduce((sum, channel) => sum + (channel.total_revenue || 0), 0)
 })
+const isFormValid = computed(() => {
+  // Validaciones básicas siempre requeridas
+  if (!channelData.value.channel_type) return false
+  if (!channelData.value.channel_name?.trim()) return false
+  
+  // Para admin, también validar empresa
+  if (isAdmin.value && !channelData.value.company_id) return false
+  
+  // ✅ Tienda General (solo necesita nombre y tipo)
+  if (channelData.value.channel_type === 'general_store') {
+    return true
+  }
+  
+  // ✅ Canales OAuth (MercadoLibre y Jumpseller) - solo necesitan store_url
+  if (requiresOAuth(channelData.value.channel_type)) {
+    return !!channelData.value.store_url?.trim()
+  }
+  
+  // ✅ Otros canales (Shopify, WooCommerce) - necesitan todo
+  if (!channelData.value.store_url?.trim()) return false
+  if (!channelData.value.api_key?.trim()) return false
+  if (!channelData.value.api_secret?.trim()) return false
+  
+  return true
+})
 
 // ==================== MÉTODOS ====================
 async function fetchChannels() {
@@ -503,47 +525,47 @@ async function fetchChannels() {
         endpoint = `companies/${selectedCompanyId.value}/channels`
         const response = await apiService.companies.getChannels?.(selectedCompanyId.value) || 
                          await apiService.channels.getByCompany(selectedCompanyId.value)
-channels.value = response.data?.data || response.data || []
+        channels.value = response.data?.data || response.data || []
       } else {
-         try {
-    const response = await apiService.channels.getAllForAdmin()
-    channels.value = response.data?.data || response.data || []
-    console.log('✅ Admin: canales de todas las empresas cargados:', channels.value.length)
-  } catch (error) {
-    console.error('❌ Error obteniendo todos los canales:', error)
-    // Si falla, intenta con fetch directo
-    try {
-      const response = await fetch('/api/channels/admin/all', {
-        headers: { 
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-          'Content-Type': 'application/json'
+        try {
+          const response = await apiService.channels.getAllForAdmin()
+          channels.value = response.data?.data || response.data || []
+          console.log('✅ Admin: canales de todas las empresas cargados:', channels.value.length)
+        } catch (error) {
+          console.error('❌ Error obteniendo todos los canales:', error)
+          // Si falla, intenta con fetch directo
+          try {
+            const response = await fetch('/api/channels/admin/all', {
+              headers: { 
+                'Authorization': `Bearer ${localStorage.getItem('token')}`,
+                'Content-Type': 'application/json'
+              }
+            })
+            if (response.ok) {
+              const data = await response.json()
+              channels.value = data.data || data || []
+            } else {
+              channels.value = []
+            }
+          } catch (fetchError) {
+            console.error('❌ Error con fetch directo:', fetchError)
+            channels.value = []
+          }
         }
-      })
-      if (response.ok) {
-        const data = await response.json()
-        channels.value = data.data || data || []
-      } else {
-        channels.value = []
       }
-    } catch (fetchError) {
-      console.error('❌ Error con fetch directo:', fetchError)
-      channels.value = []
-    }
-  }
-}
     } else {
       // Usuario normal: solo sus canales
       const companyId = getCompanyId.value
-if (!companyId) {
-  console.error('❌ No se encontró company_id en el usuario:', auth.user)
-  toast.error('Error: Usuario sin empresa asignada. Contacta al administrador.')
-  channels.value = []
-  return
-}
+      if (!companyId) {
+        console.error('❌ No se encontró company_id en el usuario:', auth.user)
+        toast.error('Error: Usuario sin empresa asignada. Contacta al administrador.')
+        channels.value = []
+        return
+      }
 
-console.log('🔍 Obteniendo canales para empresa:', companyId)
-const response = await apiService.channels.getByCompany(companyId)
-channels.value = response.data?.data || response.data || []
+      console.log('🔍 Obteniendo canales para empresa:', companyId)
+      const response = await apiService.channels.getByCompany(companyId)
+      channels.value = response.data?.data || response.data || []
     }
     
   } catch (error) {
@@ -577,6 +599,57 @@ async function refreshChannels() {
     isRefreshing.value = false
   }
 }
+// ==================== FUNCIONES HELPER ====================
+
+// ✅ FUNCIONES PARA OAUTH
+function requiresOAuth(channelType) {
+  return ['mercadolibre', 'jumpseller'].includes(channelType);
+}
+
+function getApiKeyLabel(channelType) {
+  const labels = {
+    shopify: 'Token de Acceso (API Secret)',
+    woocommerce: 'Consumer Key',
+    jumpseller: 'API Login',
+    general_store: 'API Key'
+  };
+  return labels[channelType] || 'API Key';
+}
+
+function getApiSecretLabel(channelType) {
+  const labels = {
+    shopify: 'API Key',
+    woocommerce: 'Consumer Secret', 
+    jumpseller: 'Auth Token',
+    general_store: 'API Secret'
+  };
+  return labels[channelType] || 'API Secret';
+}
+
+function getOAuthDescription(channelType) {
+  const descriptions = {
+    mercadolibre: 'MercadoLibre utiliza OAuth para mayor seguridad. Después de crear el canal, serás redirigido para autorizar la conexión.',
+    jumpseller: 'Jumpseller utiliza OAuth 2.0 para acceso seguro. Te redirigiremos a tu tienda para autorizar la conexión.'
+  };
+  return descriptions[channelType] || 'Este canal utiliza OAuth 2.0 para autenticación segura.';
+}
+
+function getOAuthSteps(channelType) {
+  const steps = {
+    mercadolibre: [
+      '✅ No necesitas credenciales manuales',
+      '✅ Conexión segura y automática',
+      '✅ Solo pedidos Flex serán importados'
+    ],
+    jumpseller: [
+      '✅ Haz clic en "Crear Canal"', 
+      '✅ Serás redirigido a Jumpseller',
+      '✅ Autoriza el acceso a enviGo',
+      '✅ Regresarás automáticamente'
+    ]
+  };
+  return steps[channelType] || [];
+}
 
 function getChannelIcon(type) {
   const icons = {
@@ -584,7 +657,7 @@ function getChannelIcon(type) {
     woocommerce: '🛒',
     mercadolibre: '🏪',
     general_store: '📱',
-    jumpseller: '🛒'
+    jumpseller: '🚀'
   }
   return icons[type] || '📦'
 }
@@ -609,25 +682,6 @@ function getChannelStatus(channel) {
   if (daysSinceLastSync > 7) return 'sync_issues'
   return 'active'
 }
-
-async function authorizeMercadoLibre(channel) {
-  try {
-    toast.info(`Redirigiendo a Mercado Libre para autorizar "${channel.channel_name}"...`);
-    
-    // Este nuevo endpoint del backend generará la URL correcta para este canal
-    const response = await apiService.mercadolibre.getAuthorizationUrl({
-      channelId: channel._id
-    });
-    
-    // Redirige al usuario a la página de Mercado Libre
-    window.location.href = response.data.authUrl;
-
-  } catch (error) {
-    console.error("Error al iniciar la autorización de Mercado Libre:", error);
-    toast.error("No se pudo iniciar la conexión con Mercado Libre.");
-  }
-}
-
 function getChannelStatusText(channel) {
   const status = getChannelStatus(channel)
   const texts = {
@@ -695,6 +749,67 @@ function formatCurrency(amount) {
   }).format(amount)
 }
 
+function getChannelNamePlaceholder(type) {
+  const placeholders = {
+    shopify: 'Mi Tienda Shopify',
+    woocommerce: 'Mi Tienda WooCommerce',
+    mercadolibre: 'Mi Tienda MercadoLibre',
+    general_store: 'Mi Tienda General',
+    jumpseller: 'Mi Tienda Jumpseller'
+  }
+  return placeholders[type] || 'Mi Tienda'
+}
+
+function getUrlPlaceholder(type) {
+  const placeholders = {
+    shopify: 'mi-tienda.myshopify.com',
+    woocommerce: 'https://mi-tienda.com',
+    mercadolibre: 'https://mercadolibre.cl', // ✅ Chile por defecto
+    jumpseller: 'https://mi-tienda.jumpseller.com'
+  }
+  return placeholders[type] || 'https://mi-tienda.com'
+}
+
+function getUrlHelp(type) {
+  const helps = {
+    shopify: 'Dominio de tu tienda Shopify',
+    woocommerce: 'URL completa de tu sitio WordPress',
+    mercadolibre: 'Ejemplos: mercadolibre.cl, mercadolibre.com.mx, mercadolibre.com.ar',
+    jumpseller: 'URL completa de tu tienda Jumpseller'
+  }
+  return helps[type] || 'URL de tu tienda'
+}
+
+function getApiKeyPlaceholder(type) {
+  const placeholders = {
+    shopify: 'shpat_...',
+    woocommerce: 'ck_...',
+    jumpseller: 'tu_api_login'
+  }
+  return placeholders[type] || ''
+}
+
+function getApiSecretPlaceholder(type) {
+  const placeholders = {
+    shopify: 'Tu API Key público',
+    woocommerce: 'cs_...',
+    jumpseller: 'Token de 32 caracteres'
+  }
+  return placeholders[type] || ''
+}
+
+function getButtonText() {
+  if (addingChannel.value) {
+    return 'Creando...'
+  }
+  
+  if (requiresOAuth(channelData.value.channel_type)) {
+    const channelName = channelData.value.channel_type === 'mercadolibre' ? 'MercadoLibre' : 'Jumpseller'
+    return `Crear y Autorizar con ${channelName}`
+  }
+  
+  return 'Crear Canal'
+}
 // ==================== ACCIONES ====================
 function openAddChannelModal() {
   channelData.value = {
@@ -709,87 +824,104 @@ function openAddChannelModal() {
 }
 
 async function addChannel() {
-    try {
-        addingChannel.value = true;
-        
-        // This part for getting the companyId is correct.
-        let companyId;
-        if (auth.isAdmin) {
-            companyId = channelData.value.company_id;
-            if (!companyId) {
-                toast.error('Selecciona una empresa para el canal');
-                addingChannel.value = false; // Stop execution
-                return;
-            }
-        } else {
-            companyId = getCompanyId.value;
-            if (!companyId) {
-                toast.error('Error: Usuario sin empresa asignada');
-                addingChannel.value = false; // Stop execution
-                return;
-            }
-        }
-
-        // --- ✅ MODIFICATION START ---
-        
-        // 1. Capture the response from the API call.
-        const response = await apiService.channels.create(companyId, channelData.value);
-
-        // 2. Check if the backend sent an authorizationUrl.
-        if (response.data.authorizationUrl) {
-            // This means it's a Mercado Libre channel.
-            toast.info('Canal creado. Redirigiendo a Mercado Libre para autorizar...');
-            
-            // Wait 1.5 seconds for the user to read the message, then redirect.
-            setTimeout(() => {
-                window.location.href = response.data.authorizationUrl;
-            }, 1500);
-
-            // Don't close the modal immediately, as the page will redirect.
-
-        } else {
-            // This is the original flow for Shopify, WooCommerce, etc.
-            toast.success('Canal creado exitosamente');
-            await fetchChannels();
-            showAddChannelModal.value = false;
-        }
-        
-        // --- END OF MODIFICATION ---
-
-    } catch (error) {
-        toast.error(`Error al crear canal: ${error.response?.data?.error || error.message}`);
-    } finally {
+  try {
+    addingChannel.value = true;
+    
+    // Obtener companyId
+    let companyId;
+    if (auth.isAdmin) {
+      companyId = channelData.value.company_id;
+      if (!companyId) {
+        toast.error('Selecciona una empresa para el canal');
         addingChannel.value = false;
+        return;
+      }
+    } else {
+      companyId = getCompanyId.value;
+      if (!companyId) {
+        toast.error('Error: Usuario sin empresa asignada');
+        addingChannel.value = false;
+        return;
+      }
     }
+
+    // Crear el canal
+    const response = await apiService.channels.create(companyId, channelData.value);
+
+    // Verificar si es un canal OAuth que requiere autorización
+    if (response.data.authorizationUrl) {
+      const channelTypeName = channelData.value.channel_type === 'mercadolibre' ? 'MercadoLibre' : 'Jumpseller';
+      toast.info(`Canal creado. Redirigiendo a ${channelTypeName} para autorizar...`);
+      
+      // Esperar un poco para que el usuario lea el mensaje
+      setTimeout(() => {
+        window.location.href = response.data.authorizationUrl;
+      }, 1500);
+
+    } else {
+      // Canal creado sin OAuth
+      toast.success('Canal creado exitosamente');
+      await fetchChannels();
+      showAddChannelModal.value = false;
+    }
+    
+  } catch (error) {
+    toast.error(`Error al crear canal: ${error.response?.data?.error || error.message}`);
+  } finally {
+    addingChannel.value = false;
+  }
 }
 
+async function authorizeOAuthChannel(channel) {
+  try {
+    const channelTypeName = getChannelTypeName(channel.channel_type);
+    toast.info(`Redirigiendo a ${channelTypeName} para autorizar "${channel.channel_name}"...`);
+    
+    // Endpoint para generar URL de autorización para canal existente
+    let response;
+    if (channel.channel_type === 'mercadolibre') {
+      response = await apiService.mercadolibre.getAuthorizationUrl({
+        channelId: channel._id
+      });
+    } else if (channel.channel_type === 'jumpseller') {
+      response = await apiService.jumpseller.getAuthorizationUrl({
+        channelId: channel._id
+      });
+    }
+    
+    // Redirigir a la página de autorización
+    if (response?.data?.authUrl || response?.data?.authorizationUrl) {
+      window.location.href = response.data.authUrl || response.data.authorizationUrl;
+    }
+
+  } catch (error) {
+    console.error(`Error al iniciar la autorización:`, error);
+    toast.error(`No se pudo iniciar la conexión con ${getChannelTypeName(channel.channel_type)}.`);
+  }
+}
 function showChannelDetails(channel) {
   selectedChannel.value = channel
   showChannelDetailsModal.value = true
 }
 
 async function syncChannel(channelId) {
-  // 1. Evita dobles clics y muestra "Sincronizando..." en el botón
+  // Evita dobles clics
   if (syncingChannels.value.includes(channelId)) return;
   syncingChannels.value.push(channelId);
   
   try {
-    // 2. Llama al backend para iniciar la sincronización
+    // Llamar al backend para sincronizar
     const { data } = await apiService.channels.syncOrders(channelId, {
       date_from: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
       date_to: new Date().toISOString()
     });
 
-    // 3. (LA PARTE MÁGICA) Busca el canal en tu lista local
+    // Actualizar el canal en la lista local
     const index = channels.value.findIndex(c => c._id === channelId);
-
-    // 4. Si lo encuentra y el backend envió el canal actualizado, lo reemplaza
     if (index !== -1 && data.channel) {
-      // Vue se encargará de actualizar la tarjeta automáticamente
       channels.value[index] = { ...channels.value[index], ...data.channel };
     }
 
-    // 5. Muestra una notificación de éxito
     toast.success(data.message || 'Sincronización completada exitosamente.');
     
   } catch (error) {
@@ -797,7 +929,6 @@ async function syncChannel(channelId) {
     toast.error(error.message || 'Ocurrió un error durante la sincronización.');
   
   } finally {
-    // 6. Vuelve a habilitar el botón
     syncingChannels.value = syncingChannels.value.filter(id => id !== channelId);
   }
 }
@@ -829,6 +960,7 @@ function clearFilters() {
   filterStatus.value = ''
   selectedCompanyId.value = ''
 }
+
 function getChannelSyncStatus(channel) {
   const syncInfo = channel.sync_status_info;
   
@@ -873,88 +1005,7 @@ function getChannelSyncStatus(channel) {
     };
   }
 }
-const isFormValid = computed(() => {
-  // Validaciones básicas siempre requeridas
-  if (!channelData.value.channel_type) return false
-  if (!channelData.value.channel_name?.trim()) return false
-  
-  // Para admin, también validar empresa
-  if (isAdmin.value && !channelData.value.company_id) return false
-  
-  // ✅ PRIMERO: Verificar Tienda General (solo necesita nombre y tipo)
-  if (channelData.value.channel_type === 'general_store') {
-    return true // Ya validamos tipo, nombre y empresa (si es admin)
-  }
-  
-  // ✅ SEGUNDO: Para MercadoLibre (necesita store_url pero no credenciales)
-  if (channelData.value.channel_type === 'mercadolibre') {
-    return !!channelData.value.store_url?.trim()
-  }
-  
-  // ✅ TERCERO: Para otros canales (Shopify, WooCommerce) - necesitan todo
-  if (!channelData.value.store_url?.trim()) return false
-  if (!channelData.value.api_key?.trim()) return false
-  if (!channelData.value.api_secret?.trim()) return false
-  
-  return true
-})
 
-function getChannelNamePlaceholder(type) {
-  const placeholders = {
-    shopify: 'Mi Tienda Shopify',
-    woocommerce: 'Mi Tienda WooCommerce',
-    mercadolibre: 'Mi Tienda MercadoLibre',
-    general_store: 'Mi Tienda General',
-    jumpseller: 'Mi Tienda Jumpseller'
-  }
-  return placeholders[type] || 'Mi Tienda'
-}
-
-function getUrlPlaceholder(type) {
-  const placeholders = {
-    shopify: 'mi-tienda.myshopify.com',
-    woocommerce: 'https://mi-tienda.com',
-    mercadolibre: 'https://mercadolibre.com.mx'
-  }
-  return placeholders[type] || 'https://mi-tienda.com'
-}
-
-function getUrlHelp(type) {
-  const helps = {
-    shopify: 'Dominio de tu tienda Shopify',
-    woocommerce: 'URL completa de tu sitio WordPress',
-    mercadolibre: 'Ejemplos: mercadolibre.com.mx, mercadolibre.cl, mercadolibre.com.ar'
-  }
-  return helps[type] || 'URL de tu tienda'
-}
-
-function getApiKeyPlaceholder(type) {
-  const placeholders = {
-    shopify: 'shpat_...',
-    woocommerce: 'ck_...'
-  }
-  return placeholders[type] || ''
-}
-
-function getApiSecretPlaceholder(type) {
-  const placeholders = {
-    shopify: 'Tu API Key público',
-    woocommerce: 'cs_...'
-  }
-  return placeholders[type] || ''
-}
-
-function getButtonText() {
-  if (addingChannel.value) {
-    return 'Creando...'
-  }
-  
-  if (channelData.value.channel_type === 'mercadolibre') {
-    return 'Crear y Autorizar'
-  }
-  
-  return 'Crear Canal'
-}
 function handleCallbackResponse() {
   const urlParams = new URLSearchParams(window.location.search);
   const success = urlParams.get('success');
@@ -967,15 +1018,20 @@ function handleCallbackResponse() {
       ? `¡Canal "${channelName}" conectado exitosamente con MercadoLibre!`
       : '¡Conexión con MercadoLibre exitosa!';
     toast.success(message);
+  } else if (success === 'jumpseller_connected') {
+    const message = channelName 
+      ? `¡Canal "${channelName}" conectado exitosamente con Jumpseller!`
+      : '¡Conexión con Jumpseller exitosa!';
+    toast.success(message);
   } else if (error) {
-    let errorMessage = 'Error conectando con MercadoLibre';
+    let errorMessage = 'Error conectando con la plataforma';
     
     switch (error) {
       case 'oauth_denied':
         errorMessage = 'Autorización denegada por el usuario';
         break;
       case 'missing_params':
-        errorMessage = 'Faltan parámetros en la respuesta de MercadoLibre';
+        errorMessage = 'Faltan parámetros en la respuesta';
         break;
       case 'validation_failed':
         errorMessage = `Error de validación: ${details || 'No se pudo validar la autorización'}`;
@@ -986,10 +1042,10 @@ function handleCallbackResponse() {
     }
     
     toast.error(errorMessage);
-    console.error('❌ [ML Frontend] Error en callback:', { error, details });
+    console.error('❌ Error en callback OAuth:', { error, details });
   }
   
-  // ✅ LIMPIAR LA URL después de mostrar el mensaje
+  // Limpiar la URL después de mostrar el mensaje
   if (success || error) {
     window.history.replaceState({}, document.title, window.location.pathname);
   }
@@ -998,17 +1054,16 @@ function handleCallbackResponse() {
 // ==================== LIFECYCLE ====================
 onMounted(async () => {
   console.log('🔍 Debug usuario en Channels:', {
-  user: auth.user,
-  isAdmin: auth.isAdmin,
-  companyId: getCompanyId.value,
-  authCompanyId: auth.companyId
-})
+    user: auth.user,
+    isAdmin: auth.isAdmin,
+    companyId: getCompanyId.value,
+    authCompanyId: auth.companyId
+  })
   await fetchCompanies()
   await fetchChannels()
   await handleCallbackResponse();
 })
 </script>
-
 <style scoped>
 .form-group {
   margin-bottom: 16px;
@@ -1064,15 +1119,20 @@ onMounted(async () => {
   margin-bottom: 4px;
 }
 
-.btn-ml {
+.btn-oauth {
   background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%) !important;
   position: relative;
   overflow: hidden;
 }
 
-.btn-ml::before {
+.btn-oauth::before {
   content: '🚀';
   margin-right: 8px;
+}
+
+.channel-type-badge.jumpseller {
+  background: #f0fdf4;
+  color: #059669;
 }
 
 .modal-actions {
@@ -1086,6 +1146,7 @@ onMounted(async () => {
   opacity: 0.5;
   cursor: not-allowed;
 }
+
 /* Reutilizar los estilos de la versión anterior pero simplificados */
 .channels-page {
   min-height: 100vh;
@@ -1101,7 +1162,6 @@ onMounted(async () => {
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
   border: 1px solid #e5e7eb;
 }
-
 .header-content {
   display: flex;
   justify-content: space-between;
@@ -1261,7 +1321,6 @@ onMounted(async () => {
 .btn-icon {
   font-size: 16px;
 }
-
 .loading-container {
   display: flex;
   flex-direction: column;
@@ -1408,7 +1467,6 @@ onMounted(async () => {
   margin: 0;
   font-weight: 500;
 }
-
 .channel-status {
   display: flex;
   align-items: center;
@@ -1577,7 +1635,6 @@ onMounted(async () => {
   background: #ef4444;
   color: white;
 }
-
 /* ==================== ADD CHANNEL CARD ==================== */
 .add-channel-card {
   display: flex;
@@ -1702,7 +1759,6 @@ onMounted(async () => {
 .empty-action-btn.secondary:hover {
   background: #4b5563;
 }
-
 /* ==================== FORMULARIOS ==================== */
 .form-group {
   margin-bottom: 16px;
@@ -1789,7 +1845,6 @@ onMounted(async () => {
   opacity: 0.6;
   cursor: not-allowed;
 }
-
 /* ==================== DETALLES DEL CANAL ==================== */
 .channel-details-simple {
   padding: 20px;
@@ -1859,7 +1914,6 @@ onMounted(async () => {
   margin-bottom: 24px;
   line-height: 1.5;
 }
-
 /* ==================== RESPONSIVE ==================== */
 @media (max-width: 1200px) {
   .channels-grid {
