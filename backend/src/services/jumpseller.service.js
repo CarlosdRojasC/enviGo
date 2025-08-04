@@ -38,20 +38,28 @@ static async exchangeCodeForTokens(code, redirectUri = null) {
     const clientSecret = process.env.JUMPSELLER_CLIENT_SECRET;
     const defaultRedirectUri = `${process.env.BACKEND_URL}/api/channels/jumpseller/callback`;
 
-    console.log('🔄 [Jumpseller] Intercambiando código por tokens...');
+    console.log('🔄 [Jumpseller] === DEBUGGING EXCHANGE ===');
+    console.log('🔄 [Jumpseller] Code:', code);
+    console.log('🔄 [Jumpseller] Client ID:', clientId);
+    console.log('🔄 [Jumpseller] Client Secret exists:', !!clientSecret);
     console.log('🔄 [Jumpseller] Redirect URI:', defaultRedirectUri);
+    console.log('🔄 [Jumpseller] BACKEND_URL:', process.env.BACKEND_URL);
 
     if (!clientId || !clientSecret) {
       throw new Error('JUMPSELLER_CLIENT_ID y JUMPSELLER_CLIENT_SECRET requeridos');
     }
 
-    const response = await axios.post('https://accounts.jumpseller.com/oauth/token', {
+    const payload = {
       grant_type: 'authorization_code',
       client_id: clientId,
       client_secret: clientSecret,
       code: code,
       redirect_uri: redirectUri || defaultRedirectUri
-    }, {
+    };
+
+    console.log('🔄 [Jumpseller] Payload enviado:', payload);
+
+    const response = await axios.post('https://accounts.jumpseller.com/oauth/token', payload, {
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json'
@@ -59,7 +67,8 @@ static async exchangeCodeForTokens(code, redirectUri = null) {
       timeout: 15000
     });
 
-    console.log('✅ [Jumpseller] Tokens obtenidos exitosamente');
+    console.log('✅ [Jumpseller] Response status:', response.status);
+    console.log('✅ [Jumpseller] Response data:', response.data);
 
     return {
       access_token: response.data.access_token,
@@ -69,15 +78,20 @@ static async exchangeCodeForTokens(code, redirectUri = null) {
     };
 
   } catch (error) {
-    console.error('❌ [Jumpseller OAuth] Error intercambiando código:', {
+    console.error('❌ [Jumpseller OAuth] ERROR COMPLETO:', {
       status: error.response?.status,
+      statusText: error.response?.statusText,
       data: error.response?.data,
-      message: error.message
+      message: error.message,
+      config: error.config ? {
+        url: error.config.url,
+        method: error.config.method,
+        data: error.config.data
+      } : null
     });
     throw new Error(`Error en OAuth: ${error.response?.data?.error_description || error.message}`);
   }
 }
-
   /**
    * Renueva el token de acceso usando refresh token
    */
