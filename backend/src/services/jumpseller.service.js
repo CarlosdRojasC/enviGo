@@ -275,28 +275,31 @@ class JumpsellerService {
   // ... resto de los métodos (syncOrders, processOrder, etc.) se mantienen igual
   
   static async syncOrders(channel, dateFrom, dateTo) {
-    try {
-      console.log(`🔄 [Jumpseller] Iniciando sincronización para canal: ${channel.channel_name}`);
+  try {
+    console.log(`🔄 [Jumpseller] Iniciando sincronización para canal: ${channel.channel_name}`);
+    
+    const accessToken = await this.getValidAccessToken(channel);
+
+    // Parámetros de consulta
+    const params = {
+      limit: 50,
+      page: 1
+    };
+
+    // Agregar filtros de fecha si se proporcionan
+    if (dateFrom) {
+      params.updated_since = new Date(dateFrom).toISOString();
+      console.log(`📅 [Jumpseller] Filtrando desde: ${params.updated_since}`);
+    }
+
+    let totalImported = 0;
+    let totalProcessed = 0;
+    let hasMorePages = true;
+
+    while (hasMorePages) {
+      console.log(`📄 [Jumpseller] Procesando página ${params.page}...`);
       
-      const accessToken = await this.getValidAccessToken(channel);
-
-      // Parámetros de consulta
-      const params = {
-        limit: 50,
-        page: 1
-      };
-
-      // Agregar filtros de fecha si se proporcionan
-      if (dateFrom) {
-        params.updated_since = new Date(dateFrom).toISOString();
-      }
-
-      let totalImported = 0;
-      let hasMorePages = true;
-
-      while (hasMorePages) {
-        console.log(`📄 [Jumpseller] Procesando página ${params.page}...`);
-        
+      try {
         const response = await axios.get(`${this.API_BASE_URL}/orders.json`, {
           headers: {
             'Authorization': `Bearer ${accessToken}`,
@@ -306,20 +309,62 @@ class JumpsellerService {
           timeout: 15000
         });
 
-        const orders = response.data.orders || response.data || [];
+        console.log(`📋 [Jumpseller] Respuesta de API - Status: ${response.status}`);
+        console.log(`📋 [Jumpseller] Estructura de respuesta:`, Object.keys(response.data));
+
+        // ✅ MEJORAR: Validar estructura de respuesta
+        let orders = [];
         
-        if (!Array.isArray(orders) || orders.length === 0) {
+        if (response.data.orders && Array.isArray(response.data.orders)) {
+          orders = response.data.orders;
+        } else if (Array.isArray(response.data)) {
+          orders = response.data;
+        } else {
+          console.warn(`⚠️ [Jumpseller] Estructura de respuesta inesperada:`, response.data);
+          break;
+        }
+
+        console.log(`📊 [Jumpseller] Página ${params.page}: ${orders.length} pedidos encontrados`);
+        
+        if (orders.length === 0) {
+          console.log(`📭 [Jumpseller] No más pedidos en página ${params.page}, finalizando`);
           hasMorePages = false;
           break;
         }
 
-        // Procesar cada pedido
-        for (const jumpsellerOrder of orders) {
+        // Procesar cada pedido con validación mejorada
+        for (let i = 0; i < orders.length; i++) {
+          const jumpsellerOrder = orders[i];
+          totalProcessed++;
+          
           try {
+            // ✅ VALIDAR que el pedido tenga los campos mínimos requeridos
+            if (!jumpsellerOrder || typeof jumpsellerOrder !== 'object') {
+              console.warn(`⚠️ [Jumpseller] Pedido ${i} es inválido:`, jumpsellerOrder);
+              continue;
+            }
+
+            if (!jumpsellerOrder.id) {
+              console.warn(`⚠️ [Jumpseller] Pedido ${i} no tiene ID:`, Object.keys(jumpsellerOrder));
+              continue;
+            }
+
+            console.log(`🔄 [Jumpseller] Procesando pedido ${jumpsellerOrder.id} (${i + 1}/${orders.length})`);
+            
             const imported = await this.processOrder(jumpsellerOrder, channel);
-            if (imported) totalImported++;
+            if (imported) {
+              totalImported++;
+              console.log(`✅ [Jumpseller] Pedido ${jumpsellerOrder.id} procesado exitosamente`);
+            } else {
+              console.log(`📝 [Jumpseller] Pedido ${jumpsellerOrder.id} ya existía (actualizado)`);
+            }
+            
           } catch (orderError) {
-            console.error(`❌ [Jumpseller] Error procesando pedido ${jumpsellerOrder.id}:`, orderError.message);
+            console.error(`❌ [Jumpseller] Error procesando pedido ${jumpsellerOrder?.id || 'ID_UNDEFINED'}:`, {
+              error: orderError.message,
+              stack: orderError.stack,
+              orderData: jumpsellerOrder ? Object.keys(jumpsellerOrder) : 'NULL_ORDER'
+            });
           }
         }
 
@@ -332,127 +377,193 @@ class JumpsellerService {
           console.warn('⚠️ [Jumpseller] Detenido en página 100 para prevenir bucle infinito');
           break;
         }
-      }
 
-      console.log(`✅ [Jumpseller] Sincronización completada: ${totalImported} pedidos importados`);
+        // Pequeña pausa entre páginas para no sobrecargar la API
+        if (hasMorePages) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+
+      } catch (pageError) {
+        console.error(`❌ [Jumpseller] Error obteniendo página ${params.page}:`, pageError.message);
+        break;
+      }
+    }
+
+    console.log(`✅ [Jumpseller] Sincronización completada:`, {
+      totalProcessed,
+      totalImported,
+      pagesProcessed: params.page - 1
+    });
+    
+    return {
+      success: true,
+      imported: totalImported,
+      orders_synced: totalImported,
+      total_processed: totalProcessed,
+      message: `${totalImported} de ${totalProcessed} pedidos sincronizados exitosamente`
+    };
+
+  } catch (error) {
+    console.error('❌ [Jumpseller] Error general en sincronización:', {
+      message: error.message,
+      stack: error.stack,
+      response: error.response?.data
+    });
+    throw error;
+  }
+}
+
+
+ static async processOrder(jumpsellerOrder, channel) {
+  try {
+    // ✅ VALIDACIONES MEJORADAS
+    if (!jumpsellerOrder) {
+      throw new Error('Pedido es null o undefined');
+    }
+
+    if (!jumpsellerOrder.id) {
+      throw new Error(`Pedido no tiene ID. Campos disponibles: ${Object.keys(jumpsellerOrder).join(', ')}`);
+    }
+
+    const orderId = jumpsellerOrder.id.toString();
+    
+    console.log(`🔍 [Jumpseller] Procesando pedido ID: ${orderId}`);
+
+    // Verificar si el pedido ya existe
+    const existingOrder = await Order.findOne({
+      external_order_id: orderId,
+      channel_id: channel._id
+    });
+
+    if (existingOrder) {
+      console.log(`📝 [Jumpseller] Pedido ${orderId} ya existe, verificando actualizaciones...`);
+      return await this.updateExistingOrder(existingOrder, jumpsellerOrder);
+    }
+
+    console.log(`🆕 [Jumpseller] Creando nuevo pedido ${orderId}...`);
+    return await this.createNewOrder(jumpsellerOrder, channel);
+
+  } catch (error) {
+    console.error(`❌ [Jumpseller] Error en processOrder:`, {
+      orderId: jumpsellerOrder?.id || 'UNKNOWN',
+      error: error.message,
+      orderKeys: jumpsellerOrder ? Object.keys(jumpsellerOrder) : 'NULL_ORDER'
+    });
+    throw error;
+  }
+}
+
+static async createNewOrder(jumpsellerOrder, channel) {
+  try {
+    console.log(`🆕 [Jumpseller] Creando pedido ${jumpsellerOrder.id} con datos:`, {
+      id: jumpsellerOrder.id,
+      status: jumpsellerOrder.status,
+      total: jumpsellerOrder.total,
+      customerEmail: jumpsellerOrder.customer?.email,
+      productsCount: jumpsellerOrder.products?.length || 0
+    });
+
+    const status = this.mapJumpsellerStatus(jumpsellerOrder.status);
+    
+    // Procesar dirección de envío con validaciones
+    const shippingAddress = jumpsellerOrder.shipping_address || {};
+    
+    // Crear items del pedido con validaciones
+    const items = (jumpsellerOrder.products || []).map((product, index) => {
+      if (!product) {
+        console.warn(`⚠️ [Jumpseller] Producto ${index} es null/undefined`);
+        return null;
+      }
       
       return {
-        success: true,
-        imported: totalImported,
-        orders_synced: totalImported,
-        message: `${totalImported} pedidos sincronizados exitosamente`
-      };
-
-    } catch (error) {
-      console.error('❌ [Jumpseller] Error en sincronización:', error.response?.data || error.message);
-      throw error;
-    }
-  }
-
-  static async processOrder(jumpsellerOrder, channel) {
-    try {
-      // Verificar si el pedido ya existe
-      const existingOrder = await Order.findOne({
-        external_order_id: jumpsellerOrder.id.toString(),
-        channel_id: channel._id
-      });
-
-      if (existingOrder) {
-        return await this.updateExistingOrder(existingOrder, jumpsellerOrder);
-      }
-
-      return await this.createNewOrder(jumpsellerOrder, channel);
-
-    } catch (error) {
-      console.error(`❌ [Jumpseller] Error procesando pedido ${jumpsellerOrder.id}:`, error);
-      throw error;
-    }
-  }
-
-  static async createNewOrder(jumpsellerOrder, channel) {
-    try {
-      const status = this.mapJumpsellerStatus(jumpsellerOrder.status);
-      
-      // Procesar dirección de envío
-      const shippingAddress = jumpsellerOrder.shipping_address || {};
-      
-      // Crear items del pedido
-      const items = (jumpsellerOrder.products || []).map(product => ({
         product_id: product.id?.toString() || '',
-        name: product.name || '',
+        name: product.name || `Producto ${index + 1}`,
         sku: product.sku || '',
         quantity: parseInt(product.pivot?.quantity) || 1,
         price: parseFloat(product.pivot?.price) || 0,
         variant_title: product.pivot?.variant_name || null
-      }));
+      };
+    }).filter(item => item !== null); // Filtrar items null
 
-      // Calcular totales
-      const subtotal = parseFloat(jumpsellerOrder.subtotal) || 0;
-      const shipping_cost = parseFloat(jumpsellerOrder.shipping) || 0;
-      const tax_amount = parseFloat(jumpsellerOrder.tax) || 0;
-      const total_amount = parseFloat(jumpsellerOrder.total) || subtotal + shipping_cost + tax_amount;
+    // Calcular totales con validaciones
+    const subtotal = parseFloat(jumpsellerOrder.subtotal) || 0;
+    const shipping_cost = parseFloat(jumpsellerOrder.shipping) || 0;
+    const tax_amount = parseFloat(jumpsellerOrder.tax) || 0;
+    const total_amount = parseFloat(jumpsellerOrder.total) || subtotal + shipping_cost + tax_amount;
 
-      const newOrder = new Order({
-        company_id: channel.company_id,
-        channel_id: channel._id,
-        external_order_id: jumpsellerOrder.id.toString(),
-        order_number: jumpsellerOrder.token || jumpsellerOrder.id.toString(),
-        
-        // Información del cliente
-        customer_name: `${jumpsellerOrder.customer?.first_name || ''} ${jumpsellerOrder.customer?.last_name || ''}`.trim(),
-        customer_email: jumpsellerOrder.customer?.email || '',
-        customer_phone: jumpsellerOrder.customer?.phone || shippingAddress.phone || '',
-        
-        // Dirección de envío
-        shipping_address: {
-          address_line_1: shippingAddress.address || '',
-          address_line_2: shippingAddress.address_2 || '',
-          city: shippingAddress.city || '',
-          state: shippingAddress.state || '',
-          postal_code: shippingAddress.zip || '',
-          country: shippingAddress.country || 'CL',
-          commune: shippingAddress.city || ''
-        },
-        
-        // Productos y totales
-        items,
-        subtotal,
-        shipping_cost,
-        tax_amount,
-        total_amount,
-        currency: jumpsellerOrder.currency || 'CLP',
-        
-        // Fechas y estado
-        order_date: new Date(jumpsellerOrder.created_at),
-        status,
-        payment_status: this.mapPaymentStatus(jumpsellerOrder.financial_status),
-        
-        // Metadatos
-        channel_data: {
-          jumpseller_id: jumpsellerOrder.id,
-          jumpseller_token: jumpsellerOrder.token,
-          jumpseller_status: jumpsellerOrder.status,
-          financial_status: jumpsellerOrder.financial_status,
-          fulfillment_status: jumpsellerOrder.fulfillment_status,
-          notes: jumpsellerOrder.notes || '',
-          created_at: jumpsellerOrder.created_at,
-          updated_at: jumpsellerOrder.updated_at
-        },
-        
-        created_at: new Date(),
-        updated_at: new Date()
-      });
+    // Validar customer
+    const customer = jumpsellerOrder.customer || {};
 
-      await newOrder.save();
-      console.log(`✅ [Jumpseller] Pedido ${jumpsellerOrder.id} creado exitosamente`);
+    const newOrder = new Order({
+      company_id: channel.company_id,
+      channel_id: channel._id,
+      external_order_id: jumpsellerOrder.id.toString(),
+      order_number: jumpsellerOrder.token || jumpsellerOrder.id.toString(),
       
-      return true;
+      // Información del cliente con validaciones
+      customer_name: `${customer.first_name || ''} ${customer.last_name || ''}`.trim() || 'Cliente Sin Nombre',
+      customer_email: customer.email || '',
+      customer_phone: customer.phone || shippingAddress.phone || '',
+      
+      // Dirección de envío
+      shipping_address: {
+        address_line_1: shippingAddress.address || '',
+        address_line_2: shippingAddress.address_2 || '',
+        city: shippingAddress.city || '',
+        state: shippingAddress.state || '',
+        postal_code: shippingAddress.zip || '',
+        country: shippingAddress.country || 'CL',
+        commune: shippingAddress.city || ''
+      },
+      
+      // Productos y totales
+      items,
+      subtotal,
+      shipping_cost,
+      tax_amount,
+      total_amount,
+      currency: jumpsellerOrder.currency || 'CLP',
+      
+      // Fechas y estado
+      order_date: jumpsellerOrder.created_at ? new Date(jumpsellerOrder.created_at) : new Date(),
+      status,
+      payment_status: this.mapPaymentStatus(jumpsellerOrder.financial_status),
+      
+      // Metadatos
+      channel_data: {
+        jumpseller_id: jumpsellerOrder.id,
+        jumpseller_token: jumpsellerOrder.token,
+        jumpseller_status: jumpsellerOrder.status,
+        financial_status: jumpsellerOrder.financial_status,
+        fulfillment_status: jumpsellerOrder.fulfillment_status,
+        notes: jumpsellerOrder.notes || '',
+        created_at: jumpsellerOrder.created_at,
+        updated_at: jumpsellerOrder.updated_at
+      },
+      
+      created_at: new Date(),
+      updated_at: new Date()
+    });
 
-    } catch (error) {
-      console.error(`❌ [Jumpseller] Error creando pedido ${jumpsellerOrder.id}:`, error);
-      throw error;
-    }
+    await newOrder.save();
+    console.log(`✅ [Jumpseller] Pedido ${jumpsellerOrder.id} creado exitosamente`);
+    
+    return true;
+
+  } catch (error) {
+    console.error(`❌ [Jumpseller] Error creando pedido ${jumpsellerOrder.id}:`, {
+      error: error.message,
+      stack: error.stack,
+      orderData: {
+        id: jumpsellerOrder.id,
+        status: jumpsellerOrder.status,
+        customer: !!jumpsellerOrder.customer,
+        products: jumpsellerOrder.products?.length || 0
+      }
+    });
+    throw error;
   }
+}
 
   static async updateExistingOrder(existingOrder, jumpsellerOrder) {
     try {
