@@ -484,6 +484,19 @@ static async createNewOrder(jumpsellerOrder, channel) {
     // Procesar dirección de envío con validaciones
     const shippingAddress = jumpsellerOrder.shipping_address || {};
     
+    // ✅ CORRECCIÓN PRINCIPAL: Convertir objeto a string para el modelo
+    const addressParts = [];
+    if (shippingAddress.address) addressParts.push(shippingAddress.address);
+    if (shippingAddress.address_2) addressParts.push(shippingAddress.address_2);
+    if (shippingAddress.city) addressParts.push(shippingAddress.city);
+    if (shippingAddress.state) addressParts.push(shippingAddress.state);
+    if (shippingAddress.zip) addressParts.push(shippingAddress.zip);
+    if (shippingAddress.country) addressParts.push(shippingAddress.country);
+    
+    const formattedAddress = addressParts.join(', ') || 'Dirección no especificada';
+    
+    console.log(`📍 [Jumpseller] Dirección formateada: "${formattedAddress}"`);
+    
     // Crear items del pedido con validaciones
     const items = (jumpsellerOrder.products || []).map((product, index) => {
       if (!product) {
@@ -521,44 +534,48 @@ static async createNewOrder(jumpsellerOrder, channel) {
       customer_email: customer.email || '',
       customer_phone: customer.phone || shippingAddress.phone || '',
       
-      // Dirección de envío
-      shipping_address: {
-        address_line_1: shippingAddress.address || '',
-        address_line_2: shippingAddress.address_2 || '',
-        city: shippingAddress.city || '',
-        state: shippingAddress.state || '',
-        postal_code: shippingAddress.zip || '',
-        country: shippingAddress.country || 'CL',
-        commune: shippingAddress.city || ''
-      },
+      // ✅ DIRECCIÓN COMO STRING (según el modelo)
+      shipping_address: formattedAddress,
+      
+      // ✅ CAMPOS INDIVIDUALES DE DIRECCIÓN (para compatibilidad)
+      shipping_city: shippingAddress.city || '',
+      shipping_state: shippingAddress.state || '',
+      shipping_zip: shippingAddress.zip || '',
+      shipping_commune: shippingAddress.city || '', // En Chile, city suele ser la comuna
       
       // Productos y totales
-      items,
+      items_count: items.length,
       subtotal,
       shipping_cost,
       tax_amount,
       total_amount,
-      currency: jumpsellerOrder.currency || 'CLP',
+      payment_method: this.mapPaymentMethod(jumpsellerOrder.payment_method),
       
       // Fechas y estado
       order_date: jumpsellerOrder.created_at ? new Date(jumpsellerOrder.created_at) : new Date(),
       status,
-      payment_status: this.mapPaymentStatus(jumpsellerOrder.financial_status),
       
-      // Metadatos
-      channel_data: {
-        jumpseller_id: jumpsellerOrder.id,
-        jumpseller_token: jumpsellerOrder.token,
-        jumpseller_status: jumpsellerOrder.status,
-        financial_status: jumpsellerOrder.financial_status,
-        fulfillment_status: jumpsellerOrder.fulfillment_status,
-        notes: jumpsellerOrder.notes || '',
-        created_at: jumpsellerOrder.created_at,
-        updated_at: jumpsellerOrder.updated_at
+      // Metadatos adicionales
+      notes: jumpsellerOrder.notes || '',
+      
+      // ✅ USAR raw_data PARA GUARDAR TODA LA INFORMACIÓN ORIGINAL
+      raw_data: {
+        jumpseller_order: jumpsellerOrder,
+        shipping_address_object: shippingAddress, // Guardar el objeto original aquí
+        processed_at: new Date(),
+        items_processed: items
       },
       
       created_at: new Date(),
       updated_at: new Date()
+    });
+
+    console.log(`💾 [Jumpseller] Guardando pedido con datos:`, {
+      id: newOrder.external_order_id,
+      customer: newOrder.customer_name,
+      address: newOrder.shipping_address,
+      total: newOrder.total_amount,
+      items: newOrder.items_count
     });
 
     await newOrder.save();
@@ -569,12 +586,14 @@ static async createNewOrder(jumpsellerOrder, channel) {
   } catch (error) {
     console.error(`❌ [Jumpseller] Error creando pedido ${jumpsellerOrder.id}:`, {
       error: error.message,
-      stack: error.stack,
+      stack: error.stack?.split('\n').slice(0, 3), // Solo las primeras 3 líneas del stack
+      validationErrors: error.errors ? Object.keys(error.errors) : null,
       orderData: {
         id: jumpsellerOrder.id,
         status: jumpsellerOrder.status,
         customer: !!jumpsellerOrder.customer,
-        products: jumpsellerOrder.products?.length || 0
+        products: jumpsellerOrder.products?.length || 0,
+        shippingAddress: !!jumpsellerOrder.shipping_address
       }
     });
     throw error;
@@ -627,6 +646,7 @@ static async createNewOrder(jumpsellerOrder, channel) {
     return statusMap[jumpsellerStatus] || 'pending';
   }
 
+  
   static mapPaymentStatus(financialStatus) {
     const paymentMap = {
       'pending': 'pending',
