@@ -434,6 +434,7 @@ if (channel.channel_type === CHANNEL_TYPES.JUMPSELLER) {
 
   // Sincronizar pedidos de un canal - MEJORADO PARA MANEJAR RESULTADOS DETALLADOS
 async syncOrders(req, res) {
+  
   try {
     const { id } = req.params;
     const { date_from, date_to } = req.body;
@@ -469,18 +470,37 @@ async syncOrders(req, res) {
     let syncResult = null;
 
     try {
+       console.log('🔍 [Controller Debug] Channel type:', {
+    original: channel.channel_type,
+    toLowerCase: channel.channel_type.toLowerCase(),
+    constants: {
+      SHOPIFY: CHANNEL_TYPES.SHOPIFY,
+      WOOCOMMERCE: CHANNEL_TYPES.WOOCOMMERCE,
+      MERCADOLIBRE: CHANNEL_TYPES.MERCADOLIBRE,
+      JUMPSELLER: CHANNEL_TYPES.JUMPSELLER
+    }
+  });
       switch (channel.channel_type.toLowerCase()) {
         case CHANNEL_TYPES.SHOPIFY:
-          syncResult = await ShopifyService.syncOrders(channel, date_from, date_to);
-          break;
-        case CHANNEL_TYPES.WOOCOMMERCE:
-          syncResult = await WooCommerceService.syncOrders(channel, date_from, date_to);
-          break;
-        case CHANNEL_TYPES.MERCADOLIBRE:
-          syncResult = await MercadoLibreService.syncOrders(channel, date_from, date_to);
-          break;
-        case CHANNEL_TYPES.JUMPSELLER:
-          syncResult = await JumpsellerService.syncOrders(channel, date_from, date_to);
+      console.log('📦 [Controller] Ejecutando sincronización Shopify');
+      syncResult = await ShopifyService.syncOrders(channel, date_from, date_to);
+      break;
+      
+    case CHANNEL_TYPES.WOOCOMMERCE:
+      console.log('🛒 [Controller] Ejecutando sincronización WooCommerce');
+      syncResult = await WooCommerceService.syncOrders(channel, date_from, date_to);
+      break;
+      
+    case CHANNEL_TYPES.MERCADOLIBRE:
+      console.log('🏪 [Controller] Ejecutando sincronización MercadoLibre');
+      syncResult = await MercadoLibreService.syncOrders(channel, date_from, date_to);
+      break;
+      
+    case CHANNEL_TYPES.JUMPSELLER:
+    case 'jumpseller': // ✅ AGREGAR TAMBIÉN EL VALOR LITERAL
+      console.log('🚀 [Controller] Ejecutando sincronización Jumpseller');
+      syncResult = await JumpsellerService.syncOrders(channel, date_from, date_to);
+      break;
         default:
           throw new Error(`Sincronización no implementada para: "${channel.channel_type}"`);
       }

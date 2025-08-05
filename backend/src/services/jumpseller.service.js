@@ -272,9 +272,8 @@ class JumpsellerService {
     }
   }
 
-  // ... resto de los métodos (syncOrders, processOrder, etc.) se mantienen igual
   
-  static async syncOrders(channel, dateFrom, dateTo) {
+static async syncOrders(channel, dateFrom, dateTo) {
   try {
     console.log(`🔄 [Jumpseller] Iniciando sincronización para canal: ${channel.channel_name}`);
     
@@ -311,20 +310,38 @@ class JumpsellerService {
 
         console.log(`📋 [Jumpseller] Respuesta de API - Status: ${response.status}`);
         console.log(`📋 [Jumpseller] Estructura de respuesta:`, Object.keys(response.data));
+        console.log(`📋 [Jumpseller] Primer elemento:`, response.data[0] ? Object.keys(response.data[0]) : 'EMPTY');
 
-        // ✅ MEJORAR: Validar estructura de respuesta
+        // ✅ CORRECCIÓN PRINCIPAL: La API de Jumpseller devuelve [{"order": {...}}]
         let orders = [];
         
-        if (response.data.orders && Array.isArray(response.data.orders)) {
+        if (Array.isArray(response.data)) {
+          // Extraer los objetos "order" de cada elemento
+          orders = response.data.map(item => {
+            if (item && typeof item === 'object' && item.order) {
+              return item.order; // ✅ EXTRAER EL OBJETO 'order'
+            }
+            return item; // Si no tiene estructura order, usar directamente
+          }).filter(order => order && typeof order === 'object');
+        } else if (response.data.orders && Array.isArray(response.data.orders)) {
           orders = response.data.orders;
-        } else if (Array.isArray(response.data)) {
-          orders = response.data;
         } else {
           console.warn(`⚠️ [Jumpseller] Estructura de respuesta inesperada:`, response.data);
           break;
         }
 
         console.log(`📊 [Jumpseller] Página ${params.page}: ${orders.length} pedidos encontrados`);
+        
+        // Log de estructura del primer pedido para debug
+        if (orders.length > 0) {
+          console.log(`🔍 [Jumpseller] Estructura del primer pedido:`, {
+            id: orders[0].id,
+            keys: Object.keys(orders[0]),
+            hasCustomer: !!orders[0].customer,
+            hasProducts: !!orders[0].products,
+            status: orders[0].status
+          });
+        }
         
         if (orders.length === 0) {
           console.log(`📭 [Jumpseller] No más pedidos en página ${params.page}, finalizando`);
@@ -345,7 +362,7 @@ class JumpsellerService {
             }
 
             if (!jumpsellerOrder.id) {
-              console.warn(`⚠️ [Jumpseller] Pedido ${i} no tiene ID:`, Object.keys(jumpsellerOrder));
+              console.warn(`⚠️ [Jumpseller] Pedido ${i} no tiene ID. Campos disponibles:`, Object.keys(jumpsellerOrder));
               continue;
             }
 
@@ -362,7 +379,6 @@ class JumpsellerService {
           } catch (orderError) {
             console.error(`❌ [Jumpseller] Error procesando pedido ${jumpsellerOrder?.id || 'ID_UNDEFINED'}:`, {
               error: orderError.message,
-              stack: orderError.stack,
               orderData: jumpsellerOrder ? Object.keys(jumpsellerOrder) : 'NULL_ORDER'
             });
           }
