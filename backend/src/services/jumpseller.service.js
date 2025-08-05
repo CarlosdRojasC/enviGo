@@ -549,7 +549,7 @@ static async createNewOrder(jumpsellerOrder, channel) {
       shipping_cost,
       tax_amount,
       total_amount,
-      payment_method: this.mapPaymentMethod(jumpsellerOrder.payment_method),
+      payment_method: this.mapPaymentStatus(jumpsellerOrder.payment_method),
       
       // Fechas y estado
       order_date: jumpsellerOrder.created_at ? new Date(jumpsellerOrder.created_at) : new Date(),
