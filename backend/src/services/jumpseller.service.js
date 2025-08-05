@@ -747,94 +747,156 @@ static async createNewOrder(jumpsellerOrder, channel) {
   }
 
 static mapJumpsellerStatus(jumpsellerStatus) {
-  // Según la documentación, Jumpseller usa estos estados:
+  // Estados válidos en tu modelo Order:
+  // ['pending', 'ready_for_pickup', 'out_for_delivery', 'warehouse_received', 'invoiced', 'shipped', 'delivered', 'cancelled', 'facturado']
+  
   const statusMap = {
-    'Pending Payment': 'pending',        // ✅ Estado real de Jumpseller
-    'Paid': 'confirmed',                 // ✅ Estado real de Jumpseller  
-    'Processing': 'confirmed',
-    'Shipped': 'shipped',
-    'Delivered': 'delivered',
-    'Cancelled': 'cancelled',
-    'Canceled': 'cancelled',             // Variante en inglés US
-    'Refunded': 'cancelled',
-    'Completed': 'delivered',
+    // Estados de Jumpseller → Estados de tu modelo
+    'Pending Payment': 'pending',           // ✅ Estado real de Jumpseller
+    'Paid': 'ready_for_pickup',            // ✅ Cambio: usar ready_for_pickup en lugar de confirmed
+    'Processing': 'ready_for_pickup',       // ✅ Cambio: usar ready_for_pickup
+    'Shipped': 'shipped',                   // ✅ Mantener
+    'Delivered': 'delivered',               // ✅ Mantener
+    'Cancelled': 'cancelled',               // ✅ Mantener
+    'Canceled': 'cancelled',                // Variante en inglés US
+    'Refunded': 'cancelled',                // ✅ Mantener
+    'Completed': 'delivered',               // ✅ Mantener
     
-    // Estados adicionales que pueden aparecer
+    // Estados adicionales en minúsculas
     'pending': 'pending',
-    'paid': 'confirmed',
-    'processing': 'confirmed',
+    'pending payment': 'pending',
+    'paid': 'ready_for_pickup',             // ✅ Cambio
+    'processing': 'ready_for_pickup',       // ✅ Cambio
     'shipped': 'shipped',
     'delivered': 'delivered',
     'cancelled': 'cancelled',
-    'refunded': 'cancelled'
+    'canceled': 'cancelled',
+    'refunded': 'cancelled',
+    'completed': 'delivered',
+    
+    // Estados específicos de fulfillment que podrían aparecer
+    'ready_to_ship': 'ready_for_pickup',
+    'in_transit': 'shipped',
+    'out_for_delivery': 'out_for_delivery',
+    'fulfilled': 'delivered'
   };
 
-  // Normalizar y mapear
-  const normalizedStatus = jumpsellerStatus?.toString().toLowerCase() || 'pending';
-  const mappedStatus = statusMap[jumpsellerStatus] || statusMap[normalizedStatus] || 'pending';
+  // Normalizar el estado de entrada
+  const normalizedStatus = jumpsellerStatus?.toString().trim() || 'pending';
+  
+  // Buscar mapeo exacto primero
+  let mappedStatus = statusMap[normalizedStatus];
+  
+  // Si no hay mapeo exacto, buscar por coincidencia en minúsculas
+  if (!mappedStatus) {
+    const lowerStatus = normalizedStatus.toLowerCase();
+    mappedStatus = statusMap[lowerStatus];
+  }
+  
+  // Fallback final
+  if (!mappedStatus) {
+    mappedStatus = 'pending';
+  }
   
   console.log(`🔄 [Jumpseller] Mapeo de estado: "${jumpsellerStatus}" → "${mappedStatus}"`);
   
   return mappedStatus;
 }
-
   
 static mapPaymentStatus(paymentMethodType, orderStatus) {
-  // Según la documentación, Jumpseller tiene payment_method_type
-  const paymentMap = {
-    'manual': 'pending',          // Cash Collection, etc.
-    'gateway': 'paid',            // Tarjetas, PayPal, etc.
-    'bank_transfer': 'pending',   // Transferencias
-    'cash': 'pending',           // Efectivo
-    'credit_card': 'paid',       // Tarjetas
-    'paypal': 'paid',           // PayPal
-    'webpay': 'paid',           // Webpay (Chile)
-    'khipu': 'paid'             // Khipu (Chile)
+  // Estados de pago simples
+  const paymentStatusMap = {
+    'pending': 'pending',
+    'paid': 'paid',
+    'partially_paid': 'partially_paid',
+    'refunded': 'refunded',
+    'cancelled': 'cancelled'
   };
   
-  // Si el pedido está pagado según el estado general, marcar como pagado
-  if (orderStatus === 'Paid' || orderStatus === 'paid') {
+  // Si el pedido está pagado según el estado general
+  if (orderStatus === 'Paid' || orderStatus === 'paid' || orderStatus === 'Processing' || orderStatus === 'processing') {
     return 'paid';
   }
   
   // Si el pedido está cancelado o reembolsado
-  if (orderStatus === 'Cancelled' || orderStatus === 'Canceled' || orderStatus === 'Refunded') {
+  if (orderStatus === 'Cancelled' || orderStatus === 'Canceled' || orderStatus === 'Refunded' || 
+      orderStatus === 'cancelled' || orderStatus === 'canceled' || orderStatus === 'refunded') {
     return 'cancelled';
   }
   
-  // Mapear según tipo de método de pago
-  return paymentMap[paymentMethodType] || 'pending';
+  // Para métodos de pago automáticos, considerar como pagado si no está cancelado
+  if (paymentMethodType === 'gateway' || paymentMethodType === 'credit_card' || 
+      paymentMethodType === 'paypal' || paymentMethodType === 'webpay') {
+    return 'paid';
+  }
+  
+  // Por defecto, pendiente
+  return 'pending';
 }
 static mapPaymentMethod(paymentMethodName) {
   if (!paymentMethodName) return 'credit_card';
   
-  const methodName = paymentMethodName.toLowerCase();
+  const methodName = paymentMethodName.toLowerCase().trim();
   
   const methodMap = {
+    // Métodos en efectivo
     'cash collection': 'cash',
     'efectivo': 'cash',
+    'cash': 'cash',
+    'contra entrega': 'cash',
+    
+    // Métodos chilenos
     'webpay': 'webpay',
     'webpay plus': 'webpay',
+    'transbank': 'webpay',
     'khipu': 'khipu',
+    
+    // Métodos internacionales
     'paypal': 'paypal',
     'mercado pago': 'mercadopago',
     'mercadopago': 'mercadopago',
+    
+    // Transferencias
     'transferencia': 'bank_transfer',
     'bank transfer': 'bank_transfer',
+    'wire transfer': 'bank_transfer',
+    
+    // Tarjetas (fallback)
     'tarjeta': 'credit_card',
     'credit card': 'credit_card',
     'visa': 'credit_card',
-    'mastercard': 'credit_card'
+    'mastercard': 'credit_card',
+    'debit': 'debit_card',
+    'debit card': 'debit_card'
   };
+  
+  // Buscar coincidencias exactas primero
+  if (methodMap[methodName]) {
+    return methodMap[methodName];
+  }
   
   // Buscar coincidencias parciales
   for (const [key, value] of Object.entries(methodMap)) {
-    if (methodName.includes(key)) {
+    if (methodName.includes(key) || key.includes(methodName)) {
       return value;
     }
   }
   
+  console.log(`⚠️ [Jumpseller] Método de pago no reconocido: "${paymentMethodName}", usando credit_card`);
   return 'credit_card'; // Fallback
+}
+static validateOrderStatus(status) {
+  const validStatuses = [
+    'pending', 'ready_for_pickup', 'out_for_delivery', 'warehouse_received', 
+    'invoiced', 'shipped', 'delivered', 'cancelled', 'facturado'
+  ];
+  
+  if (!validStatuses.includes(status)) {
+    console.error(`❌ [Jumpseller] Estado inválido: "${status}". Estados válidos:`, validStatuses);
+    return 'pending'; // Fallback seguro
+  }
+  
+  return status;
 }
 }
 
