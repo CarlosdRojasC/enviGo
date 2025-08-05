@@ -5,6 +5,18 @@ const router = express.Router();
 const { authenticateToken, isAdmin } = require('../middlewares/auth.middleware');
 const ChannelController = require('../controllers/channel.controller');
 
+
+router.post('/jumpseller/authorize', ChannelController.getJumpsellerAuthorizationUrl);
+
+// ✅ CORREGIDO: Callback de Jumpseller - DEBE SER GET, NO POST
+router.get('/jumpseller/callback', (req, res, next) => {
+  console.log('🔄 [DEBUG] Jumpseller callback route accessed!');
+  console.log('🔄 [DEBUG] Query params:', req.query);
+  console.log('🔄 [DEBUG] Method:', req.method);
+  next();
+}, ChannelController.handleJumpsellerCallback);
+
+
 // Todas las rutas requieren autenticación
 router.use(authenticateToken);
 
@@ -44,16 +56,5 @@ router.post('/mercadolibre/authorize', authenticateToken, ChannelController.getM
 
 // Ruta para manejar el callback de Mercado Libre después de la autorización
 router.post('/mercadolibre/callback', authenticateToken, ChannelController.handleMLCallback);
-
-router.post('/jumpseller/authorize', ChannelController.getJumpsellerAuthorizationUrl);
-
-// ✅ CORREGIDO: Callback de Jumpseller - DEBE SER GET, NO POST
-router.get('/jumpseller/callback', (req, res, next) => {
-  console.log('🔄 [DEBUG] Jumpseller callback route accessed!');
-  console.log('🔄 [DEBUG] Query params:', req.query);
-  console.log('🔄 [DEBUG] Method:', req.method);
-  next();
-}, ChannelController.handleJumpsellerCallback);
-
 
 module.exports = router;
