@@ -18,7 +18,13 @@
         >
           📋 Marcar como listos
         </button>
-        
+        <button 
+    @click="$emit('generate-labels')" 
+    class="bulk-btn labels-btn"
+    :disabled="!canGenerateLabels"
+  >
+    🏷️ Generar Etiquetas ({{ selectedOrders.length }})
+  </button>
         <button 
           @click="$emit('bulk-export')" 
           class="bulk-btn export-btn"
@@ -127,6 +133,7 @@
             @view-tracking="$emit('view-tracking', order)"
             @view-proof="$emit('view-proof', order)"
             @contact-support="$emit('contact-support', order)"
+            @generate-labels="$emit('generate-labels', order)"
           />
         </tbody>
       </table>
@@ -258,6 +265,7 @@ defineEmits([
   'track-live',
   'view-tracking',
   'view-proof',
+  'generate-labels',
   'contact-support',
   'bulk-mark-ready',
   'generate-manifest',
@@ -273,6 +281,16 @@ const canMarkAsReady = computed(() => {
   return props.selectedOrders.some(orderId => {
     const order = props.orders.find(o => o._id === orderId)
     return order && order.status === 'pending'
+  })
+})
+
+const canGenerateLabels = computed(() => {
+  if (props.selectedOrders.length === 0) return false
+  
+  // Verificar que todos los pedidos seleccionados sean válidos para etiquetas
+  return props.selectedOrders.every(orderId => {
+    const order = props.orders.find(o => o._id === orderId)
+    return order && ['pending', 'ready_for_pickup'].includes(order.status)
   })
 })
 
@@ -955,6 +973,37 @@ function isOrderSelectable(order) {
   .status-badge.status-shipped {
     font-size: 10px;
     padding: 4px 10px;
+  }
+}
+.labels-btn {
+  background: rgba(139, 92, 246, 0.2);
+  color: white;
+  border: 1px solid rgba(139, 92, 246, 0.3);
+}
+
+.labels-btn:hover:not(:disabled) {
+  background: rgba(139, 92, 246, 0.3);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(139, 92, 246, 0.4);
+}
+
+.labels-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* Responsive para mobile */
+@media (max-width: 1024px) {
+  .bulk-actions {
+    flex-direction: column;
+    gap: 8px;
+    width: 100%;
+  }
+  
+  .bulk-btn {
+    width: 100%;
+    justify-content: center;
   }
 }
 </style>

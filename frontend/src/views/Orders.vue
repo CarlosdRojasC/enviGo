@@ -58,6 +58,7 @@
   @bulk-mark-ready="handleBulkMarkReady"
   @generate-manifest="generateManifestAndMarkReady"
   @bulk-export="handleBulkExport"
+  @generate-labels="handleGenerateLabels"
   @create-order="handleCreateOrder"
   @go-to-page="goToPage"
   @change-page-size="changePageSize"
@@ -351,6 +352,17 @@
     </form>
   </div>
 </Modal>
+<Modal 
+  v-model="showLabelsModal" 
+  :title="`🏷️ Generar Etiquetas - ${selectedOrders.length} pedidos`" 
+  width="800px"
+>
+  <LabelGenerator 
+    :selected-order-ids="selectedOrders"
+    @labels-generated="onLabelsGenerated"
+    @close="showLabelsModal = false"
+  />
+</Modal>
   </div>
   
 </template>
@@ -473,6 +485,9 @@ const showSupportModal = ref(false)
 const showCreateOrderModal = ref(false)
 const newOrder = ref({})
 const isCreatingOrder = ref(false)
+// ✅ NUEVO: Estado para modal de etiquetas
+const showLabelsModal = ref(false)
+const generatingLabels = ref(false)
 
 // ⚡ TIEMPO REAL: Estado para actualización automática
 const realTimeEnabled = ref(true)
@@ -933,22 +948,24 @@ function handleShowProof(proofData) {
 function emailSupport(order) {
   const subject = `Consulta sobre Pedido #${order.order_number}`
   const body = `Hola,\n\nTengo una consulta sobre mi pedido #${order.order_number}.\n\nDetalles:\n- Cliente: ${order.customer_name}\n- Estado: ${getStatusName(order.status)}\n\nMi consulta es:\n\n[Describe tu consulta aquí]\n\nGracias.`
-  window.location.href = `mailto:soporte@tuempresa.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
+  window.location.href = `mailto:contacto@envigo.cl?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
   showSupportModal.value = false
 }
 
 function whatsappSupport(order) {
   const message = `Hola, tengo una consulta sobre mi pedido #${order.order_number}. Estado: ${getStatusName(order.status)}`
-  const whatsappNumber = '56912345678'
+  const whatsappNumber = '56986147420'
   window.open(`https://wa.me/${whatsappNumber}?text=${encodeURIComponent(message)}`, '_blank')
   showSupportModal.value = false
 }
 
 function callSupport(order) {
-  const phoneNumber = '+56912345678'
+  const phoneNumber = '+56986147420'
   window.location.href = `tel:${phoneNumber}`
   showSupportModal.value = false
 }
+
+
 
 // ==================== MÉTODOS UTILITARIOS ====================
 
@@ -1201,6 +1218,185 @@ async function processPendingUpdates() {
   }
 }
 
+// ✅ NUEVO: Manejar generación de etiquetas
+async function handleGenerateLabels() {
+  console.log('🏷️ Generando etiquetas para pedidos:', selectedOrders.value)
+  
+  if (selectedOrders.value.length === 0) {
+    toast.warning('Selecciona al menos un pedido')
+    return
+  }
+
+  // Validar que los pedidos sean válidos
+  const validOrders = selectedOrders.value.filter(orderId => {
+    const order = orders.value.find(o => o._id === orderId)
+    return order && ['pending', 'ready_for_pickup'].includes(order.status)
+  })
+
+  if (validOrders.length === 0) {
+    toast.error('Los pedidos seleccionados no son válidos para generar etiquetas')
+    return
+  }
+
+  if (validOrders.length !== selectedOrders.value.length) {
+    toast.warning(`Solo ${validOrders.length} de ${selectedOrders.value.length} pedidos son válidos para etiquetas`)
+    selectedOrders.value = validOrders
+  }
+
+  // Opción 1: Generar directamente sin modal
+  await generateLabelsDirectly(validOrders)
+  
+  // Opción 2: Abrir modal para más opciones
+  // showLabelsModal.value = true
+}
+
+// ✅ Generar etiquetas directamente
+async function generateLabelsDirectly(orderIds) {
+  generatingLabels.value = true
+  
+  try {
+    const response = await apiService.labels.generateBulk(orderIds)
+    
+    toast.success(`${response.data.total} etiquetas generadas exitosamente`)
+    
+    // Actualizar pedidos localmente
+    response.data.labels.forEach(label => {
+      const orderIndex = orders.value.findIndex(o => o._id === label.order_id)
+      if (orderIndex !== -1) {
+        orders.value[orderIndex].envigo_label = {
+          unique_code: label.unique_code,
+          generated_at: new Date()
+        }
+      }
+    })
+
+    // Preguntar si quiere imprimir
+    if (confirm(`¿Deseas imprimir las ${response.data.total} etiquetas generadas?`)) {
+      printLabels(response.data.labels)
+    }
+
+    // Limpiar selección
+    selectedOrders.value = []
+    
+  } catch (error) {
+    console.error('Error generando etiquetas:', error)
+    toast.error('Error generando etiquetas: ' + (error.response?.data?.error || error.message))
+  } finally {
+    generatingLabels.value = false
+  }
+}
+
+// ✅ Imprimir etiquetas generadas
+function printLabels(labels) {
+  let printContent = `
+    <html>
+      <head>
+        <title>Etiquetas enviGo - ${labels.length} etiquetas</title>
+        <style>
+          @page { size: A4; margin: 10mm; }
+          body { font-family: Arial, sans-serif; font-size: 12px; }
+          .label { 
+            width: 180mm; 
+            height: 60mm; 
+            border: 2px solid #000; 
+            margin-bottom: 10mm; 
+            padding: 5mm; 
+            page-break-inside: avoid;
+            display: flex;
+            flex-direction: column;
+          }
+          .label-header { 
+            text-align: center; 
+            border-bottom: 1px solid #000; 
+            padding-bottom: 3mm;
+            margin-bottom: 3mm;
+          }
+          .company-name { font-size: 16px; font-weight: bold; }
+          .envigo-code { 
+            font-size: 20px; 
+            font-weight: bold; 
+            color: #dc2626; 
+            margin: 2mm 0;
+          }
+          .label-content { 
+            display: flex; 
+            justify-content: space-between;
+            flex: 1;
+          }
+          .order-info { flex: 1; }
+          .info-line { margin: 1mm 0; }
+        </style>
+      </head>
+      <body>
+  `
+
+  labels.forEach(label => {
+    printContent += `
+      <div class="label">
+        <div class="label-header">
+          <div class="company-name">enviGo</div>
+          <div class="envigo-code">${label.unique_code}</div>
+        </div>
+        <div class="label-content">
+          <div class="order-info">
+            <div class="info-line"><strong>Pedido:</strong> #${label.order_number}</div>
+            <div class="info-line"><strong>Cliente:</strong> ${label.customer_name}</div>
+            <div class="info-line"><strong>Teléfono:</strong> ${label.customer_phone || 'No disponible'}</div>
+            <div class="info-line"><strong>Dirección:</strong> ${label.shipping_address}</div>
+            <div class="info-line"><strong>Comuna:</strong> ${label.shipping_commune}</div>
+            ${label.notes ? `<div class="info-line"><strong>Notas:</strong> ${label.notes}</div>` : ''}
+          </div>
+        </div>
+      </div>
+    `
+  })
+
+  printContent += `</body></html>`
+
+  const printWindow = window.open('', '_blank', 'width=800,height=600')
+  printWindow.document.write(printContent)
+  printWindow.document.close()
+  printWindow.focus()
+  printWindow.print()
+
+  // Marcar como impresas
+  labels.forEach(label => {
+    markLabelAsPrinted(label.order_id)
+  })
+}
+
+// ✅ Marcar etiqueta como impresa
+async function markLabelAsPrinted(orderId) {
+  try {
+    await apiService.labels.markPrinted(orderId)
+  } catch (error) {
+    console.error('Error marcando etiqueta como impresa:', error)
+  }
+}
+
+// ✅ Manejar cierre del modal
+function closeLabelsModal() {
+  showLabelsModal.value = false
+}
+
+// ✅ Callback cuando se generan etiquetas desde el modal
+function onLabelsGenerated(labels) {
+  toast.success(`${labels.length} etiquetas generadas exitosamente`)
+  
+  // Actualizar pedidos localmente
+  labels.forEach(label => {
+    const orderIndex = orders.value.findIndex(o => o._id === label.order_id)
+    if (orderIndex !== -1) {
+      orders.value[orderIndex].envigo_label = {
+        unique_code: label.unique_code,
+        generated_at: new Date()
+      }
+    }
+  })
+
+  closeLabelsModal()
+  selectedOrders.value = []
+}
 /**
  * Limpiar cola de notificaciones antiguas
  */
@@ -2241,5 +2437,78 @@ onBeforeUnmount(() => {
   .btn-save {
     width: 100%;
   }
+}
+
+/* ✅ NUEVOS: Estilos para modal de etiquetas */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+}
+
+.modal-large {
+  background: white;
+  border-radius: 12px;
+  width: 95vw;
+  max-width: 800px;
+  max-height: 90vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px;
+  border-bottom: 2px solid #f1f5f9;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+}
+
+.modal-header h3 {
+  margin: 0;
+  font-size: 1.5rem;
+}
+
+.modal-subtitle {
+  margin: 0;
+  font-size: 0.9rem;
+  opacity: 0.9;
+}
+
+.modal-close {
+  background: rgba(255,255,255,0.2);
+  border: none;
+  font-size: 2rem;
+  cursor: pointer;
+  color: white;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: all 0.3s ease;
+}
+
+.modal-close:hover {
+  background: rgba(255,255,255,0.3);
+}
+
+.modal-content {
+  flex: 1;
+  overflow: auto;
+  padding: 20px;
 }
 </style>
