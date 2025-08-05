@@ -1,4 +1,5 @@
-// backend/src/services/jumpseller.service.js - Versión OAuth2
+// backend/src/services/jumpseller.service.js - VERSIÓN CORREGIDA
+
 const axios = require('axios');
 const Order = require('../models/Order');
 const Channel = require('../models/Channel');
@@ -8,11 +9,17 @@ class JumpsellerService {
   static OAUTH_BASE_URL = 'https://accounts.jumpseller.com/oauth';
   
   /**
-   * Genera URL de autorización OAuth2 para Jumpseller
+   * ✅ CORREGIR: Genera URL de autorización OAuth2 para Jumpseller
    */
-  static getAuthorizationUrl(channelId, redirectUri = null) {
+  static getAuthorizationUrl(channelId) {
     const clientId = process.env.JUMPSELLER_CLIENT_ID;
-    const defaultRedirectUri = `${process.env.FRONTEND_URL}/integrations/jumpseller/callback`;
+    const redirectUri = `${process.env.BACKEND_URL}/api/channels/jumpseller/callback`;
+    
+    console.log('🔍 [Jumpseller Auth] Variables de entorno:', {
+      clientId: !!clientId,
+      backendUrl: process.env.BACKEND_URL,
+      redirectUri
+    });
     
     if (!clientId) {
       throw new Error('JUMPSELLER_CLIENT_ID no configurado en variables de entorno');
@@ -20,80 +27,101 @@ class JumpsellerService {
 
     const params = new URLSearchParams({
       client_id: clientId,
-      redirect_uri: redirectUri || defaultRedirectUri,
+      redirect_uri: redirectUri,
       response_type: 'code',
       scope: 'read_orders read_products read_customers read_store write_orders',
       state: channelId // Pasar el ID del canal para identificarlo en el callback
     });
 
-    return `${this.OAUTH_BASE_URL}/authorize?${params.toString()}`;
+    const authUrl = `${this.OAUTH_BASE_URL}/authorize?${params.toString()}`;
+    
+    console.log('✅ [Jumpseller Auth] URL generada:', authUrl);
+    
+    return authUrl;
   }
 
   /**
-   * Intercambia código de autorización por tokens de acceso
+   * ✅ CORREGIR: Intercambia código de autorización por tokens de acceso
    */
-static async exchangeCodeForTokens(code, redirectUri = null) {
-  try {
-    const clientId = process.env.JUMPSELLER_CLIENT_ID;
-    const clientSecret = process.env.JUMPSELLER_CLIENT_SECRET;
-    const defaultRedirectUri = `${process.env.BACKEND_URL}/api/channels/jumpseller/callback`;
+  static async exchangeCodeForTokens(code) {
+    try {
+      const clientId = process.env.JUMPSELLER_CLIENT_ID;
+      const clientSecret = process.env.JUMPSELLER_CLIENT_SECRET;
+      const redirectUri = `${process.env.BACKEND_URL}/api/channels/jumpseller/callback`;
 
-    console.log('🔄 [Jumpseller] === DEBUGGING EXCHANGE ===');
-    console.log('🔄 [Jumpseller] Code:', code);
-    console.log('🔄 [Jumpseller] Client ID:', clientId);
-    console.log('🔄 [Jumpseller] Client Secret exists:', !!clientSecret);
-    console.log('🔄 [Jumpseller] Redirect URI:', defaultRedirectUri);
-    console.log('🔄 [Jumpseller] BACKEND_URL:', process.env.BACKEND_URL);
+      console.log('🔄 [Jumpseller OAuth] === DEBUGGING EXCHANGE ===');
+      console.log('🔄 [Jumpseller OAuth] Code:', code?.substring(0, 10) + '...');
+      console.log('🔄 [Jumpseller OAuth] Client ID:', clientId);
+      console.log('🔄 [Jumpseller OAuth] Client Secret exists:', !!clientSecret);
+      console.log('🔄 [Jumpseller OAuth] Redirect URI:', redirectUri);
 
-    if (!clientId || !clientSecret) {
-      throw new Error('JUMPSELLER_CLIENT_ID y JUMPSELLER_CLIENT_SECRET requeridos');
+      if (!clientId || !clientSecret) {
+        throw new Error('JUMPSELLER_CLIENT_ID y JUMPSELLER_CLIENT_SECRET requeridos en variables de entorno');
+      }
+
+      const payload = {
+        grant_type: 'authorization_code',
+        client_id: clientId,
+        client_secret: clientSecret,
+        code: code,
+        redirect_uri: redirectUri
+      };
+
+      console.log('🔄 [Jumpseller OAuth] Payload a enviar:', {
+        ...payload,
+        client_secret: '***',
+        code: code?.substring(0, 10) + '...'
+      });
+
+      const response = await axios.post(`${this.OAUTH_BASE_URL}/token`, payload, {
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        timeout: 15000
+      });
+
+      console.log('✅ [Jumpseller OAuth] Response status:', response.status);
+      console.log('✅ [Jumpseller OAuth] Tokens recibidos:', {
+        access_token: !!response.data.access_token,
+        refresh_token: !!response.data.refresh_token,
+        expires_in: response.data.expires_in,
+        scope: response.data.scope
+      });
+
+      return {
+        access_token: response.data.access_token,
+        refresh_token: response.data.refresh_token,
+        expires_in: response.data.expires_in,
+        scope: response.data.scope
+      };
+
+    } catch (error) {
+      console.error('❌ [Jumpseller OAuth] ERROR COMPLETO:', {
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data,
+        message: error.message,
+        url: error.config?.url,
+        method: error.config?.method
+      });
+      
+      // Mejorar mensaje de error
+      let errorMessage = 'Error desconocido en OAuth';
+      if (error.response?.data?.error_description) {
+        errorMessage = error.response.data.error_description;
+      } else if (error.response?.data?.error) {
+        errorMessage = error.response.data.error;
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      throw new Error(`Error en OAuth de Jumpseller: ${errorMessage}`);
     }
-
-    const payload = {
-      grant_type: 'authorization_code',
-      client_id: clientId,
-      client_secret: clientSecret,
-      code: code,
-      redirect_uri: redirectUri || defaultRedirectUri
-    };
-
-    console.log('🔄 [Jumpseller] Payload enviado:', payload);
-
-    const response = await axios.post('https://accounts.jumpseller.com/oauth/token', payload, {
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-      },
-      timeout: 15000
-    });
-
-    console.log('✅ [Jumpseller] Response status:', response.status);
-    console.log('✅ [Jumpseller] Response data:', response.data);
-
-    return {
-      access_token: response.data.access_token,
-      refresh_token: response.data.refresh_token,
-      expires_in: response.data.expires_in,
-      scope: response.data.scope
-    };
-
-  } catch (error) {
-    console.error('❌ [Jumpseller OAuth] ERROR COMPLETO:', {
-      status: error.response?.status,
-      statusText: error.response?.statusText,
-      data: error.response?.data,
-      message: error.message,
-      config: error.config ? {
-        url: error.config.url,
-        method: error.config.method,
-        data: error.config.data
-      } : null
-    });
-    throw new Error(`Error en OAuth: ${error.response?.data?.error_description || error.message}`);
   }
-}
+
   /**
-   * Renueva el token de acceso usando refresh token
+   * ✅ MEJORAR: Renueva el token de acceso usando refresh token
    */
   static async refreshAccessToken(channel) {
     try {
@@ -101,36 +129,46 @@ static async exchangeCodeForTokens(code, redirectUri = null) {
       const clientSecret = process.env.JUMPSELLER_CLIENT_SECRET;
 
       if (!channel.settings?.refresh_token) {
-        throw new Error('No hay refresh token disponible');
+        throw new Error('No hay refresh token disponible para este canal');
       }
+
+      console.log('🔄 [Jumpseller] Renovando token para canal:', channel._id);
 
       const response = await axios.post(`${this.OAUTH_BASE_URL}/token`, {
         grant_type: 'refresh_token',
         client_id: clientId,
         client_secret: clientSecret,
         refresh_token: channel.settings.refresh_token
+      }, {
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        timeout: 10000
       });
 
       // Actualizar tokens en el canal
       channel.api_key = response.data.access_token;
       channel.settings = {
         ...channel.settings,
-        refresh_token: response.data.refresh_token,
+        refresh_token: response.data.refresh_token || channel.settings.refresh_token, // Mantener el anterior si no se proporciona uno nuevo
         expires_in: response.data.expires_in,
         token_updated_at: new Date()
       };
       
       await channel.save();
+      
+      console.log('✅ [Jumpseller] Token renovado exitosamente');
       return response.data.access_token;
 
     } catch (error) {
-      console.error('[Jumpseller] Error renovando token:', error.response?.data || error.message);
-      throw new Error('No se pudo renovar el token de acceso');
+      console.error('❌ [Jumpseller] Error renovando token:', error.response?.data || error.message);
+      throw new Error(`No se pudo renovar el token de acceso: ${error.response?.data?.error_description || error.message}`);
     }
   }
 
   /**
-   * Obtiene token de acceso válido (renueva si es necesario)
+   * ✅ MEJORAR: Obtiene token de acceso válido (renueva si es necesario)
    */
   static async getValidAccessToken(channel) {
     if (!channel.api_key) {
@@ -142,9 +180,9 @@ static async exchangeCodeForTokens(code, redirectUri = null) {
       const tokenAge = Date.now() - new Date(channel.settings.token_updated_at).getTime();
       const expiresIn = channel.settings.expires_in * 1000; // convertir a ms
       
-      // Renovar si queda menos de 10 minutos
+      // Renovar si queda menos de 10 minutos (600000 ms)
       if (tokenAge > (expiresIn - 600000)) {
-        console.log('[Jumpseller] Token próximo a expirar, renovando...');
+        console.log('⏰ [Jumpseller] Token próximo a expirar, renovando...');
         return await this.refreshAccessToken(channel);
       }
     }
@@ -153,7 +191,7 @@ static async exchangeCodeForTokens(code, redirectUri = null) {
   }
 
   /**
-   * Prueba la conexión con Jumpseller
+   * ✅ MEJORAR: Prueba la conexión con Jumpseller
    */
   static async testConnection(channel) {
     try {
@@ -165,6 +203,8 @@ static async exchangeCodeForTokens(code, redirectUri = null) {
         };
       }
 
+      console.log('🔍 [Jumpseller] Probando conexión para canal:', channel._id);
+
       const accessToken = await this.getValidAccessToken(channel);
 
       // Obtener información de la tienda
@@ -172,11 +212,18 @@ static async exchangeCodeForTokens(code, redirectUri = null) {
         headers: {
           'Authorization': `Bearer ${accessToken}`,
           'Content-Type': 'application/json'
-        }
+        },
+        timeout: 10000
       });
 
       if (response.status === 200 && response.data.store) {
         const store = response.data.store;
+        
+        console.log('✅ [Jumpseller] Información de tienda obtenida:', {
+          id: store.id,
+          name: store.name,
+          url: store.url
+        });
         
         // Actualizar información de la tienda
         channel.settings = {
@@ -204,11 +251,11 @@ static async exchangeCodeForTokens(code, redirectUri = null) {
 
       return {
         success: false,
-        message: 'Respuesta inesperada de Jumpseller'
+        message: 'Respuesta inesperada de Jumpseller API'
       };
 
     } catch (error) {
-      console.error('[Jumpseller] Error en testConnection:', error.response?.data || error.message);
+      console.error('❌ [Jumpseller] Error en testConnection:', error.response?.data || error.message);
       
       if (error.response?.status === 401) {
         return {
@@ -225,9 +272,8 @@ static async exchangeCodeForTokens(code, redirectUri = null) {
     }
   }
 
-  /**
-   * Sincroniza pedidos desde Jumpseller
-   */
+  // ... resto de los métodos (syncOrders, processOrder, etc.) se mantienen igual
+  
   static async syncOrders(channel, dateFrom, dateTo) {
     try {
       console.log(`🔄 [Jumpseller] Iniciando sincronización para canal: ${channel.channel_name}`);
@@ -256,7 +302,8 @@ static async exchangeCodeForTokens(code, redirectUri = null) {
             'Authorization': `Bearer ${accessToken}`,
             'Content-Type': 'application/json'
           },
-          params
+          params,
+          timeout: 15000
         });
 
         const orders = response.data.orders || response.data || [];
@@ -291,19 +338,17 @@ static async exchangeCodeForTokens(code, redirectUri = null) {
       
       return {
         success: true,
-        imported_orders: totalImported,
+        imported: totalImported,
+        orders_synced: totalImported,
         message: `${totalImported} pedidos sincronizados exitosamente`
       };
 
     } catch (error) {
-      console.error('[Jumpseller] Error en sincronización:', error.response?.data || error.message);
+      console.error('❌ [Jumpseller] Error en sincronización:', error.response?.data || error.message);
       throw error;
     }
   }
 
-  /**
-   * Procesa un pedido individual de Jumpseller
-   */
   static async processOrder(jumpsellerOrder, channel) {
     try {
       // Verificar si el pedido ya existe
@@ -319,14 +364,11 @@ static async exchangeCodeForTokens(code, redirectUri = null) {
       return await this.createNewOrder(jumpsellerOrder, channel);
 
     } catch (error) {
-      console.error(`[Jumpseller] Error procesando pedido ${jumpsellerOrder.id}:`, error);
+      console.error(`❌ [Jumpseller] Error procesando pedido ${jumpsellerOrder.id}:`, error);
       throw error;
     }
   }
 
-  /**
-   * Crea un nuevo pedido desde datos de Jumpseller
-   */
   static async createNewOrder(jumpsellerOrder, channel) {
     try {
       const status = this.mapJumpsellerStatus(jumpsellerOrder.status);
@@ -412,9 +454,6 @@ static async exchangeCodeForTokens(code, redirectUri = null) {
     }
   }
 
-  /**
-   * Actualiza un pedido existente
-   */
   static async updateExistingOrder(existingOrder, jumpsellerOrder) {
     try {
       const newStatus = this.mapJumpsellerStatus(jumpsellerOrder.status);
@@ -447,9 +486,6 @@ static async exchangeCodeForTokens(code, redirectUri = null) {
     }
   }
 
-  /**
-   * Mapeo de estados
-   */
   static mapJumpsellerStatus(jumpsellerStatus) {
     const statusMap = {
       'pending': 'pending',
@@ -475,55 +511,6 @@ static async exchangeCodeForTokens(code, redirectUri = null) {
 
     return paymentMap[financialStatus] || 'pending';
   }
-  static getAuthorizationUrl(channelId, redirectUri = null) {
-  const clientId = process.env.JUMPSELLER_CLIENT_ID;
-  const defaultRedirectUri = `${process.env.BACKEND_URL}/api/channels/jumpseller/callback`;
-  
-  if (!clientId) {
-    throw new Error('JUMPSELLER_CLIENT_ID no configurado en variables de entorno');
-  }
-
-  const params = new URLSearchParams({
-    client_id: clientId,
-    redirect_uri: redirectUri || defaultRedirectUri,
-    response_type: 'code',
-    scope: 'read_orders read_products read_customers read_store write_orders',
-    state: channelId
-  });
-
-  return `https://accounts.jumpseller.com/oauth/authorize?${params.toString()}`;
-}
-
-static async exchangeCodeForTokens(code, redirectUri = null) {
-  try {
-    const clientId = process.env.JUMPSELLER_CLIENT_ID;
-    const clientSecret = process.env.JUMPSELLER_CLIENT_SECRET;
-    const defaultRedirectUri = `${process.env.BACKEND_URL}/api/channels/jumpseller/callback`;
-
-    if (!clientId || !clientSecret) {
-      throw new Error('JUMPSELLER_CLIENT_ID y JUMPSELLER_CLIENT_SECRET requeridos');
-    }
-
-    const response = await axios.post('https://accounts.jumpseller.com/oauth/token', {
-      grant_type: 'authorization_code',
-      client_id: clientId,
-      client_secret: clientSecret,
-      code: code,
-      redirect_uri: redirectUri || defaultRedirectUri
-    });
-
-    return {
-      access_token: response.data.access_token,
-      refresh_token: response.data.refresh_token,
-      expires_in: response.data.expires_in,
-      scope: response.data.scope
-    };
-
-  } catch (error) {
-    console.error('[Jumpseller OAuth] Error intercambiando código:', error.response?.data || error.message);
-    throw new Error(`Error en OAuth: ${error.response?.data?.error_description || error.message}`);
-  }
-}
 }
 
 module.exports = JumpsellerService;
