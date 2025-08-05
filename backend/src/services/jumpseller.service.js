@@ -475,12 +475,20 @@ static async createNewOrder(jumpsellerOrder, channel) {
     console.log(`🔍 [Jumpseller] Estructura del pedido completa:`, {
       mainKeys: Object.keys(jumpsellerOrder),
       customerExists: !!jumpsellerOrder.customer,
+      shippingAddressExists: !!jumpsellerOrder.shipping_address,
+      billingAddressExists: !!jumpsellerOrder.billing_address,
       customerKeys: jumpsellerOrder.customer ? Object.keys(jumpsellerOrder.customer) : 'NO_CUSTOMER',
-      customerData: jumpsellerOrder.customer
+      shippingKeys: jumpsellerOrder.shipping_address ? Object.keys(jumpsellerOrder.shipping_address) : 'NO_SHIPPING',
+      billingKeys: jumpsellerOrder.billing_address ? Object.keys(jumpsellerOrder.billing_address) : 'NO_BILLING'
     });
 
     const status = this.mapJumpsellerStatus(jumpsellerOrder.status);
-    
+    const paymentStatus = this.mapPaymentStatus(
+      jumpsellerOrder.payment_method_type, 
+      jumpsellerOrder.status
+    );
+    const paymentMethod = this.mapPaymentMethod(jumpsellerOrder.payment_method_name);
+
     // ✅ PROCESAMIENTO CORRECTO DE DIRECCIÓN (ya funcionando)
     const shippingAddress = jumpsellerOrder.shipping_address || {};
     let formattedAddress = '';
@@ -500,54 +508,75 @@ static async createNewOrder(jumpsellerOrder, channel) {
       formattedAddress = 'Dirección no especificada';
     }
     
-    // ✅ PROCESAMIENTO MEJORADO DE CUSTOMER
+    // ✅ OBTENER DATOS DE TODAS LAS FUENTES POSIBLES
     const customer = jumpsellerOrder.customer || {};
+    const shippingAddr = jumpsellerOrder.shipping_address || {};
+    const billingAddr = jumpsellerOrder.billing_address || {};
     
-    console.log(`🔍 [Jumpseller] Datos del customer:`, {
-      customer: customer,
-      first_name: customer.first_name,
-      last_name: customer.last_name,
-      name: customer.name,
-      email: customer.email,
-      phone: customer.phone
+    console.log(`🔍 [Jumpseller] Datos disponibles para nombre:`, {
+      'customer.first_name': customer.first_name,
+      'customer.last_name': customer.last_name,
+      'customer.name': customer.name,
+      'customer.email': customer.email,
+      'shipping_address.name': shippingAddr.name,           // ✅ SEGÚN DOCUMENTACIÓN
+      'shipping_address.surname': shippingAddr.surname,     // ✅ SEGÚN DOCUMENTACIÓN
+      'billing_address.name': billingAddr.name,             // ✅ SEGÚN DOCUMENTACIÓN  
+      'billing_address.surname': billingAddr.surname        // ✅ SEGÚN DOCUMENTACIÓN
     });
     
-    // Intentar múltiples formas de obtener el nombre
+    // ✅ BUSCAR NOMBRE SEGÚN ESTRUCTURA REAL DE JUMPSELLER
     let customerName = '';
     
-    // Opción 1: first_name + last_name
-    if (customer.first_name || customer.last_name) {
-      customerName = `${customer.first_name || ''} ${customer.last_name || ''}`.trim();
+    // Opción 1: Shipping address (MÁS COMÚN - según documentación)
+    if (shippingAddr.name || shippingAddr.surname) {
+      const firstName = shippingAddr.name || '';
+      const lastName = shippingAddr.surname || '';
+      customerName = `${firstName} ${lastName}`.trim();
+      console.log(`✅ [Jumpseller] Nombre encontrado en shipping_address: "${customerName}"`);
     }
     
-    // Opción 2: campo 'name' directo
+    // Opción 2: Billing address (si no hay en shipping)
+    if (!customerName && (billingAddr.name || billingAddr.surname)) {
+      const firstName = billingAddr.name || '';
+      const lastName = billingAddr.surname || '';
+      customerName = `${firstName} ${lastName}`.trim();
+      console.log(`✅ [Jumpseller] Nombre encontrado en billing_address: "${customerName}"`);
+    }
+    
+    // Opción 3: Customer object - first_name/last_name (formato tradicional)
+    if (!customerName && (customer.first_name || customer.last_name)) {
+      customerName = `${customer.first_name || ''} ${customer.last_name || ''}`.trim();
+      console.log(`✅ [Jumpseller] Nombre encontrado en customer (first/last): "${customerName}"`);
+    }
+    
+    // Opción 4: Customer object - campo 'name' directo
     if (!customerName && customer.name) {
       customerName = customer.name.trim();
+      console.log(`✅ [Jumpseller] Nombre encontrado en customer.name: "${customerName}"`);
     }
     
-    // Opción 3: full_name
+    // Opción 5: Customer object - full_name
     if (!customerName && customer.full_name) {
       customerName = customer.full_name.trim();
+      console.log(`✅ [Jumpseller] Nombre encontrado en customer.full_name: "${customerName}"`);
     }
     
-    // Opción 4: billing_name (a veces Jumpseller usa esto)
-    if (!customerName && customer.billing_name) {
-      customerName = customer.billing_name.trim();
+    // Opción 6: Buscar en shipping_address otros campos posibles
+    if (!customerName && shippingAddr.full_name) {
+      customerName = shippingAddr.full_name.trim();
+      console.log(`✅ [Jumpseller] Nombre encontrado en shipping_address.full_name: "${customerName}"`);
     }
     
-    // Opción 5: shipping_name
-    if (!customerName && customer.shipping_name) {
-      customerName = customer.shipping_name.trim();
-    }
-    
-    // Opción 6: email como fallback (antes de "Sin Nombre")
+    // Opción 7: Email como fallback (antes de "Sin Nombre")
     if (!customerName && customer.email) {
-      customerName = customer.email.split('@')[0]; // Usar parte antes del @
+      customerName = customer.email.split('@')[0];
+      console.log(`✅ [Jumpseller] Usando email como nombre: "${customerName}"`);
     }
     
     // Fallback final
     if (!customerName) {
       customerName = 'Cliente Sin Nombre';
+      console.log(`⚠️ [Jumpseller] No se encontró nombre, usando fallback: "${customerName}"`);
     }
     
     console.log(`✅ [Jumpseller] Nombre final del cliente: "${customerName}"`);
@@ -558,15 +587,18 @@ static async createNewOrder(jumpsellerOrder, channel) {
     
     // Email: intentar múltiples fuentes
     customerEmail = customer.email || 
+                   shippingAddr.email ||
+                   billingAddr.email ||
                    customer.billing_email || 
                    customer.shipping_email || 
                    '';
     
-    // Teléfono: intentar múltiples fuentes
+    // Teléfono: intentar múltiples fuentes  
     customerPhone = customer.phone || 
+                   shippingAddr.phone ||
+                   billingAddr.phone ||
                    customer.billing_phone || 
                    customer.shipping_phone || 
-                   shippingAddress.phone || 
                    customer.mobile || 
                    '';
     
@@ -609,10 +641,10 @@ static async createNewOrder(jumpsellerOrder, channel) {
       
       // Dirección (ya funcionando)
       shipping_address: String(formattedAddress),
-      shipping_city: String(shippingAddress.city || ''),
-      shipping_state: String(shippingAddress.state || ''),
-      shipping_zip: String(shippingAddress.zip || shippingAddress.postal_code || ''),
-      shipping_commune: String(shippingAddress.city || shippingAddress.commune || ''),
+      shipping_city: String(shippingAddr.city || ''),
+      shipping_state: String(shippingAddr.state || shippingAddr.region || ''),
+      shipping_zip: String(shippingAddr.zip || shippingAddr.postal_code || shippingAddr.postal || ''),
+      shipping_commune: String(shippingAddr.city || shippingAddr.commune || ''),
       
       // Totales
       total_amount: total_amount,
@@ -622,22 +654,29 @@ static async createNewOrder(jumpsellerOrder, channel) {
       // Items
       items_count: items.length,
       
-      // Estado y fechas
+      // ✅ ESTADOS MEJORADOS
       status: status,
+      payment_status: paymentStatus,
+      payment_method: paymentMethod,
+      
+      // Fechas
       order_date: jumpsellerOrder.created_at ? new Date(jumpsellerOrder.created_at) : new Date(),
       
-      // Opcional
-      notes: String(jumpsellerOrder.notes || ''),
-      payment_method: 'credit_card',
+      // ✅ INFORMACIÓN ADICIONAL
+      notes: String(jumpsellerOrder.additional_information || jumpsellerOrder.notes || ''),
+      payment_information: String(jumpsellerOrder.payment_information || ''),
       
       // Raw data para debugging
       raw_data: {
-        original_customer: customer, // ✅ GUARDAR CUSTOMER ORIGINAL PARA DEBUG
-        original_shipping_address: shippingAddress,
+        original_customer: customer,
+        original_shipping_address: shippingAddr,
+        original_billing_address: billingAddr,
         original_order: {
           id: jumpsellerOrder.id,
           status: jumpsellerOrder.status,
-          total: jumpsellerOrder.total
+          total: jumpsellerOrder.total,
+          payment_method_name: jumpsellerOrder.payment_method_name,
+          payment_method_type: jumpsellerOrder.payment_method_type
         },
         processed_at: new Date()
       },
@@ -653,7 +692,10 @@ static async createNewOrder(jumpsellerOrder, channel) {
       customer_phone: orderData.customer_phone,
       shipping_address: orderData.shipping_address.substring(0, 50) + '...',
       total_amount: orderData.total_amount,
-      items_count: orderData.items_count
+      items_count: orderData.items_count,
+      status: orderData.status,
+      payment_status: orderData.payment_status,
+      payment_method: orderData.payment_method
     });
 
     // Crear y guardar el pedido
@@ -704,32 +746,96 @@ static async createNewOrder(jumpsellerOrder, channel) {
     }
   }
 
-  static mapJumpsellerStatus(jumpsellerStatus) {
-    const statusMap = {
-      'pending': 'pending',
-      'processing': 'confirmed', 
-      'shipped': 'shipped',
-      'delivered': 'delivered',
-      'cancelled': 'cancelled',
-      'refunded': 'cancelled',
-      'completed': 'delivered'
-    };
+static mapJumpsellerStatus(jumpsellerStatus) {
+  // Según la documentación, Jumpseller usa estos estados:
+  const statusMap = {
+    'Pending Payment': 'pending',        // ✅ Estado real de Jumpseller
+    'Paid': 'confirmed',                 // ✅ Estado real de Jumpseller  
+    'Processing': 'confirmed',
+    'Shipped': 'shipped',
+    'Delivered': 'delivered',
+    'Cancelled': 'cancelled',
+    'Canceled': 'cancelled',             // Variante en inglés US
+    'Refunded': 'cancelled',
+    'Completed': 'delivered',
+    
+    // Estados adicionales que pueden aparecer
+    'pending': 'pending',
+    'paid': 'confirmed',
+    'processing': 'confirmed',
+    'shipped': 'shipped',
+    'delivered': 'delivered',
+    'cancelled': 'cancelled',
+    'refunded': 'cancelled'
+  };
 
-    return statusMap[jumpsellerStatus] || 'pending';
-  }
+  // Normalizar y mapear
+  const normalizedStatus = jumpsellerStatus?.toString().toLowerCase() || 'pending';
+  const mappedStatus = statusMap[jumpsellerStatus] || statusMap[normalizedStatus] || 'pending';
+  
+  console.log(`🔄 [Jumpseller] Mapeo de estado: "${jumpsellerStatus}" → "${mappedStatus}"`);
+  
+  return mappedStatus;
+}
 
   
-  static mapPaymentStatus(financialStatus) {
-    const paymentMap = {
-      'pending': 'pending',
-      'paid': 'paid',
-      'partially_paid': 'partially_paid',
-      'refunded': 'refunded',
-      'voided': 'cancelled'
-    };
-
-    return paymentMap[financialStatus] || 'pending';
+static mapPaymentStatus(paymentMethodType, orderStatus) {
+  // Según la documentación, Jumpseller tiene payment_method_type
+  const paymentMap = {
+    'manual': 'pending',          // Cash Collection, etc.
+    'gateway': 'paid',            // Tarjetas, PayPal, etc.
+    'bank_transfer': 'pending',   // Transferencias
+    'cash': 'pending',           // Efectivo
+    'credit_card': 'paid',       // Tarjetas
+    'paypal': 'paid',           // PayPal
+    'webpay': 'paid',           // Webpay (Chile)
+    'khipu': 'paid'             // Khipu (Chile)
+  };
+  
+  // Si el pedido está pagado según el estado general, marcar como pagado
+  if (orderStatus === 'Paid' || orderStatus === 'paid') {
+    return 'paid';
   }
+  
+  // Si el pedido está cancelado o reembolsado
+  if (orderStatus === 'Cancelled' || orderStatus === 'Canceled' || orderStatus === 'Refunded') {
+    return 'cancelled';
+  }
+  
+  // Mapear según tipo de método de pago
+  return paymentMap[paymentMethodType] || 'pending';
+}
+static mapPaymentMethod(paymentMethodName) {
+  if (!paymentMethodName) return 'credit_card';
+  
+  const methodName = paymentMethodName.toLowerCase();
+  
+  const methodMap = {
+    'cash collection': 'cash',
+    'efectivo': 'cash',
+    'webpay': 'webpay',
+    'webpay plus': 'webpay',
+    'khipu': 'khipu',
+    'paypal': 'paypal',
+    'mercado pago': 'mercadopago',
+    'mercadopago': 'mercadopago',
+    'transferencia': 'bank_transfer',
+    'bank transfer': 'bank_transfer',
+    'tarjeta': 'credit_card',
+    'credit card': 'credit_card',
+    'visa': 'credit_card',
+    'mastercard': 'credit_card'
+  };
+  
+  // Buscar coincidencias parciales
+  for (const [key, value] of Object.entries(methodMap)) {
+    if (methodName.includes(key)) {
+      return value;
+    }
+  }
+  
+  return 'credit_card'; // Fallback
+}
 }
 
 module.exports = JumpsellerService;
