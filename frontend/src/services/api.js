@@ -888,6 +888,33 @@ const manifests = {
     });
   }
 };
+const labels = {
+  generateBulk: (orderIds) => {
+    console.log('🏷️ API: Generando etiquetas masivas para:', orderIds);
+    return api.post('/labels/generate-bulk', { orderIds });
+  },
+  
+  generateCode: (orderId) => {
+    console.log('🏷️ API: Generando código para pedido:', orderId);
+    return api.post(`/labels/generate/${orderId}`);
+  },
+  
+  markPrinted: (orderId) => {
+    console.log('🖨️ API: Marcando etiqueta como impresa:', orderId);
+    return api.post(`/labels/mark-printed/${orderId}`);
+  },
+  
+  getStats: (companyId = null) => {
+    const params = companyId ? `?company_id=${companyId}` : '';
+    console.log('📊 API: Obteniendo estadísticas de etiquetas');
+    return api.get(`/labels/stats${params}`);
+  },
+  
+  findByCode: (code) => {
+    console.log('🔍 API: Buscando pedido por código:', code);
+    return api.get(`/labels/find/${code}`);
+  }
+}
 // ACTUALIZAR la exportación para incluir shipday
 // Exportar todos los servicios
 export const apiService = {
@@ -905,7 +932,8 @@ export const apiService = {
   search,
   manifests,
   mercadolibre,
-  jumpseller
+  jumpseller,
+  labels
 }
 
 // Exportar instancia de axios para casos especiales
