@@ -471,38 +471,113 @@ static async syncOrders(channel, dateFrom, dateTo) {
 
 static async createNewOrder(jumpsellerOrder, channel) {
   try {
-    console.log(`🆕 [Jumpseller] Creando pedido ${jumpsellerOrder.id} con datos:`, {
-      id: jumpsellerOrder.id,
-      status: jumpsellerOrder.status,
-      total: jumpsellerOrder.total,
-      customerEmail: jumpsellerOrder.customer?.email,
-      productsCount: jumpsellerOrder.products?.length || 0
+    console.log(`🆕 [Jumpseller] === DEBUGGING PEDIDO ${jumpsellerOrder.id} ===`);
+    console.log(`🔍 [Jumpseller] Estructura del pedido completa:`, {
+      mainKeys: Object.keys(jumpsellerOrder),
+      customerExists: !!jumpsellerOrder.customer,
+      customerKeys: jumpsellerOrder.customer ? Object.keys(jumpsellerOrder.customer) : 'NO_CUSTOMER',
+      customerData: jumpsellerOrder.customer
     });
 
     const status = this.mapJumpsellerStatus(jumpsellerOrder.status);
     
-    // Procesar dirección de envío con validaciones
+    // ✅ PROCESAMIENTO CORRECTO DE DIRECCIÓN (ya funcionando)
     const shippingAddress = jumpsellerOrder.shipping_address || {};
+    let formattedAddress = '';
     
-    // ✅ CORRECCIÓN PRINCIPAL: Convertir objeto a string para el modelo
-    const addressParts = [];
-    if (shippingAddress.address) addressParts.push(shippingAddress.address);
-    if (shippingAddress.address_2) addressParts.push(shippingAddress.address_2);
-    if (shippingAddress.city) addressParts.push(shippingAddress.city);
-    if (shippingAddress.state) addressParts.push(shippingAddress.state);
-    if (shippingAddress.zip) addressParts.push(shippingAddress.zip);
-    if (shippingAddress.country) addressParts.push(shippingAddress.country);
+    if (typeof shippingAddress === 'string') {
+      formattedAddress = shippingAddress;
+    } else if (typeof shippingAddress === 'object' && shippingAddress !== null) {
+      const parts = [];
+      if (shippingAddress.address) parts.push(shippingAddress.address);
+      if (shippingAddress.address_2) parts.push(shippingAddress.address_2);
+      if (shippingAddress.city) parts.push(shippingAddress.city);
+      if (shippingAddress.state) parts.push(shippingAddress.state);
+      if (shippingAddress.country) parts.push(shippingAddress.country);
+      
+      formattedAddress = parts.join(', ') || 'Dirección no especificada';
+    } else {
+      formattedAddress = 'Dirección no especificada';
+    }
     
-    const formattedAddress = addressParts.join(', ') || 'Dirección no especificada';
+    // ✅ PROCESAMIENTO MEJORADO DE CUSTOMER
+    const customer = jumpsellerOrder.customer || {};
     
-    console.log(`📍 [Jumpseller] Dirección formateada: "${formattedAddress}"`);
+    console.log(`🔍 [Jumpseller] Datos del customer:`, {
+      customer: customer,
+      first_name: customer.first_name,
+      last_name: customer.last_name,
+      name: customer.name,
+      email: customer.email,
+      phone: customer.phone
+    });
     
-    // Crear items del pedido con validaciones
+    // Intentar múltiples formas de obtener el nombre
+    let customerName = '';
+    
+    // Opción 1: first_name + last_name
+    if (customer.first_name || customer.last_name) {
+      customerName = `${customer.first_name || ''} ${customer.last_name || ''}`.trim();
+    }
+    
+    // Opción 2: campo 'name' directo
+    if (!customerName && customer.name) {
+      customerName = customer.name.trim();
+    }
+    
+    // Opción 3: full_name
+    if (!customerName && customer.full_name) {
+      customerName = customer.full_name.trim();
+    }
+    
+    // Opción 4: billing_name (a veces Jumpseller usa esto)
+    if (!customerName && customer.billing_name) {
+      customerName = customer.billing_name.trim();
+    }
+    
+    // Opción 5: shipping_name
+    if (!customerName && customer.shipping_name) {
+      customerName = customer.shipping_name.trim();
+    }
+    
+    // Opción 6: email como fallback (antes de "Sin Nombre")
+    if (!customerName && customer.email) {
+      customerName = customer.email.split('@')[0]; // Usar parte antes del @
+    }
+    
+    // Fallback final
+    if (!customerName) {
+      customerName = 'Cliente Sin Nombre';
+    }
+    
+    console.log(`✅ [Jumpseller] Nombre final del cliente: "${customerName}"`);
+    
+    // ✅ PROCESAMIENTO MEJORADO DE EMAIL Y TELÉFONO
+    let customerEmail = '';
+    let customerPhone = '';
+    
+    // Email: intentar múltiples fuentes
+    customerEmail = customer.email || 
+                   customer.billing_email || 
+                   customer.shipping_email || 
+                   '';
+    
+    // Teléfono: intentar múltiples fuentes
+    customerPhone = customer.phone || 
+                   customer.billing_phone || 
+                   customer.shipping_phone || 
+                   shippingAddress.phone || 
+                   customer.mobile || 
+                   '';
+    
+    console.log(`📞 [Jumpseller] Contacto del cliente:`, {
+      email: customerEmail,
+      phone: customerPhone
+    });
+    
+    // Procesar items (sin cambios)
     const items = (jumpsellerOrder.products || []).map((product, index) => {
-      if (!product) {
-        console.warn(`⚠️ [Jumpseller] Producto ${index} es null/undefined`);
-        return null;
-      }
+      if (!product) return null;
       
       return {
         product_id: product.id?.toString() || '',
@@ -512,89 +587,86 @@ static async createNewOrder(jumpsellerOrder, channel) {
         price: parseFloat(product.pivot?.price) || 0,
         variant_title: product.pivot?.variant_name || null
       };
-    }).filter(item => item !== null); // Filtrar items null
+    }).filter(item => item !== null);
 
-    // Calcular totales con validaciones
+    // Calcular totales (sin cambios)
     const subtotal = parseFloat(jumpsellerOrder.subtotal) || 0;
     const shipping_cost = parseFloat(jumpsellerOrder.shipping) || 0;
     const tax_amount = parseFloat(jumpsellerOrder.tax) || 0;
     const total_amount = parseFloat(jumpsellerOrder.total) || subtotal + shipping_cost + tax_amount;
 
-    // Validar customer
-    const customer = jumpsellerOrder.customer || {};
-
-    const newOrder = new Order({
+    // ✅ CREAR OBJETO CON DATOS CORREGIDOS
+    const orderData = {
       company_id: channel.company_id,
       channel_id: channel._id,
       external_order_id: jumpsellerOrder.id.toString(),
       order_number: jumpsellerOrder.token || jumpsellerOrder.id.toString(),
       
-      // Información del cliente con validaciones
-      customer_name: `${customer.first_name || ''} ${customer.last_name || ''}`.trim() || 'Cliente Sin Nombre',
-      customer_email: customer.email || '',
-      customer_phone: customer.phone || shippingAddress.phone || '',
+      // ✅ CLIENTE CON DATOS CORREGIDOS
+      customer_name: customerName,
+      customer_email: customerEmail,
+      customer_phone: customerPhone,
       
-      // ✅ DIRECCIÓN COMO STRING (según el modelo)
-      shipping_address: formattedAddress,
+      // Dirección (ya funcionando)
+      shipping_address: String(formattedAddress),
+      shipping_city: String(shippingAddress.city || ''),
+      shipping_state: String(shippingAddress.state || ''),
+      shipping_zip: String(shippingAddress.zip || shippingAddress.postal_code || ''),
+      shipping_commune: String(shippingAddress.city || shippingAddress.commune || ''),
       
-      // ✅ CAMPOS INDIVIDUALES DE DIRECCIÓN (para compatibilidad)
-      shipping_city: shippingAddress.city || '',
-      shipping_state: shippingAddress.state || '',
-      shipping_zip: shippingAddress.zip || '',
-      shipping_commune: shippingAddress.city || '', // En Chile, city suele ser la comuna
+      // Totales
+      total_amount: total_amount,
+      shipping_cost: shipping_cost,
+      tax_amount: tax_amount,
       
-      // Productos y totales
+      // Items
       items_count: items.length,
-      subtotal,
-      shipping_cost,
-      tax_amount,
-      total_amount,
-      payment_method: this.mapPaymentStatus(jumpsellerOrder.payment_method),
       
-      // Fechas y estado
+      // Estado y fechas
+      status: status,
       order_date: jumpsellerOrder.created_at ? new Date(jumpsellerOrder.created_at) : new Date(),
-      status,
       
-      // Metadatos adicionales
-      notes: jumpsellerOrder.notes || '',
+      // Opcional
+      notes: String(jumpsellerOrder.notes || ''),
+      payment_method: 'credit_card',
       
-      // ✅ USAR raw_data PARA GUARDAR TODA LA INFORMACIÓN ORIGINAL
+      // Raw data para debugging
       raw_data: {
-        jumpseller_order: jumpsellerOrder,
-        shipping_address_object: shippingAddress, // Guardar el objeto original aquí
-        processed_at: new Date(),
-        items_processed: items
+        original_customer: customer, // ✅ GUARDAR CUSTOMER ORIGINAL PARA DEBUG
+        original_shipping_address: shippingAddress,
+        original_order: {
+          id: jumpsellerOrder.id,
+          status: jumpsellerOrder.status,
+          total: jumpsellerOrder.total
+        },
+        processed_at: new Date()
       },
       
       created_at: new Date(),
       updated_at: new Date()
+    };
+
+    console.log(`💾 [Jumpseller] Datos finales del pedido:`, {
+      external_order_id: orderData.external_order_id,
+      customer_name: orderData.customer_name,
+      customer_email: orderData.customer_email,
+      customer_phone: orderData.customer_phone,
+      shipping_address: orderData.shipping_address.substring(0, 50) + '...',
+      total_amount: orderData.total_amount,
+      items_count: orderData.items_count
     });
 
-    console.log(`💾 [Jumpseller] Guardando pedido con datos:`, {
-      id: newOrder.external_order_id,
-      customer: newOrder.customer_name,
-      address: newOrder.shipping_address,
-      total: newOrder.total_amount,
-      items: newOrder.items_count
-    });
-
+    // Crear y guardar el pedido
+    const newOrder = new Order(orderData);
     await newOrder.save();
-    console.log(`✅ [Jumpseller] Pedido ${jumpsellerOrder.id} creado exitosamente`);
     
+    console.log(`✅ [Jumpseller] Pedido ${jumpsellerOrder.id} creado exitosamente con cliente: "${customerName}"`);
     return true;
 
   } catch (error) {
     console.error(`❌ [Jumpseller] Error creando pedido ${jumpsellerOrder.id}:`, {
-      error: error.message,
-      stack: error.stack?.split('\n').slice(0, 3), // Solo las primeras 3 líneas del stack
-      validationErrors: error.errors ? Object.keys(error.errors) : null,
-      orderData: {
-        id: jumpsellerOrder.id,
-        status: jumpsellerOrder.status,
-        customer: !!jumpsellerOrder.customer,
-        products: jumpsellerOrder.products?.length || 0,
-        shippingAddress: !!jumpsellerOrder.shipping_address
-      }
+      message: error.message,
+      stack: error.stack?.split('\n').slice(0, 3)
     });
     throw error;
   }
