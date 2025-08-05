@@ -94,24 +94,25 @@ class WebSocketManager {
     }
   }
 
-  onClose(event) {
-    console.log('🔌 WS: Conexión cerrada:', event.code, event.reason)
-    this.state.connected = false
-    this.state.connecting = false
-    this.stopPing()
-    
-    // Emitir evento de desconexión
-    this.emit('disconnected', { 
-      code: event.code, 
-      reason: event.reason,
-      timestamp: new Date()
-    })
-    
-    // Reintentar conexión si no fue intencional
-    if (!event.wasClean && this.reconnectAttempts < this.maxReconnectAttempts) {
-      this.scheduleReconnect()
-    }
+onClose(event) {
+  console.log('🔌 WS: Conexión cerrada:', event.code, event.reason)
+  this.state.connected = false
+  this.state.connecting = false
+  this.stopPing()
+  
+  // Emitir evento de desconexión con más información
+  this.emit('disconnected', { 
+    code: event.code, 
+    reason: event.reason,
+    wasClean: event.wasClean,
+    timestamp: new Date()
+  })
+  
+  // Reintentar conexión solo si no fue intencional (código 1000 = cierre normal)
+  if (event.code !== 1000 && this.reconnectAttempts < this.maxReconnectAttempts) {
+    this.scheduleReconnect()
   }
+}
 
   onError(error) {
     console.error('❌ WS: Error:', error)
@@ -321,13 +322,27 @@ class WebSocketManager {
     }, this.reconnectInterval)
   }
 
-  disconnect() {
-    if (this.ws) {
-      this.stopPing()
-      this.ws.close(1000, 'Disconnected by user')
-      this.ws = null
-    }
+ disconnect() {
+  console.log('🔌 WS: Desconectando...')
+  
+  if (this.ws) {
+    this.stopPing()
+    
+    // Marcar como desconexión intencional
+    this.ws.close(1000, 'Disconnected by user')
+    this.ws = null
   }
+  
+  // Limpiar estado
+  this.state.connected = false
+  this.state.connecting = false
+  this.reconnectAttempts = 0
+  this.isConnecting = false
+  
+  // Reset flags
+  this._firstConnectionShown = false
+  this._firstToastShown = false
+}
 
   // Getters
   get isConnected() {
@@ -337,6 +352,27 @@ class WebSocketManager {
   get connectionState() {
     return this.state
   }
+  removeAllListeners(event) {
+  if (event) {
+    // Remover listeners específicos del evento
+    this.eventListeners.delete(event)
+  } else {
+    // Remover todos los listeners
+    this.eventListeners.clear()
+  }
+}
+
+// Método para obtener información de debug
+getDebugInfo() {
+  return {
+    isConnected: this.isConnected,
+    reconnectAttempts: this.reconnectAttempts,
+    state: this.state,
+    listenersCount: this.eventListeners.size,
+    events: Array.from(this.eventListeners.keys()),
+    wsReadyState: this.ws?.readyState
+  }
+}
 }
 
 // Singleton instance

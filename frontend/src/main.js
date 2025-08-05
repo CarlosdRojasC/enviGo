@@ -1,23 +1,24 @@
+// frontend/src/main.js - VERSIÓN MEJORADA
+
 import { createApp } from 'vue'
 import App from './App.vue'
 import router from './router'
 import pinia from './store'
-import Toast, { useToast } from 'vue-toastification';
-import 'vue-toastification/dist/index.css';
+import Toast, { useToast } from 'vue-toastification'
+import 'vue-toastification/dist/index.css'
 import wsManager from './services/websocket.service'
 import './assets/css/variables.css'
 import './assets/css/toast-styles.css'
-// Importar tu store de auth
 import { useAuthStore } from './store/auth'
 
+// ==================== CREAR APP ====================
 const app = createApp(App)
 
 app.use(pinia)
 app.use(router)
 app.use(Toast, {
-  // Configuración mejorada
   transition: 'Vue-Toastification__slideBlurred',
-  maxToasts: 5,
+  maxToasts: 3, // Reducido para menos invasivo
   newestOnTop: true,
   timeout: 5000,
   closeOnClick: true,
@@ -30,55 +31,62 @@ app.use(Toast, {
   closeButton: 'button',
   icon: true,
   rtl: false,
-  
-  // Posicionamiento
   position: 'top-right',
-  
-  // Clases CSS personalizadas
   toastClassName: 'envigo-toast',
   bodyClassName: 'envigo-toast-body'
 })
 
-// ==================== WEBSOCKET AUTO-CONNECT ====================
+// ==================== SISTEMA DE NOTIFICACIONES INTELIGENTE ====================
 
-// Auto-conectar cuando el usuario esté autenticado
+const toast = useToast()
+let notificationsConfigured = false
+let isInAuthenticatedRoute = false
+
+// Función para verificar si estamos en una ruta autenticada
+function isAuthenticatedRoute(route) {
+  return route.meta?.requiresAuth === true || route.path.startsWith('/app')
+}
+
+// Guard para manejar WebSocket de forma inteligente
 router.beforeEach((to, from, next) => {
   const authStore = useAuthStore()
+  const wasInAuthRoute = isInAuthenticatedRoute(from)
+  const willBeInAuthRoute = isAuthenticatedRoute(to)
   
-  // Si el usuario está autenticado y el WebSocket no está conectado
-  if (authStore.isLoggedIn && !wsManager.isConnected) {
-    // Solo mostrar log una vez
-    if (!wsManager._autoConnectAttempted) {
-      console.log('🔄 Conectando notificaciones en tiempo real para:', authStore.user?.email)
-      wsManager._autoConnectAttempted = true
-    }
+  isInAuthenticatedRoute = willBeInAuthRoute
+  
+  // ✅ CONECTAR: Usuario autenticado + ruta autenticada + no conectado
+  if (authStore.isLoggedIn && willBeInAuthRoute && !wsManager.isConnected) {
+    console.log('🔄 Conectando notificaciones para ruta autenticada:', to.path)
     wsManager.connect()
+    setupOrderNotifications()
   }
   
-  // Si el usuario no está autenticado y el WebSocket está conectado
-  if (!authStore.isLoggedIn && wsManager.isConnected) {
-    console.log('🔌 Desconectando notificaciones...')
+  // ❌ DESCONECTAR: Sale de rutas autenticadas o no está autenticado
+  if ((!authStore.isLoggedIn || !willBeInAuthRoute) && wsManager.isConnected) {
+    console.log('🔌 Desconectando notificaciones:', !authStore.isLoggedIn ? 'no autenticado' : 'ruta pública')
     wsManager.disconnect()
-    wsManager._autoConnectAttempted = false
+    resetNotifications()
   }
   
   next()
 })
 
-// ==================== NOTIFICACIONES PUSH AUTOMÁTICAS ====================
-
-const toast = useToast()
-let notificationsConfigured = false
+// ==================== CONFIGURACIÓN DE NOTIFICACIONES ====================
 
 function setupOrderNotifications() {
   if (notificationsConfigured) return
   notificationsConfigured = true
 
-  // 🔔 NOTIFICACIONES DE CAMBIOS DE ESTADO DE PEDIDOS
+  console.log('🔔 Configurando sistema de notificaciones...')
+
+  // 📦 NOTIFICACIONES DE CAMBIOS DE ESTADO
   wsManager.on('order_notification', (notification) => {
+    // Solo mostrar si estamos en ruta autenticada
+    if (!isInAuthenticatedRoute) return
+    
     console.log('📦 Cambio de estado:', notification)
     
-    // Configurar toast según el tipo de evento
     const toastConfig = {
       timeout: 6000,
       closeOnClick: true,
@@ -86,61 +94,44 @@ function setupOrderNotifications() {
       pauseOnHover: true
     }
 
-    // Diferentes estilos según el evento
     switch (notification.data?.type) {
       case 'driver_assigned':
-        toast.info(`👨‍💼 ${notification.message}`, {
-          ...toastConfig,
-          timeout: 5000
-        })
+        toast.info(`👨‍💼 ${notification.message}`, { ...toastConfig, timeout: 5000 })
         break
-        
       case 'picked_up':
-        toast.info(`🚚 ${notification.message}`, {
-          ...toastConfig,
-          timeout: 5000
-        })
+        toast.info(`🚚 ${notification.message}`, { ...toastConfig, timeout: 5000 })
         break
-        
       case 'delivered':
-        toast.success(`✅ ${notification.message}`, {
-          ...toastConfig,
-          timeout: 8000 // Más tiempo para entregas
-        })
+        toast.success(`✅ ${notification.message}`, { ...toastConfig, timeout: 8000 })
         break
-        
       case 'proof_uploaded':
-        toast.info(`📸 ${notification.message}`, {
-          ...toastConfig,
-          timeout: 6000
-        })
+        toast.info(`📸 ${notification.message}`, { ...toastConfig, timeout: 6000 })
         break
-        
       default:
         toast.info(`📦 ${notification.message}`, toastConfig)
     }
   })
 
-  // 🆕 NOTIFICACIONES DE NUEVAS ÓRDENES (solo para admins)
+  // 🆕 NUEVAS ÓRDENES (solo admins + rutas autenticadas)
   wsManager.on('new_order_notification', (notification) => {
-    const authStore = useAuthStore()
+    if (!isInAuthenticatedRoute) return
     
-    if (authStore.isAdmin) {
-      console.log('🆕 Nueva orden:', notification)
-      
-      toast.success(`🆕 ${notification.message}`, {
-        timeout: 7000,
-        closeOnClick: true,
-        draggable: true
-      })
-    }
+    const authStore = useAuthStore()
+    if (!authStore.isAdmin) return
+
+    console.log('🆕 Nueva orden:', notification)
+    toast.success(`🆕 ${notification.message}`, {
+      timeout: 7000,
+      closeOnClick: true,
+      draggable: true
+    })
   })
 
-  // ⚡ EVENTO PARA ACTUALIZAR VISTAS EN TIEMPO REAL
+  // ⚡ ACTUALIZACIÓN DE VISTAS (sin toast)
   wsManager.on('order_status_changed', (data) => {
-    console.log('🔄 Orden actualizada - disparando refresh:', data)
+    console.log('🔄 Orden actualizada:', data.order_number)
     
-    // Emitir evento global para que los componentes se actualicen
+    // Solo emitir evento, sin toast invasivo
     window.dispatchEvent(new CustomEvent('orderUpdated', {
       detail: {
         orderId: data.order_id,
@@ -152,14 +143,14 @@ function setupOrderNotifications() {
     }))
   })
 
-  // 🔗 NOTIFICACIONES DE CONEXIÓN (discretas)
+  // 🔗 CONEXIÓN (muy discreto)
   wsManager.on('connected', () => {
     console.log('✅ Sistema de notificaciones conectado')
     
-    // Solo mostrar toast la primera vez
-    if (!wsManager._firstConnectionShown) {
+    // Solo mostrar si estamos en ruta autenticada y es primera vez
+    if (isInAuthenticatedRoute && !wsManager._firstConnectionShown) {
       wsManager._firstConnectionShown = true
-      toast.success('📡 Notificaciones en tiempo real activadas', {
+      toast.success('📡 Notificaciones activadas', {
         timeout: 3000,
         closeOnClick: true
       })
@@ -169,22 +160,39 @@ function setupOrderNotifications() {
   wsManager.on('disconnected', () => {
     console.log('❌ Sistema de notificaciones desconectado')
     
-    toast.warning('⚠️ Notificaciones desconectadas', {
-      timeout: 4000,
-      closeOnClick: true
-    })
+    // Solo mostrar warning si estábamos en ruta autenticada
+    if (isInAuthenticatedRoute) {
+      toast.warning('⚠️ Notificaciones desconectadas', {
+        timeout: 4000,
+        closeOnClick: true
+      })
+    }
   })
 
   wsManager.on('error', (error) => {
     console.error('❌ Error en notificaciones:', error)
     
-    toast.error('❌ Error en el sistema de notificaciones', {
-      timeout: 5000
-    })
+    if (isInAuthenticatedRoute) {
+      toast.error('❌ Error en notificaciones', { timeout: 5000 })
+    }
   })
 }
 
-// Configurar las notificaciones una sola vez
-setupOrderNotifications()
+// Función para limpiar configuración
+function resetNotifications() {
+  notificationsConfigured = false
+  wsManager._firstConnectionShown = false
+  
+  // Remover listeners (opcional, para limpiar memoria)
+  wsManager.removeAllListeners('order_notification')
+  wsManager.removeAllListeners('new_order_notification') 
+  wsManager.removeAllListeners('order_status_changed')
+  wsManager.removeAllListeners('connected')
+  wsManager.removeAllListeners('disconnected')
+  wsManager.removeAllListeners('error')
+}
 
+// ==================== MONTAR APP ====================
 app.mount('#app')
+
+console.log('✅ Aplicación iniciada con notificaciones inteligentes')
