@@ -3,10 +3,10 @@
 const express = require('express');
 const router = express.Router();
 const labelController = require('../controllers/label.controller');
-const { auth } = require('../middlewares/auth.middleware');
+const { authenticateToken, isAdmin } = require('../middlewares/auth.middleware');
 
 // Todas las rutas requieren autenticación
-router.use(auth);
+router.use(authenticateToken);
 
 // Generar código enviGo para un pedido
 router.post('/generate/:orderId', labelController.generateCode);
