@@ -164,7 +164,20 @@ paymentNote: {
   
   // Metadatos
   created_at: { type: Date, default: Date.now },
-  updated_at: { type: Date, default: Date.now }
+  updated_at: { type: Date, default: Date.now },
+
+   envigo_label: {
+    unique_code: { 
+      type: String, 
+      unique: true, 
+      sparse: true,  // Permite null pero único si existe
+      index: true 
+    },
+    generated_at: { type: Date },
+    printed_count: { type: Number, default: 0 },
+    last_printed_at: { type: Date },
+    last_printed_by: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
+  },
 });
 
 // Middleware para actualizar updated_at
@@ -240,6 +253,55 @@ orderSchema.methods.revertBilling = function() {
   }
   
   return this;
+};
+
+orderSchema.methods.generateEnvigoCode = async function() {
+  if (this.envigo_label?.unique_code) {
+    return this.envigo_label.unique_code;
+  }
+
+  // Obtener el código de la empresa (primeras 3-4 letras)
+  await this.populate('company_id');
+  const companyCode = this.company_id.name
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '')
+    .substring(0, 4);
+
+  // Generar código: EMPRESA-NUMERO
+  const baseCode = `${companyCode}-${String(this.order_number).padStart(4, '0')}`;
+  
+  // Verificar si existe, agregar sufijo si es necesario
+  let finalCode = baseCode;
+  let counter = 1;
+  
+  while (await mongoose.model('Order').findOne({ 'envigo_label.unique_code': finalCode })) {
+    finalCode = `${baseCode}-${counter}`;
+    counter++;
+  }
+
+  // Inicializar envigo_label si no existe
+  if (!this.envigo_label) {
+    this.envigo_label = {};
+  }
+
+  this.envigo_label.unique_code = finalCode;
+  this.envigo_label.generated_at = new Date();
+  
+  await this.save();
+  return finalCode;
+};
+
+// ✅ MÉTODO PARA MARCAR COMO IMPRESA
+orderSchema.methods.markLabelPrinted = async function(userId) {
+  if (!this.envigo_label) {
+    this.envigo_label = {};
+  }
+
+  this.envigo_label.printed_count = (this.envigo_label.printed_count || 0) + 1;
+  this.envigo_label.last_printed_at = new Date();
+  this.envigo_label.last_printed_by = userId;
+  
+  await this.save();
 };
 
 // Índices para mejorar rendimiento
