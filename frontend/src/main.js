@@ -1,23 +1,23 @@
-// frontend/src/main.js - COMPATIBLE CON CHART.JS
-
 import { createApp } from 'vue'
 import App from './App.vue'
 import router from './router'
 import pinia from './store'
-import Toast, { useToast } from 'vue-toastification'
-import 'vue-toastification/dist/index.css'
+import Toast, { useToast } from 'vue-toastification';
+import 'vue-toastification/dist/index.css';
 import wsManager from './services/websocket.service'
 import './assets/css/variables.css'
 import './assets/css/toast-styles.css'
+// Importar tu store de auth
+import { useAuthStore } from './store/auth'
 
-// ==================== CREAR APP ====================
 const app = createApp(App)
 
 app.use(pinia)
 app.use(router)
 app.use(Toast, {
+  // Configuración mejorada
   transition: 'Vue-Toastification__slideBlurred',
-  maxToasts: 3,
+  maxToasts: 5,
   newestOnTop: true,
   timeout: 5000,
   closeOnClick: true,
@@ -30,263 +30,161 @@ app.use(Toast, {
   closeButton: 'button',
   icon: true,
   rtl: false,
+  
+  // Posicionamiento
   position: 'top-right',
+  
+  // Clases CSS personalizadas
   toastClassName: 'envigo-toast',
   bodyClassName: 'envigo-toast-body'
 })
 
-// ==================== MONTAR APP ====================
-app.mount('#app')
+// ==================== WEBSOCKET AUTO-CONNECT ====================
 
-// ==================== DESPUÉS DEL MOUNT: CONFIGURAR NOTIFICACIONES ====================
+// Auto-conectar cuando el usuario esté autenticado
+router.beforeEach((to, from, next) => {
+  const authStore = useAuthStore()
+  
+  // Si el usuario está autenticado y el WebSocket no está conectado
+  if (authStore.isLoggedIn && !wsManager.isConnected) {
+    // Solo mostrar log una vez
+    if (!wsManager._autoConnectAttempted) {
+      console.log('🔄 Conectando notificaciones en tiempo real para:', authStore.user?.email)
+      wsManager._autoConnectAttempted = true
+    }
+    wsManager.connect()
+  }
+  
+  // Si el usuario no está autenticado y el WebSocket está conectado
+  if (!authStore.isLoggedIn && wsManager.isConnected) {
+    console.log('🔌 Desconectando notificaciones...')
+    wsManager.disconnect()
+    wsManager._autoConnectAttempted = false
+  }
+  
+  next()
+})
 
-// ⚠️ DELAY PARA ASEGURAR QUE TODO ESTÉ LISTO
-setTimeout(() => {
-  setupNotificationSystem()
-}, 100)
+// ==================== NOTIFICACIONES PUSH AUTOMÁTICAS ====================
 
-function setupNotificationSystem() {
-  // Importar store después del mount
-  import('./store/auth').then(({ useAuthStore }) => {
+const toast = useToast()
+let notificationsConfigured = false
+
+function setupOrderNotifications() {
+  if (notificationsConfigured) return
+  notificationsConfigured = true
+
+  // 🔔 NOTIFICACIONES DE CAMBIOS DE ESTADO DE PEDIDOS
+  wsManager.on('order_notification', (notification) => {
+    console.log('📦 Cambio de estado:', notification)
     
-    const toast = useToast()
-    let notificationsConfigured = false
-    let currentRouteType = 'public'
-
-    // Función para verificar rutas autenticadas
-    function isAuthenticatedRoute(route) {
-      return route.meta?.requiresAuth === true || route.path.startsWith('/app')
+    // Configurar toast según el tipo de evento
+    const toastConfig = {
+      timeout: 6000,
+      closeOnClick: true,
+      draggable: true,
+      pauseOnHover: true
     }
 
-    // ==================== ROUTER GUARDS ====================
-    
-    router.beforeEach((to, from, next) => {
-      try {
-        const authStore = useAuthStore()
-        const willBeInAuthRoute = isAuthenticatedRoute(to)
-        
-        currentRouteType = willBeInAuthRoute ? 'authenticated' : 'public'
-        
-        // ✅ CONECTAR: Usuario autenticado + entrando a ruta autenticada
-        if (authStore.isLoggedIn && willBeInAuthRoute && !wsManager.isConnected) {
-          console.log('🔄 Conectando notificaciones para:', to.path)
-          wsManager.connect()
-          setupNotifications()
-        }
-        
-        // ❌ DESCONECTAR: Sale de rutas autenticadas o logout
-        if ((!authStore.isLoggedIn || !willBeInAuthRoute) && wsManager.isConnected) {
-          console.log('🔌 Desconectando notificaciones')
-          wsManager.disconnect()
-          cleanupNotifications()
-        }
-        
-      } catch (error) {
-        console.warn('⚠️ Error en router guard:', error)
-      }
-      
-      next()
-    })
-
-    // ==================== CONFIGURACIÓN DE NOTIFICACIONES ====================
-
-    function setupNotifications() {
-      if (notificationsConfigured) return
-      notificationsConfigured = true
-
-      console.log('🔔 Configurando notificaciones...')
-
-      // 📦 NOTIFICACIONES DE CAMBIO DE ESTADO
-      wsManager.on('order_notification', (notification) => {
-        if (currentRouteType !== 'authenticated') return
-        
-        console.log('📦 Notificación de orden:', notification)
-        
-        const toastConfig = {
-          timeout: notification.duration || 6000,
-          closeOnClick: true,
-          draggable: true,
-          pauseOnHover: true
-        }
-
-        switch (notification.type) {
-          case 'success':
-            toast.success(`${notification.icon || '✅'} ${notification.message}`, toastConfig)
-            break
-          case 'info':
-            toast.info(`${notification.icon || '📦'} ${notification.message}`, toastConfig)
-            break
-          case 'warning':
-            toast.warning(`${notification.icon || '⚠️'} ${notification.message}`, toastConfig)
-            break
-          default:
-            // Compatibilidad con formato anterior
-            const icon = getIconForType(notification.data?.type)
-            toast.info(`${icon} ${notification.message}`, toastConfig)
-        }
-      })
-
-      // 🆕 NUEVAS ÓRDENES (solo admins)
-      wsManager.on('new_order_notification', (notification) => {
-        if (currentRouteType !== 'authenticated') return
-        
-        try {
-          const authStore = useAuthStore()
-          if (!authStore.isAdmin) return
-        } catch (error) {
-          return
-        }
-
-        console.log('🆕 Nueva orden para admin:', notification)
-        
-        toast.success(`${notification.icon || '🆕'} ${notification.message}`, {
-          timeout: notification.duration || 7000,
-          closeOnClick: true,
-          draggable: true,
-          onClick: () => {
-            if (notification.data?.order_id) {
-              window.dispatchEvent(new CustomEvent('navigateToOrder', {
-                detail: { orderId: notification.data.order_id }
-              }))
-            }
-          }
+    // Diferentes estilos según el evento
+    switch (notification.data?.type) {
+      case 'driver_assigned':
+        toast.info(`👨‍💼 ${notification.message}`, {
+          ...toastConfig,
+          timeout: 5000
         })
-      })
-
-      // ⚡ ACTUALIZACIÓN DE VISTAS (sin toast)
-      wsManager.on('order_status_changed', (data) => {
-        console.log('🔄 Orden actualizada:', data.order_number || data.orderNumber)
+        break
         
-        window.dispatchEvent(new CustomEvent('orderUpdated', {
-          detail: {
-            orderId: data.order_id || data.orderId,
-            orderNumber: data.order_number || data.orderNumber,
-            newStatus: data.status || data.newStatus,
-            companyId: data.company_id || data.companyId,
-            eventType: data.eventType || data.type
-          }
-        }))
-      })
-
-      // 🔗 ESTADO DE CONEXIÓN (discreto)
-      wsManager.on('connected', () => {
-        console.log('✅ Notificaciones conectadas')
+      case 'picked_up':
+        toast.info(`🚚 ${notification.message}`, {
+          ...toastConfig,
+          timeout: 5000
+        })
+        break
         
-        if (currentRouteType === 'authenticated' && !wsManager._firstToastShown) {
-          wsManager._firstToastShown = true
-          toast.success('📡 Notificaciones activadas', {
-            timeout: 3000,
-            closeOnClick: true
-          })
-        }
-      })
-
-      wsManager.on('disconnected', (data) => {
-        console.log('❌ Notificaciones desconectadas')
+      case 'delivered':
+        toast.success(`✅ ${notification.message}`, {
+          ...toastConfig,
+          timeout: 8000 // Más tiempo para entregas
+        })
+        break
         
-        if (currentRouteType === 'authenticated' && data.code !== 1000) {
-          toast.warning('⚠️ Notificaciones desconectadas', {
-            timeout: 4000,
-            closeOnClick: true
-          })
-        }
-      })
-
-      wsManager.on('error', (data) => {
-        console.error('❌ Error en notificaciones:', data.error)
+      case 'proof_uploaded':
+        toast.info(`📸 ${notification.message}`, {
+          ...toastConfig,
+          timeout: 6000
+        })
+        break
         
-        if (currentRouteType === 'authenticated') {
-          toast.error('❌ Error en notificaciones', { timeout: 5000 })
-        }
-      })
-
-      wsManager.on('server_error', (data) => {
-        console.error('❌ Error del servidor:', data.message)
-        
-        if (currentRouteType === 'authenticated') {
-          toast.error(`❌ ${data.message}`, { timeout: 6000 })
-        }
-      })
+      default:
+        toast.info(`📦 ${notification.message}`, toastConfig)
     }
+  })
 
-    function cleanupNotifications() {
-      if (!notificationsConfigured) return
-      
-      console.log('🧹 Limpiando notificaciones...')
-      
-      const eventsToClean = [
-        'order_notification',
-        'new_order_notification',
-        'order_status_changed',
-        'connected',
-        'disconnected',
-        'error',
-        'server_error'
-      ]
-      
-      eventsToClean.forEach(event => {
-        try {
-          wsManager.off(event, () => {})
-        } catch (error) {
-          // Ignorar errores de cleanup
-        }
-      })
-      
-      notificationsConfigured = false
-      wsManager._firstToastShown = false
-    }
-
-    function getIconForType(type) {
-      const icons = {
-        'driver_assigned': '👨‍💼',
-        'picked_up': '🚚',
-        'delivered': '✅',
-        'proof_uploaded': '📸'
-      }
-      return icons[type] || '📦'
-    }
-
-    // ==================== WATCH AUTH CHANGES ====================
+  // 🆕 NOTIFICACIONES DE NUEVAS ÓRDENES (solo para admins)
+  wsManager.on('new_order_notification', (notification) => {
+    const authStore = useAuthStore()
     
-    router.afterEach(() => {
-      setTimeout(() => {
-        try {
-          const authStore = useAuthStore()
-          
-          if (!authStore.isLoggedIn && wsManager.isConnected) {
-            console.log('👤 Usuario deslogueado, desconectando...')
-            wsManager.disconnect()
-            cleanupNotifications()
-          }
-        } catch (error) {
-          // Store no disponible
-        }
-      }, 50)
+    if (authStore.isAdmin) {
+      console.log('🆕 Nueva orden:', notification)
+      
+      toast.success(`🆕 ${notification.message}`, {
+        timeout: 7000,
+        closeOnClick: true,
+        draggable: true
+      })
+    }
+  })
+
+  // ⚡ EVENTO PARA ACTUALIZAR VISTAS EN TIEMPO REAL
+  wsManager.on('order_status_changed', (data) => {
+    console.log('🔄 Orden actualizada - disparando refresh:', data)
+    
+    // Emitir evento global para que los componentes se actualicen
+    window.dispatchEvent(new CustomEvent('orderUpdated', {
+      detail: {
+        orderId: data.order_id,
+        orderNumber: data.order_number,
+        newStatus: data.status,
+        companyId: data.company_id,
+        eventType: data.eventType
+      }
+    }))
+  })
+
+  // 🔗 NOTIFICACIONES DE CONEXIÓN (discretas)
+  wsManager.on('connected', () => {
+    console.log('✅ Sistema de notificaciones conectado')
+    
+    // Solo mostrar toast la primera vez
+    if (!wsManager._firstConnectionShown) {
+      wsManager._firstConnectionShown = true
+      toast.success('📡 Notificaciones en tiempo real activadas', {
+        timeout: 3000,
+        closeOnClick: true
+      })
+    }
+  })
+
+  wsManager.on('disconnected', () => {
+    console.log('❌ Sistema de notificaciones desconectado')
+    
+    toast.warning('⚠️ Notificaciones desconectadas', {
+      timeout: 4000,
+      closeOnClick: true
     })
+  })
 
-    console.log('✅ Sistema de notificaciones configurado')
-
-  }).catch(error => {
-    console.error('❌ Error configurando notificaciones:', error)
+  wsManager.on('error', (error) => {
+    console.error('❌ Error en notificaciones:', error)
+    
+    toast.error('❌ Error en el sistema de notificaciones', {
+      timeout: 5000
+    })
   })
 }
 
-console.log('✅ Aplicación iniciada')
+// Configurar las notificaciones una sola vez
+setupOrderNotifications()
 
-// ==================== DEBUG HELPERS (DESARROLLO) ====================
-if (import.meta.env.DEV) {
-  window.wsManager = wsManager
-  
-  setTimeout(() => {
-    window.debugNotifications = {
-      wsState: () => wsManager.connectionState,
-      testConnection: () => {
-        if (wsManager.isConnected) {
-          console.log('🔗 WebSocket conectado')
-        } else {
-          console.log('❌ WebSocket desconectado')
-        }
-      }
-    }
-  }, 500)
-}
+app.mount('#app')
