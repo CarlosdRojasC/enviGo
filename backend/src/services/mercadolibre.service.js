@@ -682,8 +682,8 @@ static mapOrderStatus(mlOrder) {
     const statusMap = {
       // Estados principales de MercadoLibre Flex según documentación
       'pending': 'pending',                   // Pendiente
-      'handling': 'ready_for_pickup',         // Preparando - listo para recoger
-      'ready_to_ship': 'ready_for_pickup',   // Listo para enviar
+      'handling': 'pending',         // Preparando - listo para recoger
+      'ready_to_ship': 'pending',   // Listo para enviar
       'shipped': 'shipped',                   // Enviado (substatus puede ser null)
       'out_for_delivery': 'out_for_delivery', // En camino para entrega (substatus del shipped)
       'delivered': 'delivered',               // Entregado
@@ -701,10 +701,10 @@ static mapOrderStatus(mlOrder) {
   // PRIORIDAD 2: Estados generales del pedido
   if (mlOrder.status) {
     const generalStatusMap = {
-      'confirmed': 'ready_for_pickup',        // Confirmado - listo para procesar
+      'confirmed': 'pending',        // Confirmado - listo para procesar
       'payment_required': 'pending',          // Requiere pago
       'payment_in_process': 'pending',        // Pago en proceso
-      'paid': 'ready_for_pickup',             // Pagado - listo para procesar
+      'paid': 'pending',             // Pagado - listo para procesar
       'cancelled': 'cancelled',               // Cancelado
       'invalid': 'cancelled',                 // Inválido - cancelar
     };
