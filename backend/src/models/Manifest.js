@@ -112,7 +112,11 @@ manifestSchema.statics.generateManifestNumber = async function(companyId) {
     const month = String(today.getMonth() + 1).padStart(2, '0');
     const day = String(today.getDate()).padStart(2, '0');
     
-    const datePrefix = `MAN-${year}-${month}-${day}`;
+    const company = await mongoose.model('Company').findById(companyId).lean();
+    const companyCode = company?.slug?.substring(0, 4).toUpperCase() || 
+                        companyId.toString().substring(-4).toUpperCase();
+
+    const datePrefix = `MAN-${companyCode}-${year}-${month}-${day}`;
     
     // Buscar el último manifiesto del día para esta empresa
     const lastManifest = await this.findOne({
@@ -142,7 +146,8 @@ manifestSchema.statics.generateManifestNumber = async function(companyId) {
     
     // Fallback: usar timestamp
     const timestamp = Date.now();
-    const fallbackNumber = `MAN-${timestamp}`;
+    const companyCode = companyId.toString().substring(-4).toUpperCase();
+    const fallbackNumber = `MAN-${companyCode}-${timestamp}`;
     
     console.log(`⚠️ Usando número de manifiesto fallback: ${fallbackNumber}`);
     return fallbackNumber;
