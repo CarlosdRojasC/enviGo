@@ -613,6 +613,31 @@ class MercadoLibreService {
     console.log(`⚠️ [ML Status] No se pudo mapear el status, usando 'pending' por defecto`);
     return 'pending';
   }
+  static async syncOrders(channelId, options = {}) {
+  console.log('⚠️ [ML Service] syncOrders llamado - redirigiendo a syncInitialOrders');
+  
+  const channel = await Channel.findById(channelId);
+  if (!channel) {
+    throw new Error('Canal no encontrado');
+  }
+
+  // Si ya se hizo la sync inicial, no hacer nada
+  if (channel.settings?.initial_sync_completed) {
+    console.log('⏭️ [ML Service] Canal ya inicializado, no se requiere sync');
+    return {
+      success: true,
+      message: 'Canal ya sincronizado. Nuevos pedidos llegan por webhook.',
+      syncedCount: 0,
+      errorCount: 0,
+      skippedCount: 0,
+      totalFound: 0
+    };
+  }
+
+  // Si no se ha hecho, ejecutar sync inicial
+  console.log('🔄 [ML Service] Ejecutando sincronización inicial...');
+  return await this.syncInitialOrders(channelId);
+}
 }
 
 module.exports = MercadoLibreService;
