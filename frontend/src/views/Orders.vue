@@ -1334,57 +1334,6 @@ async function handleGenerateLabels() {
     generatingLabels.value = false
   }
 }
-function printLabelsFromPreview() {
-  if (labelsToPreview.value.length === 0) return
-  
-  console.log('🖨️ Imprimiendo etiquetas directamente:', labelsToPreview.value.length)
-  
-  // ✅ Crear elemento de impresión en el DOM actual
-  const printContent = createPrintableLabelsHTML(labelsToPreview.value)
-  
-  // ✅ Crear iframe oculto para impresión
-  const printFrame = document.createElement('iframe')
-  printFrame.style.position = 'absolute'
-  printFrame.style.left = '-9999px'
-  printFrame.style.top = '-9999px'
-  printFrame.style.width = '0px'
-  printFrame.style.height = '0px'
-  
-  document.body.appendChild(printFrame)
-  
-  try {
-    const frameDoc = printFrame.contentDocument || printFrame.contentWindow.document
-    frameDoc.open()
-    frameDoc.write(printContent)
-    frameDoc.close()
-    
-    // ✅ Imprimir directamente cuando esté listo
-    printFrame.onload = () => {
-      setTimeout(() => {
-        printFrame.contentWindow.focus()
-        printFrame.contentWindow.print()
-        
-        // ✅ Limpiar después de imprimir
-        setTimeout(() => {
-          document.body.removeChild(printFrame)
-        }, 1000)
-      }, 500)
-    }
-    
-    // ✅ Marcar etiquetas como impresas
-    labelsToPreview.value.forEach(label => {
-      markLabelAsPrinted(label.order_id)
-    })
-    
-    toast.success(`✅ ${labelsToPreview.value.length} etiquetas enviadas a impresión`)
-    showLabelsPreviewModal.value = false
-    
-  } catch (error) {
-    console.error('❌ Error en impresión:', error)
-    toast.error('Error al preparar impresión')
-    document.body.removeChild(printFrame)
-  }
-}
 function createPrintableLabelsHTML(labels) {
   return `
 <!DOCTYPE html>
