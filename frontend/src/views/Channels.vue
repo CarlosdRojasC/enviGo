@@ -762,7 +762,7 @@ function getChannelNamePlaceholder(type) {
 
 function getUrlPlaceholder(type) {
   const placeholders = {
-    shopify: 'mi-tienda.myshopify.com',
+    shopify: 'https://mi-tienda.myshopify.com',
     woocommerce: 'https://mi-tienda.com',
     mercadolibre: 'https://mercadolibre.cl', // ✅ Chile por defecto
     jumpseller: 'https://mi-tienda.jumpseller.com'
