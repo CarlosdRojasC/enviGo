@@ -530,6 +530,7 @@ static async syncOrders(channel, dateFrom, dateTo) {
         params.append('created_at_max', toDate);
       }
     }
+    params.append('status', 'any');
     params.append('financial_status', 'paid');
     params.append('fulfillment_status', 'shipped'); // Solo pedidos sin cumplir
     params.append('limit', '50'); // ✅ MÁXIMO 50 PEDIDOS
