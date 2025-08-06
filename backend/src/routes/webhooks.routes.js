@@ -139,15 +139,15 @@ router.post('/webhooks/:channel_type/:channel_id', async (req, res) => {
 
     let order = null;
 
-    if (channel_type === 'shopify') {
-      const ShopifyService = require('../services/shopify.service');
-      order = await ShopifyService.processWebhook(channel_id, req.body);
-    } else if (channel_type === 'woocommerce') {
+     if (channel_type === 'woocommerce') {
       const WooCommerceService = require('../services/woocommerce.service');
       order = await WooCommerceService.processWebhook(channel_id, req.body, req.headers);
     } else if (channel_type === 'mercadolibre') {
       const MercadoLibreService = require('../services/mercadolibre.service');
       order = await MercadoLibreService.processWebhook(channel_id, req.body);
+    } else if (channel_type === 'shopify') {
+      // 🚫 ELIMINAR ESTA PARTE - ya tienes ruta específica abajo
+      return res.status(404).json({ error: 'Use specific shopify webhook route' });
     }
 
     // NUEVO: Auto-crear en Shipday si está habilitado
@@ -236,7 +236,7 @@ router.get('/debug/mercadolibre/:channelId/shipment/:shipmentId', async (req, re
     res.status(500).json({ error: error.message });
   }
 });
-router.post('/webhooks/shopify/:channel_id', async (req, res) => {
+router.post('/shopify/:channel_id', async (req, res) => {
   try {
     console.log('🎯 WEBHOOK SHOPIFY RECIBIDO'); // Este log debería aparecer
     
