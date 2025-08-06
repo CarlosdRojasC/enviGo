@@ -495,7 +495,7 @@ static async processOrder(mlOrder, channel) {
     shipping_status: mlOrder.shipping?.status,
   });
   // ✅ FILTRO: Solo procesar pedidos Flex
- if (!this.isFlexOrder(mlOrder)) {
+ if (!(await this.isFlexOrder(mlOrder, accessToken)))  {
     console.log(`⏭️ [ML Process] Pedido ${mlOrder.id} no es Flex, omitiendo...`);
     return null; // Retornar null para indicar que se omitió
   }
