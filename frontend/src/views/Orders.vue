@@ -379,6 +379,9 @@
         <button @click="printLabelsFromPreview" class="btn btn-primary">
           🖨️ Imprimir Todas
         </button>
+        <button @click="printLabelsDirectly" class="btn btn-print-direct" title="Impresión directa (sin ventana adicional)">
+          ⚡ Imprimir Directo
+        </button>
         <button @click="showLabelsPreviewModal = false" class="btn btn-secondary">
           Cerrar
         </button>
@@ -1334,17 +1337,62 @@ async function handleGenerateLabels() {
 function printLabelsFromPreview() {
   if (labelsToPreview.value.length === 0) return
   
-  console.log('🖨️ Imprimiendo etiquetas:', labelsToPreview.value.length)
+  console.log('🖨️ Imprimiendo etiquetas directamente:', labelsToPreview.value.length)
   
-  // ✅ HTML optimizado para impresión
-  const printContent = `
+  // ✅ Crear elemento de impresión en el DOM actual
+  const printContent = createPrintableLabelsHTML(labelsToPreview.value)
+  
+  // ✅ Crear iframe oculto para impresión
+  const printFrame = document.createElement('iframe')
+  printFrame.style.position = 'absolute'
+  printFrame.style.left = '-9999px'
+  printFrame.style.top = '-9999px'
+  printFrame.style.width = '0px'
+  printFrame.style.height = '0px'
+  
+  document.body.appendChild(printFrame)
+  
+  try {
+    const frameDoc = printFrame.contentDocument || printFrame.contentWindow.document
+    frameDoc.open()
+    frameDoc.write(printContent)
+    frameDoc.close()
+    
+    // ✅ Imprimir directamente cuando esté listo
+    printFrame.onload = () => {
+      setTimeout(() => {
+        printFrame.contentWindow.focus()
+        printFrame.contentWindow.print()
+        
+        // ✅ Limpiar después de imprimir
+        setTimeout(() => {
+          document.body.removeChild(printFrame)
+        }, 1000)
+      }, 500)
+    }
+    
+    // ✅ Marcar etiquetas como impresas
+    labelsToPreview.value.forEach(label => {
+      markLabelAsPrinted(label.order_id)
+    })
+    
+    toast.success(`✅ ${labelsToPreview.value.length} etiquetas enviadas a impresión`)
+    showLabelsPreviewModal.value = false
+    
+  } catch (error) {
+    console.error('❌ Error en impresión:', error)
+    toast.error('Error al preparar impresión')
+    document.body.removeChild(printFrame)
+  }
+}
+function createPrintableLabelsHTML(labels) {
+  return `
 <!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>Etiquetas enviGo - ${labelsToPreview.value.length} etiquetas</title>
+  <title>Etiquetas enviGo - ${labels.length} etiquetas</title>
   <style>
-    /* ✅ CSS de impresión optimizado */
     @page {
       size: A4;
       margin: 8mm;
@@ -1446,12 +1494,10 @@ function printLabelsFromPreview() {
       font-style: italic;
     }
     
-    /* ✅ Forzar salto de página cada 4 etiquetas */
     .label:nth-child(4n) {
       page-break-after: always;
     }
     
-    /* ✅ Ocultar elementos no necesarios en impresión */
     @media print {
       body { 
         -webkit-print-color-adjust: exact;
@@ -1462,7 +1508,7 @@ function printLabelsFromPreview() {
 </head>
 <body>
   <div class="labels-container">
-    ${labelsToPreview.value.map(label => `
+    ${labels.map(label => `
       <div class="label">
         <div class="label-header">
           <div class="company-name">enviGo</div>
@@ -1480,7 +1526,7 @@ function printLabelsFromPreview() {
               <strong>Teléfono:</strong> ${label.customer_phone || 'No disponible'}
             </div>
             <div class="info-line">
-              <strong>Monto:</strong> $${label.total_amount ? new Intl.NumberFormat('es-CL').format(label.total_amount) : 'N/A'}
+              <strong>Monto:</strong> ${label.total_amount ? new Intl.NumberFormat('es-CL').format(label.total_amount) : 'N/A'}
             </div>
             ${label.notes ? `
               <div class="notes">
@@ -1504,45 +1550,77 @@ function printLabelsFromPreview() {
   </div>
 </body>
 </html>`
-
-  // ✅ Abrir ventana de impresión optimizada
-  const printWindow = window.open('', '_blank', 'width=800,height=600,scrollbars=yes')
+}
+function printSingleLabelFromPreview(label) {
+  console.log('🖨️ Imprimiendo etiqueta individual:', label.order_number)
   
-  if (!printWindow) {
-    toast.error('No se pudo abrir la ventana de impresión. Verifica los bloqueadores de pop-ups.')
-    return
-  }
+  const singleLabelContent = createPrintableLabelsHTML([label])
+  
+  // ✅ Crear iframe oculto para impresión individual
+  const printFrame = document.createElement('iframe')
+  printFrame.style.position = 'absolute'
+  printFrame.style.left = '-9999px'
+  printFrame.style.top = '-9999px'
+  printFrame.style.width = '0px'
+  printFrame.style.height = '0px'
+  
+  document.body.appendChild(printFrame)
   
   try {
-    printWindow.document.write(printContent)
-    printWindow.document.close()
+    const frameDoc = printFrame.contentDocument || printFrame.contentWindow.document
+    frameDoc.open()
+    frameDoc.write(singleLabelContent)
+    frameDoc.close()
     
-    // ✅ Esperar a que se cargue completamente antes de imprimir
-    printWindow.onload = () => {
+    printFrame.onload = () => {
       setTimeout(() => {
-        printWindow.focus()
-        printWindow.print()
+        printFrame.contentWindow.focus()
+        printFrame.contentWindow.print()
         
-        // ✅ Cerrar ventana después de imprimir
-        printWindow.onafterprint = () => {
-          printWindow.close()
-        }
+        // ✅ Limpiar después de imprimir
+        setTimeout(() => {
+          document.body.removeChild(printFrame)
+        }, 1000)
       }, 500)
     }
     
-    // ✅ Marcar etiquetas como impresas
-    labelsToPreview.value.forEach(label => {
-      markLabelAsPrinted(label.order_id)
-    })
-    
-    toast.success(`✅ ${labelsToPreview.value.length} etiquetas enviadas a impresión`)
-    showLabelsPreviewModal.value = false
+    markLabelAsPrinted(label.order_id)
+    toast.success(`✅ Etiqueta #${label.order_number} enviada a impresión`)
     
   } catch (error) {
-    console.error('❌ Error en impresión:', error)
-    toast.error('Error al preparar impresión')
-    printWindow.close()
+    console.error('❌ Error en impresión individual:', error)
+    toast.error('Error al imprimir etiqueta')
+    document.body.removeChild(printFrame)
   }
+}
+function printLabelsDirectly() {
+  if (labelsToPreview.value.length === 0) return
+  
+  // ✅ Ocultar temporalmente el contenido de la página
+  const originalContents = document.body.innerHTML
+  const printContent = createPrintableLabelsHTML(labelsToPreview.value)
+  
+  // ✅ Reemplazar el contenido temporalmente
+  document.body.innerHTML = printContent
+  
+  // ✅ Imprimir directamente
+  window.print()
+  
+  // ✅ Restaurar el contenido original después de imprimir
+  setTimeout(() => {
+    document.body.innerHTML = originalContents
+    
+    // ✅ Reactivar Vue (importante después de cambiar innerHTML)
+    location.reload() // Opción simple pero efectiva
+  }, 1000)
+  
+  // ✅ Marcar como impresas
+  labelsToPreview.value.forEach(label => {
+    markLabelAsPrinted(label.order_id)
+  })
+  
+  toast.success(`✅ ${labelsToPreview.value.length} etiquetas enviadas a impresión`)
+  showLabelsPreviewModal.value = false
 }
 // ✅ Función para imprimir etiqueta individual
 function printSingleLabelFromPreview(label) {
