@@ -299,20 +299,44 @@ const accessToken = await this.getAccessToken(channel);
     let syncedCount = 0;
     let errorCount = 0;
 
-    for (const mlOrder of orders) {
-      try {
-        const result = await MercadoLibreService.processOrder(mlOrder, channel);
-        if (result !== null) {
-          syncedCount++;
-        } else {
-          console.log(`⏭️ [ML Sync] Pedido ${mlOrder.id} omitido (no es Flex)`);
-          // No contar como error, solo como omitido
-        }
-      } catch (error) {
-        console.error(`❌ [ML Sync] Error procesando pedido ${mlOrder.id}:`, error.message);
-        errorCount++;
-      }
+    let skippedCount = 0; // Agregar esta variable al inicio de la función
+
+for (const mlOrder of orders) {
+  try {
+    console.log(`📦 [ML Sync] Evaluando pedido ${mlOrder.id}...`);
+    
+    // ✅ USAR LA NUEVA FUNCIÓN DE DETECCIÓN
+    if (!this.isFlexOrder(mlOrder)) {
+      console.log(`⏭️ [ML Sync] Pedido ${mlOrder.id} omitido (no es Flex)`);
+      skippedCount++;
+      continue;
     }
+
+    console.log(`✅ [ML Sync] Procesando pedido Flex ${mlOrder.id}`);
+
+    const existingOrder = await Order.findOne({
+      external_order_id: mlOrder.id.toString(),
+      channel_id: channel._id
+    });
+
+    if (existingOrder) {
+      // Actualizar pedido existente
+      existingOrder.status = this.mapOrderStatus(mlOrder);
+      existingOrder.raw_data = mlOrder;
+      await existingOrder.save();
+      console.log(`🔄 [ML Sync] Pedido ${mlOrder.id} actualizado`);
+    } else {
+      // Crear nuevo pedido
+      await this.createOrderFromApiData(mlOrder, channel, accessToken);
+      console.log(`➕ [ML Sync] Pedido ${mlOrder.id} creado`);
+    }
+    
+    syncedCount++;
+  } catch (error) {
+    console.error(`❌ [ML Sync] Error procesando pedido ${mlOrder.id}:`, error.message);
+    errorCount++;
+  }
+}
 
 
     // Actualizar última sincronización
@@ -322,12 +346,19 @@ const accessToken = await this.getAccessToken(channel);
 
     console.log(`✅ [ML Sync] Sincronización completada: ${syncedCount} pedidos sincronizados, ${errorCount} errores`);
 
-    return {
-      success: true,
-      syncedCount,
-      errorCount,
-      totalFound: orders.length
-    };
+    console.log(`✅ [ML Sync] Sincronización completada:`);
+console.log(`   - ${syncedCount} pedidos Flex sincronizados`);
+console.log(`   - ${skippedCount} pedidos omitidos (no Flex)`);
+console.log(`   - ${errorCount} errores`);
+console.log(`   - ${orders.length} pedidos totales evaluados`);
+
+return {
+  success: true,
+  syncedCount,
+  errorCount,
+  skippedCount,
+  totalFound: orders.length
+};
 
   } catch (error) {
     console.error('❌ [ML Sync] Error en sincronización:', error.message);
@@ -414,10 +445,12 @@ static async processOrder(mlOrder, channel) {
     shipping_status: mlOrder.shipping?.status,
   });
   // ✅ FILTRO: Solo procesar pedidos Flex
-  if (!MercadoLibreService.isFlexOrder(mlOrder)) {
+ if (!this.isFlexOrder(mlOrder)) {
     console.log(`⏭️ [ML Process] Pedido ${mlOrder.id} no es Flex, omitiendo...`);
-    return null; // Retornar null para que no se cuente como error
+    return null; // Retornar null para indicar que se omitió
   }
+
+  console.log(`✅ [ML Process] Pedido ${mlOrder.id} ES FLEX, continuando procesamiento...`);
   
   console.log(`✅ [ML Process] Pedido ${mlOrder.id} es Flex, procesando...`);
   
@@ -599,37 +632,6 @@ static extractShippingAddressSimple(mlOrder) {
  * @param {Object} mlOrder - Pedido de MercadoLibre
  * @returns {boolean} - true si es Flex, false si no
  */
-static isFlexOrder(mlOrder) {
-  // Un pedido es Flex si:
-  // 1. Tiene shipping y el shipping tiene logistic_type "flex" o "self_service"
-  // 2. O tiene tags que incluyen "flex"
-  // 3. O el shipping mode es "me2" (MercadoEnvios 2.0 que incluye Flex)
-  
-  if (mlOrder.shipping) {
-    // Verificar logistic_type (puede ser "flex" o "self_service")
-    if (mlOrder.shipping.logistic_type === 'flex' || 
-        mlOrder.shipping.logistic_type === 'self_service' ||
-        mlOrder.shipping.logistics_type === 'self_service') {
-      return true;
-    }
-    
-    // Verificar mode me2
-    if (mlOrder.shipping.mode === 'me2') {
-      return true;
-    }
-  }
-  
-  // Verificar tags
-  if (mlOrder.tags && Array.isArray(mlOrder.tags)) {
-    return mlOrder.tags.some(tag => 
-      tag.toLowerCase().includes('flex') || 
-      tag.toLowerCase().includes('me2') ||
-      tag.toLowerCase().includes('self_service')
-    );
-  }
-  
-  return false;
-}
   /**
    * Mapea los estados de Mercado Libre a los estados de tu sistema.
    */
