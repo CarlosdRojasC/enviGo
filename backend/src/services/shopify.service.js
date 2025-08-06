@@ -531,7 +531,7 @@ const today = new Date();
       params.append('order', 'created_at desc'); // Más recientes primero
       
       console.log(`🔍 URL consultada: ${this.getApiUrl(channel)}/orders.json?${params}`);
-      console.log(`📅 Buscando pedidos PREPARADOS del ${startOfDay.toLocaleDateString()} al ${endOfDay.toLocaleDateString()}`);
+      console.log(`📅 Buscando pedidos PREPARADOS del ${startOfYesterday.toLocaleDateString()} al ${endOfToday.toLocaleDateString()}`);
       
       try {
         const response = await axios.get(
