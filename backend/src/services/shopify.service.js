@@ -507,15 +507,19 @@ static async syncOrders(channel, dateFrom, dateTo) {
       console.log(`📋 Comunas permitidas: ${allowedCommunes.join(', ')}`);
       
       // 🗓️ NUEVA LÓGICA: Solo pedidos del día actual
-      const today = new Date();
-      const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-      const endOfDay = new Date(startOfDay.getTime() + 24 * 60 * 60 * 1000 - 1);
-      
+const today = new Date();
+      const yesterday = new Date(today);
+      yesterday.setDate(yesterday.getDate() - 1);
+
+
+      const startOfYesterday = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate());
+      // Fin de hoy a las 23:59
+      const endOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1, 0, 0, 0, -1);
       const params = new URLSearchParams();
       
       // 📅 SOLO PEDIDOS DE HOY
-      params.append('created_at_min', startOfDay.toISOString());
-      params.append('created_at_max', endOfDay.toISOString());
+      params.append('created_at_min', startOfYesterday.toISOString());
+      params.append('created_at_max', endOfToday.toISOString());
       
       // 🎯 FILTROS ESPECÍFICOS PARA PEDIDOS PREPARADOS
       params.append('status', 'open'); // Solo pedidos abiertos
