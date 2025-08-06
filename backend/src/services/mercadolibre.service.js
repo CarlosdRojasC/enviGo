@@ -395,7 +395,9 @@ static async isFlexOrder(mlOrder, accessToken) {
     if (shipment) {
       console.log(`🔍 [ML Debug] Shipment ${mlOrder.shipping.id} logistic:`, {
         type: shipment.logistic?.type,
-        mode: shipment.logistic?.mode
+        mode: shipment.logistic?.mode,
+        direction: shipment.logistic?.direction,
+        logistic_object: JSON.stringify(shipment.logistic, null, 2)
       });
 
       // ✅ VERIFICAR LOGISTIC TYPE = self_service
@@ -453,9 +455,10 @@ static async getShipmentDetails(shippingId, accessToken) {
     const shipment = response.data;
     console.log(`✅ [ML Shipment] Datos del shipment ${shippingId}:`, {
       logistic_type: shipment.logistic?.type,
-      mode: shipment.logistic?.mode,
+      logistic_mode: shipment.logistic?.mode,
       status: shipment.status,
-      substatus: shipment.substatus
+      substatus: shipment.substatus,
+      logistic_full: JSON.stringify(shipment.logistic, null, 2)
     });
 
     return shipment;
@@ -529,7 +532,7 @@ static async processOrder(mlOrder, channel) {
 }
 
 // ✅ AGREGAR este nuevo método estático simple:
-static extractShippingAddressSimple(mlOrder) {
+  static async extractShippingAddressSimple(mlOrder) {
   if (!mlOrder.shipping) {
     return 'Sin información de envío';
   }
