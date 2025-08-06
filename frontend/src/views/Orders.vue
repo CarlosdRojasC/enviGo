@@ -772,15 +772,17 @@ async function generateManifestAndMarkReady() {
     return;
   }
 
-  const confirmMsg = `¿Deseas generar el manifiesto y marcar ${selectedOrders.value.length} pedido(s) como "Listo para Retiro"?\n\nEl manifiesto se imprimirá automáticamente.`;
+  const confirmMsg = `¿Deseas generar el manifiesto y marcar ${selectedOrders.value.length} pedido(s) como "Listo para Retiro"?`;
   if (!confirm(confirmMsg)) return;
 
   try {
-    console.log('📋 Creando manifiesto...');
+    console.log('📋 Creando manifiesto guardado...');
     
     // 1. Crear manifiesto en la base de datos
     const response = await apiService.manifests.create(selectedOrders.value);
     const manifest = response.data;
+    
+    console.log('✅ Manifiesto creado:', manifest);
     
     // 2. Actualizar órdenes localmente
     orders.value.forEach(order => {
@@ -791,49 +793,30 @@ async function generateManifestAndMarkReady() {
       }
     });
 
-    // 3. ✅ IMPRIMIR DIRECTAMENTE (sin modal)
-    await printManifestDirectly(manifest.manifest);
+// 3. ✅ NUEVO: Abrir modal en lugar de nueva pestaña
+currentManifestId.value = manifest.manifest.id;
+showManifestModal.value = true;
+
+// ✅ NUEVO: Preguntar si quiere imprimir inmediatamente
+setTimeout(() => {
+  if (confirm('Manifiesto creado exitosamente. ¿Deseas imprimirlo ahora?')) {
+    // El modal ManifestModal ya tiene la función printManifest()
+    // Solo necesitamos triggearla
+    document.querySelector('.btn-print')?.click();
+  }
+}, 500);
     
-    toast.success(`✅ Manifiesto ${manifest.manifest.manifest_number} creado e impreso`);
+    toast.success(`✅ Manifiesto ${manifest.manifest.manifest_number} creado exitosamente`);
     clearSelection();
 
   } catch (error) {
     console.error('❌ Error creando manifiesto:', error);
-    toast.error('Error al crear el manifiesto');
-  }
-}
-
-// ✅ NUEVA FUNCIÓN: Impresión directa del manifiesto
-async function printManifestDirectly(manifestData) {
-  try {
-    // Generar HTML optimizado para impresión
-    const printContent = createManifestPrintHTML(manifestData);
     
-    // Crear iframe oculto para impresión
-    const printFrame = document.createElement('iframe');
-    printFrame.style.position = 'absolute';
-    printFrame.style.left = '-9999px';
-    printFrame.style.width = '0px';
-    printFrame.style.height = '0px';
-    
-    document.body.appendChild(printFrame);
-    
-    const frameDoc = printFrame.contentDocument;
-    frameDoc.open();
-    frameDoc.write(printContent);
-    frameDoc.close();
-    
-    // Imprimir cuando esté listo
-    printFrame.onload = () => {
-      setTimeout(() => {
-        printFrame.contentWindow.print();
-        setTimeout(() => document.body.removeChild(printFrame), 1000);
-      }, 500);
-    };
-    
-  } catch (error) {
-    console.error('❌ Error imprimiendo:', error);
-    toast.error('Error al imprimir manifiesto');
+    if (error.response?.status === 403) {
+      toast.error('No tienes permisos para crear manifiestos');
+    } else {
+      toast.error('Error al crear el manifiesto');
+    }
   }
 }
 
