@@ -494,9 +494,9 @@ static async updateExistingFulfillment(channel, shopifyOrderId, trackingUrl) {
   }
   
   // Sincronizar pedidos históricos
-static async syncOrders(channel, dateFrom, dateTo) {
+static async syncOrders(channel, dateFrom, dateTo, onlyReadyOrders = true) {
   try {
-    console.log('🔄 Sincronizando últimos pedidos de Shopify (una página)...');
+    console.log('🔄 Sincronizando pedidos preparados de Shopify...');
     
     let ordersImported = 0;
     let ordersRejected = 0;
@@ -506,24 +506,21 @@ static async syncOrders(channel, dateFrom, dateTo) {
     const allowedCommunes = channel.accepted_communes || [];
     console.log(`📋 Comunas permitidas: ${allowedCommunes.join(', ')}`);
     
-    // ✅ PARÁMETROS SIMPLES - SOLO UNA PÁGINA
     const params = new URLSearchParams();
     
-    // Si no hay fechas específicas, obtener los últimos 30 días
+    // Fechas
     if (!dateFrom && !dateTo) {
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
       params.append('created_at_min', thirtyDaysAgo.toISOString());
     } else {
       if (dateFrom) {
-        // Validar que dateFrom no sea futuro
         const fromDate = new Date(dateFrom) > new Date() ? 
           new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString() : 
           dateFrom;
         params.append('created_at_min', fromDate);
       }
       if (dateTo) {
-        // Validar que dateTo no sea futuro
         const toDate = new Date(dateTo) > new Date() ? 
           new Date().toISOString() : 
           dateTo;
@@ -531,114 +528,104 @@ static async syncOrders(channel, dateFrom, dateTo) {
       }
     }
     
-    params.append('status', 'any');
-    params.append('limit', '50'); // ✅ MÁXIMO 50 PEDIDOS
-    params.append('order', 'created_at desc'); // ✅ ORDENAR POR MÁS RECIENTES PRIMERO
+    // ✅ FILTROS PARA PEDIDOS PREPARADOS
+    if (onlyReadyOrders) {
+      // Opción 1: Pedidos YA marcados como fulfilled en Shopify (preparados por el comerciante)
+      params.append('financial_status', 'paid');
+      params.append('fulfillment_status', 'fulfilled');
+      console.log('🎯 Filtrando solo pedidos pagados y YA preparados (fulfilled)');
+      
+      // Opción 2: También podrías querer unfulfilled pero pagados (listos para preparar)
+      // params.append('fulfillment_status', 'unfulfilled');
+      // console.log('🎯 Filtrando pedidos pagados listos para preparar');
+    } else {
+      params.append('status', 'any');
+    }
+    
+    params.append('limit', '50');
+    params.append('order', 'created_at desc');
     
     console.log(`🔍 URL consultada: ${this.getApiUrl(channel)}/orders.json?${params}`);
     
-    try {
-      // ✅ UNA SOLA LLAMADA A LA API
-      const response = await axios.get(
-        `${this.getApiUrl(channel)}/orders.json?${params}`,
-        { 
-          headers: this.getHeaders(channel),
-          timeout: 30000,
-          validateStatus: function (status) {
-            return status >= 200 && status < 500;
-          }
-        }
-      );
-      
-      // Manejar errores HTTP específicos
-      if (response.status === 400) {
-        console.error('❌ Error 400 - Bad Request desde Shopify:', response.data);
-        throw new Error(`Parámetros inválidos: ${JSON.stringify(response.data)}`);
+    const response = await axios.get(
+      `${this.getApiUrl(channel)}/orders.json?${params}`,
+      { 
+        headers: this.getHeaders(channel),
+        timeout: 30000
       }
-      
-      if (response.status === 401) {
-        throw new Error('Token de acceso inválido o expirado');
-      }
-      
-      if (response.status === 429) {
-        throw new Error('Rate limit alcanzado, intenta más tarde');
-      }
-      
-      if (!response.data || !response.data.orders) {
-        throw new Error('Respuesta inválida de la API');
-      }
-      
-      const orders = response.data.orders;
-      console.log(`📦 Obtenidos ${orders.length} pedidos recientes de Shopify`);
-      
-      if (orders.length === 0) {
-        console.log('ℹ️ No hay pedidos para procesar en el rango de fechas especificado');
-        return {
-          imported: 0,
-          rejected: 0,
-          addressRejected: 0,
-          communeRejected: 0,
-          total: 0
-        };
-      }
-      
-      // ✅ PROCESAR TODOS LOS PEDIDOS DE LA PÁGINA
-      for (const shopifyOrder of orders) {
-        try {
-          console.log(`🔍 Procesando pedido: ${shopifyOrder.name}`);
-          
-          // 1. VALIDAR DIRECCIÓN PRIMERO
-          const addressValidation = this.validateShippingAddress(shopifyOrder);
-          
-          if (!addressValidation.isValid) {
-            console.log(`🚫 Pedido ${shopifyOrder.name} rechazado por dirección: ${addressValidation.errors.join(', ')}`);
-            addressRejected++;
-            continue;
-          }
-          
-          // 2. VALIDAR COMUNA (solo si la dirección es válida)
-          const orderCommune = addressValidation.address.city;
-          
-          if (allowedCommunes.length > 0 && !this.isCommuneAllowed(orderCommune, allowedCommunes)) {
-            console.log(`🚫 Pedido ${shopifyOrder.name} rechazado por comuna: "${orderCommune}" no permitida`);
-            ordersRejected++;
-            continue;
-          }
-          
-          // 3. VERIFICAR SI YA EXISTE
-          const existingOrder = await Order.findOne({
-            channel_id: channel._id,
-            external_order_id: shopifyOrder.id.toString()
-          });
-          
-          if (existingOrder) {
-            console.log(`⏭️ Pedido ${shopifyOrder.name} ya existe, omitiendo...`);
-            continue;
-          }
-          
-          // 4. CREAR PEDIDO (ya validado)
-          const createdOrder = await this.createOrderFromWebhook(channel, shopifyOrder);
-          if (createdOrder) {
-            ordersImported++;
-            console.log(`✅ Pedido ${shopifyOrder.name} importado - Comuna: ${orderCommune}`);
-          }
-          
-        } catch (orderError) {
-          console.error(`❌ Error procesando pedido ${shopifyOrder.name}:`, orderError.message);
-          ordersRejected++;
-        }
-      }
-      
-    } catch (apiError) {
-      console.error('❌ Error llamando API de Shopify:', apiError.message);
-      throw apiError;
+    );
+    
+    const orders = response.data.orders;
+    console.log(`📦 Obtenidos ${orders.length} pedidos preparados de Shopify`);
+    
+    if (orders.length === 0) {
+      console.log('ℹ️ No hay pedidos preparados para procesar');
+      return {
+        imported: 0,
+        rejected: 0,
+        addressRejected: 0,
+        communeRejected: 0,
+        total: 0
+      };
     }
     
-    console.log(`✅ Sincronización completada (una página):`);
-    console.log(`   📦 Pedidos importados: ${ordersImported}`);
+    // Procesar pedidos
+    for (const shopifyOrder of orders) {
+      try {
+        console.log(`🔍 Procesando pedido preparado: ${shopifyOrder.name}`);
+        
+        // 1. VALIDAR DIRECCIÓN
+        const addressValidation = this.validateShippingAddress(shopifyOrder);
+        
+        if (!addressValidation.isValid) {
+          console.log(`🚫 Pedido ${shopifyOrder.name} rechazado por dirección: ${addressValidation.errors.join(', ')}`);
+          addressRejected++;
+          continue;
+        }
+        
+        // 2. VALIDAR COMUNA
+        const orderCommune = addressValidation.address.city;
+        
+        if (allowedCommunes.length > 0 && !this.isCommuneAllowed(orderCommune, allowedCommunes)) {
+          console.log(`🚫 Pedido ${shopifyOrder.name} rechazado por comuna: "${orderCommune}" no permitida`);
+          ordersRejected++;
+          continue;
+        }
+        
+        // 3. VERIFICAR SI YA EXISTE
+        const existingOrder = await Order.findOne({
+          channel_id: channel._id,
+          external_order_id: shopifyOrder.id.toString()
+        });
+        
+        if (existingOrder) {
+          console.log(`⏭️ Pedido ${shopifyOrder.name} ya existe, actualizando...`);
+          await this.updateExistingOrder(existingOrder, shopifyOrder);
+          continue;
+        }
+        
+        // 4. CREAR PEDIDO COMO "READY_FOR_PICKUP" (ya preparado)
+        const createdOrder = await this.createOrderFromWebhook(channel, shopifyOrder);
+        if (createdOrder) {
+          // Marcar automáticamente como listo para pickup
+          createdOrder.status = 'ready_for_pickup';
+          createdOrder.ready_for_pickup_at = new Date();
+          await createdOrder.save();
+          
+          ordersImported++;
+          console.log(`✅ Pedido preparado importado: ${shopifyOrder.name} - Comuna: ${orderCommune}`);
+        }
+        
+      } catch (orderError) {
+        console.error(`❌ Error procesando pedido ${shopifyOrder.name}:`, orderError.message);
+        ordersRejected++;
+      }
+    }
+    
+    console.log(`✅ Sincronización de pedidos preparados completada:`);
+    console.log(`   📦 Pedidos listos importados: ${ordersImported}`);
     console.log(`   🚫 Rechazados por comuna: ${ordersRejected}`);
     console.log(`   ❌ Rechazados por dirección: ${addressRejected}`);
-    console.log(`   📊 Total procesados: ${ordersImported + ordersRejected + addressRejected}`);
     
     return {
       imported: ordersImported,
@@ -649,7 +636,7 @@ static async syncOrders(channel, dateFrom, dateTo) {
     };
     
   } catch (error) {
-    console.error('❌ Error en sincronización:', error);
+    console.error('❌ Error en sincronización de pedidos preparados:', error);
     throw error;
   }
 }
