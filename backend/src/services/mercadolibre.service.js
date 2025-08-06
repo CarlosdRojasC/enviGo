@@ -582,6 +582,14 @@ static async processWebhook(channelId, webhookData) {
   const mlOrder = orderResponse.data;
 
   console.log(`📦 [ML Webhook] Procesando pedido ${mlOrder.id}`);
+  
+const ignoredStatuses = ['delivered', 'not_delivered', 'cancelled'];
+const shippingStatus = mlOrder.shipping?.status;
+
+if (ignoredStatuses.includes(shippingStatus)) {
+  console.log(`⏭️ [ML Webhook] Pedido ${mlOrder.id} ignorado (estado: ${shippingStatus}).`);
+  return true;
+}
 
   // ✅ USAR LA NUEVA FUNCIÓN DE DETECCIÓN CON SHIPMENT
   const isFlex = await this.isFlexOrder(mlOrder, accessToken);
@@ -646,42 +654,26 @@ static async processWebhook(channelId, webhookData) {
   /**
    * Obtiene la información de envío detallada.
    */
-static async getShippingInfo(order, accessToken) {
-  if (!order.shipping?.id) return { address: 'Sin información de envío' };
-  
-  try {
-    const { data: shipping } = await axios.get(`${this.API_BASE_URL}/shipments/${order.shipping.id}`, {
-      headers: { 
-        'Authorization': `Bearer ${accessToken}`,
-        'x-format-new': 'true'  // ← HEADER IMPORTANTE
-      },
-    });
+  static async getShippingInfo(order, accessToken) {
+    if (!order.shipping?.id) return { address: 'Sin información de envío' };
     
-    console.log('🔍 [ML Debug] Datos de shipment completos para teléfono:', {
-      receiver_phone: shipping.receiver_phone,
-      destination_phone: shipping.destination?.receiver_phone,
-      destination_name: shipping.destination?.receiver_name
-    });
-    
-    // ✅ USAR LA ESTRUCTURA CORRECTA: destination.shipping_address
-    const addr = shipping.destination?.shipping_address || shipping.receiver_address;
-    
-    if (!addr) {
-      return { address: 'Sin información de dirección' };
+    try {
+      const { data: shipping } = await axios.get(`${this.API_BASE_URL}/shipments/${order.shipping.id}`, {
+        headers: { 'Authorization': `Bearer ${accessToken}` },
+      });
+      const addr = shipping.receiver_address;
+      return {
+        address: `${addr.street_name} ${addr.street_number}, ${addr.comment || ''}`.replace(/, $/, '').trim(),
+        city: addr.city.name,
+        state: addr.state.name,
+        zip_code: addr.zip_code,
+        phone: addr.receiver_phone,
+      };
+    } catch (error) {
+      console.error(`[ML Service] No se pudo obtener info de envío para ${order.id}:`, error.message);
+      return { address: 'Error al obtener dirección' };
     }
-    
-    return {
-      address: `${addr.street_name} ${addr.street_number}, ${addr.comment || ''}`.replace(/, $/, '').trim(),
-      city: addr.city?.name || '',
-      state: addr.state?.name || '',
-      zip_code: addr.zip_code || '',
-      phone: shipping.destination?.receiver_phone || shipping.receiver_phone || '', // ← CAMPO CORRECTO
-    };
-  } catch (error) {
-    console.error(`[ML Service] No se pudo obtener info de envío para ${order.id}:`, error.message);
-    return { address: 'Error al obtener dirección' };
   }
-}
 /**
  * Verifica si un pedido es de tipo Flex
  * @param {Object} mlOrder - Pedido de MercadoLibre
@@ -698,7 +690,7 @@ static mapOrderStatus(mlOrder) {
     const statusMap = {
       // Estados principales de MercadoLibre Flex según documentación
       'pending': 'pending',                   // Pendiente
-      'handling': 'pending',         // Preparando - listo para recoger
+      'handling': 'ready_for_pickup',         // Preparando - listo para recoger
       'ready_to_ship': 'pending',   // Listo para enviar
       'shipped': 'shipped',                   // Enviado (substatus puede ser null)
       'out_for_delivery': 'out_for_delivery', // En camino para entrega (substatus del shipped)
@@ -737,7 +729,76 @@ static mapOrderStatus(mlOrder) {
   return 'pending';
 }
 
-static async debugSingleShipmentForPostman(channelId, shipmentId) {
+static async debugShipmentStructure(shippingId, accessToken) {
+  if (!shippingId) {
+    console.log('❌ [ML Debug] No hay shipping ID');
+    return null;
+  }
+
+  try {
+    console.log(`🔍 [ML Debug] === ANALIZANDO SHIPMENT ${shippingId} ===`);
+    
+    const response = await axios.get(`${this.API_BASE_URL}/shipments/${shippingId}`, {
+      headers: { 'Authorization': `Bearer ${accessToken}` },
+      timeout: 15000
+    });
+
+    const shipment = response.data;
+    
+    // ✅ MOSTRAR ESTRUCTURA COMPLETA
+    console.log(`📦 [ML Debug] SHIPMENT COMPLETO ${shippingId}:`);
+    console.log(JSON.stringify(shipment, null, 2));
+    
+    // ✅ ANALIZAR CAMPOS ESPECÍFICOS
+    console.log(`🔍 [ML Debug] ANÁLISIS DE CAMPOS:`);
+    console.log(`   - ID: ${shipment.id}`);
+    console.log(`   - Status: ${shipment.status}`);
+    console.log(`   - Substatus: ${shipment.substatus}`);
+    console.log(`   - Mode: ${shipment.mode}`);
+    console.log(`   - Logistic: ${JSON.stringify(shipment.logistic)}`);
+    console.log(`   - Logistic_type: ${shipment.logistic_type}`);
+    console.log(`   - Shipping_mode: ${shipment.shipping_mode}`);
+    console.log(`   - Service_id: ${shipment.service_id}`);
+    console.log(`   - Type: ${shipment.type}`);
+    
+    // ✅ BUSCAR CUALQUIER CAMPO QUE CONTENGA "self", "flex", "service"
+    console.log(`🔍 [ML Debug] BUSCANDO CAMPOS CON 'FLEX' o 'SERVICE':`);
+    Object.keys(shipment).forEach(key => {
+      const value = shipment[key];
+      const keyLower = key.toLowerCase();
+      const valueLower = typeof value === 'string' ? value.toLowerCase() : '';
+      
+      if (keyLower.includes('flex') || keyLower.includes('service') || 
+          keyLower.includes('logistic') || keyLower.includes('mode') ||
+          valueLower.includes('flex') || valueLower.includes('service') ||
+          valueLower.includes('self')) {
+        console.log(`   *** ${key}: ${JSON.stringify(value)}`);
+      }
+    });
+    
+    // ✅ VERIFICAR SI HAY PROPIEDADES ANIDADAS
+    console.log(`🔍 [ML Debug] PROPIEDADES ANIDADAS:`);
+    Object.keys(shipment).forEach(key => {
+      const value = shipment[key];
+      if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+        console.log(`   - ${key}:`, JSON.stringify(value, null, 4));
+      }
+    });
+
+    return shipment;
+  } catch (error) {
+    console.error(`❌ [ML Debug] Error obteniendo shipment ${shippingId}:`, error.response?.status, error.message);
+    return null;
+  }
+}
+
+/**
+ * ✅ FUNCIÓN DE DEBUG PARA PEDIDOS: Analiza un pedido específico
+ */
+/**
+ * ✅ FUNCIÓN DE DEBUG QUE RETORNA LOGS EN LA RESPUESTA
+ */
+static async debugSpecificOrdersForPostman(channelId) {
   const logs = []; // Array para capturar logs
   
   // Función helper para capturar logs
@@ -746,166 +807,155 @@ static async debugSingleShipmentForPostman(channelId, shipmentId) {
     console.log(message); // También mostrar en consola
   };
   
-  logCapture(`🔍 [ML Debug] === ANALIZANDO SHIPMENT ESPECÍFICO ${shipmentId} ===`);
+  logCapture(`🔍 [ML Debug] === INICIANDO DEBUG ESPECÍFICO ===`);
   
-  try {
-    const channel = await Channel.findById(channelId);
-    if (!channel) {
-      throw new Error('Canal no encontrado');
-    }
+  const channel = await Channel.findById(channelId);
+  if (!channel) {
+    throw new Error('Canal no encontrado');
+  }
 
-    const accessToken = await this.getAccessToken(channel);
+  const accessToken = await this.getAccessToken(channel);
+  
+  // Lista de IDs de pedidos de tus logs anteriores
+  const orderIds = [
+    '2000012529328228',
+    '2000012492133130', 
+    '2000012489675218'
+  ];
+  
+  const results = [];
+  
+  for (const orderId of orderIds) {
+    logCapture(`\n================================================`);
+    logCapture(`🔍 [ML Debug] === ANALIZANDO PEDIDO ${orderId} ===`);
     
-    // HACER PETICIÓN SIN x-format-new PRIMERO
-    logCapture(`📡 [ML Debug] Consultando shipment SIN x-format-new...`);
-    const responseOld = await axios.get(`${this.API_BASE_URL}/shipments/${shipmentId}`, {
-      headers: { 'Authorization': `Bearer ${accessToken}` },
-      timeout: 15000
-    });
+    try {
+      // 1. OBTENER PEDIDO COMPLETO
+      const orderResponse = await axios.get(`${this.API_BASE_URL}/orders/${orderId}`, {
+        headers: { 'Authorization': `Bearer ${accessToken}` },
+        timeout: 15000
+      });
 
-    // HACER PETICIÓN CON x-format-new
-    logCapture(`📡 [ML Debug] Consultando shipment CON x-format-new...`);
-    const responseNew = await axios.get(`${this.API_BASE_URL}/shipments/${shipmentId}`, {
-      headers: { 
-        'Authorization': `Bearer ${accessToken}`,
-        'x-format-new': 'true'
-      },
-      timeout: 15000
-    });
+      const order = orderResponse.data;
+      
+      const orderResult = {
+        order_id: orderId,
+        tags: order.tags,
+        shipping_id: order.shipping?.id,
+        shipping_data: order.shipping,
+        shipment_details: null,
+        is_flex: false,
+        flex_indicators: []
+      };
+      
+      logCapture(`📦 [ML Debug] Pedido ${orderId} - Tags: ${JSON.stringify(order.tags)}`);
+      logCapture(`📦 [ML Debug] Pedido ${orderId} - Shipping: ${JSON.stringify(order.shipping)}`);
+      
+      // 2. ANALIZAR SHIPMENT SI EXISTE
+      if (order.shipping?.id) {
+        logCapture(`🚛 [ML Debug] El pedido tiene shipment ID: ${order.shipping.id}`);
+        
+        const shipmentResponse = await axios.get(`${this.API_BASE_URL}/shipments/${order.shipping.id}`, {
+          headers: { 'Authorization': `Bearer ${accessToken}` },
+          timeout: 15000
+        });
 
-    const shipmentOld = responseOld.data;
-    const shipmentNew = responseNew.data;
-    
-    // ANÁLISIS COMPARATIVO
-    const analysis = {
-      shipment_id: shipmentId,
-      
-      // DATOS BÁSICOS
-      basic_info: {
-        id: shipmentNew.id,
-        status: shipmentNew.status,
-        substatus: shipmentNew.substatus,
-        date_created: shipmentNew.date_created,
-        last_updated: shipmentNew.last_updated,
-        tracking_number: shipmentNew.tracking_number
-      },
-      
-      // LOGÍSTICA (PARA DETECTAR FLEX)
-      logistics_info: {
-        mode: shipmentNew.mode,
-        logistic_type: shipmentNew.logistic_type,
-        service_id: shipmentNew.service_id,
-        logistic_object: shipmentNew.logistic,
-        sender_address_types: shipmentNew.sender_address?.types || shipmentNew.origin?.shipping_address?.types,
-      },
-      
-      // INFORMACIÓN DE TELÉFONO (MÚLTIPLES FUENTES)
-      phone_info: {
-        receiver_phone_old: shipmentOld.receiver_phone,
-        receiver_phone_new: shipmentNew.receiver_phone,
-        destination_phone: shipmentNew.destination?.receiver_phone,
-        origin_phone: shipmentNew.origin?.shipping_address?.phone,
-        receiver_address_phone: shipmentNew.receiver_address?.receiver_phone
-      },
-      
-      // DIRECCIONES (COMPARAR ESTRUCTURAS)
-      address_info: {
-        old_structure: {
-          has_receiver_address: !!shipmentOld.receiver_address,
-          receiver_address: shipmentOld.receiver_address
-        },
-        new_structure: {
-          has_destination: !!shipmentNew.destination,
-          destination_address: shipmentNew.destination?.shipping_address,
-          destination_receiver: {
-            name: shipmentNew.destination?.receiver_name,
-            phone: shipmentNew.destination?.receiver_phone
+        const shipment = shipmentResponse.data;
+        
+        orderResult.shipment_details = {
+          mode: shipment.mode,
+          logistic_type: shipment.logistic_type,
+          service_id: shipment.service_id,
+          status: shipment.status,
+          substatus: shipment.substatus,
+          sender_address_types: shipment.sender_address?.types,
+          has_sender_address: !!shipment.sender_address
+        };
+        
+        logCapture(`🚛 [ML Debug] Shipment ${order.shipping.id} - Mode: ${shipment.mode}`);
+        logCapture(`🚛 [ML Debug] Shipment ${order.shipping.id} - Logistic Type: ${shipment.logistic_type}`);
+        logCapture(`🚛 [ML Debug] Shipment ${order.shipping.id} - Service ID: ${shipment.service_id}`);
+        logCapture(`🚛 [ML Debug] Shipment ${order.shipping.id} - Sender Types: ${JSON.stringify(shipment.sender_address?.types)}`);
+        
+        // 3. VERIFICAR INDICADORES DE FLEX
+        
+        // Verificar tags del pedido
+        if (order.tags && Array.isArray(order.tags)) {
+          const flexTags = ['self_service', 'flex', 'self_service_in'];
+          const hasFlexTag = order.tags.some(tag => 
+            flexTags.includes(tag.toLowerCase())
+          );
+          
+          if (hasFlexTag) {
+            orderResult.is_flex = true;
+            orderResult.flex_indicators.push('PEDIDO_TAGS');
+            logCapture(`✅ [ML Debug] Pedido ${orderId} es Flex (tags del pedido)`);
           }
         }
-      },
+        
+        // Verificar sender_address.types
+        if (shipment.sender_address?.types && Array.isArray(shipment.sender_address.types)) {
+          const flexTypes = ['self_service_partner', 'self_service', 'flex'];
+          const hasFlexType = shipment.sender_address.types.some(type => 
+            flexTypes.some(flexType => type.toLowerCase().includes(flexType))
+          );
+          
+          if (hasFlexType) {
+            orderResult.is_flex = true;
+            orderResult.flex_indicators.push('SENDER_ADDRESS_TYPES');
+            logCapture(`✅ [ML Debug] Pedido ${orderId} es Flex (sender_address.types)`);
+          }
+        }
+        
+        // Verificar logistic_type
+        if (shipment.logistic_type === 'self_service') {
+          orderResult.is_flex = true;
+          orderResult.flex_indicators.push('LOGISTIC_TYPE_SELF_SERVICE');
+          logCapture(`✅ [ML Debug] Pedido ${orderId} es Flex (logistic_type = self_service)`);
+        }
+        
+        // Verificar ME2 + self_service
+        if (shipment.mode === 'me2' && 
+            shipment.sender_address?.types?.some(type => type.includes('self_service'))) {
+          orderResult.is_flex = true;
+          orderResult.flex_indicators.push('ME2_PLUS_SELF_SERVICE');
+          logCapture(`✅ [ML Debug] Pedido ${orderId} es Flex (ME2 + self_service)`);
+        }
+        
+      } else {
+        logCapture(`❌ [ML Debug] El pedido ${orderId} NO tiene shipment ID`);
+      }
       
-      // ANÁLISIS DE FLEX
-      flex_analysis: {
-        is_flex_by_logistic_type: shipmentNew.logistic_type === 'self_service',
-        is_flex_by_sender_types: shipmentNew.sender_address?.types?.some(type => 
-          type.includes('self_service')) || false,
-        is_flex_by_service_id: shipmentNew.service_id === 3826008,
-        is_me2: shipmentNew.mode === 'me2',
+      if (!orderResult.is_flex) {
+        logCapture(`❌ [ML Debug] Pedido ${orderId} NO es Flex`);
+      }
+      
+      results.push(orderResult);
+      logCapture(`================================================\n`);
+      
+    } catch (error) {
+      logCapture(`❌ [ML Debug] Error analizando pedido ${orderId}: ${error.message}`);
+      results.push({
+        order_id: orderId,
+        error: error.message,
+        is_flex: false,
         flex_indicators: []
-      },
-      
-      // DATOS COMPLETOS (PARA INSPECCIÓN)
-      raw_data: {
-        without_x_format_new: shipmentOld,
-        with_x_format_new: shipmentNew
-      }
-    };
-    
-    // COMPLETAR ANÁLISIS DE FLEX
-    if (analysis.flex_analysis.is_flex_by_logistic_type) {
-      analysis.flex_analysis.flex_indicators.push('LOGISTIC_TYPE_SELF_SERVICE');
-    }
-    if (analysis.flex_analysis.is_flex_by_sender_types) {
-      analysis.flex_analysis.flex_indicators.push('SENDER_ADDRESS_TYPES');
-    }
-    if (analysis.flex_analysis.is_flex_by_service_id) {
-      analysis.flex_analysis.flex_indicators.push('SERVICE_ID_3826008');
+      });
     }
     
-    analysis.flex_analysis.is_flex = analysis.flex_analysis.flex_indicators.length > 0;
-    
-    // LOGS DETALLADOS
-    logCapture(`📦 [ML Debug] INFORMACIÓN BÁSICA:`);
-    logCapture(`   - ID: ${analysis.basic_info.id}`);
-    logCapture(`   - Status: ${analysis.basic_info.status} / ${analysis.basic_info.substatus}`);
-    logCapture(`   - Tracking: ${analysis.basic_info.tracking_number || 'N/A'}`);
-    
-    logCapture(`🚛 [ML Debug] LOGÍSTICA:`);
-    logCapture(`   - Mode: ${analysis.logistics_info.mode}`);
-    logCapture(`   - Logistic Type: ${analysis.logistics_info.logistic_type}`);
-    logCapture(`   - Service ID: ${analysis.logistics_info.service_id}`);
-    logCapture(`   - Sender Types: ${JSON.stringify(analysis.logistics_info.sender_address_types)}`);
-    
-    logCapture(`📞 [ML Debug] TELÉFONOS:`);
-    logCapture(`   - Receiver Phone (old): ${analysis.phone_info.receiver_phone_old || 'N/A'}`);
-    logCapture(`   - Receiver Phone (new): ${analysis.phone_info.receiver_phone_new || 'N/A'}`);
-    logCapture(`   - Destination Phone: ${analysis.phone_info.destination_phone || 'N/A'}`);
-    logCapture(`   - Origin Phone: ${analysis.phone_info.origin_phone || 'N/A'}`);
-    
-    logCapture(`🎯 [ML Debug] ANÁLISIS FLEX:`);
-    logCapture(`   - Es Flex: ${analysis.flex_analysis.is_flex ? '✅ SÍ' : '❌ NO'}`);
-    logCapture(`   - Indicadores: ${analysis.flex_analysis.flex_indicators.join(', ') || 'Ninguno'}`);
-    logCapture(`   - Logistic Type = self_service: ${analysis.flex_analysis.is_flex_by_logistic_type}`);
-    logCapture(`   - Sender Types contiene self_service: ${analysis.flex_analysis.is_flex_by_sender_types}`);
-    logCapture(`   - Service ID = 3826008: ${analysis.flex_analysis.is_flex_by_service_id}`);
-    
-    logCapture(`✅ [ML Debug] ANÁLISIS COMPLETADO`);
-    
-    return {
-      success: true,
-      shipment_id: shipmentId,
-      analysis: analysis,
-      logs: logs,
-      summary: {
-        is_flex: analysis.flex_analysis.is_flex,
-        flex_indicators: analysis.flex_analysis.flex_indicators,
-        has_phone: !!(analysis.phone_info.destination_phone || analysis.phone_info.receiver_phone_new),
-        phone_found: analysis.phone_info.destination_phone || analysis.phone_info.receiver_phone_new || 'No encontrado',
-        logistic_type: analysis.logistics_info.logistic_type,
-        service_id: analysis.logistics_info.service_id
-      }
-    };
-    
-  } catch (error) {
-    logCapture(`❌ [ML Debug] Error analizando shipment ${shipmentId}: ${error.message}`);
-    
-    return {
-      success: false,
-      shipment_id: shipmentId,
-      error: error.message,
-      logs: logs
-    };
+    // Pausa para no saturar la API
+    await new Promise(resolve => setTimeout(resolve, 1000));
   }
+  
+  logCapture(`✅ [ML Debug] DEBUG COMPLETADO`);
+  
+  return {
+    success: true,
+    total_orders_analyzed: results.length,
+    flex_orders_found: results.filter(r => r.is_flex).length,
+    results: results,
+    logs: logs
+  };
 }
 }
 
