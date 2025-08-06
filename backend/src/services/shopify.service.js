@@ -530,7 +530,6 @@ static async syncOrders(channel, dateFrom, dateTo) {
         params.append('created_at_max', toDate);
       }
     }
-    params.append('status', 'any');
     params.append('financial_status', 'paid');
     params.append('fulfillment_status', 'shipped'); // Solo pedidos sin cumplir
     params.append('limit', '50'); // ✅ MÁXIMO 50 PEDIDOS
@@ -808,7 +807,7 @@ static getCustomerName(order, validatedAddress = null) {
     if (shopifyOrder.fulfillment_status === 'unfulfilled' && shopifyOrder.financial_status === 'paid') return 'processing';
     
     // Enviado
-    if (shopifyOrder.fulfillment_status === 'unfulfilled' && shopifyOrder.financial_status === 'paid') return 'shipped';
+    if (shopifyOrder.fulfillment_status === 'shipped' && shopifyOrder.financial_status === 'paid') return 'pending';
     
     // Pendiente por defecto
     return 'pending';
