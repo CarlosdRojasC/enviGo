@@ -196,48 +196,64 @@ class ShopifyService {
   }
   
   // Procesar webhook de Shopify
-  static async processWebhook(channelId, webhookData) {
-    try {
-      console.log('🛍️ Procesando webhook de Shopify para canal:', channelId);
-      
-      // 1. Buscar información del canal
-      const channel = await Channel.findById(channelId).populate('company_id');
-      if (!channel) {
-        throw new Error(`Canal ${channelId} no encontrado`);
-      }
-      
-      // 🏘️ NUEVA LÓGICA: Filtrar por comunas permitidas
-      const allowedCommunes = channel.accepted_communes || [];
-      const orderCommune = webhookData.shipping_address?.city || webhookData.billing_address?.city || '';
-      
-      if (!this.isCommuneAllowed(orderCommune, allowedCommunes)) {
-        console.log(`🚫 Pedido #${webhookData.name} rechazado. Comuna "${orderCommune}" no está permitida para el canal "${channel.channel_name}".`);
-        console.log(`📋 Comunas permitidas: ${allowedCommunes.join(', ')}`);
-        return { success: true, message: 'Pedido rechazado por filtro de comuna' };
-      }
-      
-      console.log(`✅ Pedido #${webhookData.name} aceptado. Comuna "${orderCommune}" está permitida.`);
-      
-      // 2. Crear el pedido en la base de datos
-      const order = await this.createOrderFromWebhook(channel, webhookData);
-      
-      // 3. Opcional: Crear automáticamente en Shipday si está configurado
-      if (channel.auto_create_shipday && order.status === 'processing') {
-        try {
-          await ShipdayService.createOrder(order._id);
-          console.log('✅ Pedido creado automáticamente en Shipday');
-        } catch (shipdayError) {
-          console.error('⚠️ Error al crear pedido en Shipday:', shipdayError);
-          // No detener el proceso por errores de Shipday
-        }
-      }
-      
-      return order;
-    } catch (error) {
-      console.error('❌ Error procesando webhook de Shopify:', error);
-      throw error;
+static async processWebhook(channelId, webhookData) {
+  try {
+    console.log('🛍️ Procesando webhook de Shopify para canal:', channelId);
+    console.log(`📊 Pedido: ${webhookData.name} - Estado: ${webhookData.fulfillment_status}`);
+    
+    // 1. Buscar información del canal
+    const channel = await Channel.findById(channelId).populate('company_id');
+    if (!channel) {
+      throw new Error(`Canal ${channelId} no encontrado`);
     }
+    
+    // 🆕 2. VERIFICAR SI EL PEDIDO YA EXISTE (PARA ACTUALIZACIONES)
+    const existingOrder = await Order.findOne({
+      channel_id: channel._id,
+      external_order_id: webhookData.id.toString()
+    });
+    
+    if (existingOrder) {
+      console.log(`🔄 Pedido ${webhookData.name} YA EXISTE, actualizando estado...`);
+      return await this.updateExistingOrder(existingOrder, webhookData);
+    }
+    
+    // 3. Si no existe, verificar si debemos crearlo
+    if (!this.isOrderReadyForPickup(webhookData)) {
+      console.log(`⏭️ Pedido ${webhookData.name} no está listo para pickup, ignorando webhook`);
+      return { success: true, message: 'Pedido no está listo para pickup' };
+    }
+    
+    // 4. Filtrar por comunas permitidas (solo para pedidos nuevos)
+    const allowedCommunes = channel.accepted_communes || [];
+    const orderCommune = webhookData.shipping_address?.city || webhookData.billing_address?.city || '';
+    
+    if (!this.isCommuneAllowed(orderCommune, allowedCommunes)) {
+      console.log(`🚫 Pedido #${webhookData.name} rechazado por comuna "${orderCommune}"`);
+      return { success: true, message: 'Pedido rechazado por filtro de comuna' };
+    }
+    
+    console.log(`✅ CREANDO NUEVO pedido ${webhookData.name} - Comuna: ${orderCommune}`);
+    
+    // 5. Crear el pedido en la base de datos
+    const order = await this.createOrderFromWebhook(channel, webhookData);
+    
+    // 6. Auto-crear en Shipday si está configurado
+    if (channel.auto_create_shipday && order && order.status === 'ready_for_pickup') {
+      try {
+        await ShipdayService.createOrder(order._id);
+        console.log('✅ Pedido creado automáticamente en Shipday');
+      } catch (shipdayError) {
+        console.error('⚠️ Error al crear pedido en Shipday:', shipdayError);
+      }
+    }
+    
+    return order;
+  } catch (error) {
+    console.error('❌ Error procesando webhook de Shopify:', error);
+    throw error;
   }
+}
   static formatValidatedAddress(address) {
   if (!address) return '';
   
@@ -454,44 +470,69 @@ static async updateExistingFulfillment(channel, shopifyOrderId, trackingUrl) {
 }
   
   // Actualizar pedido existente
-  static async updateExistingOrder(existingOrder, shopifyOrder) {
-    try {
-      // Obtener información de la empresa para pricing
-      const company = await Company.findById(existingOrder.company_id);
-      const fixedShippingCost = company?.price_per_order || 0;
+static async updateExistingOrder(existingOrder, shopifyOrder) {
+  try {
+    console.log(`🔄 Actualizando pedido existente: ${shopifyOrder.name}`);
+    console.log(`   Estado anterior: ${existingOrder.status}`);
+    console.log(`   Fulfillment anterior: ${existingOrder.raw_data?.fulfillment_status || 'N/A'}`);
+    console.log(`   Fulfillment nuevo: ${shopifyOrder.fulfillment_status}`);
+    
+    // Obtener información de la empresa para pricing
+    const company = await Company.findById(existingOrder.company_id);
+    const fixedShippingCost = company?.price_per_order || 0;
+    
+    const newStatus = this.mapOrderStatus(shopifyOrder);
+    
+    const updates = {
+      status: newStatus,
+      total_amount: parseFloat(shopifyOrder.total_price) || 0,
+      shipping_cost: fixedShippingCost,
+      shipping_commune: this.normalizeCommune(shopifyOrder.shipping_address?.city || shopifyOrder.billing_address?.city || ''),
+      shipping_state: shopifyOrder.shipping_address?.province || shopifyOrder.billing_address?.province || 'Región Metropolitana',
+      items: this.mapOrderItems(shopifyOrder.line_items),
+      items_count: shopifyOrder.line_items?.length || 0,
+      notes: shopifyOrder.note,
+      raw_data: shopifyOrder,
+      updated_at: new Date()
+    };
+    
+    // 🎯 LÓGICA ESPECIAL PARA CAMBIOS DE ESTADO
+    if (existingOrder.status !== newStatus) {
+      console.log(`🔄 CAMBIO DE ESTADO: ${existingOrder.status} → ${newStatus}`);
       
-      const updates = {
-        status: this.mapOrderStatus(shopifyOrder),
-        total_amount: parseFloat(shopifyOrder.total_price) || 0,
-        shipping_cost: fixedShippingCost,
-        // 🏘️ NUEVA LÓGICA: Actualizar comuna
-        shipping_commune: this.normalizeCommune(shopifyOrder.shipping_address?.city || shopifyOrder.billing_address?.city || ''),
-        shipping_state: shopifyOrder.shipping_address?.province || shopifyOrder.billing_address?.province || 'Región Metropolitana',
-        items: this.mapOrderItems(shopifyOrder.line_items),
-        items_count: shopifyOrder.line_items?.length || 0,
-        notes: shopifyOrder.note,
-        raw_data: shopifyOrder,
-        updated_at: new Date()
-      };
-      
-      // Solo actualizar delivery_date si se marca como entregado
-      if (updates.status === 'delivered' && !existingOrder.delivery_date) {
-        updates.delivery_date = new Date();
+      // Si el pedido se marca como listo y no está en Shipday, crearlo
+      if (newStatus === 'ready_for_pickup' && !existingOrder.shipday_order_id) {
+        console.log(`🚀 Pedido ahora está listo, creando en Shipday...`);
+        try {
+          const channel = await Channel.findById(existingOrder.channel_id);
+          if (channel && channel.auto_create_shipday) {
+            await ShipdayService.createOrder(existingOrder._id);
+            console.log('✅ Pedido creado automáticamente en Shipday por cambio de estado');
+          }
+        } catch (shipdayError) {
+          console.error('⚠️ Error al crear pedido en Shipday:', shipdayError);
+        }
       }
-      
-      const updatedOrder = await Order.findByIdAndUpdate(
-        existingOrder._id,
-        updates,
-        { new: true }
-      );
-      
-      console.log(`🔄 Pedido actualizado: ${updatedOrder.order_number} - Comuna: ${updatedOrder.shipping_commune}`);
-      return updatedOrder;
-    } catch (error) {
-      console.error('❌ Error actualizando pedido:', error);
-      throw error;
     }
+    
+    // Solo actualizar delivery_date si se marca como entregado
+    if (newStatus === 'delivered' && !existingOrder.delivery_date) {
+      updates.delivery_date = new Date();
+    }
+    
+    const updatedOrder = await Order.findByIdAndUpdate(
+      existingOrder._id,
+      updates,
+      { new: true }
+    );
+    
+    console.log(`✅ Pedido actualizado: ${updatedOrder.order_number} - Estado: ${updatedOrder.status}`);
+    return updatedOrder;
+  } catch (error) {
+    console.error('❌ Error actualizando pedido:', error);
+    throw error;
   }
+}
   
   // Sincronizar pedidos históricos
 static async syncOrders(channel, dateFrom, dateTo) {
@@ -873,6 +914,20 @@ static getCustomerName(order, validatedAddress = null) {
     // Pendiente por defecto
     return 'pending';
   }
+  static async listWebhooks(channel) {
+  try {
+    const response = await axios.get(
+      `${this.getApiUrl(channel)}/webhooks.json`,
+      { headers: this.getHeaders(channel) }
+    );
+    
+    console.log('📋 Webhooks activos:', response.data.webhooks);
+    return response.data.webhooks;
+  } catch (error) {
+    console.error('❌ Error listando webhooks:', error);
+    throw error;
+  }
+}
 }
 
 module.exports = ShopifyService;
