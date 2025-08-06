@@ -375,10 +375,19 @@
         <h4>{{ labelsToPreview.length }} etiqueta(s) generada(s)</h4>
         <p>Revisa las etiquetas antes de imprimir</p>
       </div>
-      <div class="preview-actions">
-        <button @click="printLabelsFromPreview" class="btn btn-primary">
-          🖨️ Imprimir Todas
-        </button>
+<div class="preview-actions">
+  <div class="format-selector">
+    <label>Formato de etiqueta:</label>
+    <select v-model="selectedFormat" class="format-dropdown">
+      <option value="rectangular">📄 Rectangular (A4)</option>
+      <option value="square">⬜ Cuadrada (50x50mm)</option>
+      <option value="zebra">🦓 Zebra ZPL</option>
+    </select>
+  </div>
+  
+  <button @click="printLabelsFromPreview" class="btn btn-primary">
+    🖨️ Imprimir Todas
+  </button>
         <button @click="printLabelsDirectly" class="btn btn-print-direct" title="Impresión directa (sin ventana adicional)">
           ⚡ Imprimir Directo
         </button>
@@ -553,6 +562,8 @@ const showSupportModal = ref(false)
 const showCreateOrderModal = ref(false)
 const newOrder = ref({})
 const isCreatingOrder = ref(false)
+const selectedFormat = ref('rectangular') // Formato por defecto
+
 // ✅ NUEVO: Estado para modal de etiquetas
 const showLabelsModal = ref(false)
 const generatingLabels = ref(false)
@@ -747,7 +758,156 @@ function toggleAutoRefresh() {
     toast.info('Auto-actualización desactivada')
   }
 }
-
+function createSquareLabelHTML(labels) {
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Etiquetas Cuadradas enviGo</title>
+  <style>
+    @page {
+      size: A4;
+      margin: 5mm;
+    }
+    
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+    }
+    
+    .labels-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 3mm;
+      padding: 5mm;
+    }
+    
+    .square-label {
+      width: 45mm;
+      height: 45mm;
+      border: 2px solid #8BC53F;
+      border-radius: 6px;
+      padding: 2mm;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      page-break-inside: avoid;
+      background: white;
+      position: relative;
+      overflow: hidden;
+    }
+    
+    .square-label::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: linear-gradient(135deg, #8BC53F 0%, #A4D65E 100%);
+    }
+    
+    .label-header-square {
+      text-align: center;
+      border-bottom: 1px solid #8BC53F;
+      padding-bottom: 1mm;
+      margin-bottom: 1mm;
+    }
+    
+    .company-logo-square {
+      width: 15mm;
+      height: auto;
+      max-height: 6mm;
+      margin: 0 auto 1mm;
+      display: block;
+    }
+    
+    .company-name-square {
+      font-size: 10px;
+      font-weight: bold;
+      color: #8BC53F;
+      margin: 0;
+    }
+    
+    .envigo-code-square {
+      background: linear-gradient(135deg, #8BC53F 0%, #A4D65E 100%);
+      color: white;
+      font-size: 8px;
+      font-weight: bold;
+      padding: 1mm;
+      border-radius: 3px;
+      text-align: center;
+      margin: 1mm 0;
+    }
+    
+    .label-info-square {
+      flex: 1;
+      font-size: 7px;
+      line-height: 1.2;
+    }
+    
+    .info-item-square {
+      margin: 0.5mm 0;
+      display: flex;
+      flex-direction: column;
+    }
+    
+    .info-label-square {
+      font-weight: 600;
+      color: #8BC53F;
+      font-size: 6px;
+      text-transform: uppercase;
+    }
+    
+    .info-value-square {
+      color: #2C2C2C;
+      font-weight: 500;
+      word-wrap: break-word;
+    }
+    
+    @media print {
+      body { 
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="labels-grid">
+    ${labels.map(label => `
+      <div class="square-label">
+        <div class="label-header-square">
+          <img src="data:image/png;base64,${getLogoBase64()}" alt="enviGo" class="company-logo-square" />
+          <div class="company-name-square">enviGo</div>
+        </div>
+        
+        <div class="envigo-code-square">${label.unique_code}</div>
+        
+        <div class="label-info-square">
+          <div class="info-item-square">
+            <span class="info-label-square">Pedido</span>
+            <span class="info-value-square">#${label.order_number}</span>
+          </div>
+          
+          <div class="info-item-square">
+            <span class="info-label-square">Cliente</span>
+            <span class="info-value-square">${label.customer_name}</span>
+          </div>
+          
+          <div class="info-item-square">
+            <span class="info-label-square">Comuna</span>
+            <span class="info-value-square">${label.shipping_commune}</span>
+          </div>
+        </div>
+      </div>
+    `).join('')}
+  </div>
+</body>
+</html>`
+}
 // ==================== MÉTODOS DE ACCIONES MASIVAS ====================
 
 async function handleBulkMarkReady() {
