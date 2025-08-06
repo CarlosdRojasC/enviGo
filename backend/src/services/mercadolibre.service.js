@@ -355,7 +355,53 @@ static async getValidAccessToken(channel) {
     throw new Error('Token de MercadoLibre expirado. Reautoriza el canal desde la página de canales.');
   }
 }
-
+/**
+ * Detecta si un pedido es de tipo Flex usando múltiples criterios
+ */
+static isFlexOrder(mlOrder) {
+  console.log(`🔍 [ML Debug] Analizando pedido ${mlOrder.id} para Flex:`);
+  console.log('📦 [ML Debug] Shipping data:', JSON.stringify(mlOrder.shipping, null, 2));
+  console.log('📦 [ML Debug] Tags:', JSON.stringify(mlOrder.tags, null, 2));
+  
+  // MÉTODO 1: Verificar logistics_type
+  if (mlOrder.shipping?.logistics_type === 'self_service') {
+    console.log(`✅ [ML Debug] Pedido ${mlOrder.id} es Flex (logistics_type)`);
+    return true;
+  }
+  
+  // MÉTODO 2: Verificar logistic_type (sin 's')
+  if (mlOrder.shipping?.logistic_type === 'self_service') {
+    console.log(`✅ [ML Debug] Pedido ${mlOrder.id} es Flex (logistic_type)`);
+    return true;
+  }
+  
+  // MÉTODO 3: Verificar por tags
+  if (mlOrder.tags && Array.isArray(mlOrder.tags)) {
+    const flexTags = ['flex', 'self_service', 'fulfillment_flex'];
+    const hasFlexTag = mlOrder.tags.some(tag => 
+      flexTags.includes(tag.toLowerCase())
+    );
+    if (hasFlexTag) {
+      console.log(`✅ [ML Debug] Pedido ${mlOrder.id} es Flex (tags)`);
+      return true;
+    }
+  }
+  
+  // MÉTODO 4: Verificar shipping_mode
+  if (mlOrder.shipping?.shipping_mode === 'me2') {
+    console.log(`✅ [ML Debug] Pedido ${mlOrder.id} es Flex (shipping_mode)`);
+    return true;
+  }
+  
+  // MÉTODO 5: Verificar por fulfillment
+  if (mlOrder.shipping?.fulfillment?.type === 'self_service') {
+    console.log(`✅ [ML Debug] Pedido ${mlOrder.id} es Flex (fulfillment)`);
+    return true;
+  }
+  
+  console.log(`❌ [ML Debug] Pedido ${mlOrder.id} NO es Flex`);
+  return false;
+}
 
 static async processOrder(mlOrder, channel) {
   console.log(`📦 [ML Process] Procesando pedido ${mlOrder.id}`);
@@ -442,41 +488,56 @@ static extractShippingAddressSimple(mlOrder) {
    * Procesa notificaciones (webhooks) y crea pedidos si son de tipo Flex.
    */
   static async processWebhook(channelId, webhookData) {
-    if (webhookData.topic !== 'orders' && webhookData.topic !== 'orders_v2') {
-      console.log(`[ML Webhook] Notificación ignorada (Topic: ${webhookData.topic}).`);
-      return true;
-    }
-
-    const channel = await Channel.findById(channelId);
-    if (!channel) throw new Error(`[ML Webhook] Canal con ID ${channelId} no encontrado.`);
-
-    const accessToken = await this.getAccessToken(channel);
-    const orderId = webhookData.resource.split('/').pop();
-
-    const orderResponse = await axios.get(`${this.API_BASE_URL}/orders/${orderId}`, {
-      headers: { 'Authorization': `Bearer ${accessToken}` },
-    });
-    const mlOrder = orderResponse.data;
-
-    // --- ✅ FILTRO PRINCIPAL PARA MERCADO LIBRE FLEX ---
-    if (!MercadoLibreService.isFlexOrder(mlOrder)) {
-      console.log(`[ML Webhook] Pedido #${mlOrder.id} ignorado (no es Flex).`);
-      return true;
-    }
-
-    const existingOrder = await Order.findOne({ channel_id: channelId, external_order_id: mlOrder.id.toString() });
-
-    if (existingOrder) {
-      existingOrder.status = this.mapOrderStatus(mlOrder);
-      existingOrder.raw_data = mlOrder;
-      await existingOrder.save();
-      console.log(`[ML Webhook] Pedido existente #${mlOrder.id} actualizado.`);
-    } else {
-      await this.createOrderFromApiData(mlOrder, channel, accessToken);
-      console.log(`[ML Webhook] Nuevo pedido Flex #${mlOrder.id} creado.`);
-    }
+  if (webhookData.topic !== 'orders' && webhookData.topic !== 'orders_v2') {
+    console.log(`[ML Webhook] Notificación ignorada (Topic: ${webhookData.topic}).`);
     return true;
   }
+
+  const channel = await Channel.findById(channelId);
+  if (!channel) throw new Error(`[ML Webhook] Canal con ID ${channelId} no encontrado.`);
+
+  const accessToken = await this.getAccessToken(channel);
+  const orderId = webhookData.resource.split('/').pop();
+
+  const orderResponse = await axios.get(`${this.API_BASE_URL}/orders/${orderId}`, {
+    headers: { 'Authorization': `Bearer ${accessToken}` },
+  });
+  const mlOrder = orderResponse.data;
+
+  console.log(`📦 [ML Process] Procesando pedido ${mlOrder.id}`);
+  console.log(`🔍 [ML Debug] Datos de pedido ${mlOrder.id}:`, {
+    logistic_type: mlOrder.shipping?.logistic_type,
+    logistics_type: mlOrder.shipping?.logistics_type,
+    shipping_mode: mlOrder.shipping?.shipping_mode,
+    tags: mlOrder.tags,
+    shipping_status: mlOrder.shipping?.status
+  });
+
+  // ✅ USAR LA NUEVA FUNCIÓN DE DETECCIÓN
+  if (!this.isFlexOrder(mlOrder)) {
+    console.log(`⏭️ [ML Process] Pedido ${mlOrder.id} no es Flex, omitiendo...`);
+    return true;
+  }
+
+  console.log(`✅ [ML Process] Pedido ${mlOrder.id} ES FLEX, procesando...`);
+
+  const existingOrder = await Order.findOne({ 
+    channel_id: channelId, 
+    external_order_id: mlOrder.id.toString() 
+  });
+
+  if (existingOrder) {
+    existingOrder.status = this.mapOrderStatus(mlOrder);
+    existingOrder.raw_data = mlOrder;
+    await existingOrder.save();
+    console.log(`[ML Webhook] Pedido existente #${mlOrder.id} actualizado.`);
+  } else {
+    await this.createOrderFromApiData(mlOrder, channel, accessToken);
+    console.log(`[ML Webhook] Nuevo pedido Flex #${mlOrder.id} creado.`);
+  }
+  
+  return true;
+}
 
   /**
    * Helper para crear la orden en la base de datos a partir de los datos de la API.
