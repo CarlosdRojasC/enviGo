@@ -522,7 +522,7 @@ static async syncOrders(channel, dateFrom, dateTo) {
       params.append('created_at_max', endOfToday.toISOString());
       
       // 🎯 FILTROS ESPECÍFICOS PARA PEDIDOS PREPARADOS
-      params.append('status', 'open'); // Solo pedidos abiertos
+      params.append('status', 'any'); // Solo pedidos abiertos
       params.append('financial_status', 'paid'); // Solo pedidos pagados
       params.append('fulfillment_status', 'unfulfilled'); // 🎯 SOLO NO CUMPLIDOS (preparados)
       
