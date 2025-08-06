@@ -226,8 +226,8 @@ router.post('/shipday', shipdayController.handleWebhook);
 router.get('/debug/mercadolibre/:channelId', async (req, res) => {
   try {
     const MercadoLibreService = require('../services/mercadolibre.service');
-    await MercadoLibreService.debugSpecificOrders(req.params.channelId);
-    res.json({ success: true, message: 'Debug completado, revisa los logs' });
+    const result = await MercadoLibreService.debugSpecificOrdersForPostman(req.params.channelId);
+    res.json(result);
   } catch (error) {
     console.error('❌ [Debug] Error:', error.message);
     res.status(500).json({ error: error.message });
