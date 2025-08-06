@@ -363,6 +363,52 @@
     @close="showLabelsModal = false"
   />
 </Modal>
+<!-- Modal de Vista Previa de Etiquetas -->
+<Modal 
+  v-model="showLabelsPreviewModal" 
+  title="🖨️ Vista Previa de Etiquetas" 
+  width="900px"
+>
+  <div class="labels-preview-container">
+    <div class="preview-header">
+      <p>{{ labelsToPreview.length }} etiqueta(s) generada(s) - Lista para imprimir</p>
+      <div class="preview-actions">
+        <button @click="printLabelsFromPreview" class="btn btn-primary">
+          🖨️ Imprimir Todas
+        </button>
+        <button @click="showLabelsPreviewModal = false" class="btn btn-secondary">
+          Cerrar
+        </button>
+      </div>
+    </div>
+    
+    <div class="labels-grid">
+      <div 
+        v-for="label in labelsToPreview" 
+        :key="label.order_id"
+        class="label-preview-item"
+      >
+        <div class="label-mini">
+          <div class="label-header-mini">
+            <div class="company-name-mini">enviGo</div>
+            <div class="envigo-code-mini">{{ label.unique_code }}</div>
+          </div>
+          <div class="label-info-mini">
+            <div><strong>Pedido:</strong> #{{ label.order_number }}</div>
+            <div><strong>Cliente:</strong> {{ label.customer_name }}</div>
+            <div><strong>Comuna:</strong> {{ label.shipping_commune }}</div>
+          </div>
+          <button 
+            @click="printSingleLabelFromPreview(label)" 
+            class="btn-mini"
+          >
+            🖨️
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</Modal>
   </div>
   
 </template>
@@ -488,7 +534,8 @@ const isCreatingOrder = ref(false)
 // ✅ NUEVO: Estado para modal de etiquetas
 const showLabelsModal = ref(false)
 const generatingLabels = ref(false)
-
+const showLabelsPreviewModal = ref(false)
+const labelsToPreview = ref([])
 // ⚡ TIEMPO REAL: Estado para actualización automática
 const realTimeEnabled = ref(true)
 const lastOrderUpdate = ref(null)
@@ -1220,14 +1267,11 @@ async function processPendingUpdates() {
 
 // ✅ NUEVO: Manejar generación de etiquetas
 async function handleGenerateLabels() {
-  console.log('🏷️ Generando etiquetas para pedidos:', selectedOrders.value)
-  
   if (selectedOrders.value.length === 0) {
     toast.warning('Selecciona al menos un pedido')
     return
   }
 
-  // Validar que los pedidos sean válidos
   const validOrders = selectedOrders.value.filter(orderId => {
     const order = orders.value.find(o => o._id === orderId)
     return order && ['pending', 'ready_for_pickup'].includes(order.status)
@@ -1238,16 +1282,35 @@ async function handleGenerateLabels() {
     return
   }
 
-  if (validOrders.length !== selectedOrders.value.length) {
-    toast.warning(`Solo ${validOrders.length} de ${selectedOrders.value.length} pedidos son válidos para etiquetas`)
-    selectedOrders.value = validOrders
-  }
-
-  // Opción 1: Generar directamente sin modal
-  await generateLabelsDirectly(validOrders)
+  generatingLabels.value = true
   
-  // Opción 2: Abrir modal para más opciones
-  // showLabelsModal.value = true
+  try {
+    const response = await apiService.labels.generateBulk(validOrders)
+    
+    toast.success(`${response.data.total} etiquetas generadas exitosamente`)
+    
+    // Actualizar pedidos localmente
+    response.data.labels.forEach(label => {
+      const orderIndex = orders.value.findIndex(o => o._id === label.order_id)
+      if (orderIndex !== -1) {
+        orders.value[orderIndex].envigo_label = {
+          unique_code: label.unique_code,
+          generated_at: new Date()
+        }
+      }
+    })
+
+    // ✅ CAMBIO: Mostrar vista previa en lugar de preguntar
+    labelsToPreview.value = response.data.labels
+    showLabelsPreviewModal.value = true
+    clearSelection()
+    
+  } catch (error) {
+    console.error('Error generando etiquetas:', error)
+    toast.error('Error generando etiquetas: ' + (error.response?.data?.error || error.message))
+  } finally {
+    generatingLabels.value = false
+  }
 }
 
 // ✅ Generar etiquetas directamente
@@ -1363,6 +1426,148 @@ function printLabels(labels) {
   labels.forEach(label => {
     markLabelAsPrinted(label.order_id)
   })
+}
+function printLabelsFromPreview() {
+  // Crear contenido HTML para impresión
+  const printContent = generatePrintHTML(labelsToPreview.value)
+  
+  // Crear elemento oculto en el DOM
+  const printElement = document.createElement('div')
+  printElement.innerHTML = printContent
+  printElement.style.display = 'none'
+  document.body.appendChild(printElement)
+  
+  // Aplicar estilos de impresión
+  const printStyles = document.createElement('style')
+  printStyles.textContent = getPrintStyles()
+  document.head.appendChild(printStyles)
+  
+  // Ocultar contenido actual y mostrar solo las etiquetas
+  document.body.style.visibility = 'hidden'
+  printElement.style.display = 'block'
+  printElement.style.visibility = 'visible'
+  
+  // Imprimir
+  window.print()
+  
+  // Limpiar después de imprimir
+  setTimeout(() => {
+    document.body.style.visibility = 'visible'
+    document.body.removeChild(printElement)
+    document.head.removeChild(printStyles)
+    showLabelsPreviewModal.value = false
+    toast.success('Etiquetas enviadas a imprimir')
+  }, 1000)
+}
+
+function printSingleLabelFromPreview(label) {
+  const printContent = generatePrintHTML([label])
+  
+  // Mismo proceso pero para una sola etiqueta
+  const printElement = document.createElement('div')
+  printElement.innerHTML = printContent
+  printElement.style.display = 'none'
+  document.body.appendChild(printElement)
+  
+  const printStyles = document.createElement('style')
+  printStyles.textContent = getPrintStyles()
+  document.head.appendChild(printStyles)
+  
+  document.body.style.visibility = 'hidden'
+  printElement.style.display = 'block'
+  printElement.style.visibility = 'visible'
+  
+  window.print()
+  
+  setTimeout(() => {
+    document.body.style.visibility = 'visible'
+    document.body.removeChild(printElement)
+    document.head.removeChild(printStyles)
+    toast.success('Etiqueta enviada a imprimir')
+  }, 1000)
+}
+
+function generatePrintHTML(labels) {
+  let content = '<div class="labels-print-container">'
+  
+  labels.forEach(label => {
+    content += `
+      <div class="label-print">
+        <div class="label-header-print">
+          <div class="company-name-print">enviGo</div>
+          <div class="envigo-code-print">${label.unique_code}</div>
+        </div>
+        <div class="label-content-print">
+          <div class="order-info-print">
+            <div class="info-line-print"><strong>Pedido:</strong> #${label.order_number}</div>
+            <div class="info-line-print"><strong>Cliente:</strong> ${label.customer_name}</div>
+            <div class="info-line-print"><strong>Teléfono:</strong> ${label.customer_phone || 'No disponible'}</div>
+            <div class="info-line-print"><strong>Dirección:</strong> ${label.shipping_address}</div>
+            <div class="info-line-print"><strong>Comuna:</strong> ${label.shipping_commune}</div>
+            ${label.notes ? `<div class="info-line-print"><strong>Notas:</strong> ${label.notes}</div>` : ''}
+          </div>
+        </div>
+      </div>
+    `
+  })
+  
+  content += '</div>'
+  return content
+}
+
+function getPrintStyles() {
+  return `
+    @media print {
+      .labels-print-container {
+        display: block !important;
+      }
+      
+      .label-print {
+        width: 180mm;
+        height: 60mm;
+        border: 2px solid #000;
+        margin-bottom: 10mm;
+        padding: 5mm;
+        page-break-inside: avoid;
+        display: flex;
+        flex-direction: column;
+      }
+      
+      .label-header-print {
+        text-align: center;
+        border-bottom: 1px solid #000;
+        padding-bottom: 3mm;
+        margin-bottom: 3mm;
+      }
+      
+      .company-name-print {
+        font-size: 16px;
+        font-weight: bold;
+      }
+      
+      .envigo-code-print {
+        font-size: 20px;
+        font-weight: bold;
+        color: #000;
+        margin: 2mm 0;
+      }
+      
+      .order-info-print {
+        flex: 1;
+      }
+      
+      .info-line-print {
+        margin: 1mm 0;
+        font-size: 12px;
+      }
+    }
+    
+    @media screen {
+      .labels-print-container {
+        display: none;
+      }
+    }
+  `
 }
 
 // ✅ Marcar etiqueta como impresa
@@ -2510,5 +2715,85 @@ onBeforeUnmount(() => {
   flex: 1;
   overflow: auto;
   padding: 20px;
+}
+.labels-preview-container {
+  padding: 20px;
+}
+
+.preview-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  padding-bottom: 15px;
+  border-bottom: 2px solid #e5e7eb;
+}
+
+.preview-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.labels-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 16px;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.label-preview-item {
+  border: 2px solid #e5e7eb;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.label-mini {
+  position: relative;
+  padding: 12px;
+  background: white;
+}
+
+.label-header-mini {
+  text-align: center;
+  border-bottom: 1px solid #e5e7eb;
+  padding-bottom: 8px;
+  margin-bottom: 8px;
+}
+
+.company-name-mini {
+  font-size: 14px;
+  font-weight: bold;
+}
+
+.envigo-code-mini {
+  font-size: 16px;
+  font-weight: bold;
+  color: #dc2626;
+  margin-top: 4px;
+}
+
+.label-info-mini {
+  font-size: 12px;
+}
+
+.label-info-mini div {
+  margin: 2px 0;
+}
+
+.btn-mini {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: #f3f4f6;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.btn-mini:hover {
+  background: #e5e7eb;
 }
 </style>
