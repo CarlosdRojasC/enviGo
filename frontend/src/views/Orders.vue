@@ -1751,10 +1751,20 @@ function createPrintableLabelsHTML(labels) {
 function printLabelsFromPreview() {
   if (labelsToPreview.value.length === 0) return
   
-  console.log('🖨️ Imprimiendo etiquetas directamente:', labelsToPreview.value.length)
+  console.log('🖨️ Imprimiendo etiquetas:', labelsToPreview.value.length, 'Formato:', selectedFormat.value)
   
-  // ✅ Crear elemento de impresión en el DOM actual
-  const printContent = createPrintableLabelsHTML(labelsToPreview.value)
+  let printContent = ''
+  
+  // Seleccionar formato según la opción elegida
+  switch (selectedFormat.value) {
+    case 'square':
+      printContent = createSquareLabelHTML(labelsToPreview.value)
+      break
+    case 'rectangular':
+    default:
+      printContent = createPrintableLabelsHTML(labelsToPreview.value)
+      break
+  }
   
   // ✅ Crear iframe oculto para impresión
   const printFrame = document.createElement('iframe')
@@ -1772,13 +1782,11 @@ function printLabelsFromPreview() {
     frameDoc.write(printContent)
     frameDoc.close()
     
-    // ✅ Imprimir directamente cuando esté listo
     printFrame.onload = () => {
       setTimeout(() => {
         printFrame.contentWindow.focus()
         printFrame.contentWindow.print()
         
-        // ✅ Limpiar después de imprimir
         setTimeout(() => {
           document.body.removeChild(printFrame)
         }, 1000)
@@ -2245,6 +2253,44 @@ onBeforeUnmount(() => {
 
 <style scoped>
 /* ==================== ESTILOS PARA SELECTOR DE CANAL ==================== */
+.format-selector {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-right: 16px;
+}
+
+.format-selector label {
+  font-weight: 600;
+  color: #374151;
+  font-size: 14px;
+}
+
+.format-dropdown {
+  padding: 8px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 14px;
+  background: white;
+  min-width: 200px;
+}
+
+.format-dropdown:focus {
+  outline: none;
+  border-color: #8BC53F;
+  box-shadow: 0 0 0 2px rgba(139, 197, 63, 0.1);
+}
+
+@media (max-width: 768px) {
+  .preview-actions {
+    flex-direction: column;
+    gap: 12px;
+  }
+  
+  .format-selector {
+    margin-right: 0;
+  }
+}
 
 /* ==================== ESTILOS MEJORADOS PARA SELECTOR DE CANAL ==================== */
 
