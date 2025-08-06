@@ -772,7 +772,7 @@ async function generateManifestAndMarkReady() {
     return;
   }
 
-  const confirmMsg = `¿Deseas generar el manifiesto y marcar ${selectedOrders.value.length} pedido(s) como "Listo para Retiro"?`;
+  const confirmMsg = `¿Deseas generar el manifiesto y marcar ${selectedOrders.value.length} pedido(s) como "Listo para Retiro"?\n\nEl manifiesto se imprimirá automáticamente.`;
   if (!confirm(confirmMsg)) return;
 
   try {
@@ -793,11 +793,10 @@ async function generateManifestAndMarkReady() {
       }
     });
 
-// 3. ✅ NUEVO: Abrir modal en lugar de nueva pestaña
-currentManifestId.value = manifest.manifest.id;
-showManifestModal.value = true;
+    // 3. ✅ IMPRIMIR DIRECTAMENTE
+    await printManifestDirectly(manifest.manifest.id);
     
-    toast.success(`✅ Manifiesto ${manifest.manifest.manifest_number} creado exitosamente`);
+    toast.success(`✅ Manifiesto ${manifest.manifest.manifest_number} creado e impreso`);
     clearSelection();
 
   } catch (error) {
@@ -1368,8 +1367,8 @@ function createPrintableLabelsHTML(labels) {
     }
     
     .label {
-      width: 150mm;
-      height: 100mm;
+      width: 190mm;
+      height: 65mm;
       border: 2px solid #8BC53F;
       border-radius: 8px;
       padding: 4mm;
@@ -1703,6 +1702,296 @@ async function generateLabelsDirectly(orderIds) {
   } finally {
     generatingLabels.value = false
   }
+}
+async function printManifestDirectly(manifestId) {
+  try {
+    console.log('🖨️ Obteniendo datos del manifiesto para impresión:', manifestId);
+    
+    // Obtener datos completos del manifiesto
+    const { data: manifestData } = await apiService.manifests.getById(manifestId);
+    
+    // Generar HTML de impresión usando la misma lógica de PickupManifest.vue
+    const printContent = createManifestPrintHTML(manifestData);
+    
+    // Abrir ventana de impresión
+    const printWindow = window.open('', '', 'width=800,height=600');
+    printWindow.document.write(printContent);
+    printWindow.document.close();
+    printWindow.focus();
+
+    printWindow.onload = () => {
+      setTimeout(() => {
+        printWindow.print();
+        printWindow.close();
+      }, 500);
+    };
+    
+    // Marcar como impreso
+    await apiService.manifests.updateStatus(manifestId, 'printed');
+    
+    toast.success('✅ Manifiesto enviado a impresión');
+    
+  } catch (error) {
+    console.error('❌ Error imprimiendo manifiesto:', error);
+    toast.error('Error al imprimir manifiesto');
+  }
+}
+function createManifestPrintHTML(manifestData) {
+  const orders = getManifestOrders(manifestData);
+  const totalPackages = orders.reduce((total, order) => {
+    return total + (order.load1Packages || order.packages || 1);
+  }, 0);
+  
+  const uniqueCommunes = [...new Set(orders
+    .map(order => order.shipping_commune)
+    .filter(commune => commune && commune !== 'N/A'))].sort();
+
+  return `
+    <html>
+      <head>
+        <title>Manifiesto ${manifestData.manifest_number || 'N/A'}</title>
+        <style>
+          body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            font-size: 14px;
+            line-height: 1.4;
+            color: #333;
+          }
+          
+          .print-header {
+            text-align: center;
+            margin-bottom: 30px;
+            border-bottom: 2px solid #4f46e5;
+            padding-bottom: 20px;
+          }
+          
+          .print-header h1 {
+            margin: 0;
+            color: #4f46e5;
+            font-size: 24px;
+          }
+          
+          .print-header h2 {
+            margin: 5px 0 0 0;
+            color: #666;
+            font-size: 18px;
+            font-weight: normal;
+          }
+          
+          .manifest-info {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 2rem;
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 1rem;
+          }
+          
+          .company-details h3 {
+            margin: 0 0 10px 0;
+            color: #4f46e5;
+          }
+          
+          .manifest-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 2rem;
+            font-size: 12px;
+          }
+          
+          .manifest-table th, .manifest-table td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+          }
+          
+          .manifest-table th {
+            background-color: #f8fafc;
+            font-weight: bold;
+          }
+          
+          .manifest-table tbody tr:nth-child(even) {
+            background-color: #f9fafb;
+          }
+          
+          .order-number {
+            font-weight: bold;
+            color: #4f46e5;
+          }
+          
+          .address {
+            font-size: 11px;
+            max-width: 200px;
+          }
+          
+          .packages {
+            text-align: center;
+            font-weight: bold;
+          }
+          
+          .manifest-summary {
+            background: #f8fafc;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 2rem;
+            border: 1px solid #e5e7eb;
+          }
+          
+          .signature-section {
+            display: flex;
+            justify-content: space-around;
+            margin-top: 3rem;
+            margin-bottom: 2rem;
+          }
+          
+          .signature-box {
+            width: 30%;
+            text-align: center;
+          }
+          
+          .signature-box p {
+            font-size: 12px;
+            margin-bottom: 1rem;
+          }
+          
+          .line {
+            border-bottom: 1px solid #000;
+            margin-top: 2rem;
+            height: 1px;
+          }
+          
+          .print-footer {
+            text-align: center;
+            font-size: 11px;
+            color: #666;
+            border-top: 1px solid #ddd;
+            padding-top: 15px;
+            margin-top: 2rem;
+          }
+        </style>
+      </head>
+      <body>
+        <!-- Header para impresión -->
+        <div class="print-header">
+          <h1>📋 MANIFIESTO DE RETIRO</h1>
+          <h2>enviGo Logistics</h2>
+        </div>
+
+        <!-- Información del manifiesto -->
+        <div class="manifest-info">
+          <div class="company-details">
+            <h3>🏢 ${getCompanyName(manifestData)}</h3>
+            <p>📍 ${getCompanyAddress(manifestData)}</p>
+            ${getCompanyPhone(manifestData) ? `<p>📞 ${getCompanyPhone(manifestData)}</p>` : ''}
+          </div>
+          <div class="manifest-meta">
+            <p><strong>📋 N° Manifiesto:</strong> ${manifestData.manifest_number || 'N/A'}</p>
+            <p><strong>📅 Fecha:</strong> ${formatDate(manifestData.generated_at)}</p>
+            <p><strong>📦 Total Pedidos:</strong> ${orders.length}</p>
+            <p><strong>📦 Total Bultos:</strong> ${totalPackages}</p>
+            <p><strong>🏘️ Comunas:</strong> ${uniqueCommunes.join(', ')}</p>
+          </div>
+        </div>
+
+        <!-- Tabla de pedidos -->
+        <table class="manifest-table">
+          <thead>
+            <tr>
+              <th>N° Pedido</th>
+              <th>Cliente</th>
+              <th>Comuna</th>
+              <th>Dirección</th>
+              <th>Teléfono</th>
+              <th>Bultos</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${orders.map(order => `
+              <tr>
+                <td class="order-number">${order.order_number}</td>
+                <td>${order.customer_name}</td>
+                <td>${order.shipping_commune || 'N/A'}</td>
+                <td class="address">${order.shipping_address}</td>
+                <td>${order.customer_phone || 'N/A'}</td>
+                <td class="packages">${order.load1Packages || order.packages || 1}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+
+        <!-- Resumen del manifiesto -->
+        <div class="manifest-summary">
+          <div class="summary-item">
+            <strong>Total de Bultos:</strong> ${totalPackages}
+          </div>
+          <div class="summary-item">
+            <strong>Comunas incluidas:</strong> ${uniqueCommunes.join(', ') || 'N/A'}
+          </div>
+        </div>
+
+        <!-- Sección de firmas -->
+        <div class="signature-section">
+          <div class="signature-box">
+            <p><strong>Nombre de quien retira:</strong></p>
+            <div class="line"></div>
+          </div>
+          <div class="signature-box">
+            <p><strong>RUT:</strong></p>
+            <div class="line"></div>
+          </div>
+          <div class="signature-box">
+            <p><strong>Firma:</strong></p>
+            <div class="line"></div>
+          </div>
+        </div>
+
+        <!-- Footer para impresión -->
+        <div class="print-footer">
+          <p>Documento generado automáticamente por enviGo - ${formatDate(new Date())}</p>
+          <p>Manifiesto N° ${manifestData.manifest_number || 'N/A'} - Este documento certifica que los pedidos listados están listos para retiro</p>
+        </div>
+      </body>
+    </html>
+  `;
+}
+function getManifestOrders(manifestData) {
+  if (manifestData.order_ids && Array.isArray(manifestData.order_ids)) {
+    return manifestData.order_ids;
+  }
+  if (manifestData.manifest_data?.orders) {
+    return manifestData.manifest_data.orders;
+  }
+  return [];
+}
+
+function getCompanyName(manifestData) {
+  return manifestData?.company_id?.name || 
+         manifestData?.manifest_data?.company?.name || 
+         'Empresa';
+}
+
+function getCompanyAddress(manifestData) {
+  return manifestData?.company_id?.address || 
+         manifestData?.manifest_data?.company?.address || 
+         'Dirección no especificada';
+}
+
+function getCompanyPhone(manifestData) {
+  return manifestData?.company_id?.phone || 
+         manifestData?.manifest_data?.company?.phone;
+}
+
+function formatDate(dateString) {
+  if (!dateString) return 'N/A';
+  
+  const options = { 
+    year: 'numeric', 
+    month: 'long', 
+    day: 'numeric', 
+    hour: '2-digit', 
+    minute: '2-digit' 
+  };
+  return new Date(dateString).toLocaleDateString('es-CL', options);
 }
 
 // ✅ Imprimir etiquetas generadas
