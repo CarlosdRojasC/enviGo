@@ -223,10 +223,13 @@ router.post('/shipday-webhook', async (req, res) => {
 });
 router.post('/shipday', shipdayController.handleWebhook);
 
-router.get('/debug/mercadolibre/:channelId', async (req, res) => {
+router.get('/debug/mercadolibre/:channelId/shipment/:shipmentId', async (req, res) => {
   try {
     const MercadoLibreService = require('../services/mercadolibre.service');
-    const result = await MercadoLibreService.debugSpecificOrdersForPostman(req.params.channelId);
+    const result = await MercadoLibreService.debugSingleShipmentForPostman(
+      req.params.channelId, 
+      req.params.shipmentId
+    );
     res.json(result);
   } catch (error) {
     console.error('❌ [Debug] Error:', error.message);
