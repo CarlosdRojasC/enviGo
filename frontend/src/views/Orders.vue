@@ -1551,12 +1551,15 @@ function createPrintableLabelsHTML(labels) {
 </body>
 </html>`
 }
-function printSingleLabelFromPreview(label) {
-  console.log('🖨️ Imprimiendo etiqueta individual:', label.order_number)
+function printLabelsFromPreview() {
+  if (labelsToPreview.value.length === 0) return
   
-  const singleLabelContent = createPrintableLabelsHTML([label])
+  console.log('🖨️ Imprimiendo etiquetas directamente:', labelsToPreview.value.length)
   
-  // ✅ Crear iframe oculto para impresión individual
+  // ✅ Crear elemento de impresión en el DOM actual
+  const printContent = createPrintableLabelsHTML(labelsToPreview.value)
+  
+  // ✅ Crear iframe oculto para impresión
   const printFrame = document.createElement('iframe')
   printFrame.style.position = 'absolute'
   printFrame.style.left = '-9999px'
@@ -1569,9 +1572,10 @@ function printSingleLabelFromPreview(label) {
   try {
     const frameDoc = printFrame.contentDocument || printFrame.contentWindow.document
     frameDoc.open()
-    frameDoc.write(singleLabelContent)
+    frameDoc.write(printContent)
     frameDoc.close()
     
+    // ✅ Imprimir directamente cuando esté listo
     printFrame.onload = () => {
       setTimeout(() => {
         printFrame.contentWindow.focus()
@@ -1584,12 +1588,17 @@ function printSingleLabelFromPreview(label) {
       }, 500)
     }
     
-    markLabelAsPrinted(label.order_id)
-    toast.success(`✅ Etiqueta #${label.order_number} enviada a impresión`)
+    // ✅ Marcar etiquetas como impresas
+    labelsToPreview.value.forEach(label => {
+      markLabelAsPrinted(label.order_id)
+    })
+    
+    toast.success(`✅ ${labelsToPreview.value.length} etiquetas enviadas a impresión`)
+    showLabelsPreviewModal.value = false
     
   } catch (error) {
-    console.error('❌ Error en impresión individual:', error)
-    toast.error('Error al imprimir etiqueta')
+    console.error('❌ Error en impresión:', error)
+    toast.error('Error al preparar impresión')
     document.body.removeChild(printFrame)
   }
 }
@@ -1622,82 +1631,7 @@ function printLabelsDirectly() {
   toast.success(`✅ ${labelsToPreview.value.length} etiquetas enviadas a impresión`)
   showLabelsPreviewModal.value = false
 }
-// ✅ Función para imprimir etiqueta individual
-function printSingleLabelFromPreview(label) {
-  const singleLabelContent = `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8">
-  <title>Etiqueta enviGo - ${label.order_number}</title>
-  <style>
-    @page { size: A4; margin: 15mm; }
-    body { font-family: Arial, sans-serif; }
-    .label {
-      width: 180mm;
-      height: 60mm;
-      border: 2px solid #000;
-      padding: 5mm;
-      display: flex;
-      flex-direction: column;
-    }
-    .label-header {
-      text-align: center;
-      border-bottom: 1px solid #000;
-      padding-bottom: 3mm;
-      margin-bottom: 3mm;
-    }
-    .company-name { font-size: 18px; font-weight: bold; }
-    .envigo-code { 
-      font-size: 20px; 
-      font-weight: bold; 
-      color: #000; 
-      margin: 2mm 0;
-      padding: 2mm;
-      border: 1px solid #000;
-      display: inline-block;
-    }
-    .label-content { display: flex; flex: 1; gap: 5mm; }
-    .order-info { flex: 2; }
-    .address-info { flex: 1; border-left: 1px solid #000; padding-left: 3mm; }
-    .info-line { margin: 2mm 0; font-size: 11px; }
-    .info-line strong { display: inline-block; width: 20mm; }
-  </style>
-</head>
-<body>
-  <div class="label">
-    <div class="label-header">
-      <div class="company-name">enviGo</div>
-      <div class="envigo-code">${label.unique_code}</div>
-    </div>
-    <div class="label-content">
-      <div class="order-info">
-        <div class="info-line"><strong>Pedido:</strong> #${label.order_number}</div>
-        <div class="info-line"><strong>Cliente:</strong> ${label.customer_name}</div>
-        <div class="info-line"><strong>Teléfono:</strong> ${label.customer_phone || 'No disponible'}</div>
-        ${label.notes ? `<div class="info-line"><strong>Notas:</strong> ${label.notes}</div>` : ''}
-      </div>
-      <div class="address-info">
-        <div class="info-line"><strong>Dirección:</strong></div>
-        <div>${label.shipping_address}</div>
-        <div>${label.shipping_commune}</div>
-        <div>${label.shipping_state || 'Región Metropolitana'}</div>
-      </div>
-    </div>
-  </div>
-</body>
-</html>`
 
-  const printWindow = window.open('', '_blank', 'width=600,height=400')
-  printWindow.document.write(singleLabelContent)
-  printWindow.document.close()
-  printWindow.focus()
-  printWindow.print()
-  printWindow.onafterprint = () => printWindow.close()
-  
-  markLabelAsPrinted(label.order_id)
-  toast.success(`✅ Etiqueta #${label.order_number} enviada a impresión`)
-}
 // ✅ Generar etiquetas directamente
 async function generateLabelsDirectly(orderIds) {
   generatingLabels.value = true
