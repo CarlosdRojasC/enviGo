@@ -530,9 +530,8 @@ static async syncOrders(channel, dateFrom, dateTo) {
         params.append('created_at_max', toDate);
       }
     }
-    params.append('status', 'any');
     params.append('financial_status', 'paid');
-    params.append('fulfillment_status', 'shipped'); // Solo pedidos sin cumplir
+    params.append('fulfillment_status', 'fulfilled'); // Solo pedidos sin cumplir
     params.append('limit', '50'); // ✅ MÁXIMO 50 PEDIDOS
     params.append('order', 'created_at desc'); // ✅ ORDENAR POR MÁS RECIENTES PRIMERO
     
@@ -801,14 +800,14 @@ static getCustomerName(order, validatedAddress = null) {
     if (shopifyOrder.cancelled_at) return 'cancelled';
     
     // Entregado
-    if (shopifyOrder.fulfillment_status === 'fulfilled') return 'delivered';
+    if (shopifyOrder.fulfillment_status === 'fulfilled') return 'pending';
     
     // En proceso
     if (shopifyOrder.fulfillment_status === 'partial') return 'processing';
     if (shopifyOrder.fulfillment_status === 'unfulfilled' && shopifyOrder.financial_status === 'paid') return 'processing';
     
     // Enviado
-    if (shopifyOrder.fulfillment_status === 'shipped' && shopifyOrder.financial_status === 'paid') return 'pending';
+    if (shopifyOrder.fulfillment_status === 'unfulfilled' && shopifyOrder.financial_status === 'paid') return 'shipped';
     
     // Pendiente por defecto
     return 'pending';
