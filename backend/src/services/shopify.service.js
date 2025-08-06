@@ -583,7 +583,7 @@ static async syncOrders(channel, dateFrom, dateTo) {
             console.log(`🔍 Procesando pedido PREPARADO: ${shopifyOrder.name} (${shopifyOrder.fulfillment_status})`);
             
             // ✅ VERIFICAR QUE REALMENTE ESTÉ PREPARADO
-            if (shopifyOrder.fulfillment_status !== 'unfulfilled') {
+            if (shopifyOrder.fulfillment_status !== 'shipped') {
               console.log(`⏭️ Saltando pedido ${shopifyOrder.name}: no está preparado (${shopifyOrder.fulfillment_status})`);
               continue;
             }
