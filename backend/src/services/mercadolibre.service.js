@@ -376,7 +376,6 @@ static async isFlexOrder(mlOrder, accessToken) {
   
   // ✅ MÉTODO 1: Verificar por tags del pedido (más rápido)
   if (mlOrder.tags && Array.isArray(mlOrder.tags)) {
-    // Buscar tags que indiquen self-service o flex
     const flexTags = ['self_service', 'flex', 'self_service_in'];
     const hasFlexTag = mlOrder.tags.some(tag => 
       flexTags.includes(tag.toLowerCase())
@@ -388,41 +387,56 @@ static async isFlexOrder(mlOrder, accessToken) {
     }
   }
 
-  // ✅ MÉTODO 2: Consultar el shipment para verificar logistic_type
+  // ✅ MÉTODO 2: Consultar el shipment (AHORA CON LOS CAMPOS CORRECTOS)
   if (mlOrder.shipping?.id) {
-    const shipment = await this.getShipmentDetails(mlOrder.shipping.id, accessToken);
-    
-    if (shipment) {
-      console.log(`🔍 [ML Debug] Shipment ${mlOrder.shipping.id} logistic:`, {
-        type: shipment.logistic?.type,
-        mode: shipment.logistic?.mode,
-        direction: shipment.logistic?.direction,
-        logistic_object: JSON.stringify(shipment.logistic, null, 2)
+    try {
+      const shipmentResponse = await axios.get(`${this.API_BASE_URL}/shipments/${mlOrder.shipping.id}`, {
+        headers: { 'Authorization': `Bearer ${accessToken}` },
+        timeout: 15000
       });
 
-      // ✅ VERIFICAR LOGISTIC TYPE = self_service
-      if (shipment.logistic?.type === 'self_service') {
-        console.log(`✅ [ML Debug] Pedido ${mlOrder.id} es Flex (shipment.logistic.type = self_service)`);
+      const shipment = shipmentResponse.data;
+      
+      console.log(`🚛 [ML Debug] Shipment ${mlOrder.shipping.id} datos:`, {
+        mode: shipment.mode,
+        logistic_type: shipment.logistic_type,
+        service_id: shipment.service_id,
+        sender_types: shipment.sender_address?.types
+      });
+
+      // ✅ MÉTODO 2A: Verificar logistic_type = "self_service" (EL MÁS CONFIABLE)
+      if (shipment.logistic_type === 'self_service') {
+        console.log(`✅ [ML Debug] Pedido ${mlOrder.id} es Flex (logistic_type = self_service)`);
         return true;
       }
 
-      // ✅ VERIFICAR MODE = me2 (Mercado Envios 2 que incluye Flex)
-      if (shipment.logistic?.mode === 'me2' && shipment.logistic?.type) {
-        console.log(`✅ [ML Debug] Pedido ${mlOrder.id} podría ser Flex (ME2), verificando tipo...`);
-        // En ME2, si no es cross_docking, drop_off o fulfillment, podría ser self_service
-        const nonFlexTypes = ['cross_docking', 'drop_off', 'fulfillment', 'xd_drop_off'];
-        if (!nonFlexTypes.includes(shipment.logistic.type)) {
-          console.log(`✅ [ML Debug] Pedido ${mlOrder.id} es Flex (ME2 + tipo no estándar)`);
+      // ✅ MÉTODO 2B: Verificar sender_address.types contiene "self_service_partner"
+      if (shipment.sender_address?.types && Array.isArray(shipment.sender_address.types)) {
+        const hasFlexType = shipment.sender_address.types.some(type => 
+          type.includes('self_service_partner') || type.includes('self_service')
+        );
+        
+        if (hasFlexType) {
+          console.log(`✅ [ML Debug] Pedido ${mlOrder.id} es Flex (sender_address.types)`, shipment.sender_address.types);
           return true;
         }
       }
+
+      // ✅ MÉTODO 2C: Verificar service_id específico de Flex (3826008 en tus casos)
+      if (shipment.service_id === 3826008) {
+        console.log(`✅ [ML Debug] Pedido ${mlOrder.id} es Flex (service_id = 3826008)`);
+        return true;
+      }
+
+    } catch (error) {
+      console.error(`❌ [ML Debug] Error consultando shipment ${mlOrder.shipping.id}:`, error.message);
+      // Si hay error consultando shipment, continuar sin fallar
     }
   }
 
   console.log(`❌ [ML Debug] Pedido ${mlOrder.id} NO es Flex`);
   return false;
 }
-
 static async getValidAccessToken(channel) {
   console.log('🔑 [ML Auth] Verificando access token...');
   
@@ -454,11 +468,12 @@ static async getShipmentDetails(shippingId, accessToken) {
 
     const shipment = response.data;
     console.log(`✅ [ML Shipment] Datos del shipment ${shippingId}:`, {
-      logistic_type: shipment.logistic?.type,
-      logistic_mode: shipment.logistic?.mode,
+      mode: shipment.mode,
+      logistic_type: shipment.logistic_type,
+      service_id: shipment.service_id,
       status: shipment.status,
       substatus: shipment.substatus,
-      logistic_full: JSON.stringify(shipment.logistic, null, 2)
+      sender_types: shipment.sender_address?.types
     });
 
     return shipment;
