@@ -524,7 +524,6 @@ static async syncOrders(channel, dateFrom, dateTo) {
       // 🎯 FILTROS ESPECÍFICOS PARA PEDIDOS PREPARADOS
       params.append('status', 'any'); // Solo pedidos abiertos
       params.append('financial_status', 'paid'); // Solo pedidos pagados
-      params.append('fulfillment_status', 'shipped'); // 🎯 SOLO NO CUMPLIDOS (preparados)
       
       params.append('limit', '100'); // Máximo 100 pedidos del día
       params.append('fields', 'id,name,email,created_at,updated_at,total_price,currency,financial_status,fulfillment_status,shipping_address,billing_address,customer,line_items,note,cancelled_at,phone'); // Solo campos necesarios
@@ -583,7 +582,7 @@ static async syncOrders(channel, dateFrom, dateTo) {
             console.log(`🔍 Procesando pedido PREPARADO: ${shopifyOrder.name} (${shopifyOrder.fulfillment_status})`);
             
             // ✅ VERIFICAR QUE REALMENTE ESTÉ PREPARADO
-            if (shopifyOrder.fulfillment_status !== 'shipped') {
+            if (!this.isOrderReadyForPickup(shopifyOrder)) {
               console.log(`⏭️ Saltando pedido ${shopifyOrder.name}: no está preparado (${shopifyOrder.fulfillment_status})`);
               continue;
             }
@@ -669,7 +668,21 @@ static async syncOrders(channel, dateFrom, dateTo) {
       throw error;
     }
   }
+  static isOrderReadyForPickup(shopifyOrder) {
+  // Excluir cancelados
+  if (shopifyOrder.cancelled_at) return false;
   
+  // Solo pedidos pagados
+  if (shopifyOrder.financial_status !== 'paid') return false;
+  
+  // 🎯 INCLUIR ESTOS ESTADOS:
+  // - unfulfilled = preparado pero no enviado
+  // - fulfilled = ya enviado/entregado (por si queremos re-enviar)
+  // - partial = parcialmente enviado
+  const validStates = ['unfulfilled', 'fulfilled', 'partial'];
+  
+  return validStates.includes(shopifyOrder.fulfillment_status);
+}
   // Mapear items del pedido
   static mapOrderItems(lineItems) {
     if (!lineItems || lineItems.length === 0) return [];
