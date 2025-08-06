@@ -484,25 +484,22 @@ static async getShipmentDetails(shippingId, accessToken) {
 }
 
 
-static async processOrder(mlOrder, channel) {
+static async processOrder(mlOrder, channel, accessToken = null) {
   console.log(`📦 [ML Process] Procesando pedido ${mlOrder.id}`);
-   // 🔍 DEBUG COMPLETO: Mostrar información clave para entender por qué no es detectado como Flex
-  console.log(`🔍 [ML Debug] Datos de pedido ${mlOrder.id}:`, {
-    logistic_type: mlOrder.shipping?.logistic_type,
-    logistics_type: mlOrder.shipping?.logistics_type,
-    shipping_mode: mlOrder.shipping?.mode,
-    tags: mlOrder.tags,
-    shipping_status: mlOrder.shipping?.status,
-  });
+  
+  // Obtener accessToken si no se proporcionó
+  if (!accessToken) {
+    accessToken = await this.getValidAccessToken(channel);
+  }
+  
   // ✅ FILTRO: Solo procesar pedidos Flex
- if (!(await this.isFlexOrder(mlOrder, accessToken)))  {
+  const isFlex = await this.isFlexOrder(mlOrder, accessToken);
+  if (!isFlex) {
     console.log(`⏭️ [ML Process] Pedido ${mlOrder.id} no es Flex, omitiendo...`);
     return null; // Retornar null para indicar que se omitió
   }
 
   console.log(`✅ [ML Process] Pedido ${mlOrder.id} ES FLEX, continuando procesamiento...`);
-  
-  console.log(`✅ [ML Process] Pedido ${mlOrder.id} es Flex, procesando...`);
   
   // Verificar si el pedido ya existe
   const existingOrder = await Order.findOne({
@@ -512,7 +509,6 @@ static async processOrder(mlOrder, channel) {
 
   if (existingOrder) {
     console.log(`⏭️ [ML Process] Pedido ${mlOrder.id} ya existe, actualizando...`);
-    // Actualizar estado si es necesario
     return existingOrder;
   }
 
@@ -527,11 +523,9 @@ static async processOrder(mlOrder, channel) {
     customer_phone: mlOrder.buyer?.phone || '',
     total_amount: mlOrder.total_amount || 0,
     shipping_cost: mlOrder.shipping?.cost || 0,
-    // ✅ CORRECCIÓN: Usar el método que SÍ existe
-    status: MercadoLibreService.mapOrderStatus(mlOrder),
+    status: this.mapOrderStatus(mlOrder),
     order_date: new Date(mlOrder.date_created),
-    // ✅ CORRECCIÓN: Extraer dirección directamente en lugar de usar método inexistente
-    shipping_address: MercadoLibreService.extractShippingAddressSimple(mlOrder),
+    shipping_address: await this.extractShippingAddressSimple(mlOrder),
     items: mlOrder.order_items?.map(item => ({
       name: item.item?.title || 'Producto ML',
       quantity: item.quantity || 1,
