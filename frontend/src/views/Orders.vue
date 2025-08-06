@@ -1703,39 +1703,7 @@ async function generateLabelsDirectly(orderIds) {
     generatingLabels.value = false
   }
 }
-async function printManifestDirectly(manifestId) {
-  try {
-    console.log('🖨️ Obteniendo datos del manifiesto para impresión:', manifestId);
-    
-    // Obtener datos completos del manifiesto
-    const { data: manifestData } = await apiService.manifests.getById(manifestId);
-    
-    // Generar HTML de impresión usando la misma lógica de PickupManifest.vue
-    const printContent = createManifestPrintHTML(manifestData);
-    
-    // Abrir ventana de impresión
-    const printWindow = window.open('', '', 'width=800,height=600');
-    printWindow.document.write(printContent);
-    printWindow.document.close();
-    printWindow.focus();
 
-    printWindow.onload = () => {
-      setTimeout(() => {
-        printWindow.print();
-        printWindow.close();
-      }, 500);
-    };
-    
-    // Marcar como impreso
-    await apiService.manifests.updateStatus(manifestId, 'printed');
-    
-    toast.success('✅ Manifiesto enviado a impresión');
-    
-  } catch (error) {
-    console.error('❌ Error imprimiendo manifiesto:', error);
-    toast.error('Error al imprimir manifiesto');
-  }
-}
 function createManifestPrintHTML(manifestData) {
   const orders = getManifestOrders(manifestData);
   const totalPackages = orders.reduce((total, order) => {
@@ -2129,6 +2097,39 @@ function toggleRealTime() {
     toast.info('⏸️ Actualizaciones en tiempo real pausadas')
     pendingOrderUpdates.value.clear()
     orderUpdateQueue.value = []
+  }
+}
+async function printManifestDirectly(manifestId) {
+  try {
+    console.log('🖨️ Obteniendo datos del manifiesto para impresión:', manifestId);
+    
+    // Obtener datos completos del manifiesto
+    const { data: manifestData } = await apiService.manifests.getById(manifestId);
+    
+    // Generar HTML de impresión usando la misma lógica de PickupManifest.vue
+    const printContent = createManifestPrintHTML(manifestData);
+    
+    // Abrir ventana de impresión
+    const printWindow = window.open('', '', 'width=800,height=600');
+    printWindow.document.write(printContent);
+    printWindow.document.close();
+    printWindow.focus();
+
+    printWindow.onload = () => {
+      setTimeout(() => {
+        printWindow.print();
+        printWindow.close();
+      }, 500);
+    };
+    
+    // Marcar como impreso
+    await apiService.manifests.updateStatus(manifestId, 'printed');
+    
+    toast.success('✅ Manifiesto enviado a impresión');
+    
+  } catch (error) {
+    console.error('❌ Error imprimiendo manifiesto:', error);
+    toast.error('Error al imprimir manifiesto');
   }
 }
 
