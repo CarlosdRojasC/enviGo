@@ -1704,6 +1704,230 @@ async function generateLabelsDirectly(orderIds) {
   }
 }
 
+
+
+function getCompanyName(manifestData) {
+  return manifestData?.company_id?.name || 
+         manifestData?.manifest_data?.company?.name || 
+         'Empresa';
+}
+
+function getCompanyAddress(manifestData) {
+  return manifestData?.company_id?.address || 
+         manifestData?.manifest_data?.company?.address || 
+         'Dirección no especificada';
+}
+
+function getCompanyPhone(manifestData) {
+  return manifestData?.company_id?.phone || 
+         manifestData?.manifest_data?.company?.phone;
+}
+
+function formatDate(dateString) {
+  if (!dateString) return 'N/A';
+  
+  const options = { 
+    year: 'numeric', 
+    month: 'long', 
+    day: 'numeric', 
+    hour: '2-digit', 
+    minute: '2-digit' 
+  };
+  return new Date(dateString).toLocaleDateString('es-CL', options);
+}
+
+// ✅ Imprimir etiquetas generadas
+function printLabels(labels) {
+  let printContent = `
+    <html>
+      <head>
+        <title>Etiquetas enviGo - ${labels.length} etiquetas</title>
+        <style>
+          @page { size: A4; margin: 10mm; }
+          body { font-family: Arial, sans-serif; font-size: 12px; }
+          .label { 
+            width: 180mm; 
+            height: 60mm; 
+            border: 2px solid #000; 
+            margin-bottom: 10mm; 
+            padding: 5mm; 
+            page-break-inside: avoid;
+            display: flex;
+            flex-direction: column;
+          }
+          .label-header { 
+            text-align: center; 
+            border-bottom: 1px solid #000; 
+            padding-bottom: 3mm;
+            margin-bottom: 3mm;
+          }
+          .company-name { font-size: 16px; font-weight: bold; }
+          .envigo-code { 
+            font-size: 20px; 
+            font-weight: bold; 
+            color: #dc2626; 
+            margin: 2mm 0;
+          }
+          .label-content { 
+            display: flex; 
+            justify-content: space-between;
+            flex: 1;
+          }
+          .order-info { flex: 1; }
+          .info-line { margin: 1mm 0; }
+        </style>
+      </head>
+      <body>
+  `
+
+  labels.forEach(label => {
+    printContent += `
+      <div class="label">
+        <div class="label-header">
+          <div class="company-name">enviGo</div>
+          <div class="envigo-code">${label.unique_code}</div>
+        </div>
+        <div class="label-content">
+          <div class="order-info">
+            <div class="info-line"><strong>Pedido:</strong> #${label.order_number}</div>
+            <div class="info-line"><strong>Cliente:</strong> ${label.customer_name}</div>
+            <div class="info-line"><strong>Teléfono:</strong> ${label.customer_phone || 'No disponible'}</div>
+            <div class="info-line"><strong>Dirección:</strong> ${label.shipping_address}</div>
+            <div class="info-line"><strong>Comuna:</strong> ${label.shipping_commune}</div>
+            ${label.notes ? `<div class="info-line"><strong>Notas:</strong> ${label.notes}</div>` : ''}
+          </div>
+        </div>
+      </div>
+    `
+  })
+
+  printContent += `</body></html>`
+
+  const printWindow = window.open('', '_blank', 'width=800,height=600')
+  printWindow.document.write(printContent)
+  printWindow.document.close()
+  printWindow.focus()
+  printWindow.print()
+
+  // Marcar como impresas
+  labels.forEach(label => {
+    markLabelAsPrinted(label.order_id)
+  })
+}
+
+// ✅ Marcar etiqueta como impresa
+async function markLabelAsPrinted(orderId) {
+  try {
+    await apiService.labels.markPrinted(orderId)
+  } catch (error) {
+    console.error('Error marcando etiqueta como impresa:', error)
+  }
+}
+
+// ✅ Manejar cierre del modal
+function closeLabelsModal() {
+  showLabelsModal.value = false
+}
+
+// ✅ Callback cuando se generan etiquetas desde el modal
+function onLabelsGenerated(labels) {
+  toast.success(`${labels.length} etiquetas generadas exitosamente`)
+  
+  // Actualizar pedidos localmente
+  labels.forEach(label => {
+    const orderIndex = orders.value.findIndex(o => o._id === label.order_id)
+    if (orderIndex !== -1) {
+      orders.value[orderIndex].envigo_label = {
+        unique_code: label.unique_code,
+        generated_at: new Date()
+      }
+    }
+  })
+
+  closeLabelsModal()
+  selectedOrders.value = []
+}
+/**
+ * Limpiar cola de notificaciones antiguas
+ */
+function cleanupNotificationQueue() {
+  const now = Date.now()
+  const QUEUE_CLEANUP_TIME = 30000 // 30 segundos
+  
+  orderUpdateQueue.value = orderUpdateQueue.value.filter(notification => 
+    now - notification.timestamp.getTime() < QUEUE_CLEANUP_TIME
+  )
+}
+
+/**
+ * Toggle para habilitar/deshabilitar tiempo real
+ */
+function toggleRealTime() {
+  realTimeEnabled.value = !realTimeEnabled.value
+  
+  if (realTimeEnabled.value) {
+    toast.success('⚡ Actualizaciones en tiempo real activadas')
+  } else {
+    toast.info('⏸️ Actualizaciones en tiempo real pausadas')
+    pendingOrderUpdates.value.clear()
+    orderUpdateQueue.value = []
+  }
+}
+async function printManifestDirectly(manifestId) {
+  try {
+    console.log('🖨️ Obteniendo datos del manifiesto para impresión:', manifestId);
+    
+    // Obtener datos completos del manifiesto
+    const { data: manifestData } = await apiService.manifests.getById(manifestId);
+    
+    // Generar HTML de impresión
+    const printContent = createManifestPrintHTML(manifestData);
+    
+    // ✅ IMPRESIÓN DIRECTA: Crear iframe oculto
+    const printFrame = document.createElement('iframe');
+    printFrame.style.position = 'absolute';
+    printFrame.style.left = '-9999px';
+    printFrame.style.top = '-9999px';
+    printFrame.style.width = '0px';
+    printFrame.style.height = '0px';
+    
+    document.body.appendChild(printFrame);
+    
+    try {
+      const frameDoc = printFrame.contentDocument || printFrame.contentWindow.document;
+      frameDoc.open();
+      frameDoc.write(printContent);
+      frameDoc.close();
+      
+      // ✅ Imprimir directamente cuando esté listo
+      printFrame.onload = () => {
+        setTimeout(() => {
+          printFrame.contentWindow.focus();
+          printFrame.contentWindow.print();
+          
+          // ✅ Limpiar después de imprimir
+          setTimeout(() => {
+            document.body.removeChild(printFrame);
+          }, 1000);
+        }, 500);
+      };
+      
+      // Marcar como impreso
+      await apiService.manifests.updateStatus(manifestId, 'printed');
+      
+      toast.success('✅ Manifiesto enviado a impresión');
+      
+    } catch (error) {
+      console.error('❌ Error en impresión:', error);
+      toast.error('Error al preparar impresión');
+      document.body.removeChild(printFrame);
+    }
+    
+  } catch (error) {
+    console.error('❌ Error obteniendo manifiesto:', error);
+    toast.error('Error al cargar datos para impresión');
+  }
+}
 function createManifestPrintHTML(manifestData) {
   const orders = getManifestOrders(manifestData);
   const totalPackages = orders.reduce((total, order) => {
@@ -1931,208 +2155,6 @@ function getManifestOrders(manifestData) {
   }
   return [];
 }
-
-function getCompanyName(manifestData) {
-  return manifestData?.company_id?.name || 
-         manifestData?.manifest_data?.company?.name || 
-         'Empresa';
-}
-
-function getCompanyAddress(manifestData) {
-  return manifestData?.company_id?.address || 
-         manifestData?.manifest_data?.company?.address || 
-         'Dirección no especificada';
-}
-
-function getCompanyPhone(manifestData) {
-  return manifestData?.company_id?.phone || 
-         manifestData?.manifest_data?.company?.phone;
-}
-
-function formatDate(dateString) {
-  if (!dateString) return 'N/A';
-  
-  const options = { 
-    year: 'numeric', 
-    month: 'long', 
-    day: 'numeric', 
-    hour: '2-digit', 
-    minute: '2-digit' 
-  };
-  return new Date(dateString).toLocaleDateString('es-CL', options);
-}
-
-// ✅ Imprimir etiquetas generadas
-function printLabels(labels) {
-  let printContent = `
-    <html>
-      <head>
-        <title>Etiquetas enviGo - ${labels.length} etiquetas</title>
-        <style>
-          @page { size: A4; margin: 10mm; }
-          body { font-family: Arial, sans-serif; font-size: 12px; }
-          .label { 
-            width: 180mm; 
-            height: 60mm; 
-            border: 2px solid #000; 
-            margin-bottom: 10mm; 
-            padding: 5mm; 
-            page-break-inside: avoid;
-            display: flex;
-            flex-direction: column;
-          }
-          .label-header { 
-            text-align: center; 
-            border-bottom: 1px solid #000; 
-            padding-bottom: 3mm;
-            margin-bottom: 3mm;
-          }
-          .company-name { font-size: 16px; font-weight: bold; }
-          .envigo-code { 
-            font-size: 20px; 
-            font-weight: bold; 
-            color: #dc2626; 
-            margin: 2mm 0;
-          }
-          .label-content { 
-            display: flex; 
-            justify-content: space-between;
-            flex: 1;
-          }
-          .order-info { flex: 1; }
-          .info-line { margin: 1mm 0; }
-        </style>
-      </head>
-      <body>
-  `
-
-  labels.forEach(label => {
-    printContent += `
-      <div class="label">
-        <div class="label-header">
-          <div class="company-name">enviGo</div>
-          <div class="envigo-code">${label.unique_code}</div>
-        </div>
-        <div class="label-content">
-          <div class="order-info">
-            <div class="info-line"><strong>Pedido:</strong> #${label.order_number}</div>
-            <div class="info-line"><strong>Cliente:</strong> ${label.customer_name}</div>
-            <div class="info-line"><strong>Teléfono:</strong> ${label.customer_phone || 'No disponible'}</div>
-            <div class="info-line"><strong>Dirección:</strong> ${label.shipping_address}</div>
-            <div class="info-line"><strong>Comuna:</strong> ${label.shipping_commune}</div>
-            ${label.notes ? `<div class="info-line"><strong>Notas:</strong> ${label.notes}</div>` : ''}
-          </div>
-        </div>
-      </div>
-    `
-  })
-
-  printContent += `</body></html>`
-
-  const printWindow = window.open('', '_blank', 'width=800,height=600')
-  printWindow.document.write(printContent)
-  printWindow.document.close()
-  printWindow.focus()
-  printWindow.print()
-
-  // Marcar como impresas
-  labels.forEach(label => {
-    markLabelAsPrinted(label.order_id)
-  })
-}
-
-// ✅ Marcar etiqueta como impresa
-async function markLabelAsPrinted(orderId) {
-  try {
-    await apiService.labels.markPrinted(orderId)
-  } catch (error) {
-    console.error('Error marcando etiqueta como impresa:', error)
-  }
-}
-
-// ✅ Manejar cierre del modal
-function closeLabelsModal() {
-  showLabelsModal.value = false
-}
-
-// ✅ Callback cuando se generan etiquetas desde el modal
-function onLabelsGenerated(labels) {
-  toast.success(`${labels.length} etiquetas generadas exitosamente`)
-  
-  // Actualizar pedidos localmente
-  labels.forEach(label => {
-    const orderIndex = orders.value.findIndex(o => o._id === label.order_id)
-    if (orderIndex !== -1) {
-      orders.value[orderIndex].envigo_label = {
-        unique_code: label.unique_code,
-        generated_at: new Date()
-      }
-    }
-  })
-
-  closeLabelsModal()
-  selectedOrders.value = []
-}
-/**
- * Limpiar cola de notificaciones antiguas
- */
-function cleanupNotificationQueue() {
-  const now = Date.now()
-  const QUEUE_CLEANUP_TIME = 30000 // 30 segundos
-  
-  orderUpdateQueue.value = orderUpdateQueue.value.filter(notification => 
-    now - notification.timestamp.getTime() < QUEUE_CLEANUP_TIME
-  )
-}
-
-/**
- * Toggle para habilitar/deshabilitar tiempo real
- */
-function toggleRealTime() {
-  realTimeEnabled.value = !realTimeEnabled.value
-  
-  if (realTimeEnabled.value) {
-    toast.success('⚡ Actualizaciones en tiempo real activadas')
-  } else {
-    toast.info('⏸️ Actualizaciones en tiempo real pausadas')
-    pendingOrderUpdates.value.clear()
-    orderUpdateQueue.value = []
-  }
-}
-async function printManifestDirectly(manifestId) {
-  try {
-    console.log('🖨️ Obteniendo datos del manifiesto para impresión:', manifestId);
-    
-    // Obtener datos completos del manifiesto
-    const { data: manifestData } = await apiService.manifests.getById(manifestId);
-    
-    // Generar HTML de impresión usando la misma lógica de PickupManifest.vue
-    const printContent = createManifestPrintHTML(manifestData);
-    
-    // Abrir ventana de impresión
-    const printWindow = window.open('', '', 'width=800,height=600');
-    printWindow.document.write(printContent);
-    printWindow.document.close();
-    printWindow.focus();
-
-    printWindow.onload = () => {
-      setTimeout(() => {
-        printWindow.print();
-        printWindow.close();
-      }, 500);
-    };
-    
-    // Marcar como impreso
-    await apiService.manifests.updateStatus(manifestId, 'printed');
-    
-    toast.success('✅ Manifiesto enviado a impresión');
-    
-  } catch (error) {
-    console.error('❌ Error imprimiendo manifiesto:', error);
-    toast.error('Error al imprimir manifiesto');
-  }
-}
-
 /**
  * Obtener estadísticas de tiempo real
  */
