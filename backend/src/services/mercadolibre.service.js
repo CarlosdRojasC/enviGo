@@ -711,6 +711,139 @@ static mapOrderStatus(mlOrder) {
   console.log(`⚠️ [ML Status] No se pudo mapear el status, usando 'pending' por defecto. Status: ${mlOrder.status}, Shipping: ${mlOrder.shipping?.status}`);
   return 'pending';
 }
+
+static async debugShipmentStructure(shippingId, accessToken) {
+  if (!shippingId) {
+    console.log('❌ [ML Debug] No hay shipping ID');
+    return null;
+  }
+
+  try {
+    console.log(`🔍 [ML Debug] === ANALIZANDO SHIPMENT ${shippingId} ===`);
+    
+    const response = await axios.get(`${this.API_BASE_URL}/shipments/${shippingId}`, {
+      headers: { 'Authorization': `Bearer ${accessToken}` },
+      timeout: 15000
+    });
+
+    const shipment = response.data;
+    
+    // ✅ MOSTRAR ESTRUCTURA COMPLETA
+    console.log(`📦 [ML Debug] SHIPMENT COMPLETO ${shippingId}:`);
+    console.log(JSON.stringify(shipment, null, 2));
+    
+    // ✅ ANALIZAR CAMPOS ESPECÍFICOS
+    console.log(`🔍 [ML Debug] ANÁLISIS DE CAMPOS:`);
+    console.log(`   - ID: ${shipment.id}`);
+    console.log(`   - Status: ${shipment.status}`);
+    console.log(`   - Substatus: ${shipment.substatus}`);
+    console.log(`   - Mode: ${shipment.mode}`);
+    console.log(`   - Logistic: ${JSON.stringify(shipment.logistic)}`);
+    console.log(`   - Logistic_type: ${shipment.logistic_type}`);
+    console.log(`   - Shipping_mode: ${shipment.shipping_mode}`);
+    console.log(`   - Service_id: ${shipment.service_id}`);
+    console.log(`   - Type: ${shipment.type}`);
+    
+    // ✅ BUSCAR CUALQUIER CAMPO QUE CONTENGA "self", "flex", "service"
+    console.log(`🔍 [ML Debug] BUSCANDO CAMPOS CON 'FLEX' o 'SERVICE':`);
+    Object.keys(shipment).forEach(key => {
+      const value = shipment[key];
+      const keyLower = key.toLowerCase();
+      const valueLower = typeof value === 'string' ? value.toLowerCase() : '';
+      
+      if (keyLower.includes('flex') || keyLower.includes('service') || 
+          keyLower.includes('logistic') || keyLower.includes('mode') ||
+          valueLower.includes('flex') || valueLower.includes('service') ||
+          valueLower.includes('self')) {
+        console.log(`   *** ${key}: ${JSON.stringify(value)}`);
+      }
+    });
+    
+    // ✅ VERIFICAR SI HAY PROPIEDADES ANIDADAS
+    console.log(`🔍 [ML Debug] PROPIEDADES ANIDADAS:`);
+    Object.keys(shipment).forEach(key => {
+      const value = shipment[key];
+      if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+        console.log(`   - ${key}:`, JSON.stringify(value, null, 4));
+      }
+    });
+
+    return shipment;
+  } catch (error) {
+    console.error(`❌ [ML Debug] Error obteniendo shipment ${shippingId}:`, error.response?.status, error.message);
+    return null;
+  }
+}
+
+/**
+ * ✅ FUNCIÓN DE DEBUG PARA PEDIDOS: Analiza un pedido específico
+ */
+static async debugOrderStructure(orderId, accessToken) {
+  try {
+    console.log(`🔍 [ML Debug] === ANALIZANDO PEDIDO ${orderId} ===`);
+    
+    // 1. OBTENER PEDIDO COMPLETO
+    const orderResponse = await axios.get(`${this.API_BASE_URL}/orders/${orderId}`, {
+      headers: { 'Authorization': `Bearer ${accessToken}` },
+      timeout: 15000
+    });
+
+    const order = orderResponse.data;
+    
+    console.log(`📦 [ML Debug] PEDIDO COMPLETO ${orderId}:`);
+    console.log(JSON.stringify(order, null, 2));
+    
+    // 2. ANALIZAR SHIPMENT SI EXISTE
+    if (order.shipping?.id) {
+      console.log(`🚛 [ML Debug] El pedido tiene shipment ID: ${order.shipping.id}`);
+      await this.debugShipmentStructure(order.shipping.id, accessToken);
+    } else {
+      console.log(`❌ [ML Debug] El pedido NO tiene shipment ID`);
+    }
+    
+    // 3. BUSCAR INDICADORES DE FLEX EN EL PEDIDO
+    console.log(`🔍 [ML Debug] BUSCANDO INDICADORES FLEX EN EL PEDIDO:`);
+    console.log(`   - Tags: ${JSON.stringify(order.tags)}`);
+    console.log(`   - Shipping: ${JSON.stringify(order.shipping)}`);
+    
+    return order;
+  } catch (error) {
+    console.error(`❌ [ML Debug] Error obteniendo pedido ${orderId}:`, error.response?.status, error.message);
+    return null;
+  }
+}
+
+/**
+ * ✅ FUNCIÓN TEMPORAL: Debug específico para tus pedidos
+ */
+static async debugSpecificOrders(channelId) {
+  console.log(`🔍 [ML Debug] === INICIANDO DEBUG ESPECÍFICO ===`);
+  
+  const channel = await Channel.findById(channelId);
+  if (!channel) {
+    throw new Error('Canal no encontrado');
+  }
+
+  const accessToken = await this.getAccessToken(channel);
+  
+  // Lista de IDs de pedidos de tus logs
+  const orderIds = [
+    '2000012529328228',
+    '2000012492133130', 
+    '2000012489675218'
+  ];
+  
+  for (const orderId of orderIds) {
+    console.log(`\n================================================`);
+    await this.debugOrderStructure(orderId, accessToken);
+    console.log(`================================================\n`);
+    
+    // Pausa para no saturar la API
+    await new Promise(resolve => setTimeout(resolve, 1000));
+  }
+  
+  console.log(`✅ [ML Debug] DEBUG COMPLETADO`);
+}
 }
 
 module.exports = MercadoLibreService;
