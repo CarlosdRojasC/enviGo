@@ -524,7 +524,7 @@ static async syncOrders(channel, dateFrom, dateTo) {
       // 🎯 FILTROS ESPECÍFICOS PARA PEDIDOS PREPARADOS
       params.append('status', 'any'); // Solo pedidos abiertos
       params.append('financial_status', 'paid'); // Solo pedidos pagados
-      params.append('fulfillment_status', 'fulfilled'); // 🎯 SOLO NO CUMPLIDOS (preparados)
+      params.append('fulfillment_status', 'shipped'); // 🎯 SOLO NO CUMPLIDOS (preparados)
       
       params.append('limit', '100'); // Máximo 100 pedidos del día
       params.append('fields', 'id,name,email,created_at,updated_at,total_price,currency,financial_status,fulfillment_status,shipping_address,billing_address,customer,line_items,note,cancelled_at,phone'); // Solo campos necesarios
