@@ -582,14 +582,6 @@ static async processWebhook(channelId, webhookData) {
   const mlOrder = orderResponse.data;
 
   console.log(`📦 [ML Webhook] Procesando pedido ${mlOrder.id}`);
-  
-const ignoredStatuses = ['delivered', 'not_delivered', 'cancelled'];
-const shippingStatus = mlOrder.shipping?.status;
-
-if (ignoredStatuses.includes(shippingStatus)) {
-  console.log(`⏭️ [ML Webhook] Pedido ${mlOrder.id} ignorado (estado: ${shippingStatus}).`);
-  return true;
-}
 
   // ✅ USAR LA NUEVA FUNCIÓN DE DETECCIÓN CON SHIPMENT
   const isFlex = await this.isFlexOrder(mlOrder, accessToken);
