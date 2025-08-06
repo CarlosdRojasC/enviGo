@@ -532,7 +532,7 @@ static async syncOrders(channel, dateFrom, dateTo) {
     }
     
     params.append('financial_status', 'paid');
-    params.append('status', 'fulfilled');
+params.append('fulfillment_status', 'fulfilled');
     params.append('limit', '50'); // ✅ MÁXIMO 50 PEDIDOS
     params.append('order', 'created_at desc'); // ✅ ORDENAR POR MÁS RECIENTES PRIMERO
     
