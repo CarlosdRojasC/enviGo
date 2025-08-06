@@ -359,7 +359,14 @@ static async getValidAccessToken(channel) {
 
 static async processOrder(mlOrder, channel) {
   console.log(`📦 [ML Process] Procesando pedido ${mlOrder.id}`);
-  
+   // 🔍 DEBUG COMPLETO: Mostrar información clave para entender por qué no es detectado como Flex
+  console.log(`🔍 [ML Debug] Datos de pedido ${mlOrder.id}:`, {
+    logistic_type: mlOrder.shipping?.logistic_type,
+    logistics_type: mlOrder.shipping?.logistics_type,
+    shipping_mode: mlOrder.shipping?.mode,
+    tags: mlOrder.tags,
+    shipping_status: mlOrder.shipping?.status,
+  });
   // ✅ FILTRO: Solo procesar pedidos Flex
   if (!MercadoLibreService.isFlexOrder(mlOrder)) {
     console.log(`⏭️ [ML Process] Pedido ${mlOrder.id} no es Flex, omitiendo...`);
