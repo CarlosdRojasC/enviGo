@@ -6,7 +6,7 @@ const { authenticateToken } = require('../middlewares/auth.middleware');
 const ShipdayService = require('../services/shipday.service');
 const shipdayController = require('../controllers/shipday.controller');
 const MercadoLibreService = require('../services/mercadolibre.service');
-
+const ShopifyService = require('../services/shopify.service');
 // OAuth MercadoLibre
 router.get('/channels/mercadolibre/auth', authenticateToken, async (req, res) => {
   try {
@@ -236,4 +236,18 @@ router.get('/debug/mercadolibre/:channelId/shipment/:shipmentId', async (req, re
     res.status(500).json({ error: error.message });
   }
 });
+router.post('/webhooks/shopify/:channel_id', async (req, res) => {
+  try {
+    console.log('🎯 WEBHOOK SHOPIFY RECIBIDO'); // Este log debería aparecer
+    
+    const { channel_id } = req.params;
+    const result = await ShopifyService.processWebhook(channel_id, req.body);
+    
+    res.status(200).json({ success: true, result });
+  } catch (error) {
+    console.error('❌ Error en webhook:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 module.exports = router;
