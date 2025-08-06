@@ -339,6 +339,16 @@ if (channel.channel_type === CHANNEL_TYPES.JUMPSELLER) {
         });
     }
 }
+// ✅ REGISTRAR WEBHOOKS AUTOMÁTICAMENTE PARA SHOPIFY
+if (channel.channel_type === CHANNEL_TYPES.SHOPIFY) {
+  try {
+    await ShopifyService.registerWebhooks(channel);
+    console.log(`✅ Webhooks registrados automáticamente para canal Shopify: ${channel._id}`);
+  } catch (webhookError) {
+    console.error('⚠️ Error registrando webhooks (canal creado exitosamente):', webhookError);
+    // No fallar la creación del canal por esto
+  }
+}
         // Respuesta para otros tipos de canal
         res.status(201).json({ 
             success: true,
