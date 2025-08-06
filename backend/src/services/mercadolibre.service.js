@@ -226,29 +226,24 @@ static async syncOrders(channelId, options = {}) {
 
   console.log(`🔄 Iniciando sincronización para canal ${channel.channel_name}`);
 
-  // ✅ ARREGLAR LA CREACIÓN DE FECHAS
   const now = new Date();
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(now.getDate() - 30);
 
-  // Usar las fechas de options si están disponibles, sino usar defaults
   let dateFrom, dateTo;
   
   if (options.dateFrom) {
-    // Si viene como string, convertir a Date
     dateFrom = typeof options.dateFrom === 'string' ? new Date(options.dateFrom) : options.dateFrom;
   } else {
     dateFrom = thirtyDaysAgo;
   }
   
   if (options.dateTo) {
-    // Si viene como string, convertir a Date
     dateTo = typeof options.dateTo === 'string' ? new Date(options.dateTo) : options.dateTo;
   } else {
     dateTo = now;
   }
 
-  // ✅ VERIFICAR QUE SON DATES VÁLIDOS
   if (!(dateFrom instanceof Date) || isNaN(dateFrom.getTime())) {
     console.error('❌ dateFrom no es una fecha válida:', dateFrom);
     dateFrom = thirtyDaysAgo;
@@ -265,18 +260,17 @@ static async syncOrders(channelId, options = {}) {
   });
 
   try {
-    // Obtener access token
-const accessToken = await this.getAccessToken(channel);
+    const accessToken = await this.getAccessToken(channel);
     
-    // Construir URL de la API de pedidos
+    // 1. OBTENER LISTA DE PEDIDOS (sin detalles completos)
     const apiUrl = `${this.API_BASE_URL}/orders/search`;
     const params = {
-  seller: channel.settings.user_id,
-  'order.date_created.from': dateFrom.toISOString(), // ✅ CON COMILLAS
-  'order.date_created.to': dateTo.toISOString(),     // ✅ CON COMILLAS
-  sort: 'date_desc',
-  limit: 50
-};
+      seller: channel.settings.user_id,
+      'order.date_created.from': dateFrom.toISOString(),
+      'order.date_created.to': dateTo.toISOString(),
+      sort: 'date_desc',
+      limit: 50
+    };
 
     console.log('🌐 [ML Sync] Consultando pedidos con params:', params);
 
@@ -294,71 +288,87 @@ const accessToken = await this.getAccessToken(channel);
       results: response.data.results?.length || 0
     });
 
-    // Procesar pedidos
-    const orders = response.data.results || [];
+    // 2. OBTENER DATOS COMPLETOS DE CADA PEDIDO
+    const orderIds = response.data.results || [];
     let syncedCount = 0;
     let errorCount = 0;
+    let skippedCount = 0;
 
-    let skippedCount = 0; // Agregar esta variable al inicio de la función
+    for (const basicOrder of orderIds) {
+      try {
+        console.log(`📦 [ML Sync] Obteniendo datos completos del pedido ${basicOrder.id}...`);
+        
+        // ✅ HACER CONSULTA INDIVIDUAL PARA OBTENER DATOS COMPLETOS
+        const fullOrderResponse = await axios.get(`${this.API_BASE_URL}/orders/${basicOrder.id}`, {
+          headers: { 'Authorization': `Bearer ${accessToken}` },
+          timeout: 15000
+        });
 
-for (const mlOrder of orders) {
-  try {
-    console.log(`📦 [ML Sync] Evaluando pedido ${mlOrder.id}...`);
-    
-    // ✅ USAR LA NUEVA FUNCIÓN DE DETECCIÓN
-    if (!this.isFlexOrder(mlOrder)) {
-      console.log(`⏭️ [ML Sync] Pedido ${mlOrder.id} omitido (no es Flex)`);
-      skippedCount++;
-      continue;
+        const fullOrder = fullOrderResponse.data;
+        console.log(`🔍 [ML Debug] Datos completos del pedido ${fullOrder.id}:`, {
+          logistic_type: fullOrder.shipping?.logistic_type,
+          logistics_type: fullOrder.shipping?.logistics_type,
+          shipping_mode: fullOrder.shipping?.shipping_mode,
+          shipping_status: fullOrder.shipping?.status,
+          tags: fullOrder.tags,
+          shipping_full: JSON.stringify(fullOrder.shipping, null, 2)
+        });
+
+        // ✅ AHORA SÍ VERIFICAR FLEX CON DATOS COMPLETOS
+        if (!this.isFlexOrder(fullOrder)) {
+          console.log(`⏭️ [ML Sync] Pedido ${fullOrder.id} omitido (no es Flex)`);
+          skippedCount++;
+          continue;
+        }
+
+        console.log(`✅ [ML Sync] Procesando pedido Flex ${fullOrder.id}`);
+
+        const existingOrder = await Order.findOne({
+          external_order_id: fullOrder.id.toString(),
+          channel_id: channel._id
+        });
+
+        if (existingOrder) {
+          // Actualizar pedido existente
+          existingOrder.status = this.mapOrderStatus(fullOrder);
+          existingOrder.raw_data = fullOrder;
+          await existingOrder.save();
+          console.log(`🔄 [ML Sync] Pedido ${fullOrder.id} actualizado`);
+        } else {
+          // Crear nuevo pedido
+          await this.createOrderFromApiData(fullOrder, channel, accessToken);
+          console.log(`➕ [ML Sync] Pedido ${fullOrder.id} creado`);
+        }
+        
+        syncedCount++;
+        
+        // ✅ PEQUEÑA PAUSA PARA NO SATURAR LA API
+        await new Promise(resolve => setTimeout(resolve, 200));
+        
+      } catch (error) {
+        console.error(`❌ [ML Sync] Error procesando pedido ${basicOrder.id}:`, error.message);
+        errorCount++;
+      }
     }
-
-    console.log(`✅ [ML Sync] Procesando pedido Flex ${mlOrder.id}`);
-
-    const existingOrder = await Order.findOne({
-      external_order_id: mlOrder.id.toString(),
-      channel_id: channel._id
-    });
-
-    if (existingOrder) {
-      // Actualizar pedido existente
-      existingOrder.status = this.mapOrderStatus(mlOrder);
-      existingOrder.raw_data = mlOrder;
-      await existingOrder.save();
-      console.log(`🔄 [ML Sync] Pedido ${mlOrder.id} actualizado`);
-    } else {
-      // Crear nuevo pedido
-      await this.createOrderFromApiData(mlOrder, channel, accessToken);
-      console.log(`➕ [ML Sync] Pedido ${mlOrder.id} creado`);
-    }
-    
-    syncedCount++;
-  } catch (error) {
-    console.error(`❌ [ML Sync] Error procesando pedido ${mlOrder.id}:`, error.message);
-    errorCount++;
-  }
-}
-
 
     // Actualizar última sincronización
     channel.last_sync_at = new Date();
     channel.sync_status = 'success';
     await channel.save();
 
-    console.log(`✅ [ML Sync] Sincronización completada: ${syncedCount} pedidos sincronizados, ${errorCount} errores`);
-
     console.log(`✅ [ML Sync] Sincronización completada:`);
-console.log(`   - ${syncedCount} pedidos Flex sincronizados`);
-console.log(`   - ${skippedCount} pedidos omitidos (no Flex)`);
-console.log(`   - ${errorCount} errores`);
-console.log(`   - ${orders.length} pedidos totales evaluados`);
+    console.log(`   - ${syncedCount} pedidos Flex sincronizados`);
+    console.log(`   - ${skippedCount} pedidos omitidos (no Flex)`);
+    console.log(`   - ${errorCount} errores`);
+    console.log(`   - ${orderIds.length} pedidos totales evaluados`);
 
-return {
-  success: true,
-  syncedCount,
-  errorCount,
-  skippedCount,
-  totalFound: orders.length
-};
+    return {
+      success: true,
+      syncedCount,
+      errorCount,
+      skippedCount,
+      totalFound: orderIds.length
+    };
 
   } catch (error) {
     console.error('❌ [ML Sync] Error en sincronización:', error.message);
@@ -371,27 +381,11 @@ return {
     throw error;
   }
 }
-static async getValidAccessToken(channel) {
-  console.log('🔑 [ML Auth] Verificando access token...');
-  
-  if (!channel.settings?.access_token) {
-    throw new Error('Canal no tiene access token configurado. Requiere reautorización.');
-  }
 
-  // ✅ USAR LA LÓGICA DE RENOVACIÓN QUE YA TIENES EN getAccessToken
-  try {
-    return await this.getAccessToken(channel);
-  } catch (error) {
-    console.error('❌ [ML Auth] Error obteniendo token válido:', error.message);
-    throw new Error('Token de MercadoLibre expirado. Reautoriza el canal desde la página de canales.');
-  }
-}
-/**
- * Detecta si un pedido es de tipo Flex usando múltiples criterios
- */
+// ✅ TAMBIÉN MEJORAR LA FUNCIÓN isFlexOrder PARA MOSTRAR MÁS INFORMACIÓN
 static isFlexOrder(mlOrder) {
   console.log(`🔍 [ML Debug] Analizando pedido ${mlOrder.id} para Flex:`);
-  console.log('📦 [ML Debug] Shipping data:', JSON.stringify(mlOrder.shipping, null, 2));
+  console.log('📦 [ML Debug] Shipping COMPLETO:', JSON.stringify(mlOrder.shipping, null, 2));
   console.log('📦 [ML Debug] Tags:', JSON.stringify(mlOrder.tags, null, 2));
   
   // MÉTODO 1: Verificar logistics_type
@@ -429,9 +423,47 @@ static isFlexOrder(mlOrder) {
     console.log(`✅ [ML Debug] Pedido ${mlOrder.id} es Flex (fulfillment)`);
     return true;
   }
+
+  // MÉTODO 6: Verificar por mode (sin shipping_)
+  if (mlOrder.shipping?.mode === 'me2') {
+    console.log(`✅ [ML Debug] Pedido ${mlOrder.id} es Flex (mode = me2)`);
+    return true;
+  }
+
+  // MÉTODO 7: Si no hay shipping ID, podría ser dropshipping/flex
+  if (!mlOrder.shipping?.id && mlOrder.tags?.includes('flex')) {
+    console.log(`✅ [ML Debug] Pedido ${mlOrder.id} es Flex (sin shipping ID + tag flex)`);
+    return true;
+  }
   
   console.log(`❌ [ML Debug] Pedido ${mlOrder.id} NO es Flex`);
+  console.log(`🔍 [ML Debug] Resumen del shipping:`, {
+    hasShipping: !!mlOrder.shipping,
+    shippingId: mlOrder.shipping?.id,
+    logisticType: mlOrder.shipping?.logistic_type,
+    logisticsType: mlOrder.shipping?.logistics_type,
+    mode: mlOrder.shipping?.mode,
+    shippingMode: mlOrder.shipping?.shipping_mode,
+    tagsCount: mlOrder.tags?.length || 0,
+    firstTag: mlOrder.tags?.[0]
+  });
+  
   return false;
+}
+static async getValidAccessToken(channel) {
+  console.log('🔑 [ML Auth] Verificando access token...');
+  
+  if (!channel.settings?.access_token) {
+    throw new Error('Canal no tiene access token configurado. Requiere reautorización.');
+  }
+
+  // ✅ USAR LA LÓGICA DE RENOVACIÓN QUE YA TIENES EN getAccessToken
+  try {
+    return await this.getAccessToken(channel);
+  } catch (error) {
+    console.error('❌ [ML Auth] Error obteniendo token válido:', error.message);
+    throw new Error('Token de MercadoLibre expirado. Reautoriza el canal desde la página de canales.');
+  }
 }
 
 static async processOrder(mlOrder, channel) {
