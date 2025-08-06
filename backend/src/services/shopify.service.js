@@ -848,7 +848,7 @@ static getCustomerName(order, validatedAddress = null) {
     if (shopifyOrder.cancelled_at) return 'cancelled';
     
     // Entregado
-    if (shopifyOrder.fulfillment_status === 'fulfilled') return 'pending';
+    if (shopifyOrder.fulfillment_status === 'shipped') return 'pending';
     
     // En proceso
     if (shopifyOrder.fulfillment_status === 'partial') return 'processing';
