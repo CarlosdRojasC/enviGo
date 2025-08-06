@@ -507,7 +507,7 @@ static async syncOrders(channel, dateFrom, dateTo) {
       console.log(`📋 Comunas permitidas: ${allowedCommunes.join(', ')}`);
       
       // 🗓️ NUEVA LÓGICA: Solo pedidos del día actual
-const today = new Date();
+      const today = new Date();
       const yesterday = new Date(today);
       yesterday.setDate(yesterday.getDate() - 1);
 
