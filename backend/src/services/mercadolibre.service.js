@@ -646,26 +646,42 @@ static async processWebhook(channelId, webhookData) {
   /**
    * Obtiene la información de envío detallada.
    */
-  static async getShippingInfo(order, accessToken) {
-    if (!order.shipping?.id) return { address: 'Sin información de envío' };
+static async getShippingInfo(order, accessToken) {
+  if (!order.shipping?.id) return { address: 'Sin información de envío' };
+  
+  try {
+    const { data: shipping } = await axios.get(`${this.API_BASE_URL}/shipments/${order.shipping.id}`, {
+      headers: { 
+        'Authorization': `Bearer ${accessToken}`,
+        'x-format-new': 'true'  // ← HEADER IMPORTANTE
+      },
+    });
     
-    try {
-      const { data: shipping } = await axios.get(`${this.API_BASE_URL}/shipments/${order.shipping.id}`, {
-        headers: { 'Authorization': `Bearer ${accessToken}` },
-      });
-      const addr = shipping.receiver_address;
-      return {
-        address: `${addr.street_name} ${addr.street_number}, ${addr.comment || ''}`.replace(/, $/, '').trim(),
-        city: addr.city.name,
-        state: addr.state.name,
-        zip_code: addr.zip_code,
-        phone: addr.receiver_phone,
-      };
-    } catch (error) {
-      console.error(`[ML Service] No se pudo obtener info de envío para ${order.id}:`, error.message);
-      return { address: 'Error al obtener dirección' };
+    console.log('🔍 [ML Debug] Datos de shipment completos para teléfono:', {
+      receiver_phone: shipping.receiver_phone,
+      destination_phone: shipping.destination?.receiver_phone,
+      destination_name: shipping.destination?.receiver_name
+    });
+    
+    // ✅ USAR LA ESTRUCTURA CORRECTA: destination.shipping_address
+    const addr = shipping.destination?.shipping_address || shipping.receiver_address;
+    
+    if (!addr) {
+      return { address: 'Sin información de dirección' };
     }
+    
+    return {
+      address: `${addr.street_name} ${addr.street_number}, ${addr.comment || ''}`.replace(/, $/, '').trim(),
+      city: addr.city?.name || '',
+      state: addr.state?.name || '',
+      zip_code: addr.zip_code || '',
+      phone: shipping.destination?.receiver_phone || shipping.receiver_phone || '', // ← CAMPO CORRECTO
+    };
+  } catch (error) {
+    console.error(`[ML Service] No se pudo obtener info de envío para ${order.id}:`, error.message);
+    return { address: 'Error al obtener dirección' };
   }
+}
 /**
  * Verifica si un pedido es de tipo Flex
  * @param {Object} mlOrder - Pedido de MercadoLibre
