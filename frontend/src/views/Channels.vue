@@ -345,35 +345,16 @@
       </form>
     </Modal>
     <!-- Modal de detalles simplificado -->
-    <Modal v-model="showChannelDetailsModal" :title="`Detalles de ${selectedChannel?.channel_name}`" width="600px">
-      <div v-if="selectedChannel" class="channel-details-simple">
-        <div class="details-section">
-          <h4>Información General</h4>
-          <div class="detail-item">
-            <span class="detail-label">Tipo:</span>
-            <span class="detail-value">{{ getChannelTypeName(selectedChannel.channel_type) }}</span>
-          </div>
-          <div class="detail-item">
-            <span class="detail-label">URL:</span>
-            <span class="detail-value">{{ selectedChannel.store_url }}</span>
-          </div>
-          <div class="detail-item">
-            <span class="detail-label">Total Pedidos:</span>
-            <span class="detail-value">{{ selectedChannel.total_orders || 0 }}</span>
-          </div>
-          <div class="detail-item">
-            <span class="detail-label">Última Sincronización:</span>
-            <span class="detail-value">{{ formatDate(selectedChannel.last_sync_at) }}</span>
-          </div>
-        </div>
-        
-        <div class="details-actions">
-          <button @click="syncChannel(selectedChannel._id)" class="btn-sync">
-            Sincronizar Ahora
-          </button>
-        </div>
-      </div>
-    </Modal>
+    <!-- Modal de detalles completo -->
+<Modal v-model="showChannelDetailsModal" :title="`Detalles de ${selectedChannel?.channel_name}`" width="900px">
+  <ChannelDetails 
+    v-if="selectedChannel" 
+    :channel="selectedChannel"
+    @sync="handleChannelSync"
+    @edit="handleChannelEdit"
+    @refresh="refreshChannels"
+  />
+</Modal>
 
     <!-- Modal de confirmación de eliminación -->
     <Modal v-model="showDeleteModal" title="Confirmar Eliminación" width="400px">
@@ -403,6 +384,7 @@ import { useAuthStore } from '../store/auth'
 import { apiService } from '../services/api'
 import Modal from '../components/Modal.vue'
 import channelsService from '../services/channels.service'
+import ChannelDetails from '../components/ChannelDetails.vue'
 
 // ==================== ESTADO ====================
 const auth = useAuthStore()
@@ -576,7 +558,20 @@ async function fetchChannels() {
     loading.value = false
   }
 }
+function showChannelDetails(channel) {
+  selectedChannel.value = channel
+  showChannelDetailsModal.value = true
+}
+function handleChannelSync(channelId) {
+  // Reutilizar el método existente
+  syncChannel(channelId)
+}
 
+function handleChannelEdit(channel) {
+  // Implementar edición si es necesario
+  console.log('Editar canal:', channel)
+  toast.info('Funcionalidad de edición próximamente')
+}
 async function fetchCompanies() {
   if (!auth.isAdmin) return
   

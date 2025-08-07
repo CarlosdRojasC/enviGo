@@ -502,9 +502,37 @@ async syncOrders(req, res) {
       break;
       
     case CHANNEL_TYPES.MERCADOLIBRE:
-      console.log('🏪 [Controller] Ejecutando sincronización MercadoLibre');
-      syncResult = await MercadoLibreService.syncOrders(channel, date_from, date_to);
-      break;
+      console.log('🏪 [Controller] Verificando estado de MercadoLibre');
+      
+      // ✅ VERIFICAR SI YA SE HIZO LA SINCRONIZACIÓN INICIAL
+      if (channel.settings?.initial_sync_completed) {
+        console.log('ℹ️ [ML] Canal ya inicializado - Webhook activo');
+        
+        // Actualizar solo la fecha de última verificación
+        channel.last_sync_at = new Date();
+        await channel.save();
+        
+        return res.json({ 
+          success: true,
+          message: 'Canal de MercadoLibre funcionando correctamente',
+          details: 'Los pedidos nuevos llegan automáticamente por webhook. No se requiere sincronización manual.',
+          orders_imported: 0,
+          webhook_enabled: true,
+          initial_sync_completed: true,
+          last_sync: new Date(),
+          note: 'El webhook procesa pedidos Flex en tiempo real'
+        });
+      }
+      
+      // ✅ SI ES PRIMERA VEZ, HACER SINCRONIZACIÓN INICIAL
+      console.log('🔄 [ML] Ejecutando sincronización inicial por única vez');
+      syncResult = await MercadoLibreService.syncInitialOrders(channel._id);
+      
+      // Marcar como completada la sincronización inicial
+      if (syncResult.success) {
+        console.log('✅ [ML] Sincronización inicial completada - Webhook ahora activo');
+      }
+  break;
       
     case CHANNEL_TYPES.JUMPSELLER:
     case 'jumpseller': // ✅ AGREGAR TAMBIÉN EL VALOR LITERAL

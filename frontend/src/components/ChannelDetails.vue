@@ -22,17 +22,74 @@
             <span class="btn-icon">✏️</span>
             Editar
           </button>
-          <button 
-            @click="$emit('sync', channel._id)" 
-            class="action-btn sync"
-            :disabled="syncing"
-          >
-            <span class="btn-icon">{{ syncing ? '⏳' : '🔄' }}</span>
-            {{ syncing ? 'Sincronizando...' : 'Sincronizar' }}
-          </button>
+<button 
+  v-if="channel.channel_type === 'mercadolibre'"
+  @click="handleMercadoLibreSync" 
+  :disabled="syncing || channel.settings?.initial_sync_completed"
+  :class="getMercadoLibreButtonClass()"
+  class="action-btn"
+>
+  <span class="btn-icon">{{ getMercadoLibreButtonIcon() }}</span>
+  {{ getMercadoLibreButtonText() }}
+</button>
+
+<!-- BOTÓN PARA OTROS CANALES -->
+<button 
+  v-else
+  @click="$emit('sync', channel._id)" 
+  class="action-btn sync"
+  :disabled="syncing"
+>
+  <span class="btn-icon">{{ syncing ? '⏳' : '🔄' }}</span>
+  {{ syncing ? 'Sincronizando...' : 'Sincronizar' }}
+</button>
         </div>
       </div>
+<!-- ✅ NUEVA SECCIÓN: Estado del Webhook (solo para MercadoLibre) -->
+      <div v-if="channel.channel_type === 'mercadolibre'" class="webhook-section">
+        <h3 class="section-title">🔔 Estado del Webhook</h3>
+        <div class="webhook-card" :class="getWebhookStatusClass()">
+          <div class="webhook-indicator">
+            <div class="webhook-icon">{{ getWebhookStatusIcon() }}</div>
+            <div class="webhook-info">
+              <h4 class="webhook-title">{{ getWebhookStatusTitle() }}</h4>
+              <p class="webhook-description">{{ getWebhookStatusDescription() }}</p>
+            </div>
+            <div class="webhook-status">
+              <div class="status-dot" :class="{ 'active': channel.settings?.initial_sync_completed, 'pending': !channel.settings?.initial_sync_completed }"></div>
+              <span class="status-text">
+                {{ channel.settings?.initial_sync_completed ? 'Activo' : 'Pendiente' }}
+              </span>
+            </div>
+          </div>
+          
+          <!-- Información del webhook -->
+          <div class="webhook-details">
+            <div class="webhook-detail">
+              <span class="detail-label">Filtros activos:</span>
+              <span class="detail-value">Solo Flex, No entregados</span>
+            </div>
+            <div class="webhook-detail">
+              <span class="detail-label">Sincronización inicial:</span>
+              <span class="detail-value">
+                {{ channel.settings?.initial_sync_completed ? 'Completada' : 'Pendiente' }}
+              </span>
+            </div>
+          </div>
 
+          <!-- Alerta si no hay sincronización inicial -->
+          <div v-if="!channel.settings?.initial_sync_completed" class="webhook-alert">
+            <div class="alert-content">
+              <svg class="alert-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z"></path>
+              </svg>
+              <div class="alert-text">
+                <strong>Acción requerida:</strong> Ejecuta la sincronización inicial para importar pedidos existentes
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
       <!-- Estadísticas principales -->
       <div class="stats-section">
         <h3 class="section-title">📊 Estadísticas Generales</h3>
@@ -415,6 +472,69 @@ function getLogStatusText(status) {
     pending: 'En progreso'
   }
   return statusTexts[status] || status
+}
+function getWebhookStatusClass() {
+  if (props.channel.settings?.initial_sync_completed) return 'webhook-active'
+  return 'webhook-pending'
+}
+
+function getWebhookStatusIcon() {
+  return props.channel.settings?.initial_sync_completed ? '✅' : '⚠️'
+}
+
+function getWebhookStatusTitle() {
+  return props.channel.settings?.initial_sync_completed 
+    ? 'Webhook Configurado' 
+    : 'Webhook Pendiente'
+}
+
+function getWebhookStatusDescription() {
+  return props.channel.settings?.initial_sync_completed
+    ? 'Los pedidos de MercadoLibre Flex llegan automáticamente en tiempo real'
+    : 'Requiere sincronización inicial para activar el webhook automático'
+}
+
+function getMercadoLibreButtonClass() {
+  if (syncing.value) return 'sync disabled'
+  if (props.channel.settings?.initial_sync_completed) return 'sync disabled'
+  return 'sync'
+}
+
+function getMercadoLibreButtonIcon() {
+  if (syncing.value) return '⏳'
+  if (props.channel.settings?.initial_sync_completed) return '✅'
+  return '🔄'
+}
+
+function getMercadoLibreButtonText() {
+  if (syncing.value) return 'Sincronizando...'
+  if (props.channel.settings?.initial_sync_completed) return 'Webhook Activo'
+  return 'Sincronización Inicial'
+}
+
+async function handleMercadoLibreSync() {
+  if (syncing.value || props.channel.settings?.initial_sync_completed) return
+  
+  syncing.value = true
+  try {
+    emit('sync', props.channel._id)
+  } finally {
+    syncing.value = false
+  }
+}
+
+function getWebhookConfigStatus() {
+  if (props.channel.channel_type === 'mercadolibre') {
+    return props.channel.settings?.initial_sync_completed
+  }
+  return !!(props.channel.webhook_secret || props.channel.webhook_url)
+}
+
+function getWebhookConfigText() {
+  if (props.channel.channel_type === 'mercadolibre') {
+    return props.channel.settings?.initial_sync_completed ? 'Configurado' : 'Pendiente'
+  }
+  return !!(props.channel.webhook_secret || props.channel.webhook_url) ? 'Sí' : 'No'
 }
 
 async function loadChannelDetails() {
@@ -1032,7 +1152,140 @@ watch(() => props.channel._id, () => {
   color: #1f2937;
   font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
 }
+/* ==================== WEBHOOK SECTION ==================== */
+.webhook-section {
+  margin-bottom: 32px;
+}
 
+.webhook-card {
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 24px;
+}
+
+.webhook-card.webhook-active {
+  border-color: #10b981;
+  background: #f0fdf4;
+}
+
+.webhook-card.webhook-pending {
+  border-color: #f59e0b;
+  background: #fffbeb;
+}
+
+.webhook-indicator {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.webhook-icon {
+  font-size: 32px;
+  width: 56px;
+  height: 56px;
+  background: white;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.webhook-info {
+  flex: 1;
+}
+
+.webhook-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #1f2937;
+  margin: 0 0 4px 0;
+}
+
+.webhook-description {
+  font-size: 14px;
+  color: #6b7280;
+  margin: 0;
+}
+
+.webhook-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.status-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #d1d5db;
+}
+
+.status-dot.active {
+  background: #10b981;
+  animation: pulse 2s infinite;
+}
+
+.status-dot.pending {
+  background: #f59e0b;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.status-text {
+  font-size: 14px;
+  font-weight: 500;
+  color: #1f2937;
+}
+
+.webhook-details {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.webhook-detail {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: white;
+  border-radius: 6px;
+  border: 1px solid #e5e7eb;
+}
+
+.webhook-alert {
+  background: #fef3c7;
+  border: 1px solid #f59e0b;
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.alert-content {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.alert-icon {
+  width: 20px;
+  height: 20px;
+  color: #d97706;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.alert-text {
+  font-size: 14px;
+  color: #92400e;
+  line-height: 1.4;
+}
 /* ==================== RESPONSIVE ==================== */
 @media (max-width: 768px) {
   .channel-header {
