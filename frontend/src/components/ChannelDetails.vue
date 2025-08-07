@@ -157,20 +157,10 @@
         </div>
       </div>
 
-      <!-- Configuración del canal -->
-      <div class="config-section">
+<!-- Configuración del canal -->
+<div class="config-section">
   <h3 class="section-title">⚙️ Configuración</h3>
   <div class="config-grid">
-    
-    <!-- ✅ SOLO PARA CANALES QUE NO SON MERCADOLIBRE -->
-    <div v-if="channel.channel_type !== 'mercadolibre'" class="config-item">
-      <div class="config-label">Sincronización automática</div>
-      <div class="config-value">
-        <span class="status-badge" :class="channel.auto_sync ? 'active' : 'inactive'">
-          {{ channel.auto_sync ? 'Activada' : 'Desactivada' }}
-        </span>
-      </div>
-    </div>
     
     <div class="config-item">
       <div class="config-label">Crear en Shipday automáticamente</div>
@@ -181,14 +171,8 @@
       </div>
     </div>
     
-    <!-- ✅ SOLO PARA CANALES QUE NO SON MERCADOLIBRE -->
-    <div v-if="channel.channel_type !== 'mercadolibre'" class="config-item">
-      <div class="config-label">Intervalo de sincronización</div>
-      <div class="config-value">{{ getSyncIntervalText() }}</div>
-    </div>
-    
-    <!-- ✅ CONFIGURACIÓN ESPECÍFICA PARA MERCADOLIBRE -->
-    <div v-if="channel.channel_type === 'mercadolibre'" class="config-item">
+    <!-- ✅ TODOS LOS CANALES USAN WEBHOOK EN TIEMPO REAL -->
+    <div class="config-item">
       <div class="config-label">Modo de sincronización</div>
       <div class="config-value">
         <span class="status-badge active">Webhook en tiempo real</span>
@@ -196,9 +180,7 @@
     </div>
     
     <div class="config-item">
-      <div class="config-label">
-        {{ channel.channel_type === 'mercadolibre' ? 'Webhook MercadoLibre' : 'Webhook configurado' }}
-      </div>
+      <div class="config-label">Webhook {{ getChannelTypeName(channel.channel_type) }}</div>
       <div class="config-value">
         <span class="status-badge" :class="getWebhookConfigStatus() ? 'active' : 'inactive'">
           {{ getWebhookConfigText() }}
@@ -206,10 +188,20 @@
       </div>
     </div>
     
-    <!-- ✅ INFORMACIÓN ADICIONAL PARA MERCADOLIBRE -->
+    <!-- ✅ INFORMACIÓN ESPECÍFICA POR TIPO DE CANAL -->
     <div v-if="channel.channel_type === 'mercadolibre'" class="config-item">
       <div class="config-label">Filtros aplicados</div>
       <div class="config-value">Solo Flex, No entregados</div>
+    </div>
+    
+    <div v-if="channel.channel_type === 'shopify'" class="config-item">
+      <div class="config-label">Eventos webhook</div>
+      <div class="config-value">Pedidos nuevos, actualizados, cancelados</div>
+    </div>
+    
+    <div v-if="channel.channel_type === 'woocommerce'" class="config-item">
+      <div class="config-label">Eventos webhook</div>
+      <div class="config-value">Todos los pedidos en tiempo real</div>
     </div>
     
   </div>
@@ -547,14 +539,16 @@ function getWebhookConfigStatus() {
   if (props.channel.channel_type === 'mercadolibre') {
     return props.channel.settings?.initial_sync_completed
   }
-  return !!(props.channel.webhook_secret || props.channel.webhook_url)
+  // Para todos los demás canales, asumir que webhook está configurado
+  return !!(props.channel.webhook_secret || props.channel.webhook_url || props.channel.api_key)
 }
 
 function getWebhookConfigText() {
   if (props.channel.channel_type === 'mercadolibre') {
     return props.channel.settings?.initial_sync_completed ? 'Configurado' : 'Pendiente'
   }
-  return !!(props.channel.webhook_secret || props.channel.webhook_url) ? 'Sí' : 'No'
+  // Para otros canales
+  return getWebhookConfigStatus() ? 'Configurado' : 'Pendiente'
 }
 
 async function loadChannelDetails() {
