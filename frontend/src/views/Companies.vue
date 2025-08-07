@@ -878,14 +878,28 @@ const sortField = ref('name')
 const sortDirection = ref('asc')
 const logoFile = ref(null);
 const logoPreview = ref(null);
-
+const logoUrl = ref(null) // URL final desde Cloudinary
 // Maneja el input file
-function handleLogoUpload(event) {
-  const file = event.target.files[0];
-  if (!file) return;
-  logoFile.value = file;
-  logoPreview.value = URL.createObjectURL(file);
+const handleLogoUpload = async (event) => {
+  const file = event.target.files[0]
+  if (!file) return
+
+  logoFile.value = file
+  logoPreview.value = URL.createObjectURL(file)
+
+  const formData = new FormData()
+  formData.append('file', file)
+  formData.append('upload_preset', 'enviGo') // tu preset en Cloudinary
+
+  try {
+    const res = await axios.post('https://api.cloudinary.com/v1_1/duzgvyc3b/image/upload', formData)
+    logoUrl.value = res.data.secure_url
+    console.log('Logo subido:', logoUrl.value)
+  } catch (err) {
+    console.error('Error subiendo a Cloudinary:', err)
+  }
 }
+
 // Computed properties
 const filteredCompanies = computed(() => {
   let result = [...companies.value]
@@ -1425,15 +1439,15 @@ const createCompany = async () => {
   try {
     console.log('🏢 Creando nueva empresa:', newCompanyForm.value.name)
 
-     if (logoFile.value) {
-      const formData = new FormData();
-      formData.append('logo', logoFile.value);
+      let logoUrl = null
 
-      const uploadRes = await axios.post(`/api/companies/upload-logo`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
+    if (logoFile.value) {
+      const formData = new FormData()
+      formData.append('file', logoFile.value)
+      formData.append('upload_preset', 'enviGo') // ← el tuyo de Cloudinary
 
-      newCompanyForm.logo_url = uploadRes.data.logo_url;
+      const cloudRes = await axios.post('https://api.cloudinary.com/v1_1/duzgvyc3b/image/upload', formData)
+      logoUrl = cloudRes.data.secure_url
     }
     await apiService.companies.create({
       // Datos de la empresa
@@ -1450,7 +1464,7 @@ const createCompany = async () => {
       owner_name: newCompanyForm.value.owner_name,
       owner_email: newCompanyForm.value.owner_email,
       owner_password: newCompanyForm.value.owner_password,
-      logo_url: newCompanyForm.value.logo_url || ''
+      logo_url: logoUrl || newCompanyForm.value.logo_url // Usar URL de Cloudinary o la proporcionada
     })
     
     toast.success('Empresa creada exitosamente')

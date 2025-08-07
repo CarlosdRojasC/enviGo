@@ -38,7 +38,7 @@ router.post('/:companyId/channels', authenticateToken, validateMongoId('companyI
 
 router.post('/:id/logo', upload.single('logo'), uploadLogo);
 
-router.post('/upload-logo', upload.single('logo'), async (req, res) => {
+router.put('/upload-logo', upload.single('logo'), async (req, res) => {
   try {
     if (!req.file?.path) return res.status(400).json({ error: 'No se subió imagen' });
 
