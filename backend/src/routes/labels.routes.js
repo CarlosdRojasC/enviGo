@@ -90,7 +90,7 @@ router.post('/print-bulk-pdf', async (req, res) => {
 
         // --- CONFIGURACIÓN DEL PDF ---
         const doc = new PDFDocument({
-            size: [283.5, 283.5], // Tamaño de etiqueta 10x10 cm
+            size: [283.5,425.25], // Tamaño de etiqueta 10x10 cm
             autoFirstPage: false, // Controlaremos la creación de páginas manualmente
             margins: { top: 20, bottom: 20, left: 20, right: 20 }
         });
@@ -101,26 +101,30 @@ router.post('/print-bulk-pdf', async (req, res) => {
         doc.pipe(res);
 
         // --- DIBUJAR CADA ETIQUETA EN UNA NUEVA PÁGINA ---
-        for (const order of orders) {
-            doc.addPage(); // Añade una nueva página para esta etiqueta
+          for (const order of orders) {
+            doc.addPage();
 
-            if (!order.envigo_label) continue; // Salta si no tiene etiqueta
+            if (!order.envigo_label) continue;
 
-            doc.font('Helvetica-Bold').fontSize(16).text('enviGo', { align: 'center' });
-            doc.moveDown(2);
+            // --- NUEVO: AÑADIMOS EL NOMBRE DE LA EMPRESA ---
+            const companyName = order.company_id?.name || 'Empresa'; // Nombre de la empresa o un texto por defecto
+            
+            doc.font('Helvetica-Bold').fontSize(16).text(companyName, { align: 'center' });
+            doc.moveDown(1.5);
 
+            // Código único
             doc.fontSize(32)
                .fillColor('#dc2626')
                .text(order.envigo_label.unique_code, { align: 'center' });
-            doc.moveDown(2);
+            doc.moveDown(1.5);
 
+            // Información del cliente
             doc.fillColor('black').font('Helvetica').fontSize(10);
             doc.text(`Pedido #${order.order_number}`, { align: 'left' });
             doc.font('Helvetica-Bold').text(order.customer_name, { align: 'left' });
             doc.font('Helvetica').text(order.shipping_address, { align: 'left' });
             doc.text(order.shipping_commune, { align: 'left' });
         }
-
         // Finalizar y enviar el PDF
         doc.end();
 
