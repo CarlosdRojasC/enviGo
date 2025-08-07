@@ -92,11 +92,15 @@ router.post('/mercadolibre', async (req, res) => {
     }
 
     // Buscar el canal que corresponde a este usuario de ML
-    const channel = await Channel.findOne({
-      channel_type: 'mercadolibre',
-      'settings.user_id': userId.toString(),
-      is_active: true
-    });
+  const channel = await Channel.findOne({
+  channel_type: 'mercadolibre',
+  // Usa $or para buscar el valor como número o como cadena
+  $or: [
+    { 'settings.user_id': userId },         // Busca el número original del webhook
+    { 'settings.user_id': userId.toString() } // Busca la versión en cadena de texto
+  ],
+  is_active: true
+});
 
     if (!channel) {
       console.log(`[ML Webhook] No se encontró canal activo para user_id: ${userId}`);
