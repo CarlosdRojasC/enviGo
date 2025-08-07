@@ -50,7 +50,7 @@
           </div>
 
           <div class="form-group">
-            <label class="form-label required">URL de la Tienda</label>
+            <label class="form-label required">URL de la Tienda (Con HTTPS)</label>
             <input 
               v-model="formData.store_url" 
               type="url" 
