@@ -162,15 +162,7 @@
   <h3 class="section-title">⚙️ Configuración</h3>
   <div class="config-grid">
     
-    <div class="config-item">
-      <div class="config-label">Crear en Shipday automáticamente</div>
-      <div class="config-value">
-        <span class="status-badge" :class="channel.auto_create_shipday ? 'active' : 'inactive'">
-          {{ channel.auto_create_shipday ? 'Activado' : 'Desactivado' }}
-        </span>
-      </div>
-    </div>
-    
+  
     <!-- ✅ TODOS LOS CANALES USAN WEBHOOK EN TIEMPO REAL -->
     <div class="config-item">
       <div class="config-label">Modo de sincronización</div>
