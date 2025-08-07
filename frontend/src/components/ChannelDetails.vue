@@ -159,41 +159,61 @@
 
       <!-- Configuración del canal -->
       <div class="config-section">
-        <h3 class="section-title">⚙️ Configuración</h3>
-        <div class="config-grid">
-          <div class="config-item">
-            <div class="config-label">Sincronización automática</div>
-            <div class="config-value">
-              <span class="status-badge" :class="channel.auto_sync ? 'active' : 'inactive'">
-                {{ channel.auto_sync ? 'Activada' : 'Desactivada' }}
-              </span>
-            </div>
-          </div>
-          
-          <div class="config-item">
-            <div class="config-label">Crear en Shipday automáticamente</div>
-            <div class="config-value">
-              <span class="status-badge" :class="channel.auto_create_shipday ? 'active' : 'inactive'">
-                {{ channel.auto_create_shipday ? 'Activado' : 'Desactivado' }}
-              </span>
-            </div>
-          </div>
-          
-          <div class="config-item">
-            <div class="config-label">Intervalo de sincronización</div>
-            <div class="config-value">{{ getSyncIntervalText() }}</div>
-          </div>
-          
-          <div class="config-item">
-            <div class="config-label">Webhook configurado</div>
-            <div class="config-value">
-              <span class="status-badge" :class="hasWebhook ? 'active' : 'inactive'">
-                {{ hasWebhook ? 'Sí' : 'No' }}
-              </span>
-            </div>
-          </div>
-        </div>
+  <h3 class="section-title">⚙️ Configuración</h3>
+  <div class="config-grid">
+    
+    <!-- ✅ SOLO PARA CANALES QUE NO SON MERCADOLIBRE -->
+    <div v-if="channel.channel_type !== 'mercadolibre'" class="config-item">
+      <div class="config-label">Sincronización automática</div>
+      <div class="config-value">
+        <span class="status-badge" :class="channel.auto_sync ? 'active' : 'inactive'">
+          {{ channel.auto_sync ? 'Activada' : 'Desactivada' }}
+        </span>
       </div>
+    </div>
+    
+    <div class="config-item">
+      <div class="config-label">Crear en Shipday automáticamente</div>
+      <div class="config-value">
+        <span class="status-badge" :class="channel.auto_create_shipday ? 'active' : 'inactive'">
+          {{ channel.auto_create_shipday ? 'Activado' : 'Desactivado' }}
+        </span>
+      </div>
+    </div>
+    
+    <!-- ✅ SOLO PARA CANALES QUE NO SON MERCADOLIBRE -->
+    <div v-if="channel.channel_type !== 'mercadolibre'" class="config-item">
+      <div class="config-label">Intervalo de sincronización</div>
+      <div class="config-value">{{ getSyncIntervalText() }}</div>
+    </div>
+    
+    <!-- ✅ CONFIGURACIÓN ESPECÍFICA PARA MERCADOLIBRE -->
+    <div v-if="channel.channel_type === 'mercadolibre'" class="config-item">
+      <div class="config-label">Modo de sincronización</div>
+      <div class="config-value">
+        <span class="status-badge active">Webhook en tiempo real</span>
+      </div>
+    </div>
+    
+    <div class="config-item">
+      <div class="config-label">
+        {{ channel.channel_type === 'mercadolibre' ? 'Webhook MercadoLibre' : 'Webhook configurado' }}
+      </div>
+      <div class="config-value">
+        <span class="status-badge" :class="getWebhookConfigStatus() ? 'active' : 'inactive'">
+          {{ getWebhookConfigText() }}
+        </span>
+      </div>
+    </div>
+    
+    <!-- ✅ INFORMACIÓN ADICIONAL PARA MERCADOLIBRE -->
+    <div v-if="channel.channel_type === 'mercadolibre'" class="config-item">
+      <div class="config-label">Filtros aplicados</div>
+      <div class="config-value">Solo Flex, No entregados</div>
+    </div>
+    
+  </div>
+</div>
 
       <!-- Actividad reciente -->
       <div class="activity-section">
