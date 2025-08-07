@@ -57,7 +57,8 @@ const ENVIGO_COMMUNES = [
   // Zona Sur-Oriente
   'La Florida',
   'Puente Alto',
-  'San Bernardo'
+  'San Bernardo',
+  'La Pintana',
 ];
 
 const COMMUNES_BY_ZONE = {
@@ -104,7 +105,8 @@ const COMMUNES_BY_ZONE = {
   'Zona Sur-Oriente': [
     'La Florida', 
     'Puente Alto', 
-    'San Bernardo'
+    'San Bernardo',
+    'La Pintana',
   ]
 };
 
