@@ -307,613 +307,286 @@ const activeTab = ref('pending')
 const allOrders = ref([])
 const stats = ref(null)
 
-// Selecciones para diferentes tabs
 const selectedPendingIds = ref([])
 const selectedPrintIds = ref([])
 const searchCode = ref('')
 
-// Filtros para impresión masiva
 const printFilters = ref({
-  status: '',
-  commune: ''
+  status: '',
+  commune: ''
 })
 const printableOrders = ref([])
 
 // ==================== COMPUTED PROPERTIES ====================
 const pendingOrders = computed(() => {
-  return allOrders.value.filter(order => !order.envigo_label?.unique_code)
+  return allOrders.value.filter(order => !order.envigo_label?.unique_code)
 })
 
 const labeledOrders = computed(() => {
-  return allOrders.value.filter(order => order.envigo_label?.unique_code)
+  return allOrders.value.filter(order => order.envigo_label?.unique_code)
 })
 
 const filteredLabeledOrders = computed(() => {
-  if (!searchCode.value) return labeledOrders.value
-  
-  const search = searchCode.value.toLowerCase()
-  return labeledOrders.value.filter(order => 
-    order.envigo_label?.unique_code?.toLowerCase().includes(search) ||
-    order.customer_name?.toLowerCase().includes(search) ||
-    order.order_number?.toLowerCase().includes(search)
-  )
+  if (!searchCode.value) return labeledOrders.value
+  
+  const search = searchCode.value.toLowerCase()
+  return labeledOrders.value.filter(order => 
+    order.envigo_label?.unique_code?.toLowerCase().includes(search) ||
+    order.customer_name?.toLowerCase().includes(search) ||
+    order.order_number?.toLowerCase().includes(search)
+  )
 })
 
 const availableCommunes = computed(() => {
-  const communes = new Set()
-  labeledOrders.value.forEach(order => {
-    if (order.shipping_commune) {
-      communes.add(order.shipping_commune)
-    }
-  })
-  return Array.from(communes).sort()
+  const communes = new Set()
+  labeledOrders.value.forEach(order => {
+    if (order.shipping_commune) {
+      communes.add(order.shipping_commune)
+    }
+  })
+  return Array.from(communes).sort()
 })
 
 const allPendingSelected = computed(() => {
-  return pendingOrders.value.length > 0 && 
-         selectedPendingIds.value.length === pendingOrders.value.length
+  return pendingOrders.value.length > 0 && 
+         selectedPendingIds.value.length === pendingOrders.value.length
 })
 
 const allPrintableSelected = computed(() => {
-  return printableOrders.value.length > 0 && 
-         selectedPrintIds.value.length === printableOrders.value.length
+  return printableOrders.value.length > 0 && 
+         selectedPrintIds.value.length === printableOrders.value.length
 })
-// SCRIPT PARTE 2 - MÉTODOS DE CARGA DE DATOS
 
-// ==================== LIFECYCLE ====================
+// ==================== LIFECYCLE & DATA LOADING ====================
 onMounted(() => {
-  loadData()
+  loadData()
 })
 
-// Aplicar filtros iniciales al cambiar de pestaña
 watch(activeTab, () => {
-  if (activeTab.value === 'print') {
-    applyPrintFilters()
-  }
+  if (activeTab.value === 'print') {
+    applyPrintFilters()
+  }
 })
 
-// ==================== MÉTODOS DE CARGA ====================
 async function loadData() {
-  loading.value = true
-  loadingMessage.value = 'Cargando pedidos...'
-  
-  try {
-    await Promise.all([
-      loadOrders(),
-      loadStats()
-    ])
-  } finally {
-    loading.value = false
-  }
+  loading.value = true
+  loadingMessage.value = 'Cargando pedidos...'
+  try {
+    await Promise.all([
+      loadOrders(),
+      loadStats()
+    ])
+  } finally {
+    loading.value = false
+  }
 }
 
 async function loadOrders() {
-  try {
-    const response = await apiService.orders.getAll({
-      status: ['pending', 'ready_for_pickup', 'out_for_delivery'],
-      limit: 500
-    })
-    allOrders.value = response.data.orders || []
-    console.log('📦 Pedidos cargados:', allOrders.value.length)
-  } catch (error) {
-    console.error('Error cargando pedidos:', error)
-    toast.error('Error cargando pedidos')
-  }
+  try {
+    const response = await apiService.orders.getAll({
+      status: ['pending', 'ready_for_pickup', 'out_for_delivery'],
+      limit: 500
+    })
+    allOrders.value = response.data.orders || []
+  } catch (error) {
+    toast.error('Error cargando pedidos')
+  }
 }
 
 async function loadStats() {
-  try {
-    const response = await apiService.labels.getStats()
-    stats.value = response.data.stats
-    console.log('📊 Estadísticas cargadas:', stats.value)
-  } catch (error) {
-    console.error('Error cargando estadísticas:', error)
-  }
+  try {
+    const response = await apiService.labels.getStats()
+    stats.value = response.data.stats
+  } catch (error) {
+    console.error('Error cargando estadísticas:', error)
+  }
 }
 
 function refreshData() {
-  console.log('🔄 Refrescando datos del gestor de etiquetas')
-  loadData()
+  loadData()
 }
-// SCRIPT PARTE 3 - MÉTODOS DE GENERACIÓN DE CÓDIGOS
 
-// ==================== GENERACIÓN DE CÓDIGOS ====================
+// ==================== GENERACIÓN DE CÓDIGOS (SIN CAMBIOS) ====================
 async function generateSingleCode(orderId) {
-  loading.value = true
-  loadingMessage.value = 'Generando código enviGo...'
-  
-  try {
-    console.log('🏷️ Generando código para pedido:', orderId)
-    const response = await apiService.labels.generateCode(orderId)
-    
-    // Actualizar el pedido localmente
-    const orderIndex = allOrders.value.findIndex(o => o._id === orderId)
-    if (orderIndex !== -1) {
-      allOrders.value[orderIndex].envigo_label = {
-        unique_code: response.data.label.unique_code,
-        generated_at: response.data.label.generated_at,
-        printed_count: 0
-      }
-    }
-    
-    toast.success(`Código generado: ${response.data.label.unique_code}`)
-    await loadStats()
-    
-  } catch (error) {
-    console.error('Error generando código:', error)
-    toast.error('Error generando código: ' + (error.response?.data?.error || error.message))
-  } finally {
-    loading.value = false
-  }
+  loading.value = true
+  loadingMessage.value = 'Generando código enviGo...'
+  try {
+    const response = await apiService.labels.generateCode(orderId)
+    const orderIndex = allOrders.value.findIndex(o => o._id === orderId)
+    if (orderIndex !== -1) {
+      allOrders.value[orderIndex].envigo_label = {
+        unique_code: response.data.label.unique_code,
+        generated_at: response.data.label.generated_at,
+        printed_count: 0
+      }
+    }
+    toast.success(`Código generado: ${response.data.label.unique_code}`)
+    await loadStats()
+  } catch (error) {
+    toast.error('Error generando código: ' + (error.response?.data?.error || error.message))
+  } finally {
+    loading.value = false
+  }
 }
 
 async function generateBulkCodes() {
-  if (selectedPendingIds.value.length === 0) {
-    toast.warning('Selecciona al menos un pedido')
-    return
-  }
+  if (selectedPendingIds.value.length === 0) return toast.warning('Selecciona al menos un pedido')
+  loading.value = true
+  loadingMessage.value = `Generando ${selectedPendingIds.value.length} códigos...`
+  try {
+    const response = await apiService.labels.generateBulk(selectedPendingIds.value)
+    response.data.labels.forEach(label => {
+      const orderIndex = allOrders.value.findIndex(o => o._id === label.order_id)
+      if (orderIndex !== -1) {
+        allOrders.value[orderIndex].envigo_label = {
+          unique_code: label.unique_code,
+          generated_at: new Date(),
+          printed_count: 0
+        }
+      }
+    })
+    selectedPendingIds.value = []
+    toast.success(`${response.data.total} códigos generados`)
+    await loadStats()
+  } catch (error) {
+    toast.error('Error generando códigos: ' + (error.response?.data?.error || error.message))
+  } finally {
+    loading.value = false
+  }
+}
 
-  loading.value = true
-  loadingMessage.value = `Generando ${selectedPendingIds.value.length} códigos...`
-  
+// ==================== MÉTODOS DE IMPRESIÓN (NUEVA LÓGICA) ====================
+async function printSingleLabel(order) {
+  if (!order.envigo_label?.unique_code) {
+    toast.error('Este pedido no tiene una etiqueta generada.');
+    return;
+  }
+  loading.value = true;
+  loadingMessage.value = 'Generando etiqueta PDF...';
   try {
-    console.log('🏷️ Generando códigos masivos para:', selectedPendingIds.value.length, 'pedidos')
-    const response = await apiService.labels.generateBulk(selectedPendingIds.value)
+    // Llama al backend para obtener el PDF
+    const response = await apiService.labels.printLabelPDF(order._id);
+    // Crea una URL para el archivo recibido
+    const pdfBlob = new Blob([response.data], { type: 'application/pdf' });
+    const pdfUrl = URL.createObjectURL(pdfBlob);
+    // Abre el PDF en una nueva pestaña
+    window.open(pdfUrl, '_blank');
     
-    // Actualizar pedidos localmente
-    response.data.labels.forEach(label => {
-      const orderIndex = allOrders.value.findIndex(o => o._id === label.order_id)
-      if (orderIndex !== -1) {
-        allOrders.value[orderIndex].envigo_label = {
-          unique_code: label.unique_code,
-          generated_at: new Date(),
-          printed_count: 0
-        }
-      }
-    })
-    
-    selectedPendingIds.value = []
-    toast.success(`${response.data.total} códigos generados exitosamente`)
-    await loadStats()
-    
+    // Libera la memoria
+    setTimeout(() => URL.revokeObjectURL(pdfUrl), 100);
+
+    await markAsPrinted(order._id);
+    toast.success(`Etiqueta ${order.envigo_label.unique_code} lista para imprimir.`);
   } catch (error) {
-    console.error('Error generando códigos masivos:', error)
-    toast.error('Error generando códigos: ' + (error.response?.data?.error || error.message))
+    console.error('Error al generar PDF:', error);
+    toast.error('No se pudo generar el PDF. Revisa la consola.');
   } finally {
-    loading.value = false
+    loading.value = false;
   }
 }
-// SCRIPT PARTE 4 - MÉTODOS DE IMPRESIÓN
 
-// ==================== MÉTODOS DE IMPRESIÓN ====================
-function printSingleLabel(order) {
-  console.log('🖨️ Imprimiendo etiqueta individual:', order.envigo_label?.unique_code)
-  const printContent = generateLabelHTML(order)
-  const printWindow = window.open('', '_blank', 'width=400,height=600')
-  
-  printWindow.document.write(printContent)
-  printWindow.document.close()
-  printWindow.focus()
-  printWindow.print()
-  
-  // Marcar como impresa
-  markAsPrinted(order._id)
+async function printBulkLabels() {
+    if (selectedPrintIds.value.length === 0) {
+        toast.warning('Selecciona al menos una etiqueta para imprimir.');
+        return;
+    }
+    toast.info(`Iniciando impresión de ${selectedPrintIds.value.length} etiquetas...`);
+    
+    // Para la impresión masiva, simplemente llamamos a la función individual
+    // una por una con una pequeña pausa para no bloquear el navegador.
+    for (const orderId of selectedPrintIds.value) {
+        const order = allOrders.value.find(o => o._id === orderId);
+        if (order) {
+            await printSingleLabel(order);
+            await new Promise(resolve => setTimeout(resolve, 300)); // Pausa de 300ms
+        }
+    }
+    selectedPrintIds.value = [];
 }
 
-function printBulkLabels() {
-  if (selectedPrintIds.value.length === 0) {
-    toast.warning('Selecciona al menos una etiqueta para imprimir')
-    return
-  }
+// **IMPORTANTE**: Ya no necesitas la función `generateLabelHTML`, la puedes borrar.
 
-  console.log('🖨️ Imprimiendo etiquetas masivas:', selectedPrintIds.value.length)
-  const ordersToPrint = allOrders.value.filter(order => 
-    selectedPrintIds.value.includes(order._id)
-  )
-
-  let printContent = `
-    <html>
-      <head>
-        <title>Etiquetas enviGo - Impresión Masiva</title>
-        <style>
-          @page { size: A4; margin: 10mm; }
-          body { font-family: Arial, sans-serif; font-size: 12px; }
-          .label { 
-            width: 180mm; 
-            height: 60mm; 
-            border: 2px solid #000; 
-            margin-bottom: 10mm; 
-            padding: 5mm; 
-            page-break-inside: avoid;
-            display: flex;
-            flex-direction: column;
-          }
-          .label-header { 
-            text-align: center; 
-            border-bottom: 1px solid #000; 
-            padding-bottom: 3mm;
-            margin-bottom: 3mm;
-          }
-          .company-name { font-size: 16px; font-weight: bold; }
-          .envigo-code { 
-            font-size: 20px; 
-            font-weight: bold; 
-            color: #dc2626; 
-            margin: 2mm 0;
-          }
-          .label-content { 
-            display: flex; 
-            justify-content: space-between;
-            flex: 1;
-          }
-          .order-info { flex: 1; }
-          .info-line { margin: 1mm 0; }
-          .label-qr { 
-            width: 40mm; 
-            text-align: center;
-            border-left: 1px solid #ccc;
-            padding-left: 3mm;
-          }
-          .qr-placeholder {
-            width: 35mm;
-            height: 35mm;
-            border: 1px solid #ccc;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin: 0 auto;
-            font-size: 8px;
-          }
-        </style>
-      </head>
-      <body>
-  `
-
-  ordersToPrint.forEach(order => {
-    printContent += `
-      <div class="label">
-        <div class="label-header">
-          <div class="company-name">enviGo</div>
-          <div class="envigo-code">${order.envigo_label?.unique_code}</div>
-        </div>
-        <div class="label-content">
-          <div class="order-info">
-            <div class="info-line"><strong>Pedido:</strong> #${order.order_number}</div>
-            <div class="info-line"><strong>Cliente:</strong> ${order.customer_name}</div>
-            <div class="info-line"><strong>Teléfono:</strong> ${order.customer_phone || 'No disponible'}</div>
-            <div class="info-line"><strong>Dirección:</strong> ${order.shipping_address}</div>
-            <div class="info-line"><strong>Comuna:</strong> ${order.shipping_commune}</div>
-            <div class="info-line"><strong>Fecha:</strong> ${formatDate(order.order_date)}</div>
-            ${order.notes ? `<div class="info-line"><strong>Notas:</strong> ${order.notes}</div>` : ''}
-          </div>
-          <div class="label-qr">
-            <div class="qr-placeholder">
-              Código enviGo<br>
-              ${order.envigo_label?.unique_code}
-            </div>
-          </div>
-        </div>
-      </div>
-    `
-  })
-
-  printContent += `
-      </body>
-    </html>
-  `
-
-  const printWindow = window.open('', '_blank', 'width=800,height=600')
-  printWindow.document.write(printContent)
-  printWindow.document.close()
-  printWindow.focus()
-  printWindow.print()
-
-  // Marcar todas como impresas
-  selectedPrintIds.value.forEach(orderId => {
-    markAsPrinted(orderId)
-  })
-
-  selectedPrintIds.value = []
-  toast.success(`${ordersToPrint.length} etiquetas enviadas a imprimir`)
-}
-
-function generateLabelHTML(order) {
-  return `
-    <html>
-      <head>
-        <title>Etiqueta enviGo - ${order.envigo_label?.unique_code}</title>
-        <style>
-          @page { size: A5 landscape; margin: 10mm; }
-          body { 
-            font-family: Arial, sans-serif; 
-            font-size: 14px; 
-            margin: 0; 
-            padding: 20px;
-          }
-          .label { 
-            border: 3px solid #000; 
-            padding: 15px; 
-            height: 100%;
-            box-sizing: border-box;
-          }
-          .label-header { 
-            text-align: center; 
-            border-bottom: 2px solid #000; 
-            padding-bottom: 10px;
-            margin-bottom: 15px;
-          }
-          .company-name { font-size: 18px; font-weight: bold; color: #1f2937; }
-          .envigo-code { 
-            font-size: 24px; 
-            font-weight: bold; 
-            color: #dc2626;
-            margin: 10px 0;
-            padding: 8px;
-            border: 2px solid #dc2626;
-            background: #fef2f2;
-          }
-          .label-content { 
-            display: flex; 
-            justify-content: space-between;
-            gap: 20px;
-          }
-          .order-info { flex: 1; }
-          .info-line { 
-            margin: 8px 0; 
-            display: flex;
-            align-items: flex-start;
-          }
-          .info-label { 
-            font-weight: bold; 
-            width: 80px; 
-            flex-shrink: 0;
-          }
-          .info-value { flex: 1; }
-          .label-qr { 
-            width: 120px; 
-            text-align: center;
-            border-left: 2px solid #e5e7eb;
-            padding-left: 15px;
-          }
-          .qr-placeholder {
-            width: 100px;
-            height: 100px;
-            border: 2px solid #374151;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin: 0 auto 10px;
-            font-size: 10px;
-            text-align: center;
-            background: #f9fafb;
-          }
-          .footer {
-            margin-top: 15px;
-            padding-top: 10px;
-            border-top: 1px solid #ccc;
-            text-align: center;
-            font-size: 10px;
-            color: #666;
-          }
-        </style>
-      </head>
-      <body>
-        <div class="label">
-          <div class="label-header">
-            <div class="company-name">enviGo Logistics</div>
-            <div class="envigo-code">${order.envigo_label?.unique_code}</div>
-          </div>
-          <div class="label-content">
-            <div class="order-info">
-              <div class="info-line">
-                <span class="info-label">Pedido:</span>
-                <span class="info-value">#${order.order_number}</span>
-              </div>
-              <div class="info-line">
-                <span class="info-label">Cliente:</span>
-                <span class="info-value">${order.customer_name}</span>
-              </div>
-              <div class="info-line">
-                <span class="info-label">Teléfono:</span>
-                <span class="info-value">${order.customer_phone || 'No disponible'}</span>
-              </div>
-              <div class="info-line">
-                <span class="info-label">Dirección:</span>
-                <span class="info-value">${order.shipping_address}</span>
-              </div>
-              <div class="info-line">
-                <span class="info-label">Comuna:</span>
-                <span class="info-value">${order.shipping_commune}</span>
-              </div>
-              <div class="info-line">
-                <span class="info-label">Fecha:</span>
-                <span class="info-value">${formatDate(order.order_date)}</span>
-              </div>
-              ${order.notes ? `
-              <div class="info-line">
-                <span class="info-label">Notas:</span>
-                <span class="info-value">${order.notes}</span>
-              </div>
-              ` : ''}
-            </div>
-            <div class="label-qr">
-              <div class="qr-placeholder">
-                Código enviGo<br>
-                <strong>${order.envigo_label?.unique_code}</strong>
-              </div>
-              <div style="font-size: 10px;">Escanear para info</div>
-            </div>
-          </div>
-          <div class="footer">
-            enviGo Logistics - Sistema de Control de Paquetes<br>
-            Código único para identificación y seguimiento
-          </div>
-        </div>
-      </body>
-    </html>
-  `
-}
-// SCRIPT PARTE 5 - MÉTODOS DE SELECCIÓN Y FILTROS
-
-// ==================== MÉTODOS DE SELECCIÓN ====================
+// ==================== MÉTODOS DE SELECCIÓN Y FILTROS ====================
 function toggleSelectAllPending() {
-  if (allPendingSelected.value) {
-    selectedPendingIds.value = []
-    console.log('🔲 Deseleccionando todos los pedidos pendientes')
-  } else {
-    selectedPendingIds.value = pendingOrders.value.map(o => o._id)
-    console.log('☑️ Seleccionando todos los pedidos pendientes:', selectedPendingIds.value.length)
-  }
+  if (allPendingSelected.value) {
+    selectedPendingIds.value = []
+  } else {
+    selectedPendingIds.value = pendingOrders.value.map(o => o._id)
+  }
 }
 
 function toggleSelectAllPrintable() {
-  if (allPrintableSelected.value) {
-    selectedPrintIds.value = []
-    console.log('🔲 Deseleccionando todas las etiquetas imprimibles')
-  } else {
-    selectedPrintIds.value = printableOrders.value.map(o => o._id)
-    console.log('☑️ Seleccionando todas las etiquetas imprimibles:', selectedPrintIds.value.length)
-  }
+  if (allPrintableSelected.value) {
+    selectedPrintIds.value = []
+  } else {
+    selectedPrintIds.value = printableOrders.value.map(o => o._id)
+  }
 }
 
-// ==================== MÉTODOS DE FILTRADO ====================
 function applyPrintFilters() {
-  console.log('🔍 Aplicando filtros de impresión:', printFilters.value)
-  
-  let filtered = labeledOrders.value
-  
-  if (printFilters.value.status) {
-    filtered = filtered.filter(order => order.status === printFilters.value.status)
-    console.log(`📋 Filtrado por estado '${printFilters.value.status}':`, filtered.length, 'pedidos')
-  }
-  
-  if (printFilters.value.commune) {
-    filtered = filtered.filter(order => order.shipping_commune === printFilters.value.commune)
-    console.log(`🏘️ Filtrado por comuna '${printFilters.value.commune}':`, filtered.length, 'pedidos')
-  }
-  
-  printableOrders.value = filtered
-  selectedPrintIds.value = []
-  console.log('✅ Filtros aplicados. Pedidos disponibles para impresión:', printableOrders.value.length)
+  let filtered = labeledOrders.value
+  if (printFilters.value.status) {
+    filtered = filtered.filter(order => order.status === printFilters.value.status)
+  }
+  if (printFilters.value.commune) {
+    filtered = filtered.filter(order => order.shipping_commune === printFilters.value.commune)
+  }
+  printableOrders.value = filtered
+  selectedPrintIds.value = []
 }
 
 // ==================== MÉTODOS AUXILIARES ====================
 async function markAsPrinted(orderId) {
-  try {
-    console.log('🖨️ Marcando como impresa:', orderId)
-    await apiService.labels.markPrinted(orderId)
-    
-    // Actualizar localmente
-    const orderIndex = allOrders.value.findIndex(o => o._id === orderId)
-    if (orderIndex !== -1 && allOrders.value[orderIndex].envigo_label) {
-      if (!allOrders.value[orderIndex].envigo_label.printed_count) {
-        allOrders.value[orderIndex].envigo_label.printed_count = 0
-      }
-      allOrders.value[orderIndex].envigo_label.printed_count++
-      allOrders.value[orderIndex].envigo_label.last_printed_at = new Date()
-    }
-    
-    await loadStats()
-  } catch (error) {
-    console.error('Error marcando como impresa:', error)
-  }
+  try {
+    await apiService.labels.markPrinted(orderId)
+    const orderIndex = allOrders.value.findIndex(o => o._id === orderId)
+    if (orderIndex !== -1 && allOrders.value[orderIndex].envigo_label) {
+      if (!allOrders.value[orderIndex].envigo_label.printed_count) {
+        allOrders.value[orderIndex].envigo_label.printed_count = 0
+      }
+      allOrders.value[orderIndex].envigo_label.printed_count++
+      allOrders.value[orderIndex].envigo_label.last_printed_at = new Date()
+    }
+    await loadStats()
+  } catch (error) {
+    console.error('Error marcando como impresa:', error)
+  }
 }
 
 function copyCode(code) {
-  console.log('📋 Copiando código:', code)
-  navigator.clipboard.writeText(code).then(() => {
-    toast.success(`Código copiado: ${code}`)
-  }).catch(() => {
-    toast.error('Error copiando código')
-  })
+  navigator.clipboard.writeText(code).then(() => {
+    toast.success(`Código copiado: ${code}`)
+  }).catch(() => {
+    toast.error('Error copiando código')
+  })
 }
-// SCRIPT PARTE 6 - UTILIDADES Y CIERRE
 
 // ==================== FUNCIONES UTILITARIAS ====================
 function getStatusText(status) {
-  const statuses = {
-    pending: 'Pendiente',
-    ready_for_pickup: 'Listo para Recoger',
-    out_for_delivery: 'En Camino',
-    delivered: 'Entregado',
-    cancelled: 'Cancelado',
-    warehouse_received: 'En Bodega',
-    shipped: 'Enviado'
-  }
-  return statuses[status] || status
+  const statuses = {
+    pending: 'Pendiente',
+    ready_for_pickup: 'Listo para Recoger',
+    out_for_delivery: 'En Camino',
+    delivered: 'Entregado',
+    cancelled: 'Cancelado',
+    warehouse_received: 'En Bodega',
+    shipped: 'Enviado'
+  }
+  return statuses[status] || status
 }
 
 function formatDate(dateStr) {
-  if (!dateStr) return 'Sin fecha'
-  
-  try {
-    return new Date(dateStr).toLocaleDateString('es-ES', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric'
-    })
-  } catch (error) {
-    console.error('Error formateando fecha:', error)
-    return 'Fecha inválida'
-  }
+  if (!dateStr) return 'Sin fecha'
+  try {
+    return new Date(dateStr).toLocaleDateString('es-ES', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric'
+    })
+  } catch (error) {
+    return 'Fecha inválida'
+  }
 }
-
-function formatDateTime(dateStr) {
-  if (!dateStr) return 'Sin fecha'
-  
-  try {
-    return new Date(dateStr).toLocaleString('es-ES', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    })
-  } catch (error) {
-    console.error('Error formateando fecha y hora:', error)
-    return 'Fecha inválida'
-  }
-}
-
-// ==================== DEBUGGING / DESARROLLO ====================
-function debugStats() {
-  console.group('📊 Debug - Estadísticas de Etiquetas')
-  console.log('Stats completas:', stats.value)
-  console.log('Total pedidos cargados:', allOrders.value.length)
-  console.log('Pedidos sin etiqueta:', pendingOrders.value.length)
-  console.log('Pedidos con etiqueta:', labeledOrders.value.length)
-  console.log('Pedidos filtrados para búsqueda:', filteredLabeledOrders.value.length)
-  console.log('Comunas disponibles:', availableCommunes.value)
-  console.groupEnd()
-}
-
-function debugOrder(orderId) {
-  const order = allOrders.value.find(o => o._id === orderId)
-  if (order) {
-    console.group('🔍 Debug - Pedido', orderId)
-    console.log('Datos completos:', order)
-    console.log('Etiqueta enviGo:', order.envigo_label)
-    console.log('Estado:', order.status)
-    console.log('Fecha creación:', order.order_date)
-    console.groupEnd()
-  } else {
-    console.warn('❌ Pedido no encontrado:', orderId)
-  }
-}
-
-// ==================== EXPOSICIÓN PARA DEBUGGING ====================
-// Solo en desarrollo, exponer funciones útiles para debugging
-if (process.env.NODE_ENV === 'development') {
-  window.labelManagerDebug = {
-    debugStats,
-    debugOrder,
-    stats: stats,
-    orders: allOrders,
-    pendingOrders,
-    labeledOrders
-  }
-}
-
 </script>
 
 <style scoped>

@@ -913,6 +913,13 @@ const labels = {
   findByCode: (code) => {
     console.log('🔍 API: Buscando pedido por código:', code);
     return api.get(`/labels/find/${code}`);
+  },
+  printLabelPDF: (orderId) => {
+    console.log('📄 API: Solicitando PDF para la etiqueta del pedido:', orderId);
+    // La configuración 'responseType: blob' es crucial para que funcione
+    return api.post(`/labels/print-pdf/${orderId}`, {}, {
+      responseType: 'blob',
+    });
   }
 }
 // ACTUALIZAR la exportación para incluir shipday
