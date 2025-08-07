@@ -920,6 +920,12 @@ const labels = {
     return api.post(`/labels/print-pdf/${orderId}`, {}, {
       responseType: 'blob',
     });
+  },
+   printBulkLabelsPDF: (orderIds) => {
+    console.log(`📄 API: Solicitando PDF masivo para ${orderIds.length} etiquetas.`);
+    return api.post('/labels/print-bulk-pdf', { orderIds }, { // Envía los IDs en el cuerpo
+      responseType: 'blob',
+    });
   }
 }
 // ACTUALIZAR la exportación para incluir shipday

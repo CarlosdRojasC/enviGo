@@ -1217,19 +1217,22 @@ async function handleGenerateLabels() {
   isGeneratingLabels.value = true;
   
   try {
-    // 1. Genera los códigos de las etiquetas
+    // 1. Llama a la API para generar los códigos de las etiquetas
     const response = await apiService.labels.generateBulk(selectedOrders.value);
     const generatedLabels = response.data.labels || [];
 
     if (generatedLabels.length === 0) {
       toast.warning('No se generaron nuevas etiquetas. Los pedidos podrían ya tener una.');
+      clearSelection();
       return;
     }
 
-    toast.success(`${generatedLabels.length} etiquetas generadas. Iniciando impresión...`);
+    toast.success(`${generatedLabels.length} etiquetas generadas. Preparando PDF...`);
     
-    // Actualiza la UI con la nueva información
+    // Actualiza los datos en la UI
+    const generatedOrderIds = [];
     generatedLabels.forEach(label => {
+      generatedOrderIds.push(label.order_id);
       const order = orders.value.find(o => o._id === label.order_id);
       if (order) {
         order.envigo_label = {
@@ -1239,11 +1242,8 @@ async function handleGenerateLabels() {
       }
     });
 
-    // 2. Imprime cada etiqueta generada
-    for (const label of generatedLabels) {
-      await printSingleLabelPDF(label.order_id, label.unique_code);
-      await new Promise(resolve => setTimeout(resolve, 300)); // Pequeña pausa
-    }
+    // 2. Llama al nuevo endpoint de PDF masivo con los IDs de las etiquetas recién generadas
+    await printBulkLabelsPDF(generatedOrderIds);
 
     clearSelection();
 
@@ -1252,6 +1252,42 @@ async function handleGenerateLabels() {
     toast.error('Ocurrió un error: ' + (error.response?.data?.error || error.message));
   } finally {
     isGeneratingLabels.value = false;
+  }
+}
+async function printBulkLabelsPDF(orderIds) {
+  if (!orderIds || orderIds.length === 0) return;
+
+  try {
+    const response = await apiService.labels.printBulkLabelsPDF(orderIds);
+    const pdfBlob = new Blob([response.data], { type: 'application/pdf' });
+    const pdfUrl = URL.createObjectURL(pdfBlob);
+    
+    window.open(pdfUrl, '_blank');
+    URL.revokeObjectURL(pdfUrl);
+
+    // Marca todas las etiquetas como impresas de una sola vez
+    await Promise.all(orderIds.map(id => markLabelAsPrinted(id)));
+
+  } catch (error) {
+    console.error('Error al imprimir PDF masivo:', error);
+    toast.error('No se pudo generar el PDF masivo para impresión.');
+  }
+}
+
+/**
+ * Helper para marcar una etiqueta como impresa en el backend y la UI.
+ * (Esta función ahora es correcta y no dará el error 'not defined')
+ */
+async function markLabelAsPrinted(orderId) {
+  try {
+    await apiService.labels.markPrinted(orderId);
+    const order = orders.value.find(o => o._id === orderId);
+    if (order && order.envigo_label) {
+      order.envigo_label.printed_count = (order.envigo_label.printed_count || 0) + 1;
+    }
+  } catch (error) {
+    // No mostramos error al usuario por esto, solo lo logueamos
+    console.error(`Error marcando como impresa la orden ${orderId}:`, error);
   }
 }
 
