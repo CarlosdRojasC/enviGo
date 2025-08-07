@@ -274,6 +274,22 @@ async getStats(req, res) {
     res.status(500).json({ error: ERRORS.SERVER_ERROR });
   }
 }
+async uploadLogo(req, res) {
+  try {
+    const companyId = req.params.id;
+    const logo_url = req.file.path;
+
+    const updatedCompany = await Company.findByIdAndUpdate(
+      companyId,
+      { logo_url },
+      { new: true }
+    );
+
+    res.json({ success: true, company: updatedCompany });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
 }
 
 module.exports = new CompanyController();

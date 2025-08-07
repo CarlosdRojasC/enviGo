@@ -4,6 +4,10 @@ const companyController = require('../controllers/company.controller');
 const channelController = require('../controllers/channel.controller');
 const { authenticateToken, isAdmin } = require('../middlewares/auth.middleware');
 const { validateMongoId } = require('../middlewares/validators/generic.validator');
+const multer = require('multer');
+const { storage } = require('../config/cloudinary');
+const upload = multer({ storage });
+const { uploadLogo } = require('../controllers/company.controller');
 
 // ==================== RUTAS DE EMPRESAS ====================
 
@@ -32,4 +36,16 @@ router.get('/:id/stats', authenticateToken, validateMongoId('id'), companyContro
 router.get('/:companyId/channels', authenticateToken, validateMongoId('companyId'), channelController.getByCompany);
 router.post('/:companyId/channels', authenticateToken, validateMongoId('companyId'), channelController.create);
 
+router.post('/:id/logo', upload.single('logo'), uploadLogo);
+
+router.post('/upload-logo', upload.single('logo'), async (req, res) => {
+  try {
+    if (!req.file?.path) return res.status(400).json({ error: 'No se subió imagen' });
+
+    res.json({ logo_url: req.file.path });
+  } catch (err) {
+    console.error('Error subiendo logo:', err);
+    res.status(500).json({ error: 'Error al subir logo' });
+  }
+});
 module.exports = router;

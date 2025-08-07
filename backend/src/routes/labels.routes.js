@@ -82,7 +82,7 @@ router.post('/print-bulk-pdf', async (req, res) => {
         }
 
         const orders = await Order.find({ '_id': { $in: orderIds } })
-            .populate('company_id', 'name')
+            .populate('company_id', 'name logo_url')
             .lean();
 
         if (orders.length === 0) {
@@ -101,58 +101,66 @@ router.post('/print-bulk-pdf', async (req, res) => {
         doc.pipe(res);
 
         for (const order of orders) {
-            if (!order.envigo_label) continue;
+      if (!order.envigo_label) continue;
 
-            doc.addPage();
+      doc.addPage();
 
-            // Nombre de la empresa centrado
-            const companyName = order.company_id?.name || 'Empresa';
-            doc.font('Helvetica-Bold').fontSize(18).fillColor('black').text(companyName, {
-                align: 'center'
-            });
+      const pageWidth = doc.page.width;
 
-            doc.moveDown(0.5);
-
-            // Línea divisoria
-            const pageWidth = doc.page.width;
-            doc.moveTo(35, doc.y).lineTo(pageWidth - 35, doc.y).strokeColor('#ccc').lineWidth(1).stroke();
-
-            doc.moveDown(0.5);
-
-            // Código único destacado y centrado
-            doc.font('Helvetica-Bold').fontSize(34).fillColor('#8BC53F')
-                .text(order.envigo_label.unique_code, { align: 'left' });
-
-            doc.moveDown(0.5);
-
-            // Segunda línea divisoria
-            doc.moveTo(35, doc.y).lineTo(pageWidth - 35, doc.y).strokeColor('#ccc').stroke();
-
-            doc.moveDown(0.8);
-
-            // Info del pedido (pedido + nombre cliente)
-            doc.fontSize(12).fillColor('black');
-            doc.font('Helvetica').text(`Pedido #: ${order.order_number}`, { continued: true })
-               .font('Helvetica-Bold').text(`   ${order.customer_name}`);
-
-            doc.moveDown(0.2);
-
-            // Dirección
-            doc.font('Helvetica').fontSize(11);
-            doc.text(order.shipping_address);
-            doc.text(order.shipping_commune);
-            doc.text(order.customer_phone || '');
-            doc.text(order.notes || '');
-            
-            // (Opcional) Añadir más info si tienes: teléfono, instrucciones, etc.
+      // === 1. DIBUJAR LOGO SI EXISTE ===
+      const logoUrl = order.company_id?.logo_url;
+      if (logoUrl) {
+        try {
+          const response = await axios.get(logoUrl, { responseType: 'arraybuffer' });
+          const imageBuffer = Buffer.from(response.data, 'base64');
+          doc.image(imageBuffer, 35, 30, { width: 80 }); // Puedes ajustar el tamaño y posición
+        } catch (e) {
+          console.warn('No se pudo cargar el logo para:', order.company_id.name);
         }
+      }
 
-        doc.end();
+      // === 2. Nombre de empresa centrado arriba (ajustado por si hay logo) ===
+      const companyName = order.company_id?.name || 'Empresa';
+      doc.font('Helvetica-Bold')
+        .fontSize(18)
+        .fillColor('black')
+        .text(companyName, logoUrl ? 130 : 35, 30, { align: logoUrl ? 'left' : 'center' });
 
-    } catch (error) {
-        console.error('Error al generar PDF masivo:', error);
-        res.status(500).json({ error: 'Error interno al generar el PDF masivo.' });
+      doc.moveDown(1);
+
+      // Línea divisoria
+      doc.moveTo(35, doc.y).lineTo(pageWidth - 35, doc.y).strokeColor('#ccc').lineWidth(1).stroke();
+      doc.moveDown(0.5);
+
+      // Código único destacado
+      doc.fontSize(34)
+        .fillColor('#dc2626')
+        .font('Helvetica-Bold')
+        .text(order.envigo_label.unique_code, { align: 'center' });
+
+      doc.moveDown(0.5);
+
+      // Otra línea divisoria
+      doc.moveTo(35, doc.y).lineTo(pageWidth - 35, doc.y).strokeColor('#ccc').stroke();
+      doc.moveDown(0.8);
+
+      // Info del pedido y cliente
+      doc.fontSize(12).fillColor('black');
+      doc.font('Helvetica').text(`Pedido #: ${order.order_number}`, { continued: true })
+         .font('Helvetica-Bold').text(`   ${order.customer_name}`);
+
+      doc.moveDown(0.2);
+      doc.font('Helvetica').fontSize(11);
+      doc.text(order.shipping_address);
+      doc.text(order.shipping_commune);
     }
+
+    doc.end();
+
+  } catch (error) {
+    console.error('Error al generar PDF masivo:', error);
+    res.status(500).json({ error: 'Error interno al generar el PDF masivo.' });
+  }
 });
 
 

@@ -34,7 +34,7 @@ const companySchema = new mongoose.Schema({
     enum: ['monthly', 'quarterly', 'annual'], 
     default: 'monthly' 
   },
-  
+  logo_url: { type: String }, // URL pública del logo
   // Estado
   is_active: { type: Boolean, default: true },
   

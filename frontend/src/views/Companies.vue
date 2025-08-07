@@ -455,6 +455,17 @@
                 </div>
               </div>
             </div>
+            <div class="form-section">
+  <h4>Logo de la Empresa</h4>
+  <div class="form-group">
+    <label for="logoInput">Subir Logo (PNG o JPG)</label>
+    <input type="file" id="logoInput" accept="image/*" @change="handleLogoUpload">
+    <div v-if="logoPreview" class="logo-preview">
+      <p>Vista previa:</p>
+      <img :src="logoPreview" alt="Logo preview" class="h-20 mt-2 rounded border" />
+    </div>
+  </div>
+</div>
 
             <div class="form-section">
               <h4>Configuración de Precios</h4>
@@ -840,7 +851,8 @@ const newCompanyForm = ref({
   billing_cycle: 'monthly',
   owner_name: '',
   owner_email: '',
-  owner_password: ''
+  owner_password: '',
+  logo_url: ''
 })
 
 const pricingForm = ref({
@@ -863,7 +875,16 @@ const filters = ref({
 // Ordenamiento
 const sortField = ref('name')
 const sortDirection = ref('asc')
+const logoFile = ref(null);
+const logoPreview = ref(null);
 
+// Maneja el input file
+function handleLogoUpload(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  logoFile.value = file;
+  logoPreview.value = URL.createObjectURL(file);
+}
 // Computed properties
 const filteredCompanies = computed(() => {
   let result = [...companies.value]
@@ -1402,7 +1423,17 @@ const createCompany = async () => {
   isCreatingCompany.value = true
   try {
     console.log('🏢 Creando nueva empresa:', newCompanyForm.value.name)
-    
+
+     if (logoFile.value) {
+      const formData = new FormData();
+      formData.append('logo', logoFile.value);
+
+      const uploadRes = await axios.post(`/api/companies/upload-logo`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+
+      newCompanyForm.logo_url = uploadRes.data.logo_url;
+    }
     await apiService.companies.create({
       // Datos de la empresa
       name: newCompanyForm.value.name,
@@ -1417,7 +1448,8 @@ const createCompany = async () => {
       // Datos del usuario administrador
       owner_name: newCompanyForm.value.owner_name,
       owner_email: newCompanyForm.value.owner_email,
-      owner_password: newCompanyForm.value.owner_password
+      owner_password: newCompanyForm.value.owner_password,
+      logo_url: newCompanyForm.value.logo_url || ''
     })
     
     toast.success('Empresa creada exitosamente')
