@@ -106,26 +106,27 @@ router.post('/print-bulk-pdf', async (req, res) => {
 
             if (!order.envigo_label) continue;
 
-            // --- NUEVO: AÑADIMOS EL NOMBRE DE LA EMPRESA ---
-            const companyName = order.company_id?.name || 'Empresa'; // Nombre de la empresa o un texto por defecto
+            // --- DISEÑO AJUSTADO PARA 15x10 cm ---
             
-            doc.font('Helvetica-Bold').fontSize(16).text(companyName, { align: 'center' });
+            // Nombre de la Empresa
+            const companyName = order.company_id?.name || 'Empresa';
+            doc.font('Helvetica-Bold').fontSize(18).text(companyName, { align: 'center' });
             doc.moveDown(1.5);
 
             // Código único
-            doc.fontSize(32)
+            doc.fontSize(36)
                .fillColor('#dc2626')
                .text(order.envigo_label.unique_code, { align: 'center' });
             doc.moveDown(1.5);
 
             // Información del cliente
-            doc.fillColor('black').font('Helvetica').fontSize(10);
+            doc.fillColor('black').font('Helvetica').fontSize(11);
             doc.text(`Pedido #${order.order_number}`, { align: 'left' });
             doc.font('Helvetica-Bold').text(order.customer_name, { align: 'left' });
             doc.font('Helvetica').text(order.shipping_address, { align: 'left' });
             doc.text(order.shipping_commune, { align: 'left' });
         }
-        // Finalizar y enviar el PDF
+
         doc.end();
 
     } catch (error) {
