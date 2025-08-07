@@ -33,9 +33,9 @@ router.post('/print-pdf/:orderId', async (req, res) => {
             return res.status(404).json({ error: 'Pedido o etiqueta no encontrada' });
         }
 
-        // --- CONFIGURACIÓN DEL PDF (10x10 cm) ---
+        // --- CONFIGURACIÓN DEL PDF (10x15 cm) ---
         const doc = new PDFDocument({
-            size: [283.5, 283.5], // 10x10 cm
+            size: [283.5,425.25], // 10x15 cm
             margins: { top: 20, bottom: 20, left: 20, right: 20 }
         });
 
@@ -82,7 +82,7 @@ router.post('/print-bulk-pdf', async (req, res) => {
         }
 
         // Busca todos los pedidos de una vez
-        const orders = await Order.find({ '_id': { $in: orderIds } }).lean();
+        const orders = await Order.find({ '_id': { $in: orderIds } }).populate('company_id', 'name').lean();
 
         if (orders.length === 0) {
             return res.status(404).json({ error: 'No se encontraron pedidos para los IDs proporcionados.' });
