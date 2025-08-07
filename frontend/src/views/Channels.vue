@@ -558,10 +558,7 @@ async function fetchChannels() {
     loading.value = false
   }
 }
-function showChannelDetails(channel) {
-  selectedChannel.value = channel
-  showChannelDetailsModal.value = true
-}
+
 function handleChannelSync(channelId) {
   // Reutilizar el método existente
   syncChannel(channelId)
