@@ -81,50 +81,70 @@ router.post('/print-bulk-pdf', async (req, res) => {
             return res.status(400).json({ error: 'Se requiere un array de IDs de pedidos.' });
         }
 
-        // Busca todos los pedidos de una vez
-        const orders = await Order.find({ '_id': { $in: orderIds } }).populate('company_id', 'name').lean();
+        const orders = await Order.find({ '_id': { $in: orderIds } })
+            .populate('company_id', 'name')
+            .lean();
 
         if (orders.length === 0) {
-            return res.status(404).json({ error: 'No se encontraron pedidos para los IDs proporcionados.' });
+            return res.status(404).json({ error: 'No se encontraron pedidos.' });
         }
 
-        // --- CONFIGURACIÓN DEL PDF ---
         const doc = new PDFDocument({
-            size: [283.5,425.25], // Tamaño de etiqueta 10x10 cm
-            autoFirstPage: false, // Controlaremos la creación de páginas manualmente
-            margins: { top: 20, bottom: 20, left: 20, right: 20 }
+            layout: 'landscape',
+            size: [425.25, 283.5], // 15x10 cm en puntos
+            autoFirstPage: false,
+            margins: { top: 30, bottom: 30, left: 35, right: 35 }
         });
 
-        // --- ENVIAR PDF AL CLIENTE ---
         res.setHeader('Content-Type', 'application/pdf');
-        res.setHeader('Content-Disposition', `inline; filename=etiquetas-masivas.pdf`);
+        res.setHeader('Content-Disposition', `inline; filename=etiquetas-15x10.pdf`);
         doc.pipe(res);
 
-        // --- DIBUJAR CADA ETIQUETA EN UNA NUEVA PÁGINA ---
-          for (const order of orders) {
-            doc.addPage();
-
+        for (const order of orders) {
             if (!order.envigo_label) continue;
 
-            // --- DISEÑO AJUSTADO PARA 15x10 cm ---
-            
-            // Nombre de la Empresa
+            doc.addPage();
+
+            // Nombre de la empresa centrado
             const companyName = order.company_id?.name || 'Empresa';
-            doc.font('Helvetica-Bold').fontSize(18).text(companyName, { align: 'center' });
-            doc.moveDown(1.5);
+            doc.font('Helvetica-Bold').fontSize(18).fillColor('black').text(companyName, {
+                align: 'center'
+            });
 
-            // Código único
-            doc.fontSize(36)
-               .fillColor('#dc2626')
-               .text(order.envigo_label.unique_code, { align: 'center' });
-            doc.moveDown(1.5);
+            doc.moveDown(0.5);
 
-            // Información del cliente
-            doc.fillColor('black').font('Helvetica').fontSize(11);
-            doc.text(`Pedido #${order.order_number}`, { align: 'left' });
-            doc.font('Helvetica-Bold').text(order.customer_name, { align: 'left' });
-            doc.font('Helvetica').text(order.shipping_address, { align: 'left' });
-            doc.text(order.shipping_commune, { align: 'left' });
+            // Línea divisoria
+            const pageWidth = doc.page.width;
+            doc.moveTo(35, doc.y).lineTo(pageWidth - 35, doc.y).strokeColor('#ccc').lineWidth(1).stroke();
+
+            doc.moveDown(0.5);
+
+            // Código único destacado y centrado
+            doc.font('Helvetica-Bold').fontSize(34).fillColor('#8BC53F')
+                .text(order.envigo_label.unique_code, { align: 'left' });
+
+            doc.moveDown(0.5);
+
+            // Segunda línea divisoria
+            doc.moveTo(35, doc.y).lineTo(pageWidth - 35, doc.y).strokeColor('#ccc').stroke();
+
+            doc.moveDown(0.8);
+
+            // Info del pedido (pedido + nombre cliente)
+            doc.fontSize(12).fillColor('black');
+            doc.font('Helvetica').text(`Pedido #: ${order.order_number}`, { continued: true })
+               .font('Helvetica-Bold').text(`   ${order.customer_name}`);
+
+            doc.moveDown(0.2);
+
+            // Dirección
+            doc.font('Helvetica').fontSize(11);
+            doc.text(order.shipping_address);
+            doc.text(order.shipping_commune);
+            doc.text(order.customer_phone || '');
+            doc.text(order.notes || '');
+            
+            // (Opcional) Añadir más info si tienes: teléfono, instrucciones, etc.
         }
 
         doc.end();
@@ -134,6 +154,7 @@ router.post('/print-bulk-pdf', async (req, res) => {
         res.status(500).json({ error: 'Error interno al generar el PDF masivo.' });
     }
 });
+
 
 module.exports = router;
 
