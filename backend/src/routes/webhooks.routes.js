@@ -68,7 +68,7 @@ router.get('/mercadolibre/callback', async (req, res) => {
 });
 
 // ===== WEBHOOK GENÉRICO PARA MERCADOLIBRE =====
-router.post('/webhooks/mercadolibre', async (req, res) => {
+router.post('/mercadolibre', async (req, res) => {
   try {
     console.log('🔔 Webhook ML recibido:', {
       topic: req.body.topic,
@@ -130,59 +130,6 @@ router.post('/webhooks/mercadolibre', async (req, res) => {
       error: 'Error interno del servidor',
       message: error.message 
     });
-  }
-});
-router.post('/webhooks/:channel_type/:channel_id', async (req, res) => {
-  try {
-    const { channel_type, channel_id } = req.params;
-    console.log(`Webhook recibido: ${channel_type} - Canal ${channel_id}`);
-
-    let order = null;
-
-     if (channel_type === 'woocommerce') {
-      const WooCommerceService = require('../services/woocommerce.service');
-      order = await WooCommerceService.processWebhook(channel_id, req.body, req.headers);
-    } else if (channel_type === 'mercadolibre') {
-      const MercadoLibreService = require('../services/mercadolibre.service');
-      order = await MercadoLibreService.processWebhook(channel_id, req.body);
-    } else if (channel_type === 'shopify') {
-      // 🚫 ELIMINAR ESTA PARTE - ya tienes ruta específica abajo
-      return res.status(404).json({ error: 'Use specific shopify webhook route' });
-    }
-
-    // NUEVO: Auto-crear en Shipday si está habilitado
-    if (order && process.env.AUTO_CREATE_SHIPDAY_ORDERS === 'true') {
-      try {
-        console.log('🚀 Auto-creando orden en Shipday:', order.order_number);
-        
-        const shipdayData = {
-          orderNumber: order.order_number,
-          customerName: order.customer_name,
-          customerAddress: order.shipping_address,
-          customerEmail: order.customer_email || '',
-          customerPhoneNumber: order.customer_phone || '',
-          deliveryInstruction: order.notes || 'Sin instrucciones especiales',
-        };
-
-        const shipdayOrder = await ShipdayService.createOrder(shipdayData);
-        
-        // Actualizar orden local
-        order.shipday_order_id = shipdayOrder.orderId;
-        order.status = 'processing';
-        await order.save();
-
-        console.log('✅ Orden auto-creada en Shipday:', shipdayOrder.orderId);
-        
-      } catch (shipdayError) {
-        console.error('❌ Error auto-creando en Shipday:', shipdayError);
-        // No fallar el webhook por error de Shipday
-      }
-    }
-
-    res.status(200).json({ received: true });
-  } catch (error) {
-    console.error('Error procesando webhook:', error);
-    res.status(500).json({ error: 'Error procesando webhook' });
   }
 });
 
