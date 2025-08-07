@@ -171,18 +171,6 @@
             </div>
 
             <div class="form-group">
-              <label class="form-label">
-                <input 
-                  v-model="formData.auto_create_shipday" 
-                  type="checkbox" 
-                  class="form-checkbox"
-                />
-                Crear en Shipday automáticamente
-              </label>
-              <small class="form-help">Crear pedidos en Shipday cuando lleguen nuevos pedidos</small>
-            </div>
-
-            <div class="form-group">
               <label class="form-label">Intervalo de sincronización (minutos)</label>
               <select v-model="formData.sync_interval" class="form-select">
                 <option value="15">15 minutos</option>
