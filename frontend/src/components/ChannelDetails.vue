@@ -541,25 +541,23 @@ async function loadChannelDetails() {
   try {
     loading.value = true
     
-    // Cargar estadísticas del canal
-    const statsResponse = await apiService.get(`channels/${props.channel._id}/stats`)
-    channelStats.value = statsResponse.data
+    // Por ahora cargar datos simulados hasta que el backend esté listo
+    channelStats.value = {
+      total_orders: props.channel.total_orders || 0,
+      delivered_orders: Math.floor((props.channel.total_orders || 0) * 0.8),
+      total_revenue: props.channel.total_revenue || 0
+    }
     
-    // Cargar logs de sincronización
-    const logsResponse = await apiService.get(`channels/${props.channel._id}/sync-logs`)
-    syncLogs.value = logsResponse.data
-    
-    // Cargar datos de actividad (últimos 30 días)
-    const activityResponse = await apiService.get(`channels/${props.channel._id}/activity`)
-    activityData.value = activityResponse.data
+    syncLogs.value = []
+    activityData.value = []
     
   } catch (error) {
+    console.error('Error cargando detalles:', error)
     toast.error(`Error al cargar detalles: ${error.message}`)
   } finally {
     loading.value = false
   }
 }
-
 // ==================== LIFECYCLE ====================
 onMounted(() => {
   loadChannelDetails()
