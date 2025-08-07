@@ -87,7 +87,8 @@ router.post('/mercadolibre', async (req, res) => {
     const userId = req.body.user_id;
     if (!userId) {
       console.log('[ML Webhook] user_id faltante en la notificación');
-      return res.status(400).json({ error: 'user_id requerido' });
+      // 🎯 CAMBIO: 200 en lugar de 400
+      return res.status(200).json({ status: 'ignored', reason: 'missing_user_id' });
     }
 
     // Buscar el canal que corresponde a este usuario de ML
@@ -99,10 +100,12 @@ router.post('/mercadolibre', async (req, res) => {
 
     if (!channel) {
       console.log(`[ML Webhook] No se encontró canal activo para user_id: ${userId}`);
-      return res.status(404).json({ 
-        error: 'Canal no encontrado',
+      // 🎯 CAMBIO CRÍTICO: 200 en lugar de 404
+      return res.status(200).json({ 
+        status: 'ignored',
+        reason: 'channel_not_found',
         user_id: userId,
-        message: 'No hay canal de MercadoLibre configurado para este usuario'
+        message: 'Canal no configurado - webhook recibido correctamente'
       });
     }
 
@@ -121,14 +124,20 @@ router.post('/mercadolibre', async (req, res) => {
       });
     } else {
       console.log('[ML Webhook] Webhook no pudo ser procesado');
-      res.status(500).json({ error: 'Error procesando webhook' });
+      // 🎯 CAMBIO: 200 en lugar de 500
+      res.status(200).json({ 
+        status: 'ignored', 
+        reason: 'processing_failed'
+      });
     }
 
   } catch (error) {
     console.error('❌ [ML Webhook] Error procesando webhook:', error);
-    res.status(500).json({ 
-      error: 'Error interno del servidor',
-      message: error.message 
+    // 🎯 CAMBIO CRÍTICO: 200 aún con errores
+    res.status(200).json({ 
+      status: 'error',
+      message: error.message,
+      processed: false
     });
   }
 });
