@@ -537,7 +537,125 @@ async function handleExport(exportConfig = {}) {
     toast.error('Error al exportar pedidos')
   }
 }
+async function loadUserChannels() {
+  console.log('🚀 [loadUserChannels] INICIANDO...')
+  
+  // ✅ USAR auth.companyId que SÍ funciona (no auth.user?.company_id)
+  const companyId = auth.companyId
+  
+  console.log('👤 [loadUserChannels] Debug de usuario:', {
+    user_exists: !!auth.user,
+    user_role: auth.user?.role,
+    company_id_from_computed: companyId,  // ✅ Este funciona
+    company_id_from_user: auth.user?.company_id,  // ❌ Este es undefined
+    auth_logged_in: auth.isLoggedIn
+  })
+  
+  // ✅ USAR companyId en lugar de auth.user?.company_id
+  if (!companyId) {
+    console.log('❌ [loadUserChannels] No companyId found from computed')
+    toast.warning('Error: No se pudo obtener la información de tu empresa')
+    return
+  }
+  
+  loadingChannels.value = true
+  
+  try {
+    console.log(`🔍 [loadUserChannels] Cargando canales para empresa: ${companyId}`)
+    
+    // ✅ USAR companyId (no auth.user.company_id)
+    const response = await apiService.channels.getChannels(companyId)
 
+    
+    console.log('📡 [loadUserChannels] Respuesta de la API:', response)
+    
+    // Procesar respuesta
+    let allChannels = []
+    
+    if (response?.data?.data && Array.isArray(response.data.data)) {
+      allChannels = response.data.data
+      console.log('✅ [loadUserChannels] Formato correcto detectado')
+    } else if (response?.data && Array.isArray(response.data)) {
+      allChannels = response.data
+      console.log('✅ [loadUserChannels] Formato alternativo detectado')
+    } else {
+      console.log('❓ [loadUserChannels] Formato inesperado:', response?.data)
+      allChannels = []
+    }
+    
+    console.log('📊 [loadUserChannels] Análisis de canales:', {
+      total: allChannels.length,
+      activos: allChannels.filter(c => c.is_active).length,
+      inactivos: allChannels.filter(c => !c.is_active).length
+    })
+    
+    // Filtrar canales activos y utilizables
+    const usableChannels = allChannels.filter(channel => {
+      const isActive = channel.is_active === true
+      const hasName = channel.channel_name && channel.channel_name.trim() !== ''
+      const belongsToCompany = channel.company_id?.toString() === companyId.toString()
+      
+      console.log(`🔍 [loadUserChannels] Evaluando canal "${channel.channel_name}":`, {
+        id: channel._id,
+        is_active: isActive,
+        has_name: hasName,
+        belongs_to_company: belongsToCompany,
+        will_include: isActive && hasName && belongsToCompany
+      })
+      
+      return isActive && hasName && belongsToCompany
+    })
+    
+    availableChannels.value = usableChannels
+    
+    // Mensajes informativos según el resultado
+    if (allChannels.length === 0) {
+      console.log('⚠️ [loadUserChannels] No hay canales configurados')
+      toast.warning('Tu empresa no tiene canales configurados')
+    } else if (usableChannels.length === 0) {
+      const inactiveCount = allChannels.filter(c => !c.is_active).length
+      console.log('⚠️ [loadUserChannels] Canales no utilizables:', {
+        total: allChannels.length,
+        inactivos: inactiveCount
+      })
+      
+      if (inactiveCount > 0) {
+        toast.warning(`Tienes ${inactiveCount} canal(es) inactivo(s). Actívalos en la sección Canales.`)
+      } else {
+        toast.warning('No hay canales utilizables para crear pedidos')
+      }
+    } else {
+      console.log('✅ [loadUserChannels] Canales utilizables cargados:', 
+        usableChannels.map(c => `${c.channel_name} (${c.channel_type})`).join(', ')
+      )
+      toast.success(`${usableChannels.length} canal(es) disponible(s)`)
+    }
+    
+  } catch (error) {
+    console.error('❌ [loadUserChannels] Error completo:', {
+      error: error,
+      message: error.message,
+      response: error.response,
+      status: error.response?.status,
+      data: error.response?.data,
+      companyId_used: companyId
+    })
+    
+    // Manejo de errores específicos con mensajes útiles
+    if (error.response?.status === 404) {
+      toast.error('No se encontraron canales para tu empresa')
+    } else if (error.response?.status === 403) {
+      toast.error('No tienes permisos para ver los canales de esta empresa')
+    } else {
+      toast.error('Error cargando canales: ' + (error.response?.data?.error || error.message))
+    }
+    
+    availableChannels.value = []
+  } finally {
+    loadingChannels.value = false
+    console.log('🏁 [loadUserChannels] FINALIZADO')
+  }
+}
 function handleCreateOrder() {
   console.log('➕ Abriendo modal crear pedido')
   
