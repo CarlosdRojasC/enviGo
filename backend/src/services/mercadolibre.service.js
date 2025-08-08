@@ -434,71 +434,103 @@ class MercadoLibreService {
   /**
    * ✅ WEBHOOK OPTIMIZADO - SOLO PROCESA PEDIDOS FLEX, NO TRAE LOS YA ENTREGADOS
    */
-static async processWebhook(channelId, webhookData) {
-  try {
-    // 1. Validar el topic del webhook
-    if (webhookData.topic !== 'orders' && webhookData.topic !== 'orders_v2') {
-      console.log(`[ML Webhook] Notificación ignorada (Topic: ${webhookData.topic}).`);
+ static async processWebhook(channelId, webhookData) {
+    try {
+      // ✅ 1. AÑADIMOS 'shipments' A LOS TOPICS VÁLIDOS
+      const acceptedTopics = ['orders', 'orders_v2', 'shipments'];
+      if (!acceptedTopics.includes(webhookData.topic)) {
+        console.log(`[ML Webhook] Notificación ignorada (Topic: ${webhookData.topic}).`);
+        return true;
+      }
+
+      const channel = await Channel.findById(channelId);
+      if (!channel) throw new Error(`[ML Webhook] Canal con ID ${channelId} no encontrado.`);
+
+      const accessToken = await this.getAccessToken(channel);
+      let orderId;
+
+      // ✅ 2. LÓGICA PARA EXTRAER EL ID DEL PEDIDO SEGÚN EL TOPIC
+      if (webhookData.topic.includes('orders')) {
+        orderId = webhookData.resource.split('/').pop();
+        console.log(`[ML Webhook] Notificación de pedido recibida para order_id: ${orderId}`);
+      } else if (webhookData.topic === 'shipments') {
+        const shipmentId = webhookData.resource.split('/').pop();
+        console.log(`[ML Webhook] Notificación de envío ${shipmentId} recibida. Obteniendo order_id...`);
+        
+        try {
+          // Hacemos una llamada a la API para obtener los datos del envío y extraer el order_id
+          const shipmentResponse = await axios.get(`${this.API_BASE_URL}/shipments/${shipmentId}`, {
+            headers: { 'Authorization': `Bearer ${accessToken}` },
+          });
+          
+          orderId = shipmentResponse.data.order_id;
+
+          if (!orderId) {
+            console.log(`[ML Webhook] No se encontró un order_id para el envío ${shipmentId}. Se omite.`);
+            return true;
+          }
+          console.log(`[ML Webhook] Envío ${shipmentId} corresponde al pedido ${orderId}. Procediendo a verificar.`);
+
+        } catch (shipmentError) {
+          console.error(`[ML Webhook] Error al obtener datos del envío ${shipmentId}:`, shipmentError.message);
+          return false; // Error al procesar, no continuar
+        }
+      }
+
+      // ✅ 3. EL RESTO DEL FLUJO CONTINÚA IGUAL, AHORA CON EL orderId CORRECTO
+      // A partir de aquí, el flujo es el mismo para ambos webhooks.
+      // Se obtienen los detalles completos del pedido.
+      const orderResponse = await axios.get(`${this.API_BASE_URL}/orders/${orderId}`, {
+        headers: { 'Authorization': `Bearer ${accessToken}` },
+      });
+      const mlOrder = orderResponse.data;
+
+      console.log(`📦 [ML Webhook] Procesando pedido ${mlOrder.id} (originado por topic: ${webhookData.topic})`);
+
+      // 4. VERIFICAR SI ES FLEX
+      const isFlex = await this.isFlexOrder(mlOrder, accessToken);
+
+      if (!isFlex) {
+        console.log(`⏭️ [ML Webhook] Pedido ${mlOrder.id} no es Flex, omitiendo...`);
+        // Ojo: Si llega un webhook de 'shipments', es casi seguro que 'isFlex' será true.
+        // Esta validación se mantiene como una capa de seguridad.
+        return true;
+      }
+
+      console.log(`✅ [ML Webhook] Pedido ${mlOrder.id} ES FLEX, procesando...`);
+
+      // 5. VERIFICAR SI EL PEDIDO YA FUE ENTREGADO
+      const isNotDelivered = await this.isOrderNotDelivered(mlOrder, accessToken);
+
+      if (!isNotDelivered) {
+        console.log(`⏭️ [ML Webhook] Pedido ${mlOrder.id} ya entregado, no se procesa`);
+        return true;
+      }
+
+      // 6. BUSCAR SI EL PEDIDO YA EXISTE EN NUESTRO SISTEMA
+      const existingOrder = await Order.findOne({ 
+        channel_id: channelId, 
+        external_order_id: mlOrder.id.toString() 
+      });
+
+      if (existingOrder) {
+        // SI EXISTE Y NO ESTÁ ENTREGADO, LO ACTUALIZAMOS
+        existingOrder.status = this.mapOrderStatus(mlOrder);
+        existingOrder.raw_data = mlOrder;
+        await existingOrder.save();
+        console.log(`🔄 [ML Webhook] Pedido existente ${mlOrder.id} actualizado`);
+      } else {
+        // SI NO EXISTE Y NO ESTÁ ENTREGADO, LO CREAMOS
+        await this.createOrderFromApiData(mlOrder, channel, accessToken);
+        console.log(`➕ [ML Webhook] Nuevo pedido Flex ${mlOrder.id} creado`);
+      }
+
       return true;
+    } catch (error) {
+      console.error(`❌ [ML Service] Error en processWebhook para recurso ${webhookData.resource}:`, error.message);
+      return false;
     }
-
-    const channel = await Channel.findById(channelId);
-    if (!channel) throw new Error(`[ML Webhook] Canal con ID ${channelId} no encontrado.`);
-
-    const accessToken = await this.getAccessToken(channel);
-    const orderId = webhookData.resource.split('/').pop();
-
-    // 2. Obtener los detalles completos del pedido de la API de ML
-    const orderResponse = await axios.get(`${this.API_BASE_URL}/orders/${orderId}`, {
-      headers: { 'Authorization': `Bearer ${accessToken}` },
-    });
-    const mlOrder = orderResponse.data;
-
-    console.log(`📦 [ML Webhook] Procesando pedido ${mlOrder.id}`);
-
-    // 3. ✅ VERIFICAR SI ES FLEX
-    const isFlex = await this.isFlexOrder(mlOrder, accessToken);
-
-    if (!isFlex) {
-      console.log(`⏭️ [ML Webhook] Pedido ${mlOrder.id} no es Flex, omitiendo...`);
-      return true;
-    }
-
-    console.log(`✅ [ML Webhook] Pedido ${mlOrder.id} ES FLEX, procesando...`);
-
-    // 4. ✅ VERIFICAR SI EL PEDIDO YA FUE ENTREGADO
-    const isNotDelivered = await this.isOrderNotDelivered(mlOrder, accessToken);
-
-    if (!isNotDelivered) {
-      console.log(`⏭️ [ML Webhook] Pedido ${mlOrder.id} ya entregado, no se procesa`);
-      return true;
-    }
-
-    // 5. ✅ BUSCAR SI EL PEDIDO YA EXISTE EN NUESTRO SISTEMA
-    const existingOrder = await Order.findOne({ 
-      channel_id: channelId, 
-      external_order_id: mlOrder.id.toString() 
-    });
-
-    if (existingOrder) {
-      // ✅ SI EXISTE Y NO ESTÁ ENTREGADO, LO ACTUALIZAMOS
-      existingOrder.status = this.mapOrderStatus(mlOrder);
-      existingOrder.raw_data = mlOrder;
-      await existingOrder.save();
-      console.log(`🔄 [ML Webhook] Pedido existente ${mlOrder.id} actualizado`);
-    } else {
-      // ✅ SI NO EXISTE Y NO ESTÁ ENTREGADO, LO CREAMOS
-      await this.createOrderFromApiData(mlOrder, channel, accessToken);
-      console.log(`➕ [ML Webhook] Nuevo pedido Flex ${mlOrder.id} creado`);
-    }
-
-    return true;
-  } catch (error) {
-    console.error(`❌ [ML Service] Error en processWebhook para pedido ${webhookData.resource}:`, error.message);
-    // Retornamos false para que el router sepa que no se pudo procesar
-    return false;
   }
-}
 
   /**
    * Helper para crear la orden en la base de datos
