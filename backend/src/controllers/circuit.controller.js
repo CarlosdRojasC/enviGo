@@ -114,10 +114,33 @@ async function createDriverInCircuit(driverData) {
       return null;
     }
 }
+async function distributePlan(planId) {
+  try {
+    console.log(`   -> 🚀 Circuit: Iniciando distribución del plan ${planId}...`);
+    
+    // Este es el endpoint para despachar la ruta a los conductores.
+    await axios.post(`${CIRCUIT_API_URL}/operations`, {
+      planDistribute: {
+        planId: planId,
+      }
+    }, {
+      headers: { Authorization: `Bearer ${CIRCUIT_API_KEY}`, 'Content-Type': 'application/json' },
+    });
+
+    console.log(`   -> ✅ Circuit: Orden de distribución para el plan ${planId} enviada.`);
+    return true;
+  } catch (error) {
+    const errorMessage = error.response ? JSON.stringify(error.response.data) : error.message;
+    console.error(`   -> ❌ Circuit: Error al distribuir el plan ${planId}: ${errorMessage}`);
+    // No lanzamos un error fatal, pero devolvemos false.
+    return false;
+  }
+}
 
 // Exportamos las funciones que nuestros otros archivos necesitan
 module.exports = {
   createPlanForAssignment,
   addStopToPlan,
   createDriverInCircuit,
+  distributePlan
 };

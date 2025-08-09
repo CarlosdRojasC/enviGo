@@ -537,6 +537,9 @@ for (const order of validOrdersForAssignment) {
       });
       console.log(`✅ Orden #${order.order_number} (${order.company_id?.name}) actualizada con Tracking URL: "${trackingUrl}"`);
     }
+      if (newPlanId) {
+      await circuitController.distributePlan(newPlanId);
+    }
 
     console.log(`🏁 FIN: Proceso completado.`);
     res.status(200).json({
