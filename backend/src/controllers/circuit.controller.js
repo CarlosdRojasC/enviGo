@@ -87,7 +87,41 @@ const sendOrderToCircuit = async (order, circuitDriverId) => {
     throw new Error(`Fallo al enviar el pedido ${order.order_number} a Circuit.`);
   }
 };
+// --- ✅ INICIO DE LA NUEVA LÓGICA PARA DEPOTS ---
+const circuitCache = {
+  mainDepotId: null,
+};
 
+/**
+ * Busca y guarda en caché el ID del primer depot (generalmente el principal).
+ * @returns {Promise<string>} El ID del depot.
+ */
+const getMainDepotId = async () => {
+  if (circuitCache.mainDepotId) {
+    return circuitCache.mainDepotId;
+  }
+
+  try {
+    console.log('Circuit Controller: Buscando depots por primera vez...');
+    const response = await axios.get(`${CIRCUIT_API_URL}/depots`, {
+      headers: { Authorization: `Bearer ${CIRCUIT_API_KEY}` },
+    });
+
+    const depots = response.data.depots;
+    if (!depots || depots.length === 0) {
+      throw new Error('No se encontraron depots en la cuenta de Circuit.');
+    }
+
+    const mainDepotId = depots[0].id; // Usamos el primer depot de la lista
+    circuitCache.mainDepotId = mainDepotId; // Guardamos en caché para futuras llamadas
+    console.log(`   -> Depot principal encontrado y guardado en caché: ${mainDepotId}`);
+    return mainDepotId;
+
+  } catch (error) {
+    console.error('❌ Circuit Controller: Error crítico al obtener depots.', error.message);
+    throw new Error('No se pudo obtener la información de los depots de Circuit.');
+  }
+};
 
 /**
  * Crea un nuevo conductor en la API de Circuit.
@@ -109,7 +143,7 @@ const createDriverInCircuit = async (driverData) => {
       phone: null, // <-- LA CLAVE: Enviamos null para evitar la validación del teléfono.
       displayName: driverData.name,
       active: true,
-      depots: [],
+      depots: [mainDepotId],
       routeOverrides: {},
     };
     // --- ✅ FIN DE LA CORRECCIÓN ---
