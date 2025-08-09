@@ -106,11 +106,11 @@ const createDriverInCircuit = async (driverData) => {
     const circuitPayload = {
       name: driverData.name,
       email: driverData.email,
-      phone: phoneWithOnlyDigits,
-      displayName: driverData.name, // Usamos el nombre como displayName por defecto.
-      active: true,                  // Lo creamos como activo por defecto.
-      depots: [],                    // Un array vacío debería asignarlo al depósito principal.
-      routeOverrides: {},            // Un objeto vacío para cumplir con el requisito.
+      phone: null, // <-- LA CLAVE: Enviamos null para evitar la validación del teléfono.
+      displayName: driverData.name,
+      active: true,
+      depots: [],
+      routeOverrides: {},
     };
     // --- ✅ FIN DE LA CORRECCIÓN ---
 
