@@ -509,43 +509,45 @@ router.post('/bulk-assign-driver', authenticateToken, isAdmin, async (req, res) 
     const driverInfo = (await ShipdayService.getDrivers()).find(d => d.id == driverId);
 
     // --- FASE 4: Actualizar la base de datos local con la información correcta ---
-    console.log('--- FASE 4: Actualizando base de datos local ---');
-    for (const order of validOrdersForAssignment) {
-      if (results.failed.some(f => f.orderId.equals(order._id))) continue;
+     console.log('--- FASE 4: Actualizando base de datos local y enviando a Circuit ---');
+    for (const order of validOrdersForAssignment) {
+      if (results.failed.some(f => f.orderId.equals(order._id))) continue;
 
-      const updatedShipdayOrder = shipdayOrdersMap.get(order.shipday_order_id);
-      const trackingUrl = updatedShipdayOrder?.trackingLink || '';
+      const updatedShipdayOrder = shipdayOrdersMap.get(order.shipday_order_id);
+      const trackingUrl = updatedShipdayOrder?.trackingLink || '';
 
-      order.shipday_driver_id = driverId;
-      order.status = 'shipped';
-      order.shipday_tracking_url = trackingUrl;
-      if (driverInfo) {
-        order.driver_info = { 
-          name: driverInfo.name, 
-          phone: driverInfo.phone, 
-          email: driverInfo.email, 
-          status: driverInfo.isOnShift ? 'ONLINE' : 'OFFLINE' 
-        };
-      }
-      await order.save();
+      order.shipday_driver_id = driverId;
+      order.status = 'shipped';
+      order.shipday_tracking_url = trackingUrl;
+      if (driverInfo) {
+        order.driver_info = { 
+          name: driverInfo.name, 
+          phone: driverInfo.phone, 
+          email: driverInfo.email, 
+          status: driverInfo.isOnShift ? 'ONLINE' : 'OFFLINE' 
+        };
+      }
+      // Guardamos la orden con los datos de Shipday
+      await order.save();
 
- // --- ✅ INICIO DE LA INTEGRACIÓN CON CIRCUIT (VERSIÓN CORREGIDA) ---
-      // Si tenemos toda la info necesaria de Circuit, procedemos
+      // --- ✅ INICIO DE LA CORRECCIÓN FINAL ---
+      // Usamos la variable 'order', que es la que acabamos de guardar.
+      // Y llamamos a la función correcta 'addStopToPlan'.
       if (circuitDriverId && dailyPlanId) {
           try {
-              // Llamamos a la función que solo añade la parada, pasándole los IDs que ya obtuvimos.
-              await circuitController.addStopToPlan(savedOrder, dailyPlanId, circuitDriverId);
-              console.log(`   -> ✅ Parada para orden #${savedOrder.order_number} añadida al plan de Circuit.`);
+              console.log(`   -> Circuit: Añadiendo parada para orden #${order.order_number} al plan ${dailyPlanId}...`);
+              await circuitController.addStopToPlan(order, dailyPlanId, circuitDriverId);
+              console.log(`   -> ✅ Parada para orden #${order.order_number} añadida al plan de Circuit.`);
           } catch (circuitError) {
               console.error(`   -> ❌ Circuit: ${circuitError.message}`);
               results.failed.push({
-                  orderId: savedOrder._id,
-                  orderNumber: savedOrder.order_number,
+                  orderId: order._id,
+                  orderNumber: order.order_number,
                   error: `Error al añadir parada en Circuit: ${circuitError.message}`
               });
           }
       }
-      // --- ✅ FIN DE LA INTEGRACIÓN ---
+      // --- ✅ FIN DE LA CORRECCIÓN ---
 
       
       // ✅ AGREGADO: Incluir información de empresa en el resultado

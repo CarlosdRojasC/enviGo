@@ -804,15 +804,14 @@ async assignToDriver(req, res) {
 
     // --- ✅ INICIO DE LA INTEGRACIÓN CON CIRCUIT (VERSIÓN FINAL) ---
     // Si tenemos toda la info necesaria de Circuit, procedemos
-    if (circuitDriverId && dailyPlanId) {
+   if (circuitDriverId && dailyPlanId) {
         try {
-            console.log(`   -> Circuit: Añadiendo parada para orden #${savedOrder.order_number} al plan ${dailyPlanId}...`);
-            // Usamos la función correcta 'addStopToPlan'
-            await circuitController.addStopToPlan(savedOrder, dailyPlanId, circuitDriverId);
-            console.log(`   -> ✅ Parada para orden #${savedOrder.order_number} añadida al plan de Circuit.`);
+            console.log(`   -> Circuit: Añadiendo parada para orden #${order.order_number} al plan ${dailyPlanId}...`);
+            // Usamos la variable 'order' directamente
+            await circuitController.addStopToPlan(order, dailyPlanId, circuitDriverId);
+            console.log(`   -> ✅ Parada para orden #${order.order_number} añadida al plan de Circuit.`);
         } catch (circuitError) {
             console.error(`   -> ❌ Circuit: ${circuitError.message}`);
-            // No detenemos el proceso, solo registramos el error para que la respuesta principal sea exitosa
         }
     }
     // --- ✅ FIN DE LA INTEGRACIÓN ---
