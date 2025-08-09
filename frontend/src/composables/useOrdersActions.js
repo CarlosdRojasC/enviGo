@@ -253,7 +253,7 @@ async function handleCreateOrder() {
     try {
       console.log('🗑️ Deleting order:', orderId)
       
-      await apiService.orders.delete(orderId)
+      await apiService.orders.remove(orderId)
       
       toast.success('✅ Pedido eliminado exitosamente')
       console.log('✅ Order deleted successfully')

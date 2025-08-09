@@ -48,7 +48,9 @@ function drawCardBackground(doc, x, y, w, h, radius) {
 router.post('/print-pdf/:orderId', async (req, res) => {
   try {
     const orderId = req.params.orderId;
-    const order = await Order.findById(orderId).lean();
+    const order = await Order.findById(orderId)
+  .populate('channel_id', 'store_url') // <-- poblamos website desde channel
+  .lean();
 
     if (!order || !order.envigo_label) {
       return res.status(404).json({ error: 'Pedido o etiqueta no encontrada' });
@@ -84,7 +86,7 @@ router.post('/print-pdf/:orderId', async (req, res) => {
 
     // --- HEADER: Nombre empresa centrado grande ---
     doc.font('Helvetica-Bold').fontSize(20).fillColor('#000000')
-       .text((order.company_name || 'COMERCIAL FLIX S.P.A').toUpperCase(), innerX, cursorY, {
+       .text((order.company_name || 'EnviGo').toUpperCase(), innerX, cursorY, {
          width: cardW - 36,
          align: 'center'
        });
@@ -147,10 +149,13 @@ router.post('/print-pdf/:orderId', async (req, res) => {
       align: 'center'
     });
 
-    doc.font('Helvetica').fontSize(12).fillColor('#333').text(order.company_website || 'www.flixspa.com', innerX, footerY + 34, {
-      width: cardW - 36,
-      align: 'center'
-    });
+ const website = order.channel_id?.store_url || order.company_id?.store_url || 'www.envigo.cl';
+
+doc.font('Helvetica').fontSize(9).fillColor('#333')
+   .text(website, innerX, cardY + cardH - 62, {
+     width: cardW - 36,
+     align: 'center'
+   });
 
     // Finalizar
     doc.end();
@@ -171,8 +176,9 @@ router.post('/print-bulk-pdf', async (req, res) => {
     }
 
     const orders = await Order.find({ '_id': { $in: orderIds } })
-      .populate('company_id', 'name logo_url website')
-      .lean();
+  .populate('company_id', 'name logo_url')
+  .populate('channel_id', 'store_url') // <-- agregamos channel
+  .lean();
 
     if (orders.length === 0) {
       return res.status(404).json({ error: 'No se encontraron pedidos.' });
@@ -267,10 +273,14 @@ router.post('/print-bulk-pdf', async (req, res) => {
         width: cardW - 36,
         align: 'center'
       });
-      doc.font('Helvetica').fontSize(9).fillColor('#333').text(order.company_id?.website || 'www.flixspa.com', innerX, cardY + cardH - 62, {
-        width: cardW - 36,
-        align: 'center'
-      });
+ const website = order.channel_id?.store_url || order.company_id?.store_url || 'www.envigo.cl';
+
+doc.font('Helvetica').fontSize(9).fillColor('#333')
+   .text(website, innerX, cardY + cardH - 62, {
+     width: cardW - 36,
+     align: 'center'
+   });
+
     }
 
     doc.end();
