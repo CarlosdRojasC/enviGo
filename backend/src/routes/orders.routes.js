@@ -420,7 +420,6 @@ router.post('/bulk-assign-driver', authenticateToken, isAdmin, async (req, res) 
     if (!circuitDriverId) {
       console.warn(`ADVERTENCIA: No se encontró el conductor en Circuit. Las órdenes SÓLO se asignarán en Shipday.`);
     }
-    console.log(`🚀 INICIO: Asignación masiva a Shipday ID ${driverId} (Circuit ID: ${circuitDriverId || 'N/A'}) (Plan ID: ${dailyPlanId || 'N/A'})`);
     
     const results = { successful: [], failed: [] };
     const ordersToProcess = await Order.find({ _id: { $in: orderIds } }).populate('company_id');
