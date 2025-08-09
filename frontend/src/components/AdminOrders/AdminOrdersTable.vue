@@ -571,6 +571,15 @@ function duplicateOrder(order) {
   console.log('📋 Duplicate order:', order._id)
 }
 
+/**
+ * Delete order (placeholder)
+ */
+function deleteOrder(order) {
+  if (confirm(`¿Eliminar pedido ${order.order_number}?`)) {
+    console.log('🗑️ Delete order:', order._id)
+    emit('delete-order', order._id)
+  }
+}
 </script>
 
 <style scoped>
