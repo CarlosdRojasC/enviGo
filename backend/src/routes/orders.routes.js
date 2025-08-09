@@ -822,7 +822,28 @@ router.get('/:orderId/shipday-status', authenticateToken, async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+router.delete('/:id', async (req, res) => {
+  try {
+    // 1. Obtener el ID del pedido desde los parámetros de la URL
+    const orderId = req.params.id;
 
+    // 2. Buscar y eliminar el pedido en la base de datos
+    const deletedOrder = await Order.findByIdAndDelete(orderId);
+
+    // 3. Si no se encuentra el pedido, devolver un error 404
+    if (!deletedOrder) {
+      return res.status(404).json({ error: 'Pedido no encontrado' });
+    }
+
+    // 4. Si se elimina correctamente, enviar una respuesta de éxito
+    res.status(200).json({ message: 'Pedido eliminado exitosamente', orderId: deletedOrder._id });
+
+  } catch (error) {
+    // 5. Si ocurre un error en el servidor, informarlo
+    console.error('Error al eliminar el pedido:', error);
+    res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
 // ==================== TRACKING DE PEDIDOS ====================
 /**
  * Generar timeline de eventos del pedido
