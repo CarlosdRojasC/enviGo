@@ -702,7 +702,7 @@ async getOrdersTrend(req, res) {
   }
 }
 
-async function assignToDriver(req, res) {
+async assignToDriver(req, res) {
   try {
     const { orderId } = req.params;
     const { driverId } = req.body; // Este es el ID de Shipday
@@ -710,10 +710,7 @@ async function assignToDriver(req, res) {
     if (!driverId) {
       return res.status(400).json({ error: 'Se requiere el ID del conductor de Shipday.' });
     }
-
-    console.log(`🚀 INICIO (1x1): Asignando driver ${driverId} a orden ${orderId}`);
-
-    // --- ✅ FASE PREPARATORIA (CORREGIDA) ---
+// --- ✅ FASE PREPARATORIA (CORREGIDA) ---
     // 1. Obtenemos la lista de conductores de Shipday UNA SOLA VEZ al principio.
     const shipdayDrivers = await ShipdayService.getDrivers();
     const shipdayDriver = shipdayDrivers.find(d => d.id == driverId);
