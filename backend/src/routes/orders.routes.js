@@ -410,13 +410,13 @@ router.post('/bulk-assign-driver', authenticateToken, isAdmin, async (req, res) 
     console.log('--- FASE PREPARATORIA: Obteniendo IDs y asegurando Plan de Circuit ---');
     
     // 1. Obtenemos la información del conductor de Shipday y Circuit
-    const shipdayDrivers = await ShipdayService.getDrivers();
+   const shipdayDrivers = await ShipdayService.getDrivers();
     const shipdayDriver = shipdayDrivers.find(d => d.id == driverId);
     if (!shipdayDriver || !shipdayDriver.email) {
       throw new Error('Conductor no encontrado en Shipday o no tiene email.');
     }
-    
     const circuitDriverId = await circuitService.getDriverIdByEmail(shipdayDriver.email);
+
     if (!circuitDriverId) {
       console.warn(`ADVERTENCIA: No se encontró el conductor en Circuit. Las órdenes SÓLO se asignarán en Shipday.`);
     }
@@ -504,45 +504,40 @@ router.post('/bulk-assign-driver', authenticateToken, isAdmin, async (req, res) 
     const driverInfo = (await ShipdayService.getDrivers()).find(d => d.id == driverId);
 
     // --- FASE 4: Actualizar la base de datos local con la información correcta ---
-     console.log('--- FASE 4: Actualizando base de datos local y enviando a Circuit ---');
-    for (const order of validOrdersForAssignment) {
-      if (results.failed.some(f => f.orderId.equals(order._id))) continue;
+    let newPlanId = null;
+    // Solo procedemos con Circuit si encontramos al conductor y hay órdenes válidas
+    if (circuitDriverId && validOrdersForAssignment.length > 0) {
+      try {
+        // 1. Creamos un nuevo y único plan para esta asignación
+        console.log(`--- FASE 4A: Creando plan en Circuit para ${validOrdersForAssignment.length} órdenes ---`);
+        newPlanId = await circuitController.createPlanForAssignment(circuitDriverId, validOrdersForAssignment);
+      } catch (planError) {
+        console.error(`❌ Circuit: Error fatal al crear el plan. No se añadirán paradas. ${planError.message}`);
+        // Añadimos un error genérico a todas las órdenes de esta asignación
+        validOrdersForAssignment.forEach(order => {
+          results.failed.push({
+            orderId: order._id, orderNumber: order.order_number, error: `Error al crear plan en Circuit: ${planError.message}`
+          });
+        });
+      }
+    }
 
-      const updatedShipdayOrder = shipdayOrdersMap.get(order.shipday_order_id);
-      const trackingUrl = updatedShipdayOrder?.trackingLink || '';
+    console.log('--- FASE 4B: Actualizando DB local y añadiendo paradas a Circuit ---');
+    for (const order of validOrdersForAssignment) {
+      await order.save(); // Guarda los datos de Shipday
 
-      order.shipday_driver_id = driverId;
-      order.status = 'shipped';
-      order.shipday_tracking_url = trackingUrl;
-      if (driverInfo) {
-        order.driver_info = { 
-          name: driverInfo.name, 
-          phone: driverInfo.phone, 
-          email: driverInfo.email, 
-          status: driverInfo.isOnShift ? 'ONLINE' : 'OFFLINE' 
-        };
-      }
-      // Guardamos la orden con los datos de Shipday
-      await order.save();
-
-      // --- ✅ INICIO DE LA CORRECCIÓN FINAL ---
-      // Usamos la variable 'order', que es la que acabamos de guardar.
-      // Y llamamos a la función correcta 'addStopToPlan'.
-      if (circuitDriverId && dailyPlanId) {
+      // 2. Si el plan se creó con éxito, añadimos cada parada a ESE plan
+      if (newPlanId) {
           try {
-              // Llamamos a la función que solo añade la parada, pasando los IDs que ya obtuvimos.
-              await circuitController.addStopToPlan(order, dailyPlanId, circuitDriverId);
-              console.log(`   -> ✅ Parada para orden #${order.order_number} añadida al plan de Circuit.`);
-          } catch (circuitError) {
-              console.error(`   -> ❌ Circuit: ${circuitError.message}`);
+              await circuitController.addStopToPlan(order, newPlanId, circuitDriverId);
+              console.log(`   -> ✅ Parada para orden #${order.order_number} añadida al nuevo plan ${newPlanId}.`);
+          } catch (stopError) {
+              console.error(`   -> ❌ Circuit: ${stopError.message}`);
               results.failed.push({
-                  orderId: order._id,
-                  orderNumber: order.order_number,
-                  error: `Error al añadir parada en Circuit: ${circuitError.message}`
+                  orderId: order._id, orderNumber: order.order_number, error: `Error al añadir parada: ${stopError.message}`
               });
           }
-      }
-      // --- ✅ FIN DE LA CORRECCIÓN ---
+      }
 
       
       // ✅ AGREGADO: Incluir información de empresa en el resultado
