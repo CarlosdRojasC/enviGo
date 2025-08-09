@@ -506,6 +506,28 @@ router.post('/bulk-assign-driver', authenticateToken, isAdmin, async (req, res) 
         };
       }
       await order.save();
+
+      // =================================================================
+      // =========== 🚀 INICIO DE LA INTEGRACIÓN CON CIRCUIT 🚀 ===========
+      // =================================================================
+      try {
+          console.log(`   Circuit: Enviando pedido ${savedOrder.order_number}...`);
+          await circuitController.sendOrderToCircuit(savedOrder);
+          // ✅ CORRECCIÓN: Este mensaje solo aparecerá si la línea anterior NO lanza un error.
+          console.log(`  ✅ Circuit: Pedido ${savedOrder.order_number} enviado exitosamente.`);
+      } catch (circuitError) {
+          // ✅ CORRECCIÓN: Este bloque ahora se ejecutará correctamente cuando Circuit falle.
+          console.error(`  ❌ Circuit: No se pudo enviar el pedido ${savedOrder.order_number}. Error: ${circuitError.message}`);
+          results.failed.push({
+              orderId: savedOrder._id,
+              orderNumber: savedOrder.order_number,
+              error: `Error al enviar a Circuit: ${circuitError.message}`
+          });
+      }
+      // ===============================================================
+      // ============= 🏁 FIN DE LA INTEGRACIÓN CON CIRCUIT 🏁 =============
+      // ===============================================================
+
       
       // ✅ AGREGADO: Incluir información de empresa en el resultado
       results.successful.push({ 
