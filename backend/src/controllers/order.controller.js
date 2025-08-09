@@ -711,29 +711,6 @@ async assignToDriver(req, res) {
       return res.status(400).json({ error: 'Se requiere el ID del conductor de Shipday.' });
     }
 
-    console.log(`🚀 INICIO (1x1): Asignando driver ${driverId} a orden ${orderId}`);
-
-    // --- ✅ FASE PREPARATORIA: OBTENER TODO ANTES DE EMPEZAR ---
-    console.log('--- FASE PREPARATORIA (1x1): Obteniendo IDs y Plan de Circuit ---');
-    
-    // 1. Obtenemos la información del conductor de Shipday y su ID de Circuit
-    const shipdayDrivers = await ShipdayService.getDrivers();
-    const shipdayDriver = shipdayDrivers.find(d => d.id == driverId);
-    if (!shipdayDriver || !shipdayDriver.email) {
-      throw new Error('Conductor no encontrado en Shipday o no tiene email.');
-    }
-    
-    const circuitDriverId = await circuitService.getDriverIdByEmail(shipdayDriver.email);
-    if (!circuitDriverId) {
-      console.warn(`ADVERTENCIA: No se encontró el conductor en Circuit. La orden SÓLO se asignará en Shipday.`);
-    }
-
-    // 2. Aseguramos que el plan del día exista Y que el conductor esté incluido.
-    const dailyPlanId = circuitDriverId ? await circuitController.getOrCreateDailyPlan([circuitDriverId]) : null;
-    if (circuitDriverId && !dailyPlanId) {
-      throw new Error('Se encontró un conductor de Circuit, pero no se pudo crear u obtener el Plan diario.');
-    }
-    console.log(`   -> Plan de Circuit listo con ID: ${dailyPlanId || 'N/A'}`);
     
     // --- LÓGICA DE SHIPDAY (Tu código existente) ---
     let order = await Order.findById(orderId).populate('company_id');
@@ -804,16 +781,23 @@ async assignToDriver(req, res) {
 
     // --- ✅ INICIO DE LA INTEGRACIÓN CON CIRCUIT (VERSIÓN FINAL) ---
     // Si tenemos toda la info necesaria de Circuit, procedemos
-   if (circuitDriverId && dailyPlanId) {
-        try {
-            console.log(`   -> Circuit: Añadiendo parada para orden #${order.order_number} al plan ${dailyPlanId}...`);
-            // Usamos la variable 'order' directamente
-            await circuitController.addStopToPlan(order, dailyPlanId, circuitDriverId);
-            console.log(`   -> ✅ Parada para orden #${order.order_number} añadida al plan de Circuit.`);
-        } catch (circuitError) {
-            console.error(`   -> ❌ Circuit: ${circuitError.message}`);
+   if (circuitDriverId) {
+    try {
+        console.log(`   -> Circuit: Creando un plan específico para la orden #${order.order_number}...`);
+        
+        // 1. Creamos un nuevo plan (ruta) para esta asignación única
+        const newPlanId = await circuitController.createPlanForAssignment(circuitDriverId, [order]);
+
+        // 2. Si el plan se creó, añadimos la parada
+        if (newPlanId) {
+            await circuitController.addStopToPlan(order, newPlanId, circuitDriverId);
+            console.log(`   -> ✅ Parada para orden #${order.order_number} añadida al nuevo plan ${newPlanId}.`);
         }
+    } catch (circuitError) {
+        console.error(`   -> ❌ Circuit: ${circuitError.message}`);
+        // No detenemos el proceso, solo registramos el error
     }
+}
     // --- ✅ FIN DE LA INTEGRACIÓN ---
 
     res.status(200).json({ 
