@@ -6,7 +6,6 @@ const labelController = require('../controllers/label.controller');
 const { authenticateToken, isAdmin } = require('../middlewares/auth.middleware');
 const PDFDocument = require('pdfkit');
 const sanitize = require('sanitize-filename');
-const filename = `etiqueta-${sanitize(order.envigo_label.unique_code || order._id)}.pdf`;
 
 const Order = require('../models/Order');
 // Todas las rutas requieren autenticación
