@@ -399,44 +399,39 @@ router.post('/:orderId/assign-driver', authenticateToken, isAdmin, orderControll
 // Asignar múltiples pedidos a un conductor de forma masiva
 router.post('/bulk-assign-driver', authenticateToken, isAdmin, async (req, res) => {
   try {
-    const { orderIds, driverId } = req.body;
+    const { orderIds, driverId } = req.body; // Este 'driverId' es el de Shipday
 
     // --- Validaciones ---
-    if (!Array.isArray(orderIds) || orderIds.length === 0) {
-      return res.status(400).json({ error: 'Se requiere un array de IDs de órdenes.' });
+    if (!Array.isArray(orderIds) || !driverId) {
+      return res.status(400).json({ error: 'Faltan orderIds o driverId.' });
     }
-    if (!driverId) {
-      return res.status(400).json({ error: 'Se requiere el ID del conductor.' });
+    
+    // --- ✅ FASE PREPARATORIA: OBTENER TODO ANTES DE EMPEZAR ---
+    console.log('--- FASE PREPARATORIA: Obteniendo IDs y asegurando Plan de Circuit ---');
+    
+    // 1. Obtenemos la información del conductor de Shipday y Circuit
+    const shipdayDrivers = await ShipdayService.getDrivers();
+    const shipdayDriver = shipdayDrivers.find(d => d.id == driverId);
+    if (!shipdayDriver || !shipdayDriver.email) {
+      throw new Error('Conductor no encontrado en Shipday o no tiene email.');
     }
-     // --- ✅ FASE PREPARATORIA: OBTENER TODO ANTES DE EMPEZAR ---
-    console.log('--- FASE PREPARATORIA: Obteniendo IDs y asegurando Plan de Circuit ---');
-    
-    // 1. Obtenemos la información del conductor de Shipday y Circuit
-    const shipdayDrivers = await ShipdayService.getDrivers();
-    const shipdayDriver = shipdayDrivers.find(d => d.id == driverId);
-    if (!shipdayDriver || !shipdayDriver.email) {
-      throw new Error('Conductor no encontrado en Shipday o no tiene email.');
-    }
-    
-    const circuitDriverId = await circuitService.getDriverIdByEmail(shipdayDriver.email);
-    if (!circuitDriverId) {
-      console.warn(`ADVERTENCIA: No se encontró el conductor en Circuit. Las órdenes SÓLO se asignarán en Shipday.`);
-    }
+    
+    const circuitDriverId = await circuitService.getDriverIdByEmail(shipdayDriver.email);
+    if (!circuitDriverId) {
+      console.warn(`ADVERTENCIA: No se encontró el conductor en Circuit. Las órdenes SÓLO se asignarán en Shipday.`);
+    }
 
-    // 2. Aseguramos que el plan del día exista Y que nuestro conductor esté incluido en él.
-    // Pasamos el ID del conductor que vamos a usar.
-    const dailyPlanId = circuitDriverId ? await circuitController.getOrCreateDailyPlan([circuitDriverId]) : null;
-    if (circuitDriverId && !dailyPlanId) {
-      throw new Error('Se encontró un conductor de Circuit, pero no se pudo crear u obtener el Plan diario.');
-    }
-    
-    console.log(`🚀 INICIO: Asignación masiva a Shipday ID ${driverId} (Circuit ID: ${circuitDriverId || 'N/A'}) (Plan ID: ${dailyPlanId || 'N/A'})`);
+    // 2. Aseguramos que el plan del día exista Y que nuestro conductor esté incluido en él.
+    const dailyPlanId = circuitDriverId ? await circuitController.getOrCreateDailyPlan([circuitDriverId]) : null;
+    if (circuitDriverId && !dailyPlanId) {
+      throw new Error('Se encontró un conductor de Circuit, pero no se pudo crear u obtener el Plan diario.');
+    }
+    
+    console.log(`🚀 INICIO: Asignación masiva a Shipday ID ${driverId} (Circuit ID: ${circuitDriverId || 'N/A'}) (Plan ID: ${dailyPlanId || 'N/A'})`);
     
     const results = { successful: [], failed: [] };
-    
-    // ✅ CORRECCIÓN: Hacer populate de company_id desde el inicio
     const ordersToProcess = await Order.find({ _id: { $in: orderIds } }).populate('company_id');
-    const ordersThatFailedCreation = new Set();
+
 
     // --- FASE 1: Crear en Shipday todas las órdenes que no existan ---
     console.log('--- FASE 1: Creando órdenes en Shipday ---');
@@ -534,18 +529,18 @@ router.post('/bulk-assign-driver', authenticateToken, isAdmin, async (req, res) 
       // Usamos la variable 'order', que es la que acabamos de guardar.
       // Y llamamos a la función correcta 'addStopToPlan'.
       if (circuitDriverId && dailyPlanId) {
-          try {
-              console.log(`   -> Circuit: Añadiendo parada para orden #${order.order_number} al plan ${dailyPlanId}...`);
-              await circuitController.addStopToPlan(order, dailyPlanId, circuitDriverId);
-              console.log(`   -> ✅ Parada para orden #${order.order_number} añadida al plan de Circuit.`);
-          } catch (circuitError) {
-              console.error(`   -> ❌ Circuit: ${circuitError.message}`);
-              results.failed.push({
-                  orderId: order._id,
-                  orderNumber: order.order_number,
-                  error: `Error al añadir parada en Circuit: ${circuitError.message}`
-              });
-          }
+          try {
+              // Llamamos a la función que solo añade la parada, pasando los IDs que ya obtuvimos.
+              await circuitController.addStopToPlan(order, dailyPlanId, circuitDriverId);
+              console.log(`   -> ✅ Parada para orden #${order.order_number} añadida al plan de Circuit.`);
+          } catch (circuitError) {
+              console.error(`   -> ❌ Circuit: ${circuitError.message}`);
+              results.failed.push({
+                  orderId: order._id,
+                  orderNumber: order.order_number,
+                  error: `Error al añadir parada en Circuit: ${circuitError.message}`
+              });
+          }
       }
       // --- ✅ FIN DE LA CORRECCIÓN ---
 

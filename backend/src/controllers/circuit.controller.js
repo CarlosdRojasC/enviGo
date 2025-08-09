@@ -96,7 +96,6 @@ async function getOrCreateDailyPlan(requiredDriverIds = []) {
 
 /**
  * Añade una parada (pedido) a un plan existente y la asigna a un conductor.
- * Esta función reemplaza la antigua 'sendOrderToCircuit'.
  */
 async function addStopToPlan(order, planId, circuitDriverId) {
   try {
@@ -135,17 +134,16 @@ async function createDriverInCircuit(driverData) {
       depots: [mainDepotId],
       routeOverrides: {},
     };
-    // ... (el resto del código de creación, que ya funciona, no cambia)
     try {
       const response = await axios.post(`${CIRCUIT_API_URL}/drivers`, circuitPayload, {
           headers: { Authorization: `Bearer ${CIRCUIT_API_KEY}`, 'Content-Type': 'application/json' },
       });
       return response.data;
     } catch (error) {
-      //...
       return null;
     }
 }
+
 
 module.exports = {
   getOrCreateDailyPlan,
