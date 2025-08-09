@@ -59,21 +59,27 @@ const sendOrderToCircuit = async (order) => {
   try {
     const planId = await getOrCreateDailyPlan(); // Esto devuelve "plans/some_id"
 
-    // --- ✅ INICIO DE LA CORRECIÓN FINAL Y DEFINITIVA ---
-    // La documentación de la API de Circuit especifica estos nombres de campo exactos.
+    // --- ✅ INICIO DE LA CORRECIÓN BASADA EN TU ESQUEMA ---
+    // Construimos el objeto stopData siguiendo la estructura exacta que proporcionaste.
     const stopData = {
       address: {
-        street: order.shipping_address,       // CORREGIDO: El campo se llama 'street'.
+        // Nombres de campo corregidos según tu JSON
+        addressLineOne: order.shipping_address,
         city: order.shipping_commune,
-        postcodeNumber: order.shipping_zip || '', // CORREGIDO: El campo se llama 'postcodeNumber'.
+        zip: order.shipping_zip || '',
+        // state: 'RM', // Opcional: Podrías añadir un estado/región si lo tienes
+        // country: 'CL' // Opcional: Podrías añadir el país
       },
       recipient: {
         name: order.customer_name,
         phone: order.customer_phone,
+        email: order.customer_email || '', // Añadido el email
       },
       notes: `Pedido #${order.order_number}. Detalles: ${order.notes || 'Sin notas.'}`,
+      // Opcional: Puedes añadir el número de paquetes si tienes ese dato
+      // packageCount: order.items_count || 1, 
     };
-    // --- ✅ FIN DE LA CORRECIÓN FINAL Y DEFINITIVA ---
+    // --- ✅ FIN DE LA CORRECIÓN ---
 
     // Usamos la URL base y luego el planId que ya contiene "plans/..."
     await axios.post(`${CIRCUIT_API_URL}/${planId}/stops`, stopData, {
@@ -82,6 +88,9 @@ const sendOrderToCircuit = async (order) => {
         'Content-Type': 'application/json',
       },
     });
+
+    // Si la línea anterior no lanza un error, el envío fue exitoso.
+    console.log(`✅ Circuit: Pedido ${order.order_number} enviado a Circuit exitosamente.`);
 
   } catch (error) {
     const errorMessage = error.response ? JSON.stringify(error.response.data) : error.message;
