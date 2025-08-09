@@ -10,7 +10,7 @@ const ShipdayService = require('../services/shipday.service.js');
 const XLSX = require('xlsx'); // <--- Añade esta línea aquí
 const shippingZone = require('../config/ShippingZone');
 const circuitController = require('./circuit.controller');
-
+const circuitService = require('../services/circuit.service'); // El servicio "traductor"
 
 class OrderController {
 async getAll(req, res) {
@@ -705,15 +705,37 @@ async getOrdersTrend(req, res) {
 async assignToDriver(req, res) {
   try {
     const { orderId } = req.params;
-    const { driverId } = req.body;
+    const { driverId } = req.body; // Este es el ID de Shipday
 
     if (!driverId) {
       return res.status(400).json({ error: 'Se requiere el ID del conductor de Shipday.' });
     }
 
-    console.log(`🚀 INICIO: Asignando driver ${driverId} a orden ${orderId}`);
+    console.log(`🚀 INICIO (1x1): Asignando driver ${driverId} a orden ${orderId}`);
 
-    // ✅ CORRECCIÓN: Hacer populate de company_id desde el inicio
+    // --- ✅ FASE PREPARATORIA: OBTENER TODO ANTES DE EMPEZAR ---
+    console.log('--- FASE PREPARATORIA (1x1): Obteniendo IDs y Plan de Circuit ---');
+    
+    // 1. Obtenemos la información del conductor de Shipday y su ID de Circuit
+    const shipdayDrivers = await ShipdayService.getDrivers();
+    const shipdayDriver = shipdayDrivers.find(d => d.id == driverId);
+    if (!shipdayDriver || !shipdayDriver.email) {
+      throw new Error('Conductor no encontrado en Shipday o no tiene email.');
+    }
+    
+    const circuitDriverId = await circuitService.getDriverIdByEmail(shipdayDriver.email);
+    if (!circuitDriverId) {
+      console.warn(`ADVERTENCIA: No se encontró el conductor en Circuit. La orden SÓLO se asignará en Shipday.`);
+    }
+
+    // 2. Aseguramos que el plan del día exista Y que el conductor esté incluido.
+    const dailyPlanId = circuitDriverId ? await circuitController.getOrCreateDailyPlan([circuitDriverId]) : null;
+    if (circuitDriverId && !dailyPlanId) {
+      throw new Error('Se encontró un conductor de Circuit, pero no se pudo crear u obtener el Plan diario.');
+    }
+    console.log(`   -> Plan de Circuit listo con ID: ${dailyPlanId || 'N/A'}`);
+    
+    // --- LÓGICA DE SHIPDAY (Tu código existente) ---
     let order = await Order.findById(orderId).populate('company_id');
     if (!order) {
       return res.status(404).json({ error: 'Pedido no encontrado.' });
@@ -721,34 +743,25 @@ async assignToDriver(req, res) {
 
     let shipdayOrderId = order.shipday_order_id;
 
-    // Si la orden no está en Shipday, la creamos primero
     if (!shipdayOrderId) {
       console.log('📦 Orden no existe en Shipday. Creando...');
-      
-      // ✅ CORRECCIÓN: Usar nombre de empresa + enviGo
       const companyName = order.company_id?.name || 'Cliente';
       const restaurantName = `${companyName} - enviGo`;
-      
-      // ✅ CORRECCIÓN: Usar dirección de empresa si está disponible
       const restaurantAddress = order.company_id?.address || "santa hilda 1447, quilicura";
       
       const orderDataForShipday = {
           orderNumber: order.order_number,
           customerName: order.customer_name,
           customerAddress: order.shipping_address,
-          restaurantName: restaurantName, // ← CAMBIADO: Ahora usa empresa + enviGo
-          restaurantAddress: restaurantAddress, // ← CAMBIADO: Ahora usa dirección de empresa
+          restaurantName: restaurantName,
+          restaurantAddress: restaurantAddress,
           customerPhoneNumber: order.customer_phone || '',
           deliveryInstruction: order.notes || '',
           deliveryFee: order.shipping_cost || 1800,
           total: parseFloat(order.total_amount) || parseFloat(order.shipping_cost) || 1,
           customerEmail: order.customer_email || '',
           payment_method: order.payment_method || '',
-          // ✅ CORRECCIÓN: Campos de propina vacíos o sin definir para que Shipday permita añadir propina
-          // NO incluir tip: 0 ni tipAmount: 0, dejar que Shipday maneje esto
       };
-      
-      console.log(`🏢 Creando orden para: ${restaurantName} en dirección: ${restaurantAddress}`);
       
       const createdShipdayOrder = await ShipdayService.createOrder(orderDataForShipday);
       if (!createdShipdayOrder || !createdShipdayOrder.orderId) {
@@ -757,89 +770,57 @@ async assignToDriver(req, res) {
       
       shipdayOrderId = createdShipdayOrder.orderId;
       order.shipday_order_id = shipdayOrderId;
-      await order.save();
-      console.log(`✅ Orden creada en Shipday con ID: ${shipdayOrderId} para empresa: ${companyName}`);
+      // No guardamos aquí, guardamos todo al final
     }
 
-    // --- INICIO DE LA CORRECCIÓN DEFINITIVA ---
-
-    // Paso 1: Asignar el conductor
+    // Asignar conductor en Shipday
     console.log(`👨‍💼 Asignando conductor a Shipday Order ID: ${shipdayOrderId}`);
     await ShipdayService.assignOrder(shipdayOrderId, driverId);
     console.log('✅ Asignación enviada a Shipday.');
 
-    // Paso 2: Volver a pedir TODAS las órdenes de Shipday para encontrar la nuestra
-    console.log(`🔗 Consultando la lista completa de órdenes para encontrar el trackingLink...`);
+    // Obtener datos actualizados de Shipday
     const allShipdayOrders = await ShipdayService.getOrders();
-
-    // Paso 3: Buscar nuestra orden en la lista
     const updatedShipdayOrder = allShipdayOrders.find(o => o.orderId == shipdayOrderId);
-
-    if (!updatedShipdayOrder) {
-      console.warn(`⚠️ No se encontró la orden ${shipdayOrderId} en la lista de Shipday después de asignar.`);
-      // Aunque no se encuentre, procedemos a guardar el resto de la info.
-    } else {
-        console.log('📦 Datos actualizados encontrados en la lista:', JSON.stringify(updatedShipdayOrder, null, 2));
-    }
-
-    // Paso 4: Extraer el trackingLink de los datos encontrados
     const trackingUrl = updatedShipdayOrder?.trackingLink || '';
-    console.log(`🔗 URL de seguimiento final: "${trackingUrl}"`);
     
-    // Paso 5: Actualizar la orden local
+    // Actualizar la orden local
     order.shipday_driver_id = driverId;
-    order.status = 'shipped'; // o 'assigned' según tu lógica de negocio
+    order.status = 'shipped';
     order.shipday_tracking_url = trackingUrl;
 
-    // Obtener info del conductor (opcional pero recomendado)
-    try {
-      const drivers = await ShipdayService.getDrivers();
-      const driver = drivers.find(d => d.id == driverId);
-      if (driver) {
-        order.driver_info = { 
-          name: driver.name, 
-          phone: driver.phone || '', 
-          email: driver.email || '', 
-          status: driver.isOnShift ? 'ONLINE' : 'OFFLINE' 
-        };
-      }
-    } catch (driverError) {
-      console.warn('⚠️ No se pudo obtener info del conductor:', driverError.message);
+    const driverInfo = shipdayDrivers.find(d => d.id == driverId);
+    if (driverInfo) {
+      order.driver_info = { 
+        name: driverInfo.name, 
+        phone: driverInfo.phone || '', 
+        email: driverInfo.email || '', 
+        status: driverInfo.isOnShift ? 'ONLINE' : 'OFFLINE' 
+      };
     }
     
-    // Paso 6: Guardar la orden
+    // Guardar la orden con TODOS los cambios de Shipday
     const savedOrder = await order.save();
-    console.log(`💾 Orden ${savedOrder.order_number} guardada con tracking URL: "${savedOrder.shipday_tracking_url}"`);
+    console.log(`💾 Orden ${savedOrder.order_number} guardada con los datos de Shipday.`);
 
-    // --- FIN DE LA CORRECCIÓN DEFINITIVA ---
-    // =================================================================
-    // =========== 🚀 INICIO DE LA INTEGRACIÓN CON CIRCUIT 🚀 ===========
-    // =================================================================
-   if (circuitDriverId && dailyPlanId) {
-          try {
-              console.log(`   -> Circuit: Añadiendo parada para orden #${savedOrder.order_number} al plan ${dailyPlanId}...`);
-              // CAMBIO CLAVE: Usamos la nueva función 'addStopToPlan' en lugar de 'sendOrderToCircuit'
-              await circuitController.addStopToPlan(savedOrder, dailyPlanId, circuitDriverId);
-              console.log(`   -> ✅ Parada para orden #${savedOrder.order_number} añadida al plan de Circuit.`);
-          } catch (circuitError) {
-              console.error(`   -> ❌ Circuit: ${circuitError.message}`);
-              results.failed.push({
-                  orderId: savedOrder._id,
-                  orderNumber: savedOrder.order_number,
-                  error: `Error al añadir parada en Circuit: ${circuitError.message}`
-              });
-          }
-      }
-    // ===============================================================
-    // ============= 🏁 FIN DE LA INTEGRACIÓN CON CIRCUIT 🏁 =============
-    // ===============================================================
+    // --- ✅ INICIO DE LA INTEGRACIÓN CON CIRCUIT (VERSIÓN FINAL) ---
+    // Si tenemos toda la info necesaria de Circuit, procedemos
+    if (circuitDriverId && dailyPlanId) {
+        try {
+            console.log(`   -> Circuit: Añadiendo parada para orden #${savedOrder.order_number} al plan ${dailyPlanId}...`);
+            // Usamos la función correcta 'addStopToPlan'
+            await circuitController.addStopToPlan(savedOrder, dailyPlanId, circuitDriverId);
+            console.log(`   -> ✅ Parada para orden #${savedOrder.order_number} añadida al plan de Circuit.`);
+        } catch (circuitError) {
+            console.error(`   -> ❌ Circuit: ${circuitError.message}`);
+            // No detenemos el proceso, solo registramos el error para que la respuesta principal sea exitosa
+        }
+    }
+    // --- ✅ FIN DE LA INTEGRACIÓN ---
 
     res.status(200).json({ 
       message: 'Conductor asignado exitosamente.',
       success: true,
       trackingUrl: savedOrder.shipday_tracking_url,
-      company_name: order.company_id?.name, // ← AGREGADO para confirmación
-      restaurant_name_sent: `${order.company_id?.name || 'Cliente'} - enviGo`, // ← AGREGADO para debug
       order: savedOrder
     });
 
