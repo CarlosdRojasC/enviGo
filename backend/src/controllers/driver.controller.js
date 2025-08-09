@@ -44,60 +44,76 @@ class DriverController {
    * Crear nuevo conductor
    */
 async createDriver(req, res) {
+    console.log('--- INICIO DEL PROCESO DE CREACIÓN DE CONDUCTOR ---');
     try {
-      if (req.user.role !== 'admin') {
-        return res.status(403).json({ error: ERRORS.FORBIDDEN });
-      }
+        if (req.user.role !== 'admin') {
+            return res.status(403).json({ error: ERRORS.FORBIDDEN });
+        }
 
-      const driverData = req.body;
-      console.log('👨‍💼 Creando conductor:', driverData);
+        const driverData = req.body;
+        console.log('1. DATOS RECIBIDOS DEL FORMULARIO:', driverData);
 
-      if (!driverData.name || !driverData.email || !driverData.phone) {
-        return res.status(400).json({ error: 'Faltan campos obligatorios: name, email, phone' });
-      }
-      
-      // --- PASO 1: Crear en plataformas externas en paralelo ---
-      const [shipdayDriver, circuitDriver] = await Promise.all([
-        ShipdayService.createDriver(driverData),
-        circuitController.createDriverInCircuit(driverData)
-      ]);
+        if (!driverData.name || !driverData.email || !driverData.phone) {
+            return res.status(400).json({ error: 'Faltan campos obligatorios: name, email, phone' });
+        }
+        
+        // --- PASO A: Crear en Shipday ---
+        console.log('2. Intentando crear en Shipday...');
+        const shipdayDriver = await ShipdayService.createDriver(driverData);
+        if (!shipdayDriver || !shipdayDriver.id) {
+            throw new Error('La creación en Shipday falló o no devolvió un ID.');
+        }
+        console.log('✅ Éxito en Shipday. ID:', shipdayDriver.id);
 
-      if (!shipdayDriver) {
-        throw new Error('La creación en Shipday falló. El proceso no puede continuar.');
-      }
-      console.log('✅ Conductor creado en Shipday.');
-      
-      if (circuitDriver) {
-        console.log(`✅ Conductor creado en Circuit con ID: ${circuitDriver.id}`);
-      } else {
-        console.warn('⚠️ No se pudo crear el conductor en Circuit.');
-      }
+        // --- PASO B: Crear en Circuit ---
+        console.log('3. Intentando crear en Circuit...');
+        const circuitDriver = await circuitController.createDriverInCircuit(driverData);
+        if (circuitDriver && circuitDriver.id) {
+            console.log(`✅ Éxito en Circuit. ID: ${circuitDriver.id}`);
+        } else {
+            console.warn('⚠️ Fallo en Circuit. El conductor no se creó en la plataforma de Circuit, pero el proceso continuará.');
+        }
 
-      // --- PASO 2: Guardar la información en nuestro nuevo modelo Driver ---
-      const newDriver = new Driver({
-        full_name: driverData.name,
-        email: driverData.email,
-        phone: driverData.phone,
-        is_active: true,
-        shipday_driver_id: shipdayDriver.id,
-        circuit_driver_id: circuitDriver?.id, // Guarda el ID de Circuit si existe
-      });
+        // --- PASO C: Preparar para guardar en base de datos ---
+        console.log('4. Preparando datos para guardar en la base de datos local...');
+        const newDriver = new Driver({
+            full_name: driverData.name,
+            email: driverData.email,
+            phone: driverData.phone,
+            company_id: driverData.company_id,
+            is_active: true,
+            shipday_driver_id: shipdayDriver.id,
+            circuit_driver_id: circuitDriver?.id, // Guarda el ID de Circuit si existe
+        });
+        console.log('   -> Datos a guardar:', newDriver.toObject());
 
-      await newDriver.save();
-      console.log('💾 Registro de Conductor guardado en la base de datos.');
+        // --- PASO D: Guardar en la base de datos ---
+        console.log('5. Intentando guardar en la base de datos (MongoDB)...');
+        await newDriver.save();
+        console.log('✅ Éxito al guardar en la base de datos.');
 
-      res.status(201).json({
-        success: true,
-        message: 'Conductor creado exitosamente en todos los sistemas.',
-        data: newDriver,
-      });
-      
+        console.log('--- PROCESO COMPLETADO EXITOSAMENTE ---');
+        res.status(201).json({
+            success: true,
+            message: 'Conductor creado exitosamente.',
+            data: newDriver,
+        });
+        
     } catch (error) {
-      console.error('❌ Error creando conductor:', error);
-      res.status(500).json({ success: false, error: error.message });
+        // ESTE BLOQUE ES EL MÁS IMPORTANTE PARA NOSOTROS
+        console.error('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!');
+        console.error('❌ ERROR CRÍTICO DURANTE LA CREACIÓN DEL CONDUCTOR ❌');
+        console.error('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!');
+        console.error('Mensaje de error:', error.message);
+        console.error('Stack de error:', error.stack); // El stack nos dirá la línea exacta del error
+        
+        res.status(500).json({ 
+            success: false, 
+            error: 'Ocurrió un error en el servidor. Revisa la consola del backend para más detalles.',
+            errorMessage: error.message 
+        });
     }
-  }
-
+}
   /**
    * Obtener conductor específico
    */
