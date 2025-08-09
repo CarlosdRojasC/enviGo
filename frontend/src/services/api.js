@@ -132,7 +132,7 @@ const orders = {
   getAll: (params = {}) => api.get('/orders', { params }),
   getById: (id) => api.get(`/orders/${id}`),
   create: (orderData) => api.post('/orders', orderData),
-  remove: (id) => api.delete(`/orders/${id}`),
+  delete: (id) => api.delete(`/orders/${id}`),
   updateStatus: (id, status) => api.patch(`/orders/${id}/status`, { status }),
   markAsReady: (id) => api.patch(`/orders/${id}/ready`),
   getStats: (params = {}) => api.get('/orders/stats', { params }),
