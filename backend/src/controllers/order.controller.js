@@ -702,7 +702,7 @@ async getOrdersTrend(req, res) {
   }
 }
 
-async assignToDriver(req, res) {
+async function assignToDriver(req, res) {
   try {
     const { orderId } = req.params;
     const { driverId } = req.body; // Este es el ID de Shipday
@@ -711,10 +711,20 @@ async assignToDriver(req, res) {
       return res.status(400).json({ error: 'Se requiere el ID del conductor de Shipday.' });
     }
 
-       const shipdayDrivers = await ShipdayService.getDrivers();
+    console.log(`🚀 INICIO (1x1): Asignando driver ${driverId} a orden ${orderId}`);
+
+    // --- ✅ FASE PREPARATORIA (CORREGIDA) ---
+    // 1. Obtenemos la lista de conductores de Shipday UNA SOLA VEZ al principio.
+    const shipdayDrivers = await ShipdayService.getDrivers();
     const shipdayDriver = shipdayDrivers.find(d => d.id == driverId);
     if (!shipdayDriver || !shipdayDriver.email) {
       throw new Error('Conductor no encontrado en Shipday o no tiene email.');
+    }
+    
+    // 2. Obtenemos el ID del conductor de Circuit
+    const circuitDriverId = await circuitService.getDriverIdByEmail(shipdayDriver.email);
+    if (!circuitDriverId) {
+      console.warn(`ADVERTENCIA: No se encontró el conductor en Circuit. La orden SÓLO se asignará en Shipday.`);
     }
     // --- LÓGICA DE SHIPDAY (Tu código existente) ---
     let order = await Order.findById(orderId).populate('company_id');
