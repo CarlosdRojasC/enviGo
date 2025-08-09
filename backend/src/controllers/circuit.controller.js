@@ -142,7 +142,6 @@ const mainDepotId = await getMainDepotId();
       email: driverData.email,
       phone: null, // <-- LA CLAVE: Enviamos null para evitar la validación del teléfono.
       displayName: driverData.name,
-      active: true,
       depots: [mainDepotId],
       routeOverrides: {},
     };
