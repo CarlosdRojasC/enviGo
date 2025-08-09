@@ -81,7 +81,7 @@ const sendOrderToCircuit = async (order) => {
       notes: `Pedido #${order.order_number}. Detalles: ${order.notes || 'Sin notas.'}`,
     };
 
-    await axios.post(`${CIRCUIT_API_URL}/plans/${planId}/stops`, stopData, {
+    await axios.post(`${CIRCUIT_API_URL}/${planId}/stops`, stopData, {
       headers: {
         Authorization: `Bearer ${CIRCUIT_API_KEY}`,
         'Content-Type': 'application/json',
