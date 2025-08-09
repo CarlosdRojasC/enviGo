@@ -132,7 +132,7 @@ class ShipdayController {
   async createDriver(req, res) {
     try {
       const driverData = req.body;
-      console.log('👨‍💼 Creando conductor:', driverData);
+      console.log('👨‍💼 Creando conductor desde shipday.controller.js:', driverData);
 
       if (!driverData.name || !driverData.email || !driverData.phone) {
         return res.status(400).json({
@@ -141,23 +141,54 @@ class ShipdayController {
         });
       }
 
-      const newDriver = await ShipdayService.createDriver(driverData);
-      
+      // --- PASO 1: Crear en plataformas externas en paralelo para más eficiencia ---
+      const [shipdayDriver, circuitDriver] = await Promise.all([
+        ShipdayService.createDriver(driverData),
+        circuitController.createDriverInCircuit(driverData)
+      ]);
+
+      // Verificación crítica para Shipday
+      if (!shipdayDriver || !shipdayDriver.id) {
+        throw new Error('La creación en Shipday falló o no devolvió un ID. El proceso se detiene.');
+      }
+      console.log('✅ Conductor creado en Shipday.');
+
+      // Verificación para Circuit (no crítica)
+      if (circuitDriver && circuitDriver.id) {
+        console.log(`✅ Conductor creado en Circuit con ID: ${circuitDriver.id}`);
+      } else {
+        console.warn('⚠️ No se pudo crear el conductor en Circuit.');
+      }
+
+      // --- PASO 2: Guardar todo en nuestro modelo 'Driver' ---
+      const newDriverRecord = new Driver({
+        full_name: driverData.name,
+        email: driverData.email,
+        phone: driverData.phone,
+        company_id: driverData.company_id, // Asegúrate de que el frontend envíe esto si es necesario
+        is_active: true,
+        shipday_driver_id: shipdayDriver.id,
+        circuit_driver_id: circuitDriver?.id, // Guarda el ID de Circuit si existe
+      });
+
+      await newDriverRecord.save();
+      console.log('💾 Registro de Conductor guardado en la base de datos local.');
+
+      // --- PASO 3: Enviar respuesta exitosa ---
       res.status(201).json({
         success: true,
-        message: 'Conductor creado exitosamente',
-        data: newDriver,
-        timestamp: new Date().toISOString()
+        message: 'Conductor creado exitosamente en todos los sistemas.',
+        data: newDriverRecord, // Devolvemos el registro de nuestra DB, que es el más completo
       });
+
     } catch (error) {
-      console.error('❌ Error creando conductor:', error);
+      console.error('❌ Error creando conductor:', error.message);
       res.status(500).json({ 
         success: false, 
         error: error.message 
       });
     }
   }
-
   async updateDriver(req, res) {
     try {
       const { id } = req.params; // email del conductor
