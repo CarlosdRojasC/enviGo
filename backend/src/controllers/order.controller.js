@@ -711,7 +711,11 @@ async assignToDriver(req, res) {
       return res.status(400).json({ error: 'Se requiere el ID del conductor de Shipday.' });
     }
 
-    
+       const shipdayDrivers = await ShipdayService.getDrivers();
+    const shipdayDriver = shipdayDrivers.find(d => d.id == driverId);
+    if (!shipdayDriver || !shipdayDriver.email) {
+      throw new Error('Conductor no encontrado en Shipday o no tiene email.');
+    }
     // --- LÓGICA DE SHIPDAY (Tu código existente) ---
     let order = await Order.findById(orderId).populate('company_id');
     if (!order) {
