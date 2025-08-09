@@ -3,6 +3,7 @@ const axios = require('axios');
 const CIRCUIT_API_KEY = process.env.CIRCUIT_API_KEY;
 const CIRCUIT_API_URL = 'https://api.getcircuit.com/public/v0.2b';
 
+// Objeto para guardar en caché el planId del día y evitar crearlo en cada llamada.
 const dailyPlan = {
   date: null,
   planId: null,
@@ -10,21 +11,28 @@ const dailyPlan = {
 
 /**
  * Obtiene o crea el plan diario en Circuit.
- * ✅ CORRECCIÓN: Lanza un error si la creación falla para que la función que llama se entere.
  */
 const getOrCreateDailyPlan = async () => {
-  const today = new Date().toISOString().split('T')[0];
+  const today = new Date();
+  const todayISO = today.toISOString().split('T')[0]; // 'YYYY-MM-DD' para la caché y el título
 
-  if (dailyPlan.date === today && dailyPlan.planId) {
+  // Si ya tenemos un plan para hoy, lo reutilizamos.
+  if (dailyPlan.date === todayISO && dailyPlan.planId) {
     return dailyPlan.planId;
   }
 
   try {
+    // --- ✅ INICIO DE LA CORRECIÓN DEFINITIVA ---
+    // La documentación especifica que 'starts' debe ser un objeto con day, month, y year como números.
     const planData = {
-      // ✅ CORRECCIÓN: El campo se llama 'day', no 'date'.
-      starts: { day: today }, 
-      title: `Entregas del ${today}`,
+      starts: {
+        day: today.getDate(),          // -> Número para el día (ej: 9)
+        month: today.getMonth() + 1,   // -> Número para el mes (getMonth() es base 0, por eso +1)
+        year: today.getFullYear()     // -> Número para el año (ej: 2025)
+      },
+      title: `Entregas del ${todayISO}`, // El título puede seguir siendo un texto
     };
+    // --- ✅ FIN DE LA CORRECIÓN DEFINITIVA ---
 
     const response = await axios.post(`${CIRCUIT_API_URL}/plans`, planData, {
       headers: {
@@ -34,28 +42,26 @@ const getOrCreateDailyPlan = async () => {
     });
 
     const planId = response.data.id;
-    dailyPlan.date = today;
+    dailyPlan.date = todayISO;
     dailyPlan.planId = planId;
 
     console.log(`Circuit: Plan para hoy creado/obtenido: ${planId}`);
     return planId;
+
   } catch (error) {
     const errorMessage = error.response ? JSON.stringify(error.response.data) : error.message;
     console.error(`Circuit: Error creando el plan - ${errorMessage}`);
-    // ✅ CORRECCIÓN: Lanzamos el error hacia arriba.
     throw new Error(`No se pudo crear el plan en Circuit: ${errorMessage}`);
   }
 };
 
 /**
- * Envía un pedido a Circuit.
- * ✅ CORRECCIÓN: Propaga el error si algo falla.
+ * Envía un pedido como una "parada" a la API de Circuit.
  * @param {object} order - El objeto del pedido con todos los detalles.
  */
 const sendOrderToCircuit = async (order) => {
   if (!CIRCUIT_API_KEY) {
     console.error('Circuit: La variable de entorno CIRCUIT_API_KEY no está configurada.');
-    // Lanzamos un error para detener el proceso si no hay clave.
     throw new Error('La clave de API de Circuit no está configurada.');
   }
 
@@ -64,9 +70,9 @@ const sendOrderToCircuit = async (order) => {
 
     const stopData = {
       address: {
-        addressLine1: order.shipping_address, // <-- Usar el campo correcto de tu modelo.
-        city: order.shipping_commune,      // <-- Usar el campo correcto de tu modelo.
-        postcode: order.shipping_zip || '', // <-- Usar el campo correcto de tu modelo.
+        addressLine1: order.shipping_address,
+        city: order.shipping_commune,
+        postcode: order.shipping_zip || '',
       },
       recipient: {
         name: order.customer_name,
@@ -81,13 +87,10 @@ const sendOrderToCircuit = async (order) => {
         'Content-Type': 'application/json',
       },
     });
-    
-    // Si todo va bien, no se lanza error y la función termina.
-    
+
   } catch (error) {
     const errorMessage = error.response ? JSON.stringify(error.response.data) : error.message;
     console.error(`Circuit: Error enviando el pedido ${order.order_number} - ${errorMessage}`);
-    // ✅ CORRECCIÓN: Lanzamos el error para que la función principal sepa que falló.
     throw new Error(`Fallo al enviar el pedido ${order.order_number} a Circuit.`);
   }
 };
