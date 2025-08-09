@@ -98,29 +98,34 @@ const createDriverInCircuit = async (driverData) => {
   console.log(`Circuit Controller: Creando conductor con email ${driverData.email}...`);
   try {
     
-    // --- ✅ INICIO DE LA CORRECCIÓN DEL TELÉFONO ---
-    // Normalizamos el número de teléfono para que contenga ÚNICAMENTE dígitos.
-    // Esto elimina espacios, guiones, paréntesis y el signo '+'
+    // Normalizamos el teléfono para que solo contenga dígitos.
     const phoneWithOnlyDigits = driverData.phone.replace(/\D/g, '');
 
-    console.log(`   -> Teléfono original: "${driverData.phone}", Teléfono normalizado para Circuit: "${phoneWithOnlyDigits}"`);
-
-    // Preparamos los datos para enviar a Circuit con el teléfono limpio
+    // --- ✅ INICIO DE LA CORRECCIÓN CLAVE ---
+    // Construimos el payload con TODOS los campos que la API marcó como 'required'.
     const circuitPayload = {
       name: driverData.name,
       email: driverData.email,
       phone: phoneWithOnlyDigits,
+      displayName: driverData.name, // Usamos el nombre como displayName por defecto.
+      active: true,                  // Lo creamos como activo por defecto.
+      depots: [],                    // Un array vacío debería asignarlo al depósito principal.
+      routeOverrides: {},            // Un objeto vacío para cumplir con el requisito.
     };
     // --- ✅ FIN DE LA CORRECCIÓN ---
 
-    const response = await axios.post(`${CIRCUIT_API_URL}/drivers`, circuitPayload, { // <-- Usamos el payload corregido
+    console.log('   -> Payload completo enviado a Circuit:', circuitPayload);
+
+    const response = await axios.post(`${CIRCUIT_API_URL}/drivers`, circuitPayload, {
       headers: {
         Authorization: `Bearer ${CIRCUIT_API_KEY}`,
         'Content-Type': 'application/json',
       },
     });
+
     console.log(`✅ Circuit Controller: Conductor creado en Circuit.`);
     return response.data;
+
   } catch (error) {
     const errorMessage = error.response ? JSON.stringify(error.response.data) : error.message;
     console.error(`❌ Circuit Controller: Error al crear conductor: ${errorMessage}`);
