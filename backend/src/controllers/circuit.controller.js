@@ -3,36 +3,29 @@ const axios = require('axios');
 const CIRCUIT_API_KEY = process.env.CIRCUIT_API_KEY;
 const CIRCUIT_API_URL = 'https://api.getcircuit.com/public/v0.2b';
 
-// Objeto para guardar en caché el planId del día y evitar crearlo en cada llamada.
+// Objeto para guardar en caché el planId del día.
 const dailyPlan = {
   date: null,
   planId: null,
 };
 
-/**
- * Obtiene o crea el plan diario en Circuit.
- */
 const getOrCreateDailyPlan = async () => {
   const today = new Date();
-  const todayISO = today.toISOString().split('T')[0]; // 'YYYY-MM-DD' para la caché y el título
+  const todayISO = today.toISOString().split('T')[0];
 
-  // Si ya tenemos un plan para hoy, lo reutilizamos.
   if (dailyPlan.date === todayISO && dailyPlan.planId) {
     return dailyPlan.planId;
   }
 
   try {
-    // --- ✅ INICIO DE LA CORRECIÓN DEFINITIVA ---
-    // La documentación especifica que 'starts' debe ser un objeto con day, month, y year como números.
     const planData = {
       starts: {
-        day: today.getDate(),          // -> Número para el día (ej: 9)
-        month: today.getMonth() + 1,   // -> Número para el mes (getMonth() es base 0, por eso +1)
-        year: today.getFullYear()     // -> Número para el año (ej: 2025)
+        day: today.getDate(),
+        month: today.getMonth() + 1,
+        year: today.getFullYear(),
       },
-      title: `Entregas del ${todayISO}`, // El título puede seguir siendo un texto
+      title: `Entregas del ${todayISO}`,
     };
-    // --- ✅ FIN DE LA CORRECIÓN DEFINITIVA ---
 
     const response = await axios.post(`${CIRCUIT_API_URL}/plans`, planData, {
       headers: {
@@ -47,7 +40,6 @@ const getOrCreateDailyPlan = async () => {
 
     console.log(`Circuit: Plan para hoy creado/obtenido: ${planId}`);
     return planId;
-
   } catch (error) {
     const errorMessage = error.response ? JSON.stringify(error.response.data) : error.message;
     console.error(`Circuit: Error creando el plan - ${errorMessage}`);
@@ -57,7 +49,6 @@ const getOrCreateDailyPlan = async () => {
 
 /**
  * Envía un pedido como una "parada" a la API de Circuit.
- * @param {object} order - El objeto del pedido con todos los detalles.
  */
 const sendOrderToCircuit = async (order) => {
   if (!CIRCUIT_API_KEY) {
@@ -66,13 +57,15 @@ const sendOrderToCircuit = async (order) => {
   }
 
   try {
-    const planId = await getOrCreateDailyPlan();
+    const planId = await getOrCreateDailyPlan(); // Esto devuelve "plans/some_id"
 
+    // --- ✅ INICIO DE LA CORRECIÓN FINAL Y DEFINITIVA ---
+    // La documentación de la API de Circuit especifica estos nombres de campo exactos.
     const stopData = {
       address: {
-        addressLine1: order.shipping_address,
+        street: order.shipping_address,       // CORREGIDO: El campo se llama 'street'.
         city: order.shipping_commune,
-        postcode: order.shipping_zip || '',
+        postcodeNumber: order.shipping_zip || '', // CORREGIDO: El campo se llama 'postcodeNumber'.
       },
       recipient: {
         name: order.customer_name,
@@ -80,7 +73,9 @@ const sendOrderToCircuit = async (order) => {
       },
       notes: `Pedido #${order.order_number}. Detalles: ${order.notes || 'Sin notas.'}`,
     };
+    // --- ✅ FIN DE LA CORRECIÓN FINAL Y DEFINITIVA ---
 
+    // Usamos la URL base y luego el planId que ya contiene "plans/..."
     await axios.post(`${CIRCUIT_API_URL}/${planId}/stops`, stopData, {
       headers: {
         Authorization: `Bearer ${CIRCUIT_API_KEY}`,
