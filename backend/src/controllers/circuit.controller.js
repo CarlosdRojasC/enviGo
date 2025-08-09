@@ -134,7 +134,7 @@ const createDriverInCircuit = async (driverData) => {
     
     // Normalizamos el teléfono para que solo contenga dígitos.
     const phoneWithOnlyDigits = driverData.phone.replace(/\D/g, '');
-
+const mainDepotId = await getMainDepotId();
     // --- ✅ INICIO DE LA CORRECCIÓN CLAVE ---
     // Construimos el payload con TODOS los campos que la API marcó como 'required'.
     const circuitPayload = {
