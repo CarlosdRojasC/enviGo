@@ -420,13 +420,6 @@ router.post('/bulk-assign-driver', authenticateToken, isAdmin, async (req, res) 
     if (!circuitDriverId) {
       console.warn(`ADVERTENCIA: No se encontró el conductor en Circuit. Las órdenes SÓLO se asignarán en Shipday.`);
     }
-
-    // 2. Aseguramos que el plan del día exista Y que nuestro conductor esté incluido en él.
-    const dailyPlanId = circuitDriverId ? await circuitController.getOrCreateDailyPlan([circuitDriverId]) : null;
-    if (circuitDriverId && !dailyPlanId) {
-      throw new Error('Se encontró un conductor de Circuit, pero no se pudo crear u obtener el Plan diario.');
-    }
-    
     console.log(`🚀 INICIO: Asignación masiva a Shipday ID ${driverId} (Circuit ID: ${circuitDriverId || 'N/A'}) (Plan ID: ${dailyPlanId || 'N/A'})`);
     
     const results = { successful: [], failed: [] };
