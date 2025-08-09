@@ -3,7 +3,7 @@ const bcrypt = require('bcrypt');
 const User = require('../models/User');
 const ShipdayService = require('../services/shipday.service.js');
 const { ERRORS } = require('../config/constants');
-
+const circuitController = require('./circuit.controller');
 class DriverController {
   /**
    * Obtiene la lista de todos los conductores. Solo para administradores.
@@ -43,7 +43,7 @@ class DriverController {
   /**
    * Crear nuevo conductor
    */
-  async createDriver(req, res) {
+async createDriver(req, res) {
     try {
       if (req.user.role !== 'admin') {
         return res.status(403).json({ error: ERRORS.FORBIDDEN });
@@ -52,46 +52,49 @@ class DriverController {
       const driverData = req.body;
       console.log('👨‍💼 Creando conductor:', driverData);
 
-      // Validaciones básicas
       if (!driverData.name || !driverData.email || !driverData.phone) {
-        return res.status(400).json({
-          success: false,
-          error: 'Faltan campos obligatorios: name, email, phone'
-        });
+        return res.status(400).json({ error: 'Faltan campos obligatorios: name, email, phone' });
+      }
+      
+      // --- PASO 1: Crear en plataformas externas en paralelo ---
+      const [shipdayDriver, circuitDriver] = await Promise.all([
+        ShipdayService.createDriver(driverData),
+        circuitController.createDriverInCircuit(driverData)
+      ]);
+
+      if (!shipdayDriver) {
+        throw new Error('La creación en Shipday falló. El proceso no puede continuar.');
+      }
+      console.log('✅ Conductor creado en Shipday.');
+      
+      if (circuitDriver) {
+        console.log(`✅ Conductor creado en Circuit con ID: ${circuitDriver.id}`);
+      } else {
+        console.warn('⚠️ No se pudo crear el conductor en Circuit.');
       }
 
-      // Crear en Shipday
-      const newDriver = await ShipdayService.createDriver(driverData);
-      
-      // Opcional: También crear en tu base de datos local
-      try {
-        const localDriver = new User({
-          full_name: driverData.name,
-          email: driverData.email,
-          phone: driverData.phone,
-          role: 'driver',
-          shipday_driver_id: newDriver.email, // Shipday usa email como ID
-          is_active: true
-        });
-        await localDriver.save();
-      } catch (localError) {
-        console.warn('⚠️ No se pudo crear conductor local:', localError.message);
-        // No fallar si el conductor local no se puede crear
-      }
-      
+      // --- PASO 2: Guardar la información en nuestro nuevo modelo Driver ---
+      const newDriver = new Driver({
+        full_name: driverData.name,
+        email: driverData.email,
+        phone: driverData.phone,
+        is_active: true,
+        shipday_driver_id: shipdayDriver.id,
+        circuit_driver_id: circuitDriver?.id, // Guarda el ID de Circuit si existe
+      });
+
+      await newDriver.save();
+      console.log('💾 Registro de Conductor guardado en la base de datos.');
+
       res.status(201).json({
         success: true,
-        message: 'Conductor creado exitosamente',
+        message: 'Conductor creado exitosamente en todos los sistemas.',
         data: newDriver,
-        timestamp: new Date().toISOString()
       });
       
     } catch (error) {
       console.error('❌ Error creando conductor:', error);
-      res.status(500).json({ 
-        success: false, 
-        error: error.message || ERRORS.SERVER_ERROR
-      });
+      res.status(500).json({ success: false, error: error.message });
     }
   }
 
