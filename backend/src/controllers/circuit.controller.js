@@ -57,31 +57,28 @@ const sendOrderToCircuit = async (order) => {
   }
 
   try {
-    const planId = await getOrCreateDailyPlan(); // Esto devuelve "plans/some_id"
+    const planId = await getOrCreateDailyPlan();
 
-    // --- ✅ INICIO DE LA CORRECIÓN BASADA EN TU ESQUEMA ---
-    // Construimos el objeto stopData siguiendo la estructura exacta que proporcionaste.
+    // --- ✅ INICIO DE LA CORRECIÓN CON VALORES POR DEFECTO ---
     const stopData = {
       address: {
-        // Nombres de campo corregidos según tu JSON
         addressLineOne: order.shipping_address,
         city: order.shipping_commune,
-        zip: order.shipping_zip || '',
-        // state: 'RM', // Opcional: Podrías añadir un estado/región si lo tienes
-        // country: 'CL' // Opcional: Podrías añadir el país
+        // Si no hay zip, usamos '8700000' (código de Quilicura) como valor por defecto.
+        zip: order.shipping_zip || '8700000',
+        // Añadimos valores por defecto para estado y país para mayor robustez.
+        state: order.shipping_state || 'RM',
+        country: order.shipping_country || 'CL',
       },
       recipient: {
         name: order.customer_name,
         phone: order.customer_phone,
-        email: order.customer_email || '', // Añadido el email
+        email: order.customer_email || '',
       },
       notes: `Pedido #${order.order_number}. Detalles: ${order.notes || 'Sin notas.'}`,
-      // Opcional: Puedes añadir el número de paquetes si tienes ese dato
-      // packageCount: order.items_count || 1, 
     };
     // --- ✅ FIN DE LA CORRECIÓN ---
 
-    // Usamos la URL base y luego el planId que ya contiene "plans/..."
     await axios.post(`${CIRCUIT_API_URL}/${planId}/stops`, stopData, {
       headers: {
         Authorization: `Bearer ${CIRCUIT_API_KEY}`,
@@ -89,7 +86,6 @@ const sendOrderToCircuit = async (order) => {
       },
     });
 
-    // Si la línea anterior no lanza un error, el envío fue exitoso.
     console.log(`✅ Circuit: Pedido ${order.order_number} enviado a Circuit exitosamente.`);
 
   } catch (error) {
