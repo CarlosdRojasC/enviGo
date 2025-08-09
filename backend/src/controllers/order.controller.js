@@ -9,6 +9,8 @@ const mongoose = require('mongoose'); // Agregar esta línea
 const ShipdayService = require('../services/shipday.service.js');
 const XLSX = require('xlsx'); // <--- Añade esta línea aquí
 const shippingZone = require('../config/ShippingZone');
+const circuitController = require('./circuit.controller');
+
 
 class OrderController {
 async getAll(req, res) {
@@ -810,6 +812,23 @@ async assignToDriver(req, res) {
     console.log(`💾 Orden ${savedOrder.order_number} guardada con tracking URL: "${savedOrder.shipday_tracking_url}"`);
 
     // --- FIN DE LA CORRECCIÓN DEFINITIVA ---
+    // =================================================================
+    // =========== 🚀 INICIO DE LA INTEGRACIÓN CON CIRCUIT 🚀 ===========
+    // =================================================================
+    try {
+        console.log(` Circuit: Enviando pedido ${savedOrder.order_number} a Circuit...`);
+        // Usamos el objeto `savedOrder` porque contiene la información más actualizada.
+        // El `await` asegura que si esto falla, se irá al catch principal.
+        await circuitController.sendOrderToCircuit(savedOrder);
+        console.log(`✅ Circuit: Pedido ${savedOrder.order_number} enviado exitosamente.`);
+    } catch (circuitError) {
+        // Si falla el envío a Circuit, solo lo registramos en la consola
+        // pero NO detenemos el proceso. La asignación en Shipday ya fue exitosa.
+        console.error(`❌ Circuit: No se pudo enviar el pedido ${savedOrder.order_number}. Error: ${circuitError.message}`);
+    }
+    // ===============================================================
+    // ============= 🏁 FIN DE LA INTEGRACIÓN CON CIRCUIT 🏁 =============
+    // ===============================================================
 
     res.status(200).json({ 
       message: 'Conductor asignado exitosamente.',
