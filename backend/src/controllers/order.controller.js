@@ -815,17 +815,21 @@ async assignToDriver(req, res) {
     // =================================================================
     // =========== 🚀 INICIO DE LA INTEGRACIÓN CON CIRCUIT 🚀 ===========
     // =================================================================
-    try {
-        console.log(` Circuit: Enviando pedido ${savedOrder.order_number} a Circuit...`);
-        // Usamos el objeto `savedOrder` porque contiene la información más actualizada.
-        // El `await` asegura que si esto falla, se irá al catch principal.
-        await circuitController.sendOrderToCircuit(savedOrder);
-        console.log(`✅ Circuit: Pedido ${savedOrder.order_number} enviado exitosamente.`);
-    } catch (circuitError) {
-        // Si falla el envío a Circuit, solo lo registramos en la consola
-        // pero NO detenemos el proceso. La asignación en Shipday ya fue exitosa.
-        console.error(`❌ Circuit: No se pudo enviar el pedido ${savedOrder.order_number}. Error: ${circuitError.message}`);
-    }
+   if (circuitDriverId && dailyPlanId) {
+          try {
+              console.log(`   -> Circuit: Añadiendo parada para orden #${savedOrder.order_number} al plan ${dailyPlanId}...`);
+              // CAMBIO CLAVE: Usamos la nueva función 'addStopToPlan' en lugar de 'sendOrderToCircuit'
+              await circuitController.addStopToPlan(savedOrder, dailyPlanId, circuitDriverId);
+              console.log(`   -> ✅ Parada para orden #${savedOrder.order_number} añadida al plan de Circuit.`);
+          } catch (circuitError) {
+              console.error(`   -> ❌ Circuit: ${circuitError.message}`);
+              results.failed.push({
+                  orderId: savedOrder._id,
+                  orderNumber: savedOrder.order_number,
+                  error: `Error al añadir parada en Circuit: ${circuitError.message}`
+              });
+          }
+      }
     // ===============================================================
     // ============= 🏁 FIN DE LA INTEGRACIÓN CON CIRCUIT 🏁 =============
     // ===============================================================
