@@ -243,7 +243,7 @@
                       <span class="action-icon">📋</span>
                       Duplicar
                     </button>
-                    <button @click="deleteOrder(order)" class="dropdown-item danger">
+                    <button @click="$emit('delete-order', order._id)" class="dropdown-item danger">
                       <span class="action-icon">🗑️</span>
                       Eliminar
                     </button>
@@ -569,16 +569,6 @@ function debugOrder(order) {
  */
 function duplicateOrder(order) {
   console.log('📋 Duplicate order:', order._id)
-}
-
-/**
- * Delete order (placeholder)
- */
-function deleteOrder(order) {
-  if (confirm(`¿Eliminar pedido ${order.order_number}?`)) {
-    console.log('🗑️ Delete order:', order._id)
-    emit('delete-order', order._id)
-  }
 }
 </script>
 

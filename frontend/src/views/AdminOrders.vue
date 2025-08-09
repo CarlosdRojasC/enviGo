@@ -57,7 +57,7 @@
       :selected-orders="selectedOrders"
       :select-all-checked="selectAllChecked"
       :select-all-indeterminate="selectAllIndeterminate"
-      :delete-order="deleteOrder"
+      @delete-order="deleteOrder"
       @select-order="toggleOrderSelection"
       @select-all="toggleSelectAll"
       @view-details="openOrderDetailsModal"
