@@ -399,18 +399,16 @@ router.post('/:orderId/assign-driver', authenticateToken, isAdmin, orderControll
 // Asignar múltiples pedidos a un conductor de forma masiva
 router.post('/bulk-assign-driver', authenticateToken, isAdmin, async (req, res) => {
   try {
-    const { orderIds, driverId } = req.body; // Este 'driverId' es el de Shipday
+    const { orderIds, driverId } = req.body; // driverId de Shipday
 
-    // --- Validaciones ---
     if (!Array.isArray(orderIds) || !driverId) {
       return res.status(400).json({ error: 'Faltan orderIds o driverId.' });
     }
-    
-    // --- ✅ FASE PREPARATORIA: OBTENER TODO ANTES DE EMPEZAR ---
-    console.log('--- FASE PREPARATORIA: Obteniendo IDs y asegurando Plan de Circuit ---');
-    
-    // 1. Obtenemos la información del conductor de Shipday y Circuit
-   const shipdayDrivers = await ShipdayService.getDrivers();
+
+    console.log('--- FASE PREPARATORIA: Obteniendo conductor y preparando Circuit ---');
+
+    // 1. Obtener info del driver desde Shipday y Circuit
+    const shipdayDrivers = await ShipdayService.getDrivers();
     const shipdayDriver = shipdayDrivers.find(d => d.id == driverId);
     if (!shipdayDriver || !shipdayDriver.email) {
       throw new Error('Conductor no encontrado en Shipday o no tiene email.');
@@ -418,45 +416,42 @@ router.post('/bulk-assign-driver', authenticateToken, isAdmin, async (req, res) 
     const circuitDriverId = await circuitService.getDriverIdByEmail(shipdayDriver.email);
 
     if (!circuitDriverId) {
-      console.warn(`ADVERTENCIA: No se encontró el conductor en Circuit. Las órdenes SÓLO se asignarán en Shipday.`);
+      console.warn(`⚠️ No se encontró el conductor en Circuit. Se asignará SOLO en Shipday.`);
     }
-    
+
     const results = { successful: [], failed: [] };
+    const ordersThatFailedCreation = new Set();
+
+    // 2. Obtener las órdenes a procesar
     const ordersToProcess = await Order.find({ _id: { $in: orderIds } }).populate('company_id');
 
-
-    // --- FASE 1: Crear en Shipday todas las órdenes que no existan ---
+    // --- FASE 1: Crear en Shipday las órdenes que no existan ---
     console.log('--- FASE 1: Creando órdenes en Shipday ---');
     for (const order of ordersToProcess) {
       if (!order.shipday_order_id) {
         try {
-          console.log(`📦 Creando orden #${order.order_number} en Shipday...`);
-          
-          // ✅ CORRECCIÓN: Usar nombre de empresa + enviGo
           const companyName = order.company_id?.name || 'Cliente';
           const restaurantName = `${companyName} - enviGo`;
           const restaurantAddress = order.company_id?.address || "santa hilda 1447, quilicura";
-          
+
           const orderDataForShipday = {
             orderNumber: order.order_number,
             customerName: order.customer_name,
             customerAddress: order.shipping_address,
-            restaurantName: restaurantName, // ← CAMBIADO: era "enviGo"
-            restaurantAddress: restaurantAddress, // ← CAMBIADO: era fijo
+            restaurantName,
+            restaurantAddress,
             customerPhoneNumber: order.customer_phone || '',
             deliveryInstruction: order.notes || '',
-            deliveryFee: order.shipping_cost || 1800, // ← MEJORADO: usar shipping_cost dinámico
+            deliveryFee: order.shipping_cost || 1800,
             total: parseFloat(order.total_amount) || parseFloat(order.shipping_cost) || 1,
             customerEmail: order.customer_email || '',
-            payment_method: order.payment_method || '', // ← MEJORADO: usar payment_method real
-            // ✅ CORRECCIÓN: NO incluir campos de propina para permitir que el repartidor añada propina
+            payment_method: order.payment_method || ''
           };
-          
-          console.log(`🏢 Creando orden bulk assign para: ${restaurantName}`);
+
           const createdShipdayOrder = await ShipdayService.createOrder(orderDataForShipday);
           order.shipday_order_id = createdShipdayOrder.orderId;
           await order.save();
-          
+
         } catch (creationError) {
           console.error(`❌ Error creando #${order.order_number} en Shipday:`, creationError.message);
           results.failed.push({ 
@@ -473,8 +468,8 @@ router.post('/bulk-assign-driver', authenticateToken, isAdmin, async (req, res) 
       order => !ordersThatFailedCreation.has(order._id.toString())
     );
 
-    // --- FASE 2: Asignar el conductor a todas las órdenes válidas ---
-    console.log(`--- FASE 2: Asignando conductor a ${validOrdersForAssignment.length} órdenes ---`);
+    // --- FASE 2: Asignar conductor en Shipday ---
+    console.log(`--- FASE 2: Asignando conductor en Shipday para ${validOrdersForAssignment.length} órdenes ---`);
     for (const order of validOrdersForAssignment) {
       try {
         await ShipdayService.assignOrder(order.shipday_order_id, driverId);
@@ -487,50 +482,43 @@ router.post('/bulk-assign-driver', authenticateToken, isAdmin, async (req, res) 
         });
       }
     }
-    
-    // --- FASE 3: Consultar TODAS las órdenes de Shipday para obtener los datos actualizados ---
-    console.log('--- FASE 3: Obteniendo datos actualizados de Shipday ---');
-    await new Promise(resolve => setTimeout(resolve, 2000)); // Delay para dar tiempo a la API
-    const allShipdayOrders = await ShipdayService.getOrders();
-    const shipdayOrdersMap = new Map(allShipdayOrders.map(o => [o.orderId.toString(), o]));
-    const driverInfo = (await ShipdayService.getDrivers()).find(d => d.id == driverId);
 
-    // --- FASE 4: Actualizar la base de datos local con la información correcta ---
-let newPlanId = null;
+    // --- FASE 3: Crear plan y asignar en Circuit ---
     if (circuitDriverId && validOrdersForAssignment.length > 0) {
       try {
-        // 1. Creamos UN solo plan para esta asignación
-        newPlanId = await circuitController.createPlanForAssignment(circuitDriverId, validOrdersForAssignment);
+        console.log(`🚀 Circuit: Creando plan único para ${validOrdersForAssignment.length} órdenes...`);
+        const newPlanId = await circuitController.createPlanForAssignment(circuitDriverId, validOrdersForAssignment);
 
-        // 2. Añadimos TODAS las paradas a ese nuevo plan
-        for (const order of validOrdersForAssignment) {
-          await circuitController.addStopToPlan(order, newPlanId, circuitDriverId);
+        // Añadir paradas en paralelo
+        await Promise.all(validOrdersForAssignment.map(order =>
+          circuitController.addStopToPlan(order, newPlanId, circuitDriverId)
+        ));
+        console.log(`✅ Circuit: ${validOrdersForAssignment.length} paradas añadidas al plan ${newPlanId}.`);
+
+        // Distribuir y notificar
+        const distributed = await circuitController.distributePlan(newPlanId);
+        if (distributed) {
+          console.log(`📲 Circuit: Notificación enviada al conductor para el plan ${newPlanId}.`);
+        } else {
+          console.warn(`⚠️ Circuit: No se pudo notificar el plan ${newPlanId} al conductor.`);
         }
-        console.log(`   -> ✅ Todas las paradas (${validOrdersForAssignment.length}) añadidas al plan ${newPlanId}.`);
-
-        // 3. ¡PASO CLAVE! Distribuimos el plan al conductor
-        await circuitController.distributePlan(newPlanId);
 
       } catch (circuitError) {
-        console.error(`❌ Circuit: Error en el proceso de Circuit: ${circuitError.message}`);
-        // ... (manejo de errores)
+        console.error(`❌ Circuit: Error en el proceso - ${circuitError.message}`);
       }
     }
 
-console.log('--- FASE 4B: Actualizando DB local y añadiendo paradas a Circuit ---');
-for (const order of validOrdersForAssignment) {
-  await order.save(); // Guarda los datos de Shipday
-
-      // ✅ AGREGADO: Incluir información de empresa en el resultado
+    // --- FASE 4: Guardar y devolver resultado ---
+    for (const order of validOrdersForAssignment) {
+      await order.save();
       results.successful.push({ 
         orderId: order._id, 
         orderNumber: order.order_number,
-        companyName: order.company_id?.name, // ← AGREGADO para logging
-        restaurantNameSent: `${order.company_id?.name || 'Cliente'} - enviGo` // ← AGREGADO para debug
+        companyName: order.company_id?.name,
+        restaurantNameSent: `${order.company_id?.name || 'Cliente'} - enviGo`
       });
-      console.log(`✅ Orden #${order.order_number} (${order.company_id?.name}) actualizada con Tracking URL: "${trackingUrl}"`);
     }
-    console.log(`🏁 FIN: Proceso completado.`);
+
     res.status(200).json({
       message: `Asignación masiva completada: ${results.successful.length} exitosas, ${results.failed.length} fallidas.`,
       summary: { 
