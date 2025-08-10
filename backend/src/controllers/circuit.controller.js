@@ -132,12 +132,26 @@ async function distributePlan(planId) {
 async function optimizePlan(planId) {
   try {
     const res = await axios.post(
-      `${CIRCUIT_API_URL}/${planId}:optimize`,
+      `${CIRCUIT_API_URL}/plans/${planId}:optimize`,
       {},
       { headers: { Authorization: `Bearer ${CIRCUIT_API_KEY}`, 'Content-Type': 'application/json' } }
     );
+
     console.log(`✅ Circuit: Plan ${planId} enviado a optimización.`);
-    return res.data.operationId;
+
+    // Puede devolver directamente el plan optimizado
+    if (res.data?.id && !res.data?.operationId) {
+      console.log(`ℹ Circuit: Optimización completada instantáneamente para el plan ${planId}.`);
+      return { optimized: true, operationId: null };
+    }
+
+    // Puede devolver un ID de operación para polling
+    if (res.data?.operationId) {
+      return { optimized: false, operationId: res.data.operationId };
+    }
+
+    throw new Error(`Respuesta inesperada de optimizePlan: ${JSON.stringify(res.data)}`);
+
   } catch (err) {
     const msg = err.response ? JSON.stringify(err.response.data) : err.message;
     throw new Error(`Error optimizando plan ${planId}: ${msg}`);
