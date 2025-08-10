@@ -117,7 +117,7 @@ async function distributePlan(planId) {
   try {
     console.log(`🚀 Circuit: Distribuyendo plan ${planId}...`);
     await axios.post(
-      `${CIRCUIT_API_URL}/plans/${planId}:distribute`,
+      `${CIRCUIT_API_URL}/${planId}:distribute`,
       {},
       { headers: { Authorization: `Bearer ${CIRCUIT_API_KEY}`, 'Content-Type': 'application/json' } }
     );
