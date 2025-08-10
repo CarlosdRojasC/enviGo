@@ -129,10 +129,44 @@ async function distributePlan(planId) {
     return false;
   }
 }
+async function optimizePlan(planId) {
+  try {
+    const res = await axios.post(
+      `${CIRCUIT_API_URL}/plans/${planId}:optimize`,
+      {},
+      { headers: { Authorization: `Bearer ${CIRCUIT_API_KEY}`, 'Content-Type': 'application/json' } }
+    );
+    console.log(`✅ Circuit: Plan ${planId} enviado a optimización.`);
+    return res.data.operationId;
+  } catch (err) {
+    const msg = err.response ? JSON.stringify(err.response.data) : err.message;
+    throw new Error(`Error optimizando plan ${planId}: ${msg}`);
+  }
+}
+
+/**
+ * Consulta el estado de una operación en Circuit.
+ * @param {string} operationId
+ */
+async function getOperationStatus(operationId) {
+  try {
+    const res = await axios.get(
+      `${CIRCUIT_API_URL}/operations/${operationId}`,
+      { headers: { Authorization: `Bearer ${CIRCUIT_API_KEY}` } }
+    );
+    return res.data;
+  } catch (err) {
+    const msg = err.response ? JSON.stringify(err.response.data) : err.message;
+    throw new Error(`Error obteniendo estado de operación ${operationId}: ${msg}`);
+  }
+}
+
 // Exportamos las funciones que nuestros otros archivos necesitan
 module.exports = {
   createPlanForAssignment,
   addStopToPlan,
   createDriverInCircuit,
-  distributePlan
+  distributePlan,
+  optimizePlan,
+  getOperationStatus,
 };

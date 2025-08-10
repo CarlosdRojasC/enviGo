@@ -399,42 +399,34 @@ router.post('/:orderId/assign-driver', authenticateToken, isAdmin, orderControll
 // Asignar múltiples pedidos a un conductor de forma masiva
 router.post('/bulk-assign-driver', authenticateToken, isAdmin, async (req, res) => {
   try {
-    const { orderIds, driverId } = req.body; // driverId de Shipday
-
+    const { orderIds, driverId } = req.body;
     if (!Array.isArray(orderIds) || !driverId) {
       return res.status(400).json({ error: 'Faltan orderIds o driverId.' });
     }
 
-    console.log('--- FASE PREPARATORIA: Obteniendo conductor y preparando Circuit ---');
-
-    // 1. Obtener info del driver desde Shipday y Circuit
+    // 1️⃣ Obtener info de driver en Shipday y Circuit
     const shipdayDrivers = await ShipdayService.getDrivers();
     const shipdayDriver = shipdayDrivers.find(d => d.id == driverId);
-    if (!shipdayDriver || !shipdayDriver.email) {
-      throw new Error('Conductor no encontrado en Shipday o no tiene email.');
+    if (!shipdayDriver?.email) {
+      throw new Error('Conductor no encontrado en Shipday o sin email.');
     }
     const circuitDriverId = await circuitService.getDriverIdByEmail(shipdayDriver.email);
-
-    if (!circuitDriverId) {
-      console.warn(`⚠️ No se encontró el conductor en Circuit. Se asignará SOLO en Shipday.`);
-    }
+    if (!circuitDriverId) console.warn(`⚠️ Driver no encontrado en Circuit, solo se asignará en Shipday.`);
 
     const results = { successful: [], failed: [] };
     const ordersThatFailedCreation = new Set();
 
-    // 2. Obtener las órdenes a procesar
+    // 2️⃣ Traer las órdenes a procesar
     const ordersToProcess = await Order.find({ _id: { $in: orderIds } }).populate('company_id');
 
-    // --- FASE 1: Crear en Shipday las órdenes que no existan ---
-    console.log('--- FASE 1: Creando órdenes en Shipday ---');
+    // 3️⃣ Crear en Shipday las que no existan
     for (const order of ordersToProcess) {
       if (!order.shipday_order_id) {
         try {
           const companyName = order.company_id?.name || 'Cliente';
           const restaurantName = `${companyName} - enviGo`;
           const restaurantAddress = order.company_id?.address || "santa hilda 1447, quilicura";
-
-          const orderDataForShipday = {
+          const shipdayData = {
             orderNumber: order.order_number,
             customerName: order.customer_name,
             customerAddress: order.shipping_address,
@@ -447,91 +439,89 @@ router.post('/bulk-assign-driver', authenticateToken, isAdmin, async (req, res) 
             customerEmail: order.customer_email || '',
             payment_method: order.payment_method || ''
           };
-
-          const createdShipdayOrder = await ShipdayService.createOrder(orderDataForShipday);
+          const createdShipdayOrder = await ShipdayService.createOrder(shipdayData);
           order.shipday_order_id = createdShipdayOrder.orderId;
           await order.save();
-
-        } catch (creationError) {
-          console.error(`❌ Error creando #${order.order_number} en Shipday:`, creationError.message);
-          results.failed.push({ 
-            orderId: order._id, 
-            orderNumber: order.order_number, 
-            error: `Error al crear en Shipday: ${creationError.message}` 
-          });
+        } catch (err) {
+          results.failed.push({ orderId: order._id, orderNumber: order.order_number, error: err.message });
           ordersThatFailedCreation.add(order._id.toString());
         }
       }
     }
 
-    const validOrdersForAssignment = ordersToProcess.filter(
-      order => !ordersThatFailedCreation.has(order._id.toString())
-    );
+    const validOrdersForAssignment = ordersToProcess.filter(o => !ordersThatFailedCreation.has(o._id.toString()));
 
-    // --- FASE 2: Asignar conductor en Shipday ---
-    console.log(`--- FASE 2: Asignando conductor en Shipday para ${validOrdersForAssignment.length} órdenes ---`);
+    // 4️⃣ Asignar en Shipday
     for (const order of validOrdersForAssignment) {
       try {
         await ShipdayService.assignOrder(order.shipday_order_id, driverId);
-      } catch (assignError) {
-        console.error(`❌ Error asignando #${order.order_number}:`, assignError.message);
-        results.failed.push({ 
-          orderId: order._id, 
-          orderNumber: order.order_number, 
-          error: `Error en la asignación: ${assignError.message}` 
-        });
+      } catch (err) {
+        results.failed.push({ orderId: order._id, orderNumber: order.order_number, error: err.message });
       }
     }
 
-    // --- FASE 3: Crear plan y asignar en Circuit ---
+    // 5️⃣ Crear plan en Circuit, añadir paradas, optimizar y distribuir
     if (circuitDriverId && validOrdersForAssignment.length > 0) {
       try {
-        console.log(`🚀 Circuit: Creando plan único para ${validOrdersForAssignment.length} órdenes...`);
+        console.log(`🚀 Circuit: Creando plan para ${validOrdersForAssignment.length} órdenes...`);
         const newPlanId = await circuitController.createPlanForAssignment(circuitDriverId, validOrdersForAssignment);
 
         // Añadir paradas en paralelo
         await Promise.all(validOrdersForAssignment.map(order =>
           circuitController.addStopToPlan(order, newPlanId, circuitDriverId)
         ));
-        console.log(`✅ Circuit: ${validOrdersForAssignment.length} paradas añadidas al plan ${newPlanId}.`);
+        console.log(`✅ Circuit: Paradas añadidas.`);
 
-        // Distribuir y notificar
-        const distributed = await circuitController.distributePlan(newPlanId);
-        if (distributed) {
-          console.log(`📲 Circuit: Notificación enviada al conductor para el plan ${newPlanId}.`);
-        } else {
-          console.warn(`⚠️ Circuit: No se pudo notificar el plan ${newPlanId} al conductor.`);
+        // Optimizar plan
+        const opId = await circuitController.optimizePlan(newPlanId);
+        let optimized = false;
+        for (let i = 0; i < 10; i++) { // hasta 10 intentos
+          await new Promise(res => setTimeout(res, 2000)); // 2s entre intentos
+          const status = await circuitController.getOperationStatus(opId);
+          if (status?.done) {
+            optimized = true;
+            console.log(`✅ Circuit: Plan ${newPlanId} optimizado.`);
+            break;
+          }
+          console.log(`⏳ Circuit: Optimización en progreso (${i + 1}/10)...`);
         }
 
-      } catch (circuitError) {
-        console.error(`❌ Circuit: Error en el proceso - ${circuitError.message}`);
+        if (!optimized) {
+          console.warn(`⚠️ Circuit: Optimización no finalizó, distribuyendo igual.`);
+        }
+
+        // Distribuir al conductor
+        const distributed = await circuitController.distributePlan(newPlanId);
+        if (distributed) {
+          console.log(`📲 Circuit: Plan ${newPlanId} enviado al conductor.`);
+        } else {
+          console.warn(`⚠️ Circuit: Falló la distribución.`);
+        }
+
+      } catch (err) {
+        console.error(`❌ Circuit: Error en proceso - ${err.message}`);
       }
     }
 
-    // --- FASE 4: Guardar y devolver resultado ---
+    // 6️⃣ Guardar y responder
     for (const order of validOrdersForAssignment) {
       await order.save();
-      results.successful.push({ 
-        orderId: order._id, 
+      results.successful.push({
+        orderId: order._id,
         orderNumber: order.order_number,
-        companyName: order.company_id?.name,
-        restaurantNameSent: `${order.company_id?.name || 'Cliente'} - enviGo`
+        companyName: order.company_id?.name
       });
     }
 
     res.status(200).json({
-      message: `Asignación masiva completada: ${results.successful.length} exitosas, ${results.failed.length} fallidas.`,
-      summary: { 
-        total: orderIds.length, 
-        successful: results.successful.length, 
-        failed: results.failed.length 
-      },
+      message: `Asignación completada: ${results.successful.length} ok, ${results.failed.length} errores.`,
+      summary: { total: orderIds.length, successful: results.successful.length, failed: results.failed.length },
       details: results
     });
 
   } catch (error) {
     console.error('❌ Error crítico en asignación masiva:', error);
-    res.status(500).json({ error: error.message || 'Error interno del servidor en asignación masiva' });
+    res.status(500).json({ error: error.message });
   }
 });
 
