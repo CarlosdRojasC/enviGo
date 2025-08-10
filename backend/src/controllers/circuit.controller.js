@@ -44,11 +44,11 @@ async function createPlanForAssignment(circuitDriverId, orders) {
 
     const planData = {
       starts: { day: today.getDate(), month: today.getMonth() + 1, year: today.getFullYear() },
-      title: `Ruta de ${orderCount} pedido(s) para conductor - ${todayISO}`,
+      title: `Ruta de ${orderCount} pedido(s) - ${todayISO}`,
       drivers: [circuitDriverId], // El plan (la ruta) es solo para este conductor
     };
 
-    console.log(`Circuit Controller: Creando un nuevo plan específico para el conductor ${circuitDriverId}...`);
+    console.log(`Circuit Controller: Creando un nuevo plan para el conductor ${circuitDriverId}...`);
     const response = await axios.post(`${CIRCUIT_API_URL}/plans`, planData, {
       headers: { Authorization: `Bearer ${CIRCUIT_API_KEY}`, 'Content-Type': 'application/json' },
     });
@@ -56,7 +56,6 @@ async function createPlanForAssignment(circuitDriverId, orders) {
     const planId = response.data.id;
     console.log(`✅ Circuit Controller: Nuevo plan creado con ID: ${planId}`);
     return planId;
-
   } catch (error) {
     const errorMessage = error.response ? JSON.stringify(error.response.data) : error.message;
     console.error(`❌ Circuit Controller: Error creando el plan específico - ${errorMessage}`);
@@ -117,26 +116,19 @@ async function createDriverInCircuit(driverData) {
 async function distributePlan(planId) {
   try {
     console.log(`   -> 🚀 Circuit: Iniciando distribución del plan ${planId}...`);
-    
-    // Este es el endpoint para despachar la ruta a los conductores.
     await axios.post(`${CIRCUIT_API_URL}/operations`, {
-      planDistribute: {
-        planId: planId,
-      }
+      planDistribute: { planId: planId }
     }, {
       headers: { Authorization: `Bearer ${CIRCUIT_API_KEY}`, 'Content-Type': 'application/json' },
     });
-
     console.log(`   -> ✅ Circuit: Orden de distribución para el plan ${planId} enviada.`);
     return true;
   } catch (error) {
     const errorMessage = error.response ? JSON.stringify(error.response.data) : error.message;
     console.error(`   -> ❌ Circuit: Error al distribuir el plan ${planId}: ${errorMessage}`);
-    // No lanzamos un error fatal, pero devolvemos false.
     return false;
   }
 }
-
 // Exportamos las funciones que nuestros otros archivos necesitan
 module.exports = {
   createPlanForAssignment,
