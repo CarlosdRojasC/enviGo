@@ -132,7 +132,7 @@ async function distributePlan(planId) {
 async function optimizePlan(planId) {
   try {
     const res = await axios.post(
-      `${CIRCUIT_API_URL}/plans/${planId}:optimize`,
+      `${CIRCUIT_API_URL}/${planId}:optimize`,
       {},
       { headers: { Authorization: `Bearer ${CIRCUIT_API_KEY}`, 'Content-Type': 'application/json' } }
     );
