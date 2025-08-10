@@ -115,17 +115,17 @@ async function createDriverInCircuit(driverData) {
 }
 async function distributePlan(planId) {
   try {
-    console.log(`   -> 🚀 Circuit: Iniciando distribución del plan ${planId}...`);
-    await axios.post(`${CIRCUIT_API_URL}/operations`, {
-      planDistribute: { planId: planId }
-    }, {
-      headers: { Authorization: `Bearer ${CIRCUIT_API_KEY}`, 'Content-Type': 'application/json' },
-    });
-    console.log(`   -> ✅ Circuit: Orden de distribución para el plan ${planId} enviada.`);
+    console.log(`🚀 Circuit: Distribuyendo plan ${planId}...`);
+    await axios.post(
+      `${CIRCUIT_API_URL}/plans/${planId}:distribute`,
+      {},
+      { headers: { Authorization: `Bearer ${CIRCUIT_API_KEY}`, 'Content-Type': 'application/json' } }
+    );
+    console.log(`✅ Circuit: Plan ${planId} distribuido al conductor.`);
     return true;
   } catch (error) {
     const errorMessage = error.response ? JSON.stringify(error.response.data) : error.message;
-    console.error(`   -> ❌ Circuit: Error al distribuir el plan ${planId}: ${errorMessage}`);
+    console.error(`❌ Circuit: Error al distribuir el plan ${planId}: ${errorMessage}`);
     return false;
   }
 }
