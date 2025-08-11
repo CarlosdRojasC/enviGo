@@ -49,6 +49,7 @@ router.post('/print-pdf/:orderId', async (req, res) => {
   try {
     const orderId = req.params.orderId;
     const order = await Order.findById(orderId)
+    .populate('company_id', 'name logo_url website')
       .populate('channel_id', 'store_url')
       .lean();
 
@@ -175,7 +176,7 @@ router.post('/print-bulk-pdf', async (req, res) => {
     }
 
     const orders = await Order.find({ '_id': { $in: orderIds } })
-      .populate('company_id', 'name logo_url')
+      .populate('company_id', 'name logo_url website')
       .populate('channel_id', 'store_url')
       .lean();
 
@@ -281,7 +282,7 @@ router.post('/print-bulk-pdf', async (req, res) => {
            width: cardW - 36, align: 'center'
          });
 
-      const website = order.channel_id?.name || order.company_id?.name || 'www.envigo.cl';
+      const website = order.channel_id?.website || order.company_id?.website || 'www.envigo.cl';
       doc.font('Helvetica-Bold').fontSize(9).fillColor('#333')
          .text(website, innerX, cardY + cardH - 62, {
            width: cardW - 36, align: 'center'

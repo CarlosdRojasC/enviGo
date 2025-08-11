@@ -9,7 +9,7 @@ const companySchema = new mongoose.Schema({
     minlength: 1 // Asegurar que no esté vacío
   },
   slug: { type: String, required: true, unique: true },
-  
+  domain: String,
   // NUEVOS: Campos de facturación
   rut: { type: String },
   email: { type: String },
