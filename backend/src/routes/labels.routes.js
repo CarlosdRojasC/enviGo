@@ -243,7 +243,7 @@ router.post('/print-bulk-pdf', async (req, res) => {
       y += 10;
 
       // Código único
-      doc.font('Helvetica-Bold').fontSize(26).fillColor('#dc2626')
+      doc.font('Helvetica-Bold').fontSize(22).fillColor('#000')
          .text(order.envigo_label.unique_code, innerX, y, {
            width: cardW - 36, align: 'center'
          });
@@ -281,7 +281,7 @@ router.post('/print-bulk-pdf', async (req, res) => {
            width: cardW - 36, align: 'center'
          });
 
-      const website = order.channel_id?.store_url || order.company_id?.store_url || 'www.envigo.cl';
+      const website = order.channel_id?.name || order.company_id?.name || 'www.envigo.cl';
       doc.font('Helvetica-Bold').fontSize(9).fillColor('#333')
          .text(website, innerX, cardY + cardH - 62, {
            width: cardW - 36, align: 'center'
