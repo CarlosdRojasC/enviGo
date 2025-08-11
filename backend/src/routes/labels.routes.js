@@ -49,26 +49,23 @@ router.post('/print-pdf/:orderId', async (req, res) => {
   try {
     const orderId = req.params.orderId;
     const order = await Order.findById(orderId)
-  .populate('channel_id', 'store_url') // <-- poblamos website desde channel
-  .lean();
+      .populate('channel_id', 'store_url')
+      .lean();
 
     if (!order || !order.envigo_label) {
       return res.status(404).json({ error: 'Pedido o etiqueta no encontrada' });
     }
 
-    // 10x15 cm -> puntos ya convertidos aprox (72pt/in * inches)
     const doc = new PDFDocument({
       size: [283.5, 425.25],
-      margins: { top: 0, bottom: 0, left: 0, right: 0 } // nosotros manejamos margins manualmente
+      margins: { top: 0, bottom: 0, left: 0, right: 0 }
     });
 
-    // Enviar PDF al cliente
     res.setHeader('Content-Type', 'application/pdf');
     const filename = `etiqueta-${sanitize(order.envigo_label.unique_code || order._id)}.pdf`;
     res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
     doc.pipe(res);
 
-    // Variables de layout
     const pageW = doc.page.width;
     const pageH = doc.page.height;
     const cardX = 16;
@@ -77,87 +74,88 @@ router.post('/print-pdf/:orderId', async (req, res) => {
     const cardH = pageH - cardY * 2;
     const cornerRadius = 10;
 
-    // Fondo blanco con borde redondeado + borde interior punteado
     drawCardBackground(doc, cardX, cardY, cardW, cardH, cornerRadius);
 
-    // Usar posiciones absolutas dentro de la "tarjeta"
     const innerX = cardX + 18;
     let cursorY = cardY + 18;
 
-    // --- HEADER: Nombre empresa centrado grande ---
-    doc.font('Helvetica-Bold').fontSize(20).fillColor('#000000')
-       .text((order.company_name || 'EnviGo').toUpperCase(), innerX, cursorY, {
-         width: cardW - 36,
-         align: 'center'
+    // --- HEADER ---
+    const headerY = cursorY;
+    doc.font('Helvetica-Bold')
+       .fontSize(20)
+       .fillColor('#000')
+       .text((order.company_name || 'EnviGo').toUpperCase(), innerX, headerY, {
+         width: (cardW - 36) * 0.65,
+         align: 'left'
        });
 
-    // Pedido a la derecha (pequeño) - colocamos en la misma altura que el header pero alineado a la derecha
-    doc.font('Helvetica').fontSize(10).fillColor('black')
-       .text(`Pedido #${order.order_number || ''}`, cardX + 18, cursorY + 2, {
-         width: cardW - 36,
+    doc.font('Helvetica-Bold')
+       .fontSize(12)
+       .fillColor('#000')
+       .text(`Pedido #${order.order_number || ''}`, innerX + (cardW - 36) * 0.65, headerY + 5, {
+         width: (cardW - 36) * 0.35,
          align: 'right'
        });
 
-    cursorY += 36; // espacio tras header
+    cursorY += 36;
 
-    // Línea divisoria fina
-    doc.moveTo(innerX - 6, cursorY).lineTo(innerX + cardW - 36, cursorY).lineWidth(1).strokeColor('#333').stroke();
-    cursorY += 8;
-
-    // GRAN texto de zona/servicio (p.ej. "Santiago Urbano") a la izquierda
-    doc.font('Helvetica').fontSize(20).fillColor('#111')
-       .text(order.delivery_zone || 'Santiago Urbano', innerX, cursorY, { align: 'left' });
-
-    cursorY += 28;
-
-    // Otra línea separadora (fina)
-    doc.moveTo(innerX - 6, cursorY).lineTo(innerX + cardW - 36, cursorY).lineWidth(1).strokeColor('#333').stroke();
+    // Línea divisoria
+    doc.moveTo(innerX - 6, cursorY).lineTo(innerX + cardW - 36, cursorY)
+       .lineWidth(1).strokeColor('#333').stroke();
     cursorY += 12;
 
-    // --- CUADRO DE DATOS (Nombre, Dirección, Comuna, Teléfono, Comentario) ---
-    const labelSize = 11;
-    const valueSize = 11;
-    const gapY = 6;
+    // Zona/Servicio
+    doc.font('Helvetica-Bold')
+       .fontSize(20)
+       .fillColor('#111')
+       .text(order.delivery_zone || 'Santiago Urbano', innerX, cursorY, { align: 'left' });
+    cursorY += 32;
 
-    doc.font('Helvetica-Bold').fontSize(labelSize).text('Nombre:', innerX, cursorY);
-    doc.font('Helvetica').fontSize(valueSize).text(` ${order.customer_name || ''}`, innerX + 70, cursorY);
-    cursorY += labelSize + gapY;
+    // Línea divisoria
+    doc.moveTo(innerX - 6, cursorY).lineTo(innerX + cardW - 36, cursorY)
+       .lineWidth(1).strokeColor('#333').stroke();
+    cursorY += 16;
 
-    doc.font('Helvetica-Bold').fontSize(labelSize).text('Dirección:', innerX, cursorY);
-    doc.font('Helvetica').fontSize(valueSize).text(` ${order.shipping_address || ''}`, innerX + 70, cursorY, { width: cardW - 120 });
-    cursorY += labelSize + gapY;
+    // --- DATOS ---
+    const labelSize = 12;
+    const valueSize = 12;
+    const gapY = 8;
+    const valueWidth = cardW - 140;
 
-    doc.font('Helvetica-Bold').fontSize(labelSize).text('Comuna:', innerX, cursorY);
-    doc.font('Helvetica').fontSize(valueSize).text(` ${order.shipping_commune || ''}`, innerX + 70, cursorY);
-    cursorY += labelSize + gapY;
+    function printField(label, value) {
+      doc.font('Helvetica-Bold').fontSize(labelSize).text(label, innerX, cursorY);
+      doc.font('Helvetica-Bold').fontSize(valueSize)
+         .text(value || '', innerX + 70, cursorY, { width: valueWidth, lineGap: 2 });
 
-    doc.font('Helvetica-Bold').fontSize(labelSize).text('Telefono:', innerX, cursorY);
-    doc.font('Helvetica').fontSize(valueSize).text(` ${order.customer_phone || ''}`, innerX + 70, cursorY);
-    cursorY += labelSize + gapY;
+      cursorY += Math.max(
+        doc.heightOfString(label, { width: 70 }),
+        doc.heightOfString(value || '', { width: valueWidth })
+      ) + gapY;
+    }
 
-    doc.font('Helvetica-Bold').fontSize(labelSize).text('Comentario:', innerX, cursorY);
-    doc.font('Helvetica').fontSize(valueSize).text(` ${order.comment || ''}`, innerX, cursorY + 14, { width: cardW - 72 });
-    cursorY += 50;
+    printField('Nombre:', order.customer_name);
+    printField('Dirección:', order.shipping_address);
+    printField('Comuna:', order.shipping_commune);
+    printField('Teléfono:', order.customer_phone);
+    printField('Comentario:', order.comment);
 
-    // Línea divisoria antes del footer
-    doc.moveTo(innerX - 6, cardY + cardH - 120).lineTo(innerX + cardW - 36, cardY + cardH - 120).lineWidth(1).strokeColor('#333').stroke();
+    // Footer
+    doc.moveTo(innerX - 6, cardY + cardH - 120)
+       .lineTo(innerX + cardW - 36, cardY + cardH - 120)
+       .lineWidth(1).strokeColor('#333').stroke();
 
-    // --- PIE: Gracias por tu compra! + web ---
     const footerY = cardY + cardH - 92;
-    doc.font('Helvetica').fontSize(20).fillColor('#000').text('Gracias por tu compra!', innerX, footerY, {
-      width: cardW - 36,
-      align: 'center'
-    });
+    doc.font('Helvetica-Bold').fontSize(20).fillColor('#000')
+       .text('Gracias por tu compra!', innerX, footerY, {
+         width: cardW - 36, align: 'center'
+       });
 
- const website = order.channel_id?.store_url || order.company_id?.store_url || 'www.envigo.cl';
+    const website = order.channel_id?.store_url || order.company_id?.store_url || 'www.envigo.cl';
+    doc.font('Helvetica-Bold').fontSize(9).fillColor('#333')
+       .text(website, innerX, cardY + cardH - 62, {
+         width: cardW - 36, align: 'center'
+       });
 
-doc.font('Helvetica').fontSize(9).fillColor('#333')
-   .text(website, innerX, cardY + cardH - 62, {
-     width: cardW - 36,
-     align: 'center'
-   });
-
-    // Finalizar
     doc.end();
 
   } catch (error) {
@@ -165,6 +163,7 @@ doc.font('Helvetica').fontSize(9).fillColor('#333')
     res.status(500).json({ error: 'Error interno al generar el PDF.' });
   }
 });
+
 
 
 // --- Endpoint para bulk (15x10 cm en landscape por página) ---
@@ -176,17 +175,17 @@ router.post('/print-bulk-pdf', async (req, res) => {
     }
 
     const orders = await Order.find({ '_id': { $in: orderIds } })
-  .populate('company_id', 'name logo_url')
-  .populate('channel_id', 'store_url') // <-- agregamos channel
-  .lean();
+      .populate('company_id', 'name logo_url')
+      .populate('channel_id', 'store_url')
+      .lean();
 
     if (orders.length === 0) {
       return res.status(404).json({ error: 'No se encontraron pedidos.' });
     }
 
     const doc = new PDFDocument({
-      layout: 'portrait', // mantendremos portrait y rotamos el diseño internamente si quieres landscape
-      size: [283.5, 425.25], // mismo tamaño por etiqueta (10x15)
+      layout: 'portrait',
+      size: [283.5, 425.25],
       autoFirstPage: false,
       margins: { top: 0, bottom: 0, left: 0, right: 0 }
     });
@@ -199,7 +198,7 @@ router.post('/print-bulk-pdf', async (req, res) => {
       if (!order.envigo_label) continue;
 
       doc.addPage();
-      // layout copia del single, pero simplificado y con logo a la izquierda
+
       const pageW = doc.page.width;
       const pageH = doc.page.height;
       const cardX = 16;
@@ -212,75 +211,81 @@ router.post('/print-bulk-pdf', async (req, res) => {
       const innerX = cardX + 18;
       let y = cardY + 18;
 
-      // Logo (si existe)
+      // Logo
       const logoUrl = order.company_id?.logo_url;
       if (logoUrl) {
         try {
           const response = await axios.get(logoUrl, { responseType: 'arraybuffer' });
           const imageBuffer = Buffer.from(response.data, 'binary');
-          // Ajusta x,y,w según necesites
-          doc.image(imageBuffer, innerX, y - 2, { width: 60, height: 40, fit: [60,40] });
+          doc.image(imageBuffer, innerX, y - 2, { width: 60, height: 40, fit: [60, 40] });
         } catch (e) {
           console.warn('No se pudo cargar logo', e.message || e);
         }
       }
 
-      // Company name (centrado si no hay logo)
+      // Header con nombre y pedido
       const companyName = order.company_id?.name || order.company_name || 'Empresa';
-      doc.font('Helvetica-Bold').fontSize(16).text(companyName, innerX + (logoUrl ? 76 : 0), y, {
-        width: cardW - 36 - (logoUrl ? 76 : 0),
-        align: logoUrl ? 'left' : 'center'
-      });
+      doc.font('Helvetica-Bold').fontSize(16)
+         .text(companyName, innerX + (logoUrl ? 76 : 0), y, {
+           width: (cardW - 36) * 0.65 - (logoUrl ? 76 : 0),
+           align: 'left'
+         });
 
-      // Pedido a la derecha
-      doc.font('Helvetica').fontSize(9).text(`Pedido #${order.order_number || ''}`, innerX, y + 2, {
-        width: cardW - 36,
-        align: 'right'
-      });
-
-      y += 36;
-      doc.moveTo(innerX - 6, y).lineTo(innerX + cardW - 36, y).lineWidth(1).strokeColor('#333').stroke();
-      y += 8;
-
-      // Código único prominent
-      doc.font('Helvetica-Bold').fontSize(26).fillColor('#dc2626').text(order.envigo_label.unique_code, innerX, y, {
-        width: cardW - 36,
-        align: 'center'
-      });
+      doc.font('Helvetica-Bold').fontSize(10)
+         .text(`Pedido #${order.order_number || ''}`, innerX + (cardW - 36) * 0.65, y + 2, {
+           width: (cardW - 36) * 0.35,
+           align: 'right'
+         });
 
       y += 36;
-      doc.moveTo(innerX - 6, y).lineTo(innerX + cardW - 36, y).lineWidth(1).strokeColor('#333').stroke();
+      doc.moveTo(innerX - 6, y).lineTo(innerX + cardW - 36, y)
+         .lineWidth(1).strokeColor('#333').stroke();
       y += 10;
 
-      // Info cliente
-      doc.font('Helvetica-Bold').fontSize(10).text('Nombre: ', innerX, y);
-      doc.font('Helvetica').fontSize(10).text(`${order.customer_name || ''}`, innerX + 70, y);
-      y += 16;
+      // Código único
+      doc.font('Helvetica-Bold').fontSize(26).fillColor('#dc2626')
+         .text(order.envigo_label.unique_code, innerX, y, {
+           width: cardW - 36, align: 'center'
+         });
 
-      doc.font('Helvetica-Bold').fontSize(10).text('Dirección: ', innerX, y);
-      doc.font('Helvetica').fontSize(10).text(`${order.shipping_address || ''}`, innerX + 70, y, { width: cardW - 120 });
-      y += 16;
+      y += 36;
+      doc.moveTo(innerX - 6, y).lineTo(innerX + cardW - 36, y)
+         .lineWidth(1).strokeColor('#333').stroke();
+      y += 12;
 
-      doc.font('Helvetica-Bold').fontSize(10).text('Comuna: ', innerX, y);
-      doc.font('Helvetica').fontSize(10).text(`${order.shipping_commune || ''}`, innerX + 70, y);
-      y += 16;
+      // Campos
+      const labelSize = 10;
+      const valueSize = 10;
+      const gapY = 6;
+      const valueWidth = cardW - 140;
 
-      doc.font('Helvetica-Bold').fontSize(10).text('Telefono: ', innerX, y);
-      doc.font('Helvetica').fontSize(10).text(`${order.customer_phone || ''}`, innerX + 70, y);
+      function printField(label, value) {
+        doc.font('Helvetica-Bold').fontSize(labelSize).text(label, innerX, y);
+        doc.font('Helvetica-Bold').fontSize(valueSize)
+           .text(value || '', innerX + 70, y, { width: valueWidth, lineGap: 2 });
 
-      // Footer simplificado
-      doc.font('Helvetica').fontSize(12).fillColor('#000').text('Gracias por tu compra!', innerX, cardY + cardH - 90, {
-        width: cardW - 36,
-        align: 'center'
-      });
- const website = order.channel_id?.store_url || order.company_id?.store_url || 'www.envigo.cl';
+        y += Math.max(
+          doc.heightOfString(label, { width: 70 }),
+          doc.heightOfString(value || '', { width: valueWidth })
+        ) + gapY;
+      }
 
-doc.font('Helvetica').fontSize(9).fillColor('#333')
-   .text(website, innerX, cardY + cardH - 62, {
-     width: cardW - 36,
-     align: 'center'
-   });
+      printField('Nombre:', order.customer_name);
+      printField('Dirección:', order.shipping_address);
+      printField('Comuna:', order.shipping_commune);
+      printField('Teléfono:', order.customer_phone);
 
+      // Footer
+      doc.font('Helvetica-Bold').fontSize(12).fillColor('#000')
+         .text('Gracias por tu compra!', innerX, cardY + cardH - 90, {
+           width: cardW - 36, align: 'center'
+         });
+
+      const website = order.channel_id?.store_url || order.company_id?.store_url || 'www.envigo.cl';
+      doc.font('Helvetica-Bold').fontSize(9).fillColor('#333')
+         .text(website, innerX, cardY + cardH - 62, {
+           width: cardW - 36, align: 'center'
+         });
     }
 
     doc.end();
@@ -290,6 +295,7 @@ doc.font('Helvetica').fontSize(9).fillColor('#333')
     res.status(500).json({ error: 'Error interno al generar el PDF masivo.' });
   }
 });
+
 
 
 module.exports = router;
