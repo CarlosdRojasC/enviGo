@@ -771,11 +771,7 @@ function closeCreateOrderModal() {
 // Función para crear pedido - AGREGAR
 async function handleCreateOrderSubmit() {
   
-   // Validación básica
-  if (!newOrder.value.order_number?.trim()) {
-    toast.warning('Por favor, ingrese el número de pedido')
-    return
-  }
+
   if (!newOrder.value.customer_name?.trim()) {
     toast.warning('Por favor, ingrese el nombre del cliente')
     return
@@ -812,17 +808,11 @@ async function handleCreateOrderSubmit() {
   try {
     console.log('➕ Creando pedido:', newOrder.value)
     
-    // Verificar que la empresa tenga canales
-    if (!channels.value || channels.value.length === 0) {
-      toast.warning('Su empresa no tiene canales configurados. Configure uno primero en la sección Canales.')
-      return
-    }
-    
+
+  
     // Preparar datos del pedido
     const orderData = {
       ...newOrder.value,
-      channel_id: newOrder.value.channel_id, // Usar el primer canal disponible
-      order_number: newOrder.value.order_number,
       external_order_id: `manual-company-${Date.now()}`,
       order_date: new Date().toISOString(),
       status: 'pending'
