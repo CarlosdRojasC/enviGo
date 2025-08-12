@@ -307,7 +307,7 @@ const adminActions = computed(() => [
     title: 'Gestionar Empresas', 
     description: 'Ver, crear y administrar empresas cliente', 
     icon: '🏢', 
-    route: 'app/admin/companies',
+    route: 'companies',
     variant: 'primary',
     badge: stats.value.companies || 0
   },
@@ -316,7 +316,7 @@ const adminActions = computed(() => [
     title: 'Pedidos Globales', 
     description: 'Ver todos los pedidos del sistema', 
     icon: '📦', 
-    route: 'app/admin/orders',
+    route: 'orders',
     variant: 'secondary',
     badge: totalOrders.value
   },
@@ -325,7 +325,7 @@ const adminActions = computed(() => [
     title: 'Facturación', 
     description: 'Gestionar facturas y pagos', 
     icon: '💳', 
-    route: 'app/admin/billing',
+    route: 'billing',
     variant: 'success'
   },
   { 
@@ -333,7 +333,7 @@ const adminActions = computed(() => [
     title: 'Conductores', 
     description: 'Gestión de conductores del sistema', 
     icon: '🚚', 
-    route: 'app/admin/drivers',
+    route: 'drivers',
     variant: 'info'
   },
   { 
@@ -341,7 +341,7 @@ const adminActions = computed(() => [
     title: 'Canales de Venta', 
     description: 'Supervisar integraciones activas', 
     icon: '📡', 
-    route: 'app/admin/channels',
+    route: 'channels',
     variant: 'warning'
   },
   { 
@@ -349,7 +349,7 @@ const adminActions = computed(() => [
     title: 'Comunas', 
     description: 'Configurar zonas de entrega', 
     icon: '🏘️', 
-    route: 'app/admin/communes',
+    route: 'communes',
     variant: 'neutral'
   }
 ])
