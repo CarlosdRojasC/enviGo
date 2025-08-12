@@ -58,7 +58,7 @@ router.get('/dashboard', authenticateToken, async (req, res) => {
       ]);
 
       // Costos estimados para admin
-      const estimatedMonthlyCost = ordersThisMonth * 1500;
+      const estimatedMonthlyCost = ordersThisMonth * 2500;
 
       stats = {
         // Métricas principales
@@ -78,7 +78,7 @@ router.get('/dashboard', authenticateToken, async (req, res) => {
         
         // Costos
         estimatedMonthlyCost,
-        pricePerOrder: 1500,
+        pricePerOrder: 2500,
         
         // Meta información
         role: 'admin',
@@ -146,7 +146,7 @@ router.get('/dashboard', authenticateToken, async (req, res) => {
 
       // Obtener configuración de precios de la empresa
       const company = await Company.findById(companyId).select('price_per_order');
-      const pricePerOrder = company?.price_per_order || 1500;
+      const pricePerOrder = company?.price_per_order || 2500;
       const estimatedMonthlyCost = ordersThisMonth * pricePerOrder;
 
       stats = {

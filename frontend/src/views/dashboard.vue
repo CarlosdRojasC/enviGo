@@ -377,7 +377,7 @@ const deliveryRate = computed(() => {
 const estimatedMonthlyCost = computed(() => {
   return stats.value.estimatedMonthlyCost || (monthlyOrders.value * pricePerOrder.value)
 })
-const pricePerOrder = computed(() => stats.value.pricePerOrder || 1500)
+const pricePerOrder = computed(() => stats.value.pricePerOrder || 2500)
 
 const quickActions = computed(() => [
   { 
