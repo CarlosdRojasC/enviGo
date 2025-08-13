@@ -106,7 +106,7 @@
       @download-template="downloadTemplate"
       @close-assign="showAssignModal = false"
       @confirm-assignment="confirmAssignment"
-      @close-bulk-assign="closeBulkAssignModal"
+      @close-bulk-assign="handleCloseBulkAssignModal"
       @confirm-bulk-assignment="confirmBulkAssignment"
     />
 
@@ -247,7 +247,7 @@ const {
   assignmentSummary,
   confirmAssignment,
   confirmBulkAssignment,
-  closeBulkAssignModal,
+  closeBulkAssignModal: resetBulkAssignState,
   fetchAvailableDrivers
 } = useDriverAssignment(selectedOrderObjects, fetchOrders) 
 
@@ -791,7 +791,11 @@ function handleKeyboardShortcuts(event) {
     toggleSelectAll()
   }
 }
-
+function handleCloseBulkAssignModal() {
+  console.log('Orquestando cierre de modal masivo...');
+  resetBulkAssignState(); // 1. Llama a la función que resetea la lógica.
+  showBulkAssignModal.value = false; // 2. Oculta el modal.
+}
 /**
  * ⚡ ACTUALIZACIÓN AUTOMÁTICA EN TIEMPO REAL
  * Maneja las actualizaciones de órdenes via WebSocket
