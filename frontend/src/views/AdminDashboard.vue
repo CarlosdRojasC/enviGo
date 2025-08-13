@@ -129,7 +129,7 @@
         <div class="section-header">
           <h2 class="section-title">Gestión de Empresas</h2>
           <div class="header-actions">
-            <router-link to="/admin/companies" class="section-link">Ver todas</router-link>
+            <router-link to="app/admin/companies" class="section-link">Ver todas</router-link>
             <button @click="console.log('🏢 Debug empresas:', topCompanies)" class="debug-btn" v-if="topCompanies.length > 0">
               🐛 Debug
             </button>
