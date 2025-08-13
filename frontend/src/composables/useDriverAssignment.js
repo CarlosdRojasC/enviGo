@@ -109,7 +109,7 @@ export function useDriverAssignment(selectedOrders, fetchOrders) {
       
     } catch (error) {
       console.error('❌ Error fetching drivers:', error)
-      toast.error('Error al cargar conductores desde Shipday')
+      toast.error('Error al cargar conductores')
       availableDrivers.value = []
     } finally {
       loadingDrivers.value = false

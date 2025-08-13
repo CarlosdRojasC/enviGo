@@ -32,7 +32,7 @@ const allowedOrigins = [
   'https://envigo-frontend-production.up.railway.app',
   'https://envigo.cl',
   'https://www.envigo.cl',
-  process.env.FRONTEND_URL,
+    process.env.FRONTEND_URL,
   null
 ];
 
