@@ -596,7 +596,7 @@
     </Modal>
 
      <Modal 
-      v-model:model-value="showBulkAssign" 
+      :model-value="showBulkAssign" 
       @update:model-value="(value) => !value && $emit('close-bulk-assign')"
       title="Asignación Masiva" 
       width="800px"
