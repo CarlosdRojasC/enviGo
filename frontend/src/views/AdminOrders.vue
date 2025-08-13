@@ -106,7 +106,7 @@
       @download-template="downloadTemplate"
       @close-assign="showAssignModal = false"
       @confirm-assignment="confirmAssignment"
-      @close-bulk-assign="closeBulkAssignModalFull"
+      @close-bulk-assign="closeBulkAssignModal"
       @confirm-bulk-assignment="confirmBulkAssignment"
     />
 
@@ -248,7 +248,6 @@ const {
   confirmAssignment,
   confirmBulkAssignment,
   closeBulkAssignModal,
-  closeBulkAssignModalFull,
   fetchAvailableDrivers
 } = useDriverAssignment(selectedOrderObjects, fetchOrders) 
 
