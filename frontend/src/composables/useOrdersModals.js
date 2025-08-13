@@ -146,10 +146,34 @@ export function useOrdersModals() {
   /**
    * Close bulk assign modal
    */
-  function closeBulkAssignModal() {
-    showBulkAssignModal.value = false
-    console.log('❌ Bulk assign modal closed')
+ function closeBulkAssignModal() {
+  // Si la asignación masiva ya terminó, eliminar los pedidos exitosos de la selección
+  if (bulkAssignmentFinished.value) {
+    const successfulOrderIds = bulkAssignmentResults.value
+      .filter(r => r.success)
+      .map(r => r.orderId)
+
+    if (successfulOrderIds.length > 0) {
+      // Filtrar los pedidos seleccionados y selectedOrderObjects
+      selectedOrders.value = selectedOrders.value.filter(id => !successfulOrderIds.includes(id))
+      selectedOrderObjects.value = selectedOrderObjects.value.filter(order => !successfulOrderIds.includes(order._id))
+    }
+
+    console.log(`🧹 Removed ${successfulOrderIds.length} successfully assigned orders from selection`)
   }
+
+  // Resetear todos los estados de la asignación masiva
+  bulkSelectedDriverId.value = ''
+  bulkAssignmentCompleted.value = 0
+  bulkAssignmentResults.value = []
+  bulkAssignmentFinished.value = false
+  isBulkAssigning.value = false
+
+  // Cerrar el modal
+  showBulkAssignModal.value = false
+
+  console.log('❌ Bulk assignment modal closed and state fully reset')
+}
 
   /**
    * Close all modals
