@@ -146,7 +146,7 @@ export function useOrdersModals() {
   /**
    * Close bulk assign modal
    */
- function closeBulkAssignModal() {
+function closeBulkAssignModal() {
   // Si la asignación masiva ya terminó, eliminar los pedidos exitosos de la selección
   if (bulkAssignmentFinished.value) {
     const successfulOrderIds = bulkAssignmentResults.value
@@ -154,7 +154,6 @@ export function useOrdersModals() {
       .map(r => r.orderId)
 
     if (successfulOrderIds.length > 0) {
-      // Filtrar los pedidos seleccionados y selectedOrderObjects
       selectedOrders.value = selectedOrders.value.filter(id => !successfulOrderIds.includes(id))
       selectedOrderObjects.value = selectedOrderObjects.value.filter(order => !successfulOrderIds.includes(order._id))
     }
@@ -169,8 +168,8 @@ export function useOrdersModals() {
   bulkAssignmentFinished.value = false
   isBulkAssigning.value = false
 
-  // Cerrar el modal
-  showBulkAssignModal.value = false
+  // ⚡ Emitir al padre para cerrar el modal
+  emit('close-bulk-assign')
 
   console.log('❌ Bulk assignment modal closed and state fully reset')
 }
