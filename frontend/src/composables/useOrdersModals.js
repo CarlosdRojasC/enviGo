@@ -114,6 +114,18 @@ export function useOrdersModals() {
     console.log('🚚 Opening assign driver modal for:', order.order_number)
   }
 
+  function closeBulkAssignModalFull() {
+  // Cerrar modal visualmente
+  showBulkAssignModal.value = false;
+
+  // Resetear estados del composable de driver assignment
+  if (typeof resetBulkAssignmentState === 'function') {
+    resetBulkAssignmentState();
+  }
+
+  console.log('❌ Bulk assign modal closed and state reset')
+}
+
   /**
    * Close assign driver modal
    */
