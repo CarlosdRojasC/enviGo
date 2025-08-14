@@ -506,6 +506,9 @@ class MercadoLibreService {
         console.log(`⏭️ [ML Webhook] Pedido ${mlOrder.id} ya entregado, no se procesa`);
         return true;
       }
+      const uniqueOrderId = mlOrder.pack_id || mlOrder.id;
+    
+      console.log(`🔍 [ML Webhook] Buscando pedido con ID único: ${uniqueOrderId}`);
 
       // 6. BUSCAR SI EL PEDIDO YA EXISTE EN NUESTRO SISTEMA
       const existingOrder = await Order.findOne({ 
@@ -517,13 +520,16 @@ class MercadoLibreService {
         // SI EXISTE Y NO ESTÁ ENTREGADO, LO ACTUALIZAMOS
         existingOrder.status = this.mapOrderStatus(mlOrder);
         existingOrder.raw_data = mlOrder;
-        await existingOrder.save();
-        console.log(`🔄 [ML Webhook] Pedido existente ${mlOrder.id} actualizado`);
-      } else {
-        // SI NO EXISTE Y NO ESTÁ ENTREGADO, LO CREAMOS
-        await this.createOrderFromApiData(mlOrder, channel, accessToken);
-        console.log(`➕ [ML Webhook] Nuevo pedido Flex ${mlOrder.id} creado`);
-      }
+        if (mlOrder.pack_id) {
+        existingOrder.total_amount = mlOrder.total_amount;
+        }
+       await existingOrder.save();
+      console.log(`🔄 [ML Webhook] Pedido existente ${uniqueOrderId} actualizado`);
+    } else {
+      // Crear nuevo pedido usando pack_id como external_order_id si existe
+      await this.createOrderFromApiData(mlOrder, channel, accessToken, uniqueOrderId);
+      console.log(`➕ [ML Webhook] Nuevo pedido Flex ${uniqueOrderId} creado`);
+    }
 
       return true;
     } catch (error) {
@@ -535,14 +541,14 @@ class MercadoLibreService {
   /**
    * Helper para crear la orden en la base de datos
    */
-  static async createOrderFromApiData(fullOrder, channel, accessToken) {
+  static async createOrderFromApiData(fullOrder, channel, accessToken,uniqueOrderId) {
     const shippingInfo = await this.getShippingInfo(fullOrder, accessToken);
 
     const newOrderData = {
       company_id: channel.company_id,
       channel_id: channel._id,
-      external_order_id: fullOrder.id.toString(),
-      order_number: fullOrder.id.toString(),
+      external_order_id: uniqueOrderId.toString(),
+      order_number: uniqueOrderId.toString(),
       customer_name: `${fullOrder.buyer.first_name} ${fullOrder.buyer.last_name}`.trim(),
       customer_email: fullOrder.buyer.email,
       customer_phone: shippingInfo.phone,
@@ -558,7 +564,7 @@ class MercadoLibreService {
       status: this.mapOrderStatus(fullOrder),
       order_date: new Date(fullOrder.date_created),
       raw_data: fullOrder,
-      notes: `Comprador: ${fullOrder.buyer.nickname}`,
+       notes: `Comprador: ${fullOrder.buyer.nickname}${fullOrder.pack_id ? ` | Pack ID: ${fullOrder.pack_id}` : ''} | Original Order: ${fullOrder.id}`,
     };
     
     const newOrder = await new Order(newOrderData).save();
