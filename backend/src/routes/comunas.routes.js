@@ -59,6 +59,7 @@ const ENVIGO_COMMUNES = [
   'Puente Alto',
   'San Bernardo',
   'La Pintana',
+  'Lo Prado'
 ];
 
 const COMMUNES_BY_ZONE = {
@@ -107,6 +108,7 @@ const COMMUNES_BY_ZONE = {
     'Puente Alto', 
     'San Bernardo',
     'La Pintana',
+    'Lo Prado'
   ]
 };
 
