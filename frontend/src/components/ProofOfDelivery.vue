@@ -165,33 +165,27 @@ const hasPhotos = computed(() => {
 })
 
 const deliveryPhotos = computed(() => {
-  if (!hasPhotos.value) return []
-  
-  const proof = props.order.proof_of_delivery
-  
-  // Intentar diferentes fuentes de fotos
-  if (proof.photo_url) {
-    return [{
-      url: proof.photo_url,
-      loading: imageLoadStates.value[0] !== 'loaded'
-    }]
+  const photos = new Set(); // Usamos un Set para evitar URLs duplicadas
+
+  // Fuente 1: proof_of_delivery.photo_url (legacy)
+  if (props.order?.proof_of_delivery?.photo_url) {
+    photos.add(props.order.proof_of_delivery.photo_url);
   }
-  
-  if (Array.isArray(proof.photos) && proof.photos.length > 0) {
-    return proof.photos.map((photo, index) => ({
-      url: photo,
-      loading: imageLoadStates.value[index] !== 'loaded'
-    }))
+
+  // Fuente 2: proof_of_delivery.photos (array)
+  if (Array.isArray(props.order?.proof_of_delivery?.photos)) {
+    props.order.proof_of_delivery.photos.forEach(p => photos.add(p));
   }
-  
-  if (Array.isArray(proof.podUrls) && proof.podUrls.length > 0) {
-    return proof.podUrls.map((photo, index) => ({
-      url: photo,
-      loading: imageLoadStates.value[index] !== 'loaded'
-    }))
+
+  // Fuente 3: podUrls (array en la raíz del objeto order)
+  if (Array.isArray(props.order?.podUrls)) {
+    props.order.podUrls.forEach(p => photos.add(p));
   }
-  
-  return []
+
+  return Array.from(photos).map((url, index) => ({
+    url,
+    loading: imageLoadStates.value[index] !== 'loaded'
+  }));
 })
 
 const hasSignature = computed(() => {
@@ -201,9 +195,19 @@ const hasSignature = computed(() => {
 })
 
 const signatureUrl = computed(() => {
-  if (!hasSignature.value) return null
-  const proof = props.order.proof_of_delivery
-  return proof.signature_url || proof.signatureUrl
+  const potentialSignature = props.order?.signatureUrl || props.order?.proof_of_delivery?.signature_url;
+
+  if (!potentialSignature) {
+    return null;
+  }
+
+  // Si la URL de la firma está incluida en las fotos, no la mostramos.
+  const isPhoto = deliveryPhotos.value.some(photo => photo.url === potentialSignature);
+  if (isPhoto) {
+    return null;
+  }
+
+  return potentialSignature;
 })
 
 const hasGpsLocation = computed(() => {
@@ -368,7 +372,7 @@ onMounted(() => {
 
 .photos-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 16px;
   margin-top: 12px;
 }
