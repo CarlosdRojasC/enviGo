@@ -39,7 +39,7 @@
 
     <!-- Prueba de Entrega -->
     <div class="proof-evidence">
-      <h3>Prueba de Entrega</h3>
+      <h3>Pruebas de Entrega</h3>
       
       <!-- Fotos -->
       <div class="photos-section" v-if="hasPhotos">
