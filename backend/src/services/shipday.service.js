@@ -147,19 +147,27 @@ class ShipDayService {
     }
   }
 
-  async getOrder(orderId) {
+async getOrder(orderId) {
     try {
-      console.log('📦 Obteniendo orden:', orderId);
-      
-      const headers = this.getHeaders();
-      const response = await axios.get(`${BASE_URL}/orders/${orderId}`, { headers });
-      
-      return response.data;
+        const allOrders = await this.getOrders();
+        const order = allOrders.find(o => o.orderId == orderId);
+
+        // ✅ INICIO DE LA CORRECCIÓN
+        // Si encontramos la orden y tiene datos "crudos" de la API...
+        if (order && order._raw) {
+            // ... nos aseguramos de que las 'podUrls' y la firma se copien
+            // al nivel superior del objeto, que es donde el controlador las busca.
+            order.podUrls = order._raw.podUrls || [];
+            order.signatureUrl = order._raw.signatures?.[0]?.url || null;
+        }
+        // ✅ FIN DE LA CORRECCIÓN
+
+        return order;
     } catch (error) {
-      console.error('❌ Error obteniendo orden:', error.message);
-      throw this.handleError(error);
+        console.error(`Error obteniendo la orden ${orderId} de Shipday:`, error);
+        return null;
     }
-  }
+}
 
   async createOrder(orderData) {
     try {
