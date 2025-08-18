@@ -64,19 +64,6 @@
         </div>
       </div>
 
-      <!-- Firma -->
-      <div class="signature-section" v-if="order.proof_of_delivery?.signature_url">
-        <h4>Firma del Receptor</h4>
-        <div class="signature-container">
-          <img 
-            :src="order.proof_of_delivery.signature_url" 
-            alt="Firma del receptor"
-            class="signature-image"
-            @error="handleSignatureError"
-          />
-        </div>
-      </div>
-
       <!-- Ubicación GPS -->
       <div class="location-section" v-if="hasGpsLocation">
         <h4>Ubicación de Entrega</h4>
