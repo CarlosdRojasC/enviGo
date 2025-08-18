@@ -184,60 +184,48 @@ async getById(req, res) {
         const shipdayOrderDetails = await ShipdayService.getOrder(order.shipday_order_id);
         
         // 🆕 MAPEAR CORRECTAMENTE LOS DATOS DE SHIPDAY
-        if (shipdayOrderDetails) {
-          // Actualizar URL de tracking
-          if (shipdayOrderDetails.trackingUrl && shipdayOrderDetails.trackingUrl !== order.shipday_tracking_url) {
-            console.log('🔄 Actualizando tracking URL desde Shipday:', shipdayOrderDetails.trackingUrl);
-            
-            // Actualizar en la base de datos para futuras consultas
-            await Order.findByIdAndUpdate(id, {
-              shipday_tracking_url: shipdayOrderDetails.trackingUrl,
-              updated_at: new Date()
-            });
-            
-            // Actualizar en el objeto de respuesta
-            order.shipday_tracking_url = shipdayOrderDetails.trackingUrl;
-          }
+if (shipdayOrderDetails) {
+    // Primero, nos aseguramos de que las fotos (podUrls) y la firma se extraigan
+    // de la respuesta "cruda" de la API, que es la fuente más confiable.
+    order.podUrls = shipdayOrderDetails._raw?.podUrls || [];
+    order.signatureUrl = shipdayOrderDetails._raw?.signatures?.[0]?.url || null;
 
-          // Agregar datos completos de Shipday para debugging
-          order.shipday_details = shipdayOrderDetails._raw || shipdayOrderDetails;
-          
-          // Extraer datos específicos
-          order.delivery_note = shipdayOrderDetails.deliveryNote || shipdayOrderDetails._raw?.deliveryNote;
-          order.podUrls = shipdayOrderDetails.podUrls || shipdayOrderDetails._raw?.podUrls || [];
-          order.signatureUrl = shipdayOrderDetails.signatureUrl || shipdayOrderDetails._raw?.signatures?.[0]?.url;
-          
-          // Información del conductor
-          if (shipdayOrderDetails.carrierName || shipdayOrderDetails._raw?.assignedCarrier) {
-            order.driver_info = {
-              name: shipdayOrderDetails.carrierName || shipdayOrderDetails._raw?.assignedCarrier?.name,
-              phone: shipdayOrderDetails.carrierPhone || shipdayOrderDetails._raw?.assignedCarrier?.phone,
-              email: shipdayOrderDetails.carrierEmail || shipdayOrderDetails._raw?.assignedCarrier?.email,
-              status: shipdayOrderDetails.carrierStatus || shipdayOrderDetails._raw?.assignedCarrier?.status
-            };
-          }
-          
-          // Tiempos de Shipday
-          if (shipdayOrderDetails._raw?.activityLog) {
-            order.shipday_times = shipdayOrderDetails._raw.activityLog;
-          }
-          
-          // Ubicación de entrega
-          if (shipdayOrderDetails._raw?.proofOfDelivery?.location) {
-            order.delivery_location = {
-              lat: shipdayOrderDetails._raw.proofOfDelivery.location.latitude,
-              lng: shipdayOrderDetails._raw.proofOfDelivery.location.longitude,
-              formatted_address: shipdayOrderDetails._raw.proofOfDelivery.location.address
-            };
-          }
+    // Ahora, continuamos con el resto de la lógica que ya tenías...
 
-          console.log('✅ Datos de Shipday actualizados correctamente:', {
-            has_tracking_url: !!order.shipday_tracking_url,
-            tracking_url: order.shipday_tracking_url,
-            has_driver: !!order.driver_info?.name,
-            has_pods: !!(order.podUrls?.length || order.signatureUrl)
-          });
-        }
+    // Actualizar URL de tracking
+    if (shipdayOrderDetails.trackingUrl && shipdayOrderDetails.trackingUrl !== order.shipday_tracking_url) {
+        console.log('🔄 Actualizando tracking URL desde Shipday:', shipdayOrderDetails.trackingUrl);
+        await Order.findByIdAndUpdate(id, { shipday_tracking_url: shipdayOrderDetails.trackingUrl });
+        order.shipday_tracking_url = shipdayOrderDetails.trackingUrl;
+    }
+
+    // Agregar datos completos para debugging
+    order.shipday_details = shipdayOrderDetails._raw || shipdayOrderDetails;
+
+    // Información del conductor
+    if (shipdayOrderDetails.carrierName || shipdayOrderDetails._raw?.assignedCarrier) {
+        order.driver_info = {
+            name: shipdayOrderDetails.carrierName || shipdayOrderDetails._raw?.assignedCarrier?.name,
+            phone: shipdayOrderDetails.carrierPhone || shipdayOrderDetails._raw?.assignedCarrier?.phone,
+            email: shipdayOrderDetails.carrierEmail || shipdayOrderDetails._raw?.assignedCarrier?.email,
+            status: shipdayOrderDetails.carrierStatus || shipdayOrderDetails._raw?.assignedCarrier?.status
+        };
+    }
+
+    // Tiempos de Shipday
+    if (shipdayOrderDetails._raw?.activityLog) {
+        order.shipday_times = shipdayOrderDetails._raw.activityLog;
+    }
+
+    // Ubicación de entrega
+    if (shipdayOrderDetails._raw?.proofOfDelivery?.location) {
+        order.delivery_location = {
+            lat: shipdayOrderDetails._raw.proofOfDelivery.location.latitude,
+            lng: shipdayOrderDetails._raw.proofOfDelivery.location.longitude,
+            formatted_address: shipdayOrderDetails._raw.proofOfDelivery.location.address
+        };
+    }
+}
         
       } catch (shipdayError) {
         console.error('❌ Error obteniendo datos de Shipday:', shipdayError);
