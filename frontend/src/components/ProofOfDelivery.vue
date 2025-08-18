@@ -152,26 +152,26 @@ const hasPhotos = computed(() => {
 })
 
 const deliveryPhotos = computed(() => {
-  // Usamos un Set para que nunca haya URLs duplicadas, sin importar de dónde vengan.
+  // Usamos un Set para garantizar que nunca haya URLs duplicadas.
   const photoUrls = new Set();
 
-  // 1. Buscamos en el array 'podUrls', que es la fuente más común.
+  // 1. Buscamos en 'podUrls', que es la fuente principal y más moderna de fotos.
   if (Array.isArray(props.order?.podUrls) && props.order.podUrls.length > 0) {
     props.order.podUrls.forEach(url => {
       if (url) photoUrls.add(url);
     });
   }
 
-  // 2. Buscamos en el objeto 'proof_of_delivery', por si hay datos más antiguos.
+  // 2. Buscamos dentro de 'proof_of_delivery' para compatibilidad con datos más antiguos.
   if (props.order?.proof_of_delivery) {
     const proof = props.order.proof_of_delivery;
 
-    // Buscamos en 'proof.photo_url' (un solo string)
+    // Buscamos en 'proof.photo_url' (si solo hay una foto como string)
     if (proof.photo_url) {
       photoUrls.add(proof.photo_url);
     }
 
-    // Buscamos en 'proof.photos' (un array)
+    // Buscamos en 'proof.photos' (si hay un array dentro de proof)
     if (Array.isArray(proof.photos) && proof.photos.length > 0) {
       proof.photos.forEach(url => {
         if (url) photoUrls.add(url);
@@ -179,7 +179,7 @@ const deliveryPhotos = computed(() => {
     }
   }
 
-  // 3. Convertimos el Set (sin duplicados) de nuevo a un array con el formato que el template espera.
+  // 3. Finalmente, convertimos el Set (ya sin duplicados) a un array con el formato que el template necesita.
   return Array.from(photoUrls).map((url, index) => ({
     url,
     loading: imageLoadStates.value[index] !== 'loaded'
