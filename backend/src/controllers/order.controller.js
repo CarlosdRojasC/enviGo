@@ -243,7 +243,8 @@ if (shipdayOrderDetails) {
       order_number: order.order_number,
       status: order.status,
       shipday_tracking_url: order.shipday_tracking_url,
-      has_shipday_order: !!order.shipday_order_id
+      has_shipday_order: !!order.shipday_order_id,
+      photo_url: order.proof_of_delivery?.photo_url,
     });
 
     res.json(order);
