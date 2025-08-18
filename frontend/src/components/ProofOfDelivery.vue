@@ -152,28 +152,39 @@ const hasPhotos = computed(() => {
 })
 
 const deliveryPhotos = computed(() => {
-  const photos = new Set(); // Usamos un Set para evitar URLs duplicadas
+  // Usamos un Set para que nunca haya URLs duplicadas, sin importar de dónde vengan.
+  const photoUrls = new Set();
 
-  // Fuente 1: proof_of_delivery.photo_url (legacy)
-  if (props.order?.proof_of_delivery?.photo_url) {
-    photos.add(props.order.proof_of_delivery.photo_url);
+  // 1. Buscamos en el array 'podUrls', que es la fuente más común.
+  if (Array.isArray(props.order?.podUrls) && props.order.podUrls.length > 0) {
+    props.order.podUrls.forEach(url => {
+      if (url) photoUrls.add(url);
+    });
   }
 
-  // Fuente 2: proof_of_delivery.photos (array)
-  if (Array.isArray(props.order?.proof_of_delivery?.photos)) {
-    props.order.proof_of_delivery.photos.forEach(p => photos.add(p));
+  // 2. Buscamos en el objeto 'proof_of_delivery', por si hay datos más antiguos.
+  if (props.order?.proof_of_delivery) {
+    const proof = props.order.proof_of_delivery;
+
+    // Buscamos en 'proof.photo_url' (un solo string)
+    if (proof.photo_url) {
+      photoUrls.add(proof.photo_url);
+    }
+
+    // Buscamos en 'proof.photos' (un array)
+    if (Array.isArray(proof.photos) && proof.photos.length > 0) {
+      proof.photos.forEach(url => {
+        if (url) photoUrls.add(url);
+      });
+    }
   }
 
-  // Fuente 3: podUrls (array en la raíz del objeto order)
-  if (Array.isArray(props.order?.podUrls)) {
-    props.order.podUrls.forEach(p => photos.add(p));
-  }
-
-  return Array.from(photos).map((url, index) => ({
+  // 3. Convertimos el Set (sin duplicados) de nuevo a un array con el formato que el template espera.
+  return Array.from(photoUrls).map((url, index) => ({
     url,
     loading: imageLoadStates.value[index] !== 'loaded'
   }));
-})
+});
 
 const hasSignature = computed(() => {
   if (!hasProofOfDelivery.value) return false
