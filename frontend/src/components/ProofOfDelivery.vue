@@ -122,7 +122,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useToast } from 'vue-toastification'
 import jsPDF from 'jspdf';
-import 'jspdf-autotable'; // Importante para las tablas
+import autoTable from 'jspdf-autotable';
 
 const props = defineProps({
   order: {
