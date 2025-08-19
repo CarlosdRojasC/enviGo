@@ -15,6 +15,19 @@ const manifestSchema = new mongoose.Schema({
     required: true,
     index: true
   },
+  pickup_address: {
+    full_address: String,
+    street: String,
+    number: String,
+    complement: String,
+    commune: String,
+    city: String,
+    region: String,
+    postal_code: String,
+    latitude: Number,
+    longitude: Number,
+  },
+  
   order_ids: [{
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Order',
@@ -34,10 +47,11 @@ const manifestSchema = new mongoose.Schema({
     type: String,
     trim: true
   }],
-  status: {
+status: {
     type: String,
-    enum: ['generated', 'printed', 'picked_up', 'cancelled'],
-    default: 'generated',
+    // ✅ CAMBIAR EL ENUM POR ESTOS NUEVOS VALORES
+    enum: ['pending_pickup', 'in_route', 'completed', 'cancelled'],
+    default: 'pending_pickup', // ✅ CAMBIAR EL VALOR POR DEFECTO
     index: true
   },
   generated_by: {

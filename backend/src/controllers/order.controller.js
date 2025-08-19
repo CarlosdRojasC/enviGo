@@ -4,6 +4,7 @@ const Order = require('../models/Order');
 const Company = require('../models/Company');
 const Channel = require('../models/Channel');
 const Notification = require('../models/Notification');
+const ManifestController = require('./manifest.controller');
 
 const mongoose = require('mongoose'); // Agregar esta línea
 const ShipdayService = require('../services/shipday.service.js');
