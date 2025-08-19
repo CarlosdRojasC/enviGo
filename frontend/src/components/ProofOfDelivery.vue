@@ -121,6 +121,8 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useToast } from 'vue-toastification'
+import jsPDF from 'jspdf';
+import 'jspdf-autotable'; // Importante para las tablas
 
 const props = defineProps({
   order: {
@@ -293,8 +295,92 @@ function shareProof() {
   }
 }
 
-function downloadProof() {
-  toast.info('Función de descarga en desarrollo')
+async function downloadProof() {
+  toast.info('Generando comprobante en PDF...', { timeout: 2000 });
+  const doc = new jsPDF();
+
+  // --- Título y Encabezado ---
+  doc.setFontSize(20);
+  doc.setFont('helvetica', 'bold');
+  doc.text('Comprobante de Entrega', 105, 20, { align: 'center' });
+
+  doc.setFontSize(12);
+  doc.setFont('helvetica', 'normal');
+  doc.text(`Pedido #${props.order.order_number}`, 105, 30, { align: 'center' });
+
+  // --- Tabla con Detalles de la Entrega ---
+  const tableBody = [
+    ['Cliente', props.order.customer_name],
+    ['Fecha de Entrega', formatDateTime(props.order.delivery_date)],
+    ['Dirección', props.order.shipping_address],
+    ['Comuna', props.order.shipping_commune],
+    ['Entregado por', props.order.driver_info?.name || 'No especificado'],
+  ];
+  if (props.order.proof_of_delivery?.notes) {
+      tableBody.push(['Notas del Conductor', props.order.proof_of_delivery.notes]);
+  }
+
+  doc.autoTable({
+    startY: 40,
+    head: [['Detalle', 'Información']],
+    body: tableBody,
+    theme: 'grid',
+    headStyles: { fillColor: [41, 128, 185] },
+  });
+
+  let finalY = doc.lastAutoTable.finalY || 80; // Posición después de la tabla
+
+  // --- Función para cargar y añadir imágenes ---
+  const addImageToPdf = async (url, title, yPosition) => {
+    try {
+      doc.setFontSize(14);
+      doc.setFont('helvetica', 'bold');
+      doc.text(title, 14, yPosition + 10);
+      const response = await fetch(url);
+      const blob = await response.blob();
+      const reader = new FileReader();
+      
+      return new Promise((resolve) => {
+        reader.onload = (event) => {
+          doc.addImage(event.target.result, 'JPEG', 14, yPosition + 15, 80, 80);
+          resolve(yPosition + 105); // Retorna la nueva posición Y
+        };
+        reader.readAsDataURL(blob);
+      });
+    } catch (error) {
+      console.error('Error cargando imagen para PDF:', error);
+      doc.setFontSize(10);
+      doc.setTextColor(255, 0, 0);
+      doc.text('No se pudo cargar la imagen.', 14, yPosition + 20);
+      return yPosition + 30;
+    }
+  };
+
+  // --- Añadir Fotos de Entrega ---
+  if (hasPhotos.value) {
+    for (let i = 0; i < deliveryPhotos.value.length; i++) {
+        const photo = deliveryPhotos.value[i];
+        finalY = await addImageToPdf(photo.url, `Foto de Entrega ${i + 1}`, finalY);
+        // Añadir nueva página si no hay espacio
+        if (finalY > 250 && i < deliveryPhotos.value.length - 1) {
+            doc.addPage();
+            finalY = 10;
+        }
+    }
+  }
+
+  // --- Añadir Firma ---
+  if (signatureUrl.value) {
+      if (finalY > 200) { // Si no cabe la firma, nueva página
+          doc.addPage();
+          finalY = 10;
+      }
+      finalY = await addImageToPdf(signatureUrl.value, 'Firma del Receptor', finalY);
+  }
+  
+  // --- Guardar el PDF ---
+  doc.save(`Comprobante-Pedido-${props.order.order_number}.pdf`);
+  toast.success('¡Comprobante descargado!');
 }
 
 function reportIssue() {
@@ -314,6 +400,45 @@ onMounted(() => {
 </script>
 
 <style scoped>
+
+.proof-actions {
+  display: flex;
+  justify-content: center;
+  gap: 16px; /* Aumenta el espacio */
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid #e2e8f0;
+  flex-wrap: wrap; /* Para que se vea bien en móviles */
+}
+
+.action-button {
+  display: inline-flex; /* Permite alinear el ícono y el texto */
+  align-items: center;
+  gap: 8px; /* Espacio entre ícono y texto */
+  padding: 10px 20px;
+  border-radius: 8px;
+  border: none;
+  background-color: #f8fafc;
+  border: 1px solid #e2e8f0;
+  color: #334155;
+  cursor: pointer;
+  font-weight: 600; /* Letra más marcada */
+  font-size: 14px;
+  transition: all 0.2s ease;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+}
+
+.action-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+  border-color: #cbd5e1;
+}
+
+/* Colores específicos por botón */
+.action-button.share:hover { color: #3b82f6; border-color: #3b82f6; }
+.action-button.download:hover { color: #16a34a; border-color: #16a34a; }
+.action-button.report:hover { color: #ef4444; border-color: #ef4444; }
+
 .proof-container {
   max-width: 800px;
   margin: 0 auto;
