@@ -16,7 +16,7 @@
       <router-link v-if="auth.isAdmin" to="/app/admin/companies" class="nav-item">
         🏢 <span>Empresas</span>
       </router-link>
-      <router-link v-if="auth.isAdmin" to="/app/admin/dashboard/pickup-routes" class="nav-link">
+      <router-link v-if="auth.isAdmin" to="/app/admin/pickup-routes" class="nav-item">
           <i class="fas fa-route"></i>
           <span>Rutas de Recolección</span>
         </router-link>
