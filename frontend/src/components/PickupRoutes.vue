@@ -77,7 +77,7 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import apiService from '@/services/apiService'
+import apiService from '../services/api'
 import { toast } from 'vue3-toastify'
 
 const manifests = ref([])

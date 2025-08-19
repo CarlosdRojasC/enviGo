@@ -126,12 +126,6 @@ const routes = [
         component: () => import('../views/Companies.vue'),
         meta: { roles: ['admin'] }
       },
-{
-  path: '/admin/pickup-routes',
-  name: 'PickupRoutes',
-  component: () => import('../components/PickupRoutes.vue'),
-  meta: { roles: ['admin'] }
-},
       {
         path: 'admin/orders',
         name: 'AdminOrders',
@@ -176,6 +170,12 @@ const routes = [
     requiresAuth: true, 
     roles: ['admin'] 
   }
+},
+{
+  path: 'admin/pickup-routes',
+  name: 'PickupRoutes',
+  component: () => import('../components/PickupRoutes.vue'),
+  meta: { roles: ['admin'] }
 },
 {
   path: 'admin/manifest/:id',
