@@ -84,6 +84,7 @@ const orderSchema = new mongoose.Schema({
   shipday_status: { type: String }, // Estado en Shipday
   proof_of_delivery: { type: evidenceSchema, default: null },
   podUrls: [{ type: String }], // Array de URLs de fotos de entrega
+  photos: [{ type: String }], // Array de URLs de fotos del pedido
   signatureUrl: { type: String }, // URL de firma digital
   
   // 🆕 Información del conductor expandida

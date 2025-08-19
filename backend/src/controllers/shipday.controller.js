@@ -596,7 +596,7 @@ case 'READY_TO_DELIVER':        // Por si acaso viene sin el prefijo
     order.proof_of_delivery = {
       photo_url: validPhotos[0] || null, // Primera foto como principal
       signature_url: signatureUrl,
-      photos: validPhotos, // 🆕 Array completo de fotos
+      podUrls: validPhotos, // 🆕 Array completo de fotos
       timestamp: new Date(),
       notes: 'Entrega completada vía Shipday',
       delivered_by: order.driver_info?.name || 'Conductor',
