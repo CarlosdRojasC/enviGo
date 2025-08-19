@@ -24,4 +24,4 @@ router.get('/:id/pdf', authenticateToken, manifestController.generatePDF);
 // Actualizar estado - solo admin y company_owner pueden cambiar estados
 router.patch('/:id/status', authenticateToken, isAdmin, manifestController.updateStatus);
 
-
+module.exports = router;
