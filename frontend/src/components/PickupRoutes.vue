@@ -78,9 +78,9 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import apiService from '../services/api'
-import { toast } from 'vue3-toastify'
-
+import { useToast } from 'vue-toastification';
 const manifests = ref([])
+const toast = useToast();
 
 onMounted(() => {
   fetchPendingPickups()
