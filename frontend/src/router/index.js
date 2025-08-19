@@ -8,7 +8,7 @@ import PublicLayout from '../layouts/PublicLayout.vue'
 // Vistas públicas
 import LandingPage from '../views/LandingPage.vue'
 import Login from '../views/login.vue'
-import 
+ 
 
 // Vistas del sistema (existentes)
 const routes = [
