@@ -23,7 +23,7 @@ router.get('/:id/pdf', authenticateToken, manifestController.generatePDF);
 router.patch('/:id/status', authenticateToken, isAdmin, manifestController.updateStatus);
 router.post(
     '/group-for-pickup', 
-    authMiddleware.verifyToken, // Protege la ruta
+    authenticateToken, // Protege la ruta
     manifestController.groupOrdersForPickup
 );
 module.exports = router;
