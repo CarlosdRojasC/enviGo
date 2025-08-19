@@ -8,6 +8,7 @@ import PublicLayout from '../layouts/PublicLayout.vue'
 // Vistas públicas
 import LandingPage from '../views/LandingPage.vue'
 import Login from '../views/login.vue'
+import 
 
 // Vistas del sistema (existentes)
 const routes = [
@@ -128,7 +129,7 @@ const routes = [
       {
         path: 'admin/pickup-routes',
         name: 'AdminPickupRoutes',
-        component: () => import('../views/PickupRoutes.vue'),
+        component: () => import('../components/PickupRoutes.vue'),
         meta: { roles: ['admin'] }
       },
       {
