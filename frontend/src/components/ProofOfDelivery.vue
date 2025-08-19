@@ -299,12 +299,17 @@ async function downloadProof() {
         toast.info('Generando comprobante...');
         const orderId = props.order._id;
 
-        // Llama a la nueva API del backend
-        const response = await apiService.get(`/labels/proof/${orderId}/download`, {
+        // ✅ INICIO DE LA CORRECCIÓN
+        // Cambiamos la sintaxis de la llamada a la API para que coincida
+        // con otros servicios de tu proyecto. Esto evita el error ".get is not a function".
+        const response = await apiService({
+            method: 'GET',
+            url: `/labels/proof/${orderId}/download`,
             responseType: 'blob', // Importante para recibir un archivo
         });
+        // ✅ FIN DE LA CORRECCIÓN
 
-        // Crea un link para descargar el archivo
+        // Crea un link para descargar el archivo (sin cambios aquí)
         const url = window.URL.createObjectURL(new Blob([response.data]));
         const link = document.createElement('a');
         link.href = url;
