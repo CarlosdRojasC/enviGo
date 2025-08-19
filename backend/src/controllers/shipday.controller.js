@@ -589,9 +589,11 @@ case 'READY_TO_DELIVER':        // Por si acaso viene sin el prefijo
 
   // 3. LIMPIAR Y VALIDAR FOTOS
   const validPhotos = photos.filter(url => url && typeof url === 'string' && url.trim() !== '');
-
+ 
   // 4. GUARDAR EN proof_of_delivery (estructura que busca tu frontend)
   if (validPhotos.length > 0 || signatureUrl) {
+    order.podUrls = validPhotos; // 🆕 Guardar en el nuevo campo podUrls
+    order.signatureUrl = signatureUrl; // Guardar firma si existe
     
     order.proof_of_delivery = {
       photo_url: validPhotos[0] || null, // Primera foto como principal

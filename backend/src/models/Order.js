@@ -5,6 +5,7 @@ const evidenceSchema = new mongoose.Schema({
   photo_url: { type: String },
   signature_url: { type: String },
   notes: { type: String },
+  podUrls: [{ type: String }], // Array de URLs de fotos de entrega
   location: {
     type: {
       type: String,
