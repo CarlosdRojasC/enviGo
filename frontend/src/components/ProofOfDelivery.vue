@@ -303,12 +303,11 @@ async function downloadProof() {
   doc.setFontSize(20);
   doc.setFont('helvetica', 'bold');
   doc.text('Comprobante de Entrega', 105, 20, { align: 'center' });
-
   doc.setFontSize(12);
   doc.setFont('helvetica', 'normal');
   doc.text(`Pedido #${props.order.order_number}`, 105, 30, { align: 'center' });
 
-  // --- Tabla con Detalles de la Entrega ---
+  // --- Tabla con Detalles ---
   const tableBody = [
     ['Cliente', props.order.customer_name],
     ['Fecha de Entrega', formatDateTime(props.order.delivery_date)],
@@ -319,7 +318,6 @@ async function downloadProof() {
   if (props.order.proof_of_delivery?.notes) {
       tableBody.push(['Notas del Conductor', props.order.proof_of_delivery.notes]);
   }
-
   doc.autoTable({
     startY: 40,
     head: [['Detalle', 'Información']],
@@ -328,57 +326,53 @@ async function downloadProof() {
     headStyles: { fillColor: [41, 128, 185] },
   });
 
-  let finalY = doc.lastAutoTable.finalY || 80; // Posición después de la tabla
+  let finalY = doc.lastAutoTable.finalY || 80;
 
-  // --- Función para cargar y añadir imágenes ---
-  const addImageToPdf = async (url, title, yPosition) => {
-    try {
+  // --- Función para cargar imágenes (maneja CORS) ---
+  const addImageToPdf = (url, title, yPosition) => {
+    return new Promise((resolve) => {
       doc.setFontSize(14);
       doc.setFont('helvetica', 'bold');
       doc.text(title, 14, yPosition + 10);
-      const response = await fetch(url);
-      const blob = await response.blob();
-      const reader = new FileReader();
-      
-      return new Promise((resolve) => {
-        reader.onload = (event) => {
-          doc.addImage(event.target.result, 'JPEG', 14, yPosition + 15, 80, 80);
-          resolve(yPosition + 105); // Retorna la nueva posición Y
-        };
-        reader.readAsDataURL(blob);
-      });
-    } catch (error) {
-      console.error('Error cargando imagen para PDF:', error);
-      doc.setFontSize(10);
-      doc.setTextColor(255, 0, 0);
-      doc.text('No se pudo cargar la imagen.', 14, yPosition + 20);
-      return yPosition + 30;
-    }
+      const img = new Image();
+      img.crossOrigin = 'Anonymous'; // Intento para evitar problemas de CORS
+      img.src = url;
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0);
+        const dataUrl = canvas.toDataURL('image/jpeg');
+        doc.addImage(dataUrl, 'JPEG', 14, yPosition + 15, 80, 80);
+        resolve(yPosition + 105);
+      };
+      img.onerror = () => {
+        doc.setFontSize(10);
+        doc.setTextColor(255, 0, 0);
+        doc.text('No se pudo cargar esta imagen (posible error de CORS).', 14, yPosition + 20);
+        resolve(yPosition + 30);
+      };
+    });
   };
 
-  // --- Añadir Fotos de Entrega ---
-  if (hasPhotos.value) {
-    for (let i = 0; i < deliveryPhotos.value.length; i++) {
-        const photo = deliveryPhotos.value[i];
-        finalY = await addImageToPdf(photo.url, `Foto de Entrega ${i + 1}`, finalY);
-        // Añadir nueva página si no hay espacio
-        if (finalY > 250 && i < deliveryPhotos.value.length - 1) {
-            doc.addPage();
-            finalY = 10;
-        }
-    }
+  // --- Añadir Fotos y Firma ---
+  const proofs = deliveryPhotos.value || [];
+  if (signatureUrl.value) {
+      proofs.push({ url: signatureUrl.value, isSignature: true });
   }
 
-  // --- Añadir Firma ---
-  if (signatureUrl.value) {
-      if (finalY > 200) { // Si no cabe la firma, nueva página
-          doc.addPage();
-          finalY = 10;
-      }
-      finalY = await addImageToPdf(signatureUrl.value, 'Firma del Receptor', finalY);
+  for (let i = 0; i < proofs.length; i++) {
+    const proof = proofs[i];
+    const title = proof.isSignature ? 'Firma del Receptor' : `Foto de Entrega ${i + 1}`;
+    if (finalY > 200) {
+      doc.addPage();
+      finalY = 10;
+    }
+    finalY = await addImageToPdf(proof.url, title, finalY);
   }
   
-  // --- Guardar el PDF ---
+  // --- Guardar PDF ---
   doc.save(`Comprobante-Pedido-${props.order.order_number}.pdf`);
   toast.success('¡Comprobante descargado!');
 }
