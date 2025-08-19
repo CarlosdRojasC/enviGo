@@ -200,89 +200,25 @@ async function createPDFBuffer(manifest) {
 class ManifestController {
   
 
-  async groupOrdersForPickup(req, res) {
-    // El 'user' y 'company_id' vienen del authMiddleware que ya tienes
-    const { orderIds } = req.body;
-    const userId = req.user.id;
-    const companyId = req.user.company_id;
-
-    if (!orderIds || orderIds.length === 0) {
-      return res.status(400).json({ message: 'Se requiere una lista de IDs de órdenes.' });
+async getPendingPickups(req, res) {
+  try {
+    const filters = { status: 'pending_pickup' };
+    if (req.user.role !== 'admin') {
+      filters.company_id = req.user.company_id;
     }
 
-    try {
-      // 1. Obtener los datos de la empresa para la dirección de retiro
-      const company = await Company.findById(companyId).lean();
-      if (!company || !company.address) {
-        return res.status(404).json({ message: 'Empresa o dirección de la empresa no encontrada.' });
-      }
+    const manifests = await Manifest.find(filters)
+      .populate('company_id', 'name address')
+      .populate('generated_by', 'full_name email')
+      .sort({ generated_at: -1 })
+      .lean();
 
-      // 2. Obtener los detalles de las órdenes para el snapshot
-      const ordersForSnapshot = await Order.find({ _id: { $in: orderIds } }).lean();
-      
-      let totalPackages = 0;
-      const communes = new Set();
-      const orderSnapshots = ordersForSnapshot.map(order => {
-        totalPackages += order.load1Packages || 1; // Suma los paquetes de cada orden
-        communes.add(order.shipping_address.commune); // Agrega la comuna a un set para evitar duplicados
-        return { // Crea el snapshot reducido para el manifiesto
-          _id: order._id,
-          order_number: order.order_number,
-          customer_name: order.customer_name,
-          shipping_commune: order.shipping_address.commune,
-          shipping_address: order.shipping_address.full_address,
-          customer_phone: order.customer_phone,
-          load1Packages: order.load1Packages || 1,
-          notes: order.notes,
-        };
-      });
-
-      // 3. Generar el número de manifiesto usando tu método estático
-      const manifestNumber = await Manifest.generateManifestNumber(companyId);
-
-      // 4. Crear la nueva instancia del Manifiesto con los campos actualizados
-      const newManifest = new Manifest({
-        manifest_number: manifestNumber,
-        company_id: companyId,
-        pickup_address: company.address, // <-- Usando el nuevo campo
-        orders: orderIds, // <-- Renombrado de 'order_ids'
-        total_orders: orderIds.length,
-        total_packages: totalPackages,
-        communes: Array.from(communes),
-        status: 'pending_pickup', // <-- Usando el nuevo estado
-        generated_by: userId,
-        manifest_data: { // Tu excelente snapshot de datos
-          company: {
-            name: company.name,
-            address: company.address.full_address,
-            phone: company.phone,
-            email: company.email,
-          },
-          orders: orderSnapshots,
-          generation_date: new Date(),
-          generated_by: req.user.full_name,
-        }
-      });
-
-      await newManifest.save();
-
-      // 5. Actualizar las órdenes para vincularlas al nuevo manifiesto
-      await Order.updateMany(
-        { _id: { $in: orderIds } },
-        { $set: { manifest_id: newManifest._id, status: 'ready_for_pickup' } }
-      );
-
-      console.log(`✅ Punto de Recolección Creado: ${manifestNumber}`);
-      res.status(201).json({ 
-        message: 'Punto de recolección creado exitosamente.', 
-        manifest: newManifest 
-      });
-
-    } catch (error) {
-      console.error('❌ Error agrupando órdenes para recolección:', error);
-      res.status(500).json({ message: 'Error interno del servidor al crear el punto de recolección.' });
-    }
+    res.json(manifests);
+  } catch (error) {
+    console.error('❌ Error obteniendo pendientes de recolección:', error);
+    res.status(500).json({ error: 'Error interno del servidor' });
   }
+}
 
   // ==================== CREAR MANIFIESTO ====================
   async create(req, res) {
