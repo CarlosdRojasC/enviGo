@@ -297,6 +297,11 @@ router.post('/print-bulk-pdf', async (req, res) => {
   }
 });
 
+router.get(
+    '/proof/:orderId/download',
+    authenticateToken, // Asumiendo que usas este middleware de autenticación
+    labelController.downloadProofOfDelivery
+);
 
 
 module.exports = router;

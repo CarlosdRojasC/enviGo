@@ -121,8 +121,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useToast } from 'vue-toastification'
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
+import { apiService } from '../services/api';
 
 const props = defineProps({
   order: {
@@ -296,91 +295,30 @@ function shareProof() {
 }
 
 async function downloadProof() {
-  toast.info('Generando comprobante en PDF...', { timeout: 2000 });
-  const doc = new jsPDF();
-
-  // --- Título y Encabezado ---
-  doc.setFontSize(20);
-  doc.setFont('helvetica', 'bold');
-  doc.text('Comprobante de Entrega', 105, 20, { align: 'center' });
-
-  doc.setFontSize(12);
-  doc.setFont('helvetica', 'normal');
-  doc.text(`Pedido #${props.order.order_number}`, 105, 30, { align: 'center' });
-
-  // --- Tabla con Detalles de la Entrega ---
-  const tableBody = [
-    ['Cliente', props.order.customer_name],
-    ['Fecha de Entrega', formatDateTime(props.order.delivery_date)],
-    ['Dirección', props.order.shipping_address],
-    ['Comuna', props.order.shipping_commune],
-    ['Entregado por', props.order.driver_info?.name || 'No especificado'],
-  ];
-  if (props.order.proof_of_delivery?.notes) {
-      tableBody.push(['Notas del Conductor', props.order.proof_of_delivery.notes]);
-  }
-
-  autoTable(doc, {
-    startY: 40,
-    head: [['Detalle', 'Información']],
-    body: tableBody,
-    theme: 'grid',
-    headStyles: { fillColor: [41, 128, 185] },
-  });
-
-  let finalY = doc.lastAutoTable.finalY || 80; // Posición después de la tabla
-
-  // --- Función para cargar y añadir imágenes ---
-  const addImageToPdf = async (url, title, yPosition) => {
     try {
-      doc.setFontSize(14);
-      doc.setFont('helvetica', 'bold');
-      doc.text(title, 14, yPosition + 10);
-      const response = await fetch(url);
-      const blob = await response.blob();
-      const reader = new FileReader();
-      
-      return new Promise((resolve) => {
-        reader.onload = (event) => {
-          doc.addImage(event.target.result, 'JPEG', 14, yPosition + 15, 80, 80);
-          resolve(yPosition + 105); // Retorna la nueva posición Y
-        };
-        reader.readAsDataURL(blob);
-      });
+        toast.info('Generando comprobante...');
+        const orderId = props.order._id;
+
+        // Llama a la nueva API del backend
+        const response = await apiService.get(`/labels/proof/${orderId}/download`, {
+            responseType: 'blob', // Importante para recibir un archivo
+        });
+
+        // Crea un link para descargar el archivo
+        const url = window.URL.createObjectURL(new Blob([response.data]));
+        const link = document.createElement('a');
+        link.href = url;
+        link.setAttribute('download', `Comprobante-${props.order.order_number}.pdf`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+
+        toast.success('¡Comprobante descargado!');
     } catch (error) {
-      console.error('Error cargando imagen para PDF:', error);
-      doc.setFontSize(10);
-      doc.setTextColor(255, 0, 0);
-      doc.text('No se pudo cargar la imagen.', 14, yPosition + 20);
-      return yPosition + 30;
+        console.error('Error al descargar el comprobante:', error);
+        toast.error('No se pudo generar el PDF.');
     }
-  };
-
-  // --- Añadir Fotos de Entrega ---
-  if (hasPhotos.value) {
-    for (let i = 0; i < deliveryPhotos.value.length; i++) {
-        const photo = deliveryPhotos.value[i];
-        finalY = await addImageToPdf(photo.url, `Foto de Entrega ${i + 1}`, finalY);
-        // Añadir nueva página si no hay espacio
-        if (finalY > 250 && i < deliveryPhotos.value.length - 1) {
-            doc.addPage();
-            finalY = 10;
-        }
-    }
-  }
-
-  // --- Añadir Firma ---
-  if (signatureUrl.value) {
-      if (finalY > 200) { // Si no cabe la firma, nueva página
-          doc.addPage();
-          finalY = 10;
-      }
-      finalY = await addImageToPdf(signatureUrl.value, 'Firma del Receptor', finalY);
-  }
-  
-  // --- Guardar el PDF ---
-  doc.save(`Comprobante-Pedido-${props.order.order_number}.pdf`);
-  toast.success('¡Comprobante descargado!');
 }
 
 function reportIssue() {

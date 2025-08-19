@@ -232,6 +232,27 @@ class LabelController {
       res.status(500).json({ error: 'Error interno del servidor' });
     }
   }
+  async downloadProofOfDelivery(req, res) {
+        try {
+            const { orderId } = req.params;
+            const order = await Order.findById(orderId).populate('company_id');
+
+            if (!order) {
+                return res.status(404).json({ error: 'Pedido no encontrado' });
+            }
+
+            // Llama al servicio para generar el PDF
+            const pdfBuffer = await PdfService.generateProofOfDelivery(order);
+
+            res.setHeader('Content-Type', 'application/pdf');
+            res.setHeader('Content-Disposition', `attachment; filename=Comprobante-${order.order_number}.pdf`);
+            res.send(pdfBuffer);
+
+        } catch (error) {
+            console.error('Error generando PDF de comprobante:', error);
+            res.status(500).json({ error: 'No se pudo generar el PDF' });
+        }
+    }
 }
 
 module.exports = new LabelController();
