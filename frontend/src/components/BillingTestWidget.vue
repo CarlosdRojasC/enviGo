@@ -172,7 +172,7 @@ const selectedCompany = computed(() =>
 // --- MÉTODOS ---
 async function loadInitialData() {
   loading.value = true;
-  setDefaultDates(); // Establecer fechas por defecto al inicio
+  setDefaultDates(); 
   try {
     if (auth.isAdmin) {
       const { data } = await apiService.companies.getAll();
@@ -189,11 +189,10 @@ async function loadInitialData() {
 }
 
 async function onCompanyChange() {
-  selectedOrderIds.value = []; // Limpiar selección al cambiar de empresa
+  selectedOrderIds.value = []; 
   if (selectedCompanyId.value) {
     await loadCompanyData();
   } else {
-    // Si no hay empresa seleccionada, limpiar los datos
     invoiceableOrders.value = [];
     ordersSummary.value = {};
     dashboardStats.value = {};
@@ -203,7 +202,7 @@ async function onCompanyChange() {
 async function loadCompanyData() {
   await Promise.all([
     loadDashboardStats(),
-    loadInvoiceableOrders() // Carga pedidos con fechas por defecto
+    loadInvoiceableOrders()
   ]);
 }
 
@@ -222,7 +221,7 @@ async function loadDashboardStats() {
   }
 }
 
-// ** FUNCIÓN MODIFICADA PARA FILTRAR POR FECHA **
+// ** FUNCIÓN CORREGIDA PARA ENVIAR PARÁMETROS CORRECTAMENTE **
 async function loadInvoiceableOrders() {
   if (!selectedCompanyId.value) return;
   if (!invoiceForm.value.period_start || !invoiceForm.value.period_end) {
@@ -232,18 +231,26 @@ async function loadInvoiceableOrders() {
     
   loadingOrders.value = true;
   try {
-    const params = {
+    // ⭐ CAMBIO CLAVE: Los parámetros ahora van dentro de un objeto "params"
+    const config = {
+      params: {
+        company_id: selectedCompanyId.value,
         startDate: invoiceForm.value.period_start,
         endDate: invoiceForm.value.period_end
+      }
     };
-    // Asumo que tu API puede recibir `params`. Si no, ajusta esta llamada.
-    const { data } = await apiService.billing.getInvoiceableOrders(selectedCompanyId.value, params);
+    
+    // La llamada ahora pasa el objeto de configuración
+    const { data } = await apiService.billing.getInvoiceableOrders(config);
+    
     invoiceableOrders.value = data.orders;
     ordersSummary.value = data.summary;
-    selectedOrderIds.value = []; // Limpiar selección al cargar nuevos pedidos
+    selectedOrderIds.value = []; 
     
     if(data.orders.length > 0) {
       toast.success(`${data.orders.length} pedidos cargados para el período.`);
+    } else {
+      toast.info('No se encontraron pedidos para las fechas seleccionadas.');
     }
 
   } catch (error) {
@@ -255,19 +262,15 @@ async function loadInvoiceableOrders() {
   }
 }
 
-// ** NUEVA FUNCIÓN PARA SELECCIÓN INDIVIDUAL **
 function toggleOrderSelection(orderId) {
   const index = selectedOrderIds.value.indexOf(orderId);
   if (index > -1) {
-    // Si ya está seleccionado, quitarlo
     selectedOrderIds.value.splice(index, 1);
   } else {
-    // Si no está, agregarlo
     selectedOrderIds.value.push(orderId);
   }
 }
 
-// ** FUNCIÓN MODIFICADA PARA SELECCIONAR/DESELECCIONAR TODOS **
 function selectAllOrders() {
   if (selectedOrderIds.value.length === invoiceableOrders.value.length) {
     selectedOrderIds.value = [];
@@ -290,8 +293,6 @@ async function generateTestInvoice() {
       period_end: invoiceForm.value.period_end
     };
 
-    console.log('🧪 Probando facturación mejorada:', invoiceData);
-
     const { data } = await apiService.billing.generateInvoiceImproved(invoiceData);
     
     addResult('success', '💰 Factura generada con método mejorado', {
@@ -302,7 +303,7 @@ async function generateTestInvoice() {
 
     toast.success(`✅ Factura ${data.invoice.invoice_number} generada correctamente`);
     
-    await loadCompanyData(); // Refrescar todos los datos
+    await loadCompanyData(); 
     
   } catch (error) {
     addResult('error', 'Error generando factura', error.response?.data?.error || error.message);
@@ -343,11 +344,23 @@ function formatCurrency(amount) {
   return new Intl.NumberFormat('es-CL').format(amount || 0);
 }
 
+// ** FUNCIÓN CORREGIDA PARA EVITAR "INVALID DATE" **
 function formatDate(dateStr) {
   if (!dateStr) return 'N/A';
-  // Asegurarse de que la fecha se interpreta en UTC para evitar problemas de zona horaria
-  const date = new Date(dateStr + 'T00:00:00');
-  return date.toLocaleDateString('es-CL', { timeZone: 'UTC' });
+  
+  const date = new Date(dateStr); // Intenta crear la fecha directamente
+  
+  // Verifica si la fecha es válida
+  if (isNaN(date.getTime())) {
+    return 'Fecha inválida';
+  }
+  
+  return date.toLocaleDateString('es-CL', {
+    timeZone: 'UTC', // Usar UTC para consistencia
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  });
 }
 
 // --- CICLO DE VIDA ---
@@ -357,7 +370,7 @@ onMounted(() => {
 </script>
 
 <style scoped>
-/* ==================== WIDGET PRINCIPAL ==================== */
+/* Estilos sin cambios */
 .billing-test-widget {
   background: white;
   border-radius: 12px;
@@ -389,7 +402,6 @@ onMounted(() => {
 }
 .company-selector select option { color: black; }
 
-/* ==================== ESTADOS ==================== */
 .loading-state, .no-selection { text-align: center; padding: 40px; color: #6b7280; }
 .loading-spinner {
   width: 32px; height: 32px;
@@ -401,7 +413,6 @@ onMounted(() => {
 }
 @keyframes spin { 100% { transform: rotate(360deg); } }
 
-/* ==================== SECCIONES ==================== */
 .test-sections { padding: 20px; }
 .test-section {
   margin-bottom: 32px; padding: 20px;
@@ -411,13 +422,11 @@ onMounted(() => {
 }
 .section-title { font-size: 16px; font-weight: 600; color: #1f2937; margin: 0 0 16px 0; }
 
-/* ==================== ESTADÍSTICAS ==================== */
 .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 16px; margin-bottom: 16px; }
 .stat-card { background: white; padding: 16px; border-radius: 8px; text-align: center; border: 1px solid #e5e7eb; }
 .stat-label { font-size: 12px; color: #6b7280; margin-bottom: 4px; }
 .stat-value { font-size: 20px; font-weight: 700; color: #1f2937; }
 
-/* ==================== PEDIDOS ==================== */
 .orders-summary { background: white; padding: 16px; border-radius: 8px; margin-bottom: 16px; border: 1px solid #e5e7eb; }
 .orders-list { background: white; border-radius: 8px; margin-bottom: 16px; max-height: 250px; overflow-y: auto; border: 1px solid #e5e7eb; }
 .no-orders { text-align: center; color: #6b7280; padding: 20px; }
@@ -431,7 +440,6 @@ onMounted(() => {
 .order-date { font-size: 12px; color: #6b7280; }
 .order-amount { font-weight: 600; color: #059669; }
 
-/* ==================== FORMULARIO ==================== */
 .invoice-form { background: white; padding: 16px; border-radius: 8px; margin-bottom: 16px; border: 1px solid #e5e7eb; }
 .date-filter-form { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
 .form-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; gap: 8px; }
@@ -439,7 +447,6 @@ onMounted(() => {
 .form-row input[type="date"] { padding: 6px 8px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 14px; }
 .selected-count { font-weight: 600; color: #3b82f6; }
 
-/* ==================== BOTONES ==================== */
 .test-actions { display: flex; gap: 12px; flex-wrap: wrap; }
 .test-btn {
   padding: 10px 16px; border-radius: 6px; border: none; font-weight: 500;
