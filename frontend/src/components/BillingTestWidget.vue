@@ -231,17 +231,18 @@ async function loadInvoiceableOrders() {
     
   loadingOrders.value = true;
   try {
-    // ⭐ CAMBIO CLAVE: Los parámetros ahora van dentro de un objeto "params"
+    // ⭐ CAMBIO CLAVE: Los parámetros de fecha van en un objeto "params"
     const config = {
       params: {
-        company_id: selectedCompanyId.value,
+        // El company_id ya no se pasa aquí, se pasa como el primer argumento
         startDate: invoiceForm.value.period_start,
         endDate: invoiceForm.value.period_end
       }
     };
     
-    // La llamada ahora pasa el objeto de configuración
-    const { data } = await apiService.billing.getInvoiceableOrders(config);
+    // ⭐ CAMBIO CLAVE: Se pasa el 'selectedCompanyId' como primer argumento
+    // y la configuración con las fechas como segundo argumento.
+    const { data } = await apiService.billing.getInvoiceableOrders(selectedCompanyId.value, config);
     
     invoiceableOrders.value = data.orders;
     ordersSummary.value = data.summary;
@@ -254,7 +255,8 @@ async function loadInvoiceableOrders() {
     }
 
   } catch (error) {
-    addResult('error', 'Error cargando pedidos facturables', error.message);
+    const errorMessage = error.response?.data?.error || error.message;
+    addResult('error', 'Error cargando pedidos facturables', errorMessage);
     console.error('Error cargando pedidos:', error);
     toast.error('No se pudieron cargar los pedidos.');
   } finally {
