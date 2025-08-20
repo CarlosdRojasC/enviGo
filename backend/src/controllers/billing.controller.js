@@ -1410,56 +1410,57 @@ async bulkMarkAsPaid(req, res) {
 // ✅ OBTENER PEDIDOS FACTURABLES (solo delivered)
 async getInvoiceableOrders(req, res) {
   try {
-    const companyId = req.user.role === 'admin' ? req.query.company_id : req.user.company_id;
+    // --- PASO 1: LEER PARÁMETROS DE LA URL ---
+    const { company_id, startDate, endDate } = req.query;
+    const companyId = req.user.role === 'admin' ? company_id : req.user.company_id;
     
     if (!companyId) {
       return res.status(400).json({ error: 'Company ID requerido' });
     }
 
-    console.log(`📦 Buscando pedidos facturables optimizado para empresa: ${companyId}`);
+    // --- PASO 2: CONSTRUIR LA CONSULTA BASE ---
+    const query = {
+      company_id: companyId,
+      status: 'delivered',
+      'billing_status.is_billable': true,
+      invoice_id: null
+    };
+
+    // --- PASO 3: AÑADIR FILTRO DE FECHAS SI SE PROPORCIONAN ---
+    if (startDate && endDate) {
+      query.delivery_date = {
+        $gte: new Date(startDate), // Mayor o igual que la fecha de inicio
+        $lte: new Date(endDate + 'T23:59:59Z') // Menor o igual que el final del día de la fecha de fin (en UTC)
+      };
+      console.log(`📦 Buscando pedidos facturables para empresa ${companyId} entre ${startDate} y ${endDate}`);
+    } else {
+      console.log(`📦 Buscando TODOS los pedidos facturables para empresa ${companyId}`);
+    }
+    
     const startTime = new Date();
 
-    // ✅ CONSULTA OPTIMIZADA CON LÍMITE Y PROYECCIÓN
+    // --- PASO 4: EJECUTAR LA CONSULTA CON LOS FILTROS ---
     const [orders, totalCount] = await Promise.all([
-      // Obtener pedidos con proyección limitada
-      Order.find({
-        company_id: companyId,
-        status: 'delivered',
-        'billing_status.is_billable': true,
-        invoice_id: null
-      })
-      .select('order_number customer_name customer_phone delivery_date shipping_cost channel_id') // Solo campos necesarios
-      .populate('channel_id', 'name platform') // Solo campos necesarios del canal
-      .sort({ delivery_date: -1 })
-      .limit(100) // ✅ LIMITAR RESULTADOS PARA EVITAR TIMEOUT
-      .lean(), // ✅ USAR LEAN PARA MEJOR PERFORMANCE
-
-      // Contar total por separado
-      Order.countDocuments({
-        company_id: companyId,
-        status: 'delivered',
-        'billing_status.is_billable': true,
-        invoice_id: null
-      })
+      Order.find(query)
+        .select('order_number customer_name delivery_date shipping_cost')
+        .sort({ delivery_date: -1 })
+        .limit(200) // Se mantiene un límite por seguridad
+        .lean(),
+      Order.countDocuments(query)
     ]);
 
-    // ✅ CALCULAR RESUMEN DE FORMA EFICIENTE
+    // Calcular resumen
     const totalAmount = orders.reduce((sum, order) => sum + (order.shipping_cost || 0), 0);
-    
-    // Encontrar rango de fechas sin ordenar todo
     const dates = orders.map(o => o.delivery_date).filter(Boolean);
     const minDate = dates.length > 0 ? new Date(Math.min(...dates.map(d => new Date(d)))) : null;
     const maxDate = dates.length > 0 ? new Date(Math.max(...dates.map(d => new Date(d)))) : null;
 
     const summary = {
       total_orders: orders.length,
-      total_count: totalCount, // Total real sin límite
+      total_count: totalCount,
       total_amount: totalAmount,
-      date_range: {
-        from: minDate,
-        to: maxDate
-      },
-      showing_limit: orders.length < totalCount ? 100 : null
+      date_range: { from: minDate, to: maxDate },
+      showing_limit: orders.length < totalCount ? 200 : null
     };
 
     const executionTime = new Date() - startTime;
@@ -1486,11 +1487,10 @@ async generateInvoiceImproved(req, res) {
         company_id,
         period_start,
         period_end,
-        order_ids,
-        type = 'invoice'
+        order_ids
       } = req.body;
 
-      console.log(`🧾 Iniciando generación de factura mejorada para empresa: ${company_id}`);
+      console.log(`🧾 Iniciando generación de factura para empresa: ${company_id}`);
 
       if (req.user.role !== 'admin') {
         return res.status(403).json({ error: ERRORS.FORBIDDEN });
@@ -1502,7 +1502,7 @@ async generateInvoiceImproved(req, res) {
         });
       }
 
-      // ✅ VALIDAR QUE TODOS LOS PEDIDOS ESTÉN EN ESTADO 'DELIVERED'
+      // Validar que todos los pedidos sean facturables
       const orders = await Order.find({
         _id: { $in: order_ids.map(id => new mongoose.Types.ObjectId(id)) },
         company_id: new mongoose.Types.ObjectId(company_id),
@@ -1515,7 +1515,7 @@ async generateInvoiceImproved(req, res) {
 
       if (orders.length !== order_ids.length) {
         const invalidOrders = order_ids.length - orders.length;
-        throw new Error(`${invalidOrders} pedidos no son facturables. Solo se pueden facturar pedidos entregados que no estén ya facturados.`);
+        throw new Error(`${invalidOrders} pedidos no son facturables o ya pertenecen a otra factura.`);
       }
 
       const company = await Company.findById(company_id).session(session);
@@ -1523,120 +1523,61 @@ async generateInvoiceImproved(req, res) {
         throw new Error('Empresa no encontrada');
       }
 
-      // Verificar si ya existe una factura en borrador para este período
-      const month = new Date(period_end).getMonth() + 1;
-      const year = new Date(period_end).getFullYear();
+      // --- LÓGICA MODIFICADA ---
+      // Se elimina la búsqueda de factura existente para permitir múltiples facturas por mes.
+      // Siempre se creará una nueva factura.
 
-      let existingInvoice = await Invoice.findOne({
-        company_id: company_id,
-        month: month,
-        year: year,
-        status: 'draft'
-      }).session(session);
+      console.log(`✨ Creando nueva factura para ${company.name} para el período ${period_start} a ${period_end}`);
+      
+      const subtotal = orders.reduce((acc, order) => acc + (order.shipping_cost || 0), 0);
+      const tax_amount = Math.round(subtotal * 0.19);
+      const total_amount = subtotal + tax_amount;
+      
+      const invoiceCount = await Invoice.countDocuments({}).session(session) + 1;
+      const now = new Date();
+      const invoice_number = `INV-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}-${String(invoiceCount).padStart(4, '0')}`;
 
-      if (existingInvoice) {
-        console.log(`🔄 Actualizando factura existente: ${existingInvoice.invoice_number}`);
-        
-        // ✅ ACTUALIZAR FACTURA EXISTENTE
-        const currentOrderIds = existingInvoice.order_ids || [];
-        const allOrderIds = [...new Set([...currentOrderIds, ...order_ids])];
-        const allOrders = await Order.find({ 
-          _id: { $in: allOrderIds.map(id => new mongoose.Types.ObjectId(id)) } 
-        }).session(session);
+      const newInvoice = new Invoice({
+        company_id,
+        invoice_number,
+        month: new Date(period_end).getMonth() + 1, // Se sigue guardando para reportes
+        year: new Date(period_end).getFullYear(),  // Se sigue guardando para reportes
+        total_orders: orders.length,
+        price_per_order: company.price_per_order,
+        subtotal,
+        tax_amount,
+        total_amount,
+        amount_due: subtotal,
+        period_start: new Date(period_start),
+        period_end: new Date(period_end),
+        due_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+        status: 'draft',
+        order_ids: order_ids
+      });
 
-        const subtotal = allOrders.reduce((acc, order) => acc + (order.shipping_cost || 0), 0);
-        const tax_amount = Math.round(subtotal * 0.19);
-        const total_amount = subtotal + tax_amount;
-
-        existingInvoice.total_orders = allOrders.length;
-        existingInvoice.subtotal = subtotal;
-        existingInvoice.tax_amount = tax_amount;
-        existingInvoice.total_amount = total_amount;
-        existingInvoice.amount_due = subtotal;
-        existingInvoice.order_ids = allOrderIds;
-        
-        await existingInvoice.save({ session });
-
-        // ✅ CAMBIAR ESTADO DE PEDIDOS A 'INVOICED' USANDO MÉTODO DEL MODELO
-        for (const order of orders) {
-          order.markAsInvoiced(existingInvoice._id, company.price_per_order);
-          await order.save({ session });
-        }
-
-        const invoiceWithCompany = await Invoice.findById(existingInvoice._id)
-          .populate('company_id', 'name email')
-          .session(session);
-
-        console.log(`✅ Factura actualizada: ${existingInvoice.invoice_number} - ${orders.length} pedidos añadidos`);
-
-        return res.status(200).json({
-          message: 'Factura actualizada exitosamente con nuevos pedidos',
-          invoice: invoiceWithCompany,
-          orders_added: orders.length,
-          total_orders: allOrders.length
-        });
-
-      } else {
-        console.log(`✨ Creando nueva factura para ${company.name} - ${month}/${year}`);
-        
-        // ✅ CREAR NUEVA FACTURA
-        const subtotal = orders.reduce((acc, order) => acc + (order.shipping_cost || 0), 0);
-        const tax_amount = Math.round(subtotal * 0.19);
-        const total_amount = subtotal + tax_amount;
-        
-        const invoiceCount = await Invoice.countDocuments({}).session(session) + 1;
-        const now = new Date();
-        const invoice_number = `INV-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}-${String(invoiceCount).padStart(4, '0')}`;
-
-        const newInvoice = new Invoice({
-          company_id,
-          invoice_number,
-          month,
-          year,
-          total_orders: orders.length,
-          price_per_order: company.price_per_order,
-          subtotal,
-          tax_amount,
-          total_amount,
-          amount_due: subtotal,
-          period_start: new Date(period_start),
-          period_end: new Date(period_end),
-          due_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-          status: 'draft',
-          order_ids: order_ids
-        });
-
-        await newInvoice.save({ session });
-        
-        // ✅ CAMBIAR ESTADO DE PEDIDOS A 'INVOICED' USANDO MÉTODO DEL MODELO
-        for (const order of orders) {
-          order.markAsInvoiced(newInvoice._id, company.price_per_order);
-          await order.save({ session });
-        }
-
-        const invoiceWithCompany = await Invoice.findById(newInvoice._id)
-          .populate('company_id', 'name email')
-          .session(session);
-
-        console.log(`✅ Nueva factura creada: ${newInvoice.invoice_number} con ${orders.length} pedidos`);
-
-        return res.status(201).json({
-          message: 'Factura generada exitosamente',
-          invoice: invoiceWithCompany,
-          orders_invoiced: orders.length
-        });
+      await newInvoice.save({ session });
+      
+      // Marcar pedidos como facturados
+      for (const order of orders) {
+        order.markAsInvoiced(newInvoice._id, company.price_per_order);
+        await order.save({ session });
       }
+
+      const invoiceWithCompany = await Invoice.findById(newInvoice._id)
+        .populate('company_id', 'name email')
+        .session(session);
+
+      console.log(`✅ Nueva factura creada: ${newInvoice.invoice_number} con ${orders.length} pedidos`);
+
+      return res.status(201).json({
+        message: 'Factura generada exitosamente',
+        invoice: invoiceWithCompany,
+        orders_invoiced: orders.length
+      });
     });
 
   } catch (error) {
     console.error('❌ Error generando factura mejorada:', error);
-    
-    if (error.code === 11000) {
-      return res.status(409).json({ 
-        error: 'Conflicto: Ya existe una factura para esta empresa en este período que no está en borrador.' 
-      });
-    }
-    
     res.status(500).json({ 
       error: error.message || 'Error interno del servidor al generar la factura' 
     });
