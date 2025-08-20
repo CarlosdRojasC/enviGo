@@ -239,7 +239,7 @@ await Order.updateMany(
       }
 
       res.json({
-        message: `Generadas ${generatedInvoices.length} facturas exitosamente`,
+        message: `Generada ${generatedInvoices.length} facturas exitosamente`,
         generated_invoices: generatedInvoices,
         errors: errors.length > 0 ? errors : undefined
       });
