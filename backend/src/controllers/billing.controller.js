@@ -30,113 +30,66 @@ async generateInvoice(req, res) {
       });
     }
 
-    const company = await Company.findById(company_id);
+        const company = await Company.findById(company_id);
     if (!company) {
       return res.status(404).json({ error: 'Empresa no encontrada' });
     }
 
-    const month = new Date(period_end).getMonth() + 1;
-    const year = new Date(period_end).getFullYear();
-
-    // 1. BUSCA UNA FACTURA EXISTENTE EN BORRADOR
-    let existingInvoice = await Invoice.findOne({
-      company_id: company_id,
-      month: month,
-      year: year,
-      status: 'draft'
-    });
-
-    const newOrders = await Order.find({ 
+    const orders = await Order.find({ 
         _id: { $in: order_ids.map(id => new mongoose.Types.ObjectId(id)) },
         company_id: new mongoose.Types.ObjectId(company_id)
     });
 
-    if (newOrders.length === 0) {
-        return res.status(400).json({ error: 'Los pedidos seleccionados no son válidos o no pertenecen a la empresa.' });
+    if (orders.length === 0) {
+        return res.status(400).json({ error: 'Los pedidos seleccionados no son válidos.' });
     }
+    
+    // --- LÓGICA MODIFICADA ---
+    // Se elimina la búsqueda de factura existente.
+    
+    console.log(`✨ Creando nueva factura para ${company.name}`);
+    
+    const subtotal = orders.reduce((acc, order) => acc + (order.shipping_cost || 0), 0);
+    const tax_amount = Math.round(subtotal * 0.19);
+    const total_amount = subtotal + tax_amount;
+    
+    const invoiceCount = await Invoice.countDocuments({}) + 1;
+    const now = new Date();
+    const invoice_number = `INV-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}-${String(invoiceCount).padStart(4, '0')}`;
 
-    if (existingInvoice) {
-      // 2. SI EXISTE, LA ACTUALIZA
-      console.log(`🧾 Actualizando factura existente: ${existingInvoice.invoice_number}`);
-      
-      const existingOrderIds = await Order.find({ invoice_id: existingInvoice._id }).select('_id');
-      const allOrderIds = [...new Set([...existingOrderIds.map(o => o._id.toString()), ...order_ids])];
-      const allOrders = await Order.find({ _id: { $in: allOrderIds.map(id => new mongoose.Types.ObjectId(id)) } });
+    const newInvoice = new Invoice({
+      company_id,
+      invoice_number,
+      month: new Date(period_end).getMonth() + 1,
+      year: new Date(period_end).getFullYear(),
+      total_orders: orders.length,
+      price_per_order: company.price_per_order,
+      subtotal,
+      tax_amount,
+      total_amount,
+      amount_due: subtotal,
+      period_start: new Date(period_start),
+      period_end: new Date(period_end),
+      due_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      status: 'draft'
+    });
 
-      const subtotal = allOrders.reduce((acc, order) => acc + (order.shipping_cost || 0), 0);
-      const tax_amount = Math.round(subtotal * 0.19);
-      const total_amount = subtotal + tax_amount;
+    await newInvoice.save();
+    
+    await Order.updateMany(
+      { _id: { $in: orders.map(o => o._id) } },
+      { $set: { billed: true, invoice_id: newInvoice._id, status: 'invoiced' } }
+    );
 
-      existingInvoice.total_orders = allOrders.length;
-      existingInvoice.subtotal = subtotal;
-      existingInvoice.tax_amount = tax_amount;
-      existingInvoice.total_amount = total_amount;
-      existingInvoice.amount_due = subtotal; // O total_amount según tu lógica de negocio
-      
-      await existingInvoice.save();
+    const invoiceWithCompany = await Invoice.findById(newInvoice._id).populate('company_id', 'name email');
 
-      await Order.updateMany(
-        { _id: { $in: allOrders.map(o => o._id) } },
-        { $set: { billed: true, invoice_id: existingInvoice._id } }
-      );
-      
-      const invoiceWithCompany = await Invoice.findById(existingInvoice._id).populate('company_id', 'name email');
-
-      return res.status(200).json({
-        message: 'Factura actualizada exitosamente con nuevos pedidos',
-        invoice: invoiceWithCompany
-      });
-
-    } else {
-      // 3. SI NO EXISTE, CREA UNA NUEVA
-      console.log(`✨ Creando nueva factura para ${company.name} - ${month}/${year}`);
-      
-      const subtotal = newOrders.reduce((acc, order) => acc + (order.shipping_cost || 0), 0);
-      const tax_amount = Math.round(subtotal * 0.19);
-      const total_amount = subtotal + tax_amount;
-      
-      const invoiceCount = await Invoice.countDocuments({}) + 1;
-      const now = new Date();
-      const invoice_number = `INV-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}-${String(invoiceCount).padStart(4, '0')}`;
-
-      const newInvoice = new Invoice({
-        company_id,
-        invoice_number,
-        month,
-        year,
-        total_orders: newOrders.length,
-        price_per_order: company.price_per_order, // Referencial
-        subtotal,
-        tax_amount,
-        total_amount,
-        amount_due: subtotal, // O total_amount
-        period_start: new Date(period_start),
-        period_end: new Date(period_end),
-        due_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-        status: 'draft'
-      });
-
-      await newInvoice.save();
-      
-await Order.updateMany(
-  { _id: { $in: newOrders.map(o => o._id) } },
-  { $set: { billed: true, invoice_id: newInvoice._id, status: 'invoiced' } }
-);
-
-      const invoiceWithCompany = await Invoice.findById(newInvoice._id).populate('company_id', 'name email');
-
-      return res.status(201).json({
-        message: 'Factura generada exitosamente',
-        invoice: invoiceWithCompany
-      });
-    }
+    return res.status(201).json({
+      message: 'Factura generada exitosamente',
+      invoice: invoiceWithCompany
+    });
 
   } catch (error) {
     console.error('❌ Error generando factura:', error);
-    // Captura específica del error de duplicado para un mensaje más claro
-    if (error.code === 11000) {
-      return res.status(409).json({ error: 'Conflicto: Ya existe una factura para esta empresa en este período que no está en borrador.' });
-    }
     res.status(500).json({ error: 'Error interno del servidor al generar la factura' });
   }
 }
