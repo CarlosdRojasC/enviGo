@@ -231,24 +231,23 @@ async function loadInvoiceableOrders() {
     
   loadingOrders.value = true;
   try {
-    // ⭐ CAMBIO CLAVE: Los parámetros de fecha van en un objeto "params"
-    const config = {
-      params: {
-        // El company_id ya no se pasa aquí, se pasa como el primer argumento
-        startDate: invoiceForm.value.period_start,
-        endDate: invoiceForm.value.period_end
-      }
+    // 1. Preparamos los parámetros de consulta (query params)
+    const params = {
+      // El company_id también debe ir aquí para que el backend lo reciba en req.query
+      company_id: selectedCompanyId.value, 
+      startDate: invoiceForm.value.period_start,
+      endDate: invoiceForm.value.period_end
     };
     
-    // ⭐ CAMBIO CLAVE: Se pasa el 'selectedCompanyId' como primer argumento
-    // y la configuración con las fechas como segundo argumento.
-    const { data } = await apiService.billing.getInvoiceableOrders(selectedCompanyId.value, config);
+    // 2. La llamada a la API ahora solo pasa un objeto de configuración con los 'params'
+    // Tu apiService se encargará de construir la URL: /invoiceable-orders?company_id=...&startDate=...
+    const { data } = await apiService.billing.getInvoiceableOrders({ params });
     
     invoiceableOrders.value = data.orders;
     ordersSummary.value = data.summary;
     selectedOrderIds.value = []; 
     
-    if(data.orders.length > 0) {
+    if (data.orders.length > 0) {
       toast.success(`${data.orders.length} pedidos cargados para el período.`);
     } else {
       toast.info('No se encontraron pedidos para las fechas seleccionadas.');
