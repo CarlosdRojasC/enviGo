@@ -597,15 +597,22 @@ async function downloadLabel(orderId) {
   try {
     const response = await axios.get(
       `/api/mercadolibre/orders/${orderId}/label`,
-      { responseType: "blob" }
+      { responseType: 'blob' }
     );
 
-    const blob = new Blob([response.data], { type: "application/pdf" });
+    console.log('📄 Respuesta etiqueta:', response);
+
+    if (response.headers['content-type'] !== 'application/pdf') {
+      console.error('❌ El backend no devolvió un PDF:', response.headers['content-type']);
+      return alert('El backend no devolvió un PDF');
+    }
+
+    const blob = new Blob([response.data], { type: 'application/pdf' });
     const url = window.URL.createObjectURL(blob);
-    window.open(url, "_blank"); // abre en nueva pestaña para imprimir
+    window.open(url, '_blank');
   } catch (err) {
-    console.error("Error descargando etiqueta:", err);
-    toast.error("No se pudo descargar la etiqueta");
+    console.error('Error descargando etiqueta:', err);
+    alert('No se pudo descargar la etiqueta');
   }
 }
 </script>
