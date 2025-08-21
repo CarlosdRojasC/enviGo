@@ -975,7 +975,7 @@ async function generateManifestAndMarkReady() {
 }
 async function viewManifest(manifest) {
   const manifestUrl = `/app/manifest/${manifest.manifest.id}`;
-  window.open(manifestUrl, '_blank', 'width=900,height=700');
+  window.print(manifestUrl, '_blank', 'width=900,height=700');
 }
 
 async function handleBulkExport() {
