@@ -353,7 +353,7 @@
 import { computed } from 'vue'
 import axios from "axios"
 import { useToast } from "vue-toastification";
-import api from '../../services/api';
+import { apiService } from '../../services/api';
 // ==================== PROPS ====================
 const props = defineProps({
   orders: {
@@ -597,7 +597,7 @@ function duplicateOrder(order) {
 }
 async function downloadLabel(externalOrderId) {
   try {
-    const response = await api.get(`/orders/${externalOrderId}/label`, {
+    const response = await apiService.get(`/orders/${externalOrderId}/label`, {
       responseType: 'blob',
     });
 
