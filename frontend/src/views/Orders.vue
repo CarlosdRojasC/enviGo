@@ -949,7 +949,7 @@ async function generateManifestAndMarkReady() {
     });
 
     // 3. ✅ IMPRIMIR DIRECTAMENTE
-await printManifestDirectly(manifest.manifest.id);    
+viewManifest(manifest.manifest);
 
     toast.success(`✅ Manifiesto ${manifest.manifest.manifest_number} creado e impreso`);
     clearSelection();
@@ -964,9 +964,15 @@ await printManifestDirectly(manifest.manifest.id);
     }
   }
 }
-async function viewManifest(manifest) {
-  const manifestUrl = `/app/manifest/${manifest.manifest.id}`;
-  window.print(manifestUrl, '_blank', 'width=900,height=700');
+function viewManifest(manifest) {
+  const manifestUrl = `/app/manifest/${manifest._id}`;
+  const printWindow = window.open(manifestUrl, '_blank', 'width=900,height=700');
+
+  // Cuando cargue la página del manifiesto → disparar impresión
+  printWindow.onload = () => {
+    printWindow.focus();
+    printWindow.print();
+  };
 }
 
 async function handleBulkExport() {
