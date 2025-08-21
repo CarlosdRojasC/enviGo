@@ -582,13 +582,13 @@ const billing = {
 
 
   // ✅ Obtener pedidos facturables (solo delivered, no facturados)
-  getInvoiceableOrders: (companyId = null) => {
-    const params = companyId ? `?company_id=${companyId}` : '';
-    console.log('📦 API: Obteniendo pedidos facturables');
-    return api.get(`/billing/invoiceable-orders${params}`, {
-      timeout: 30000 // 30 segundos para pedidos
-    });
-  },
+getInvoiceableOrders: (filters = {}) => {
+  console.log('📦 API: Obteniendo pedidos facturables con filtros:', filters);
+  return api.get('/billing/invoiceable-orders', {
+    params: filters,
+    timeout: 30000
+  });
+},
 
 // ✅ Generar factura con flujo mejorado (complementa generateInvoice existente)
   generateInvoiceImproved: (invoiceData) => {
