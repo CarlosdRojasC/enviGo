@@ -198,34 +198,28 @@ router.post('/shopify/:channel_id', async (req, res) => {
     res.status(500).json({ success: false, error: error.message });
   }
 });
-router.get('/mercadolibre/orders/:orderId/label', async (req, res) => {
+router.get('/orders/:orderId/label', async (req, res) => {
   try {
-    const order = await Order.findById(req.params.orderId);
-    if (!order) return res.status(404).json({ error: 'Pedido no encontrado' });
+    const { orderId } = req.params;
 
-    // Solo MercadoLibre
-    const channel = await Channel.findById(order.channel_id);
-    if (!channel || channel.channel_type !== 'mercadolibre') {
-      return res.status(400).json({ error: 'Este pedido no es de MercadoLibre' });
+    // Buscar el pedido en la BD para obtener el channel_id
+    const order = await Order.findOne({ external_order_id: orderId });
+    if (!order) {
+      return res.status(404).json({ error: 'Orden no encontrada en BD' });
     }
 
-    const MercadoLibreService = require('../services/mercadolibre.service');
-    const accessToken = await MercadoLibreService.getAccessToken(channel);
+    // Obtener la etiqueta desde ML
+    const pdfResponse = await MercadoLibreService.getShippingLabel(orderId, order.channel_id);
 
-    // shipmentId viene del raw_data de la orden ML
-    const shipmentId = order.raw_data?.shipping?.id;
-    if (!shipmentId) {
-      return res.status(400).json({ error: 'El pedido no tiene envío asociado' });
-    }
-
-    const pdfBuffer = await MercadoLibreService.getShippingLabel(shipmentId, accessToken, 'pdf');
-
+    // Configurar headers para PDF
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', 'inline; filename=etiqueta.pdf');
-    return res.send(pdfBuffer);
-  } catch (error) {
-    console.error('❌ Error obteniendo etiqueta ML:', error.message);
-    res.status(500).json({ error: 'No se pudo generar la etiqueta' });
+    res.setHeader('Content-Disposition', `inline; filename="label-${orderId}.pdf"`);
+
+    // Pipear el stream directo al response
+    pdfResponse.data.pipe(res);
+  } catch (err) {
+    console.error('❌ [ML Label] Error obteniendo etiqueta:', err.message);
+    res.status(500).json({ error: 'No se pudo obtener la etiqueta', details: err.message });
   }
 });
 

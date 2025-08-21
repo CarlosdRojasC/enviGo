@@ -640,24 +640,30 @@ static async createOrderFromApiData(fullOrder, channel, accessToken) {
       return { address: 'Error al obtener dirección' };
     }
   }
-static async getShippingLabel(shipmentId, accessToken, type = 'pdf') {
-  try {
-    const { data } = await axios.get(
-      `${this.API_BASE_URL}/shipment_labels`,
-      {
-        headers: { Authorization: `Bearer ${accessToken}` },
-        params: {
-          shipment_ids: shipmentId,
-          response_type: type // 'pdf' o 'zpl2'
-        },
-        responseType: 'arraybuffer'
-      }
-    );
-    return data;
-  } catch (error) {
-    console.error(`[ML Service] Error obteniendo etiqueta ${shipmentId}:`, error.message);
-    throw error;
-  }
+static async getShippingLabel(orderId, channelId) {
+  // 1️⃣ Buscar el canal
+  const channel = await Channel.findById(channelId);
+  if (!channel) throw new Error(`Canal ${channelId} no encontrado`);
+
+  // 2️⃣ Obtener access token válido
+  const accessToken = await this.getAccessToken(channel);
+
+  // 3️⃣ Consultar la orden en ML para obtener el shipmentId
+  const orderResponse = await axios.get(
+    `${this.API_BASE_URL}/orders/${orderId}`,
+    { headers: { Authorization: `Bearer ${accessToken}` } }
+  );
+
+  const shipmentId = orderResponse.data.shipping?.id;
+  if (!shipmentId) throw new Error(`No se encontró shipment para orden ${orderId}`);
+
+  // 4️⃣ Pedir la etiqueta PDF y devolver stream
+  return axios({
+    method: 'GET',
+    url: `${this.API_BASE_URL}/shipments/${shipmentId}/labels`,
+    headers: { Authorization: `Bearer ${accessToken}` },
+    responseType: 'stream'
+  });
 }
   static async extractShippingAddressSimple(mlOrder) {
     if (!mlOrder.shipping) {

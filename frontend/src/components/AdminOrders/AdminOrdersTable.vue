@@ -244,8 +244,8 @@
                       Duplicar
                     </button>
                   <button 
-  v-if="getChannelType(order.channel_id) === 'mercadolibre'" 
-  @click="downloadLabel(order._id)" 
+  v-if="getChannelType(order.channel_id) === 'mercadolibre' && order.external_order_id" 
+  @click="downloadLabel(order.external_order_id)" 
   class="dropdown-item"
 >
   <span class="action-icon">📄</span>
