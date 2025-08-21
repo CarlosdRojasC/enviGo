@@ -541,8 +541,13 @@ class MercadoLibreService {
   /**
    * Helper para crear la orden en la base de datos
    */
-  static async createOrderFromApiData(fullOrder, channel, accessToken,uniqueOrderId) {
+static async createOrderFromApiData(fullOrder, channel, accessToken, uniqueOrderId) {
     const shippingInfo = await this.getShippingInfo(fullOrder, accessToken);
+
+    // 🔑 Fix: calcular correctamente el total de la orden
+    const totalAmount = fullOrder.total_amount 
+      || fullOrder.total_amount_with_shipping 
+      || (fullOrder.payments?.reduce((sum, p) => sum + (p.total_paid_amount || 0), 0) || 0);
 
     const newOrderData = {
       company_id: channel.company_id,
@@ -558,13 +563,13 @@ class MercadoLibreService {
       shipping_city: shippingInfo.city,
       shipping_state: shippingInfo.state,
       shipping_zip: shippingInfo.zip_code,
-      total_amount: fullOrder.total_amount,
+      total_amount: totalAmount,        // 👈 antes usabas solo fullOrder.total_amount
       shipping_cost: fullOrder.shipping?.cost || 0,
       currency: fullOrder.currency_id,
       status: this.mapOrderStatus(fullOrder),
       order_date: new Date(fullOrder.date_created),
       raw_data: fullOrder,
-       notes: `Comprador: ${fullOrder.buyer.nickname}${fullOrder.pack_id ? ` | Pack ID: ${fullOrder.pack_id}` : ''} | Original Order: ${fullOrder.id}`,
+      notes: `Comprador: ${fullOrder.buyer.nickname}${fullOrder.pack_id ? ` | Pack ID: ${fullOrder.pack_id}` : ''} | Original Order: ${fullOrder.id}`,
     };
     
     const newOrder = await new Order(newOrderData).save();
@@ -594,7 +599,25 @@ class MercadoLibreService {
       return { address: 'Error al obtener dirección' };
     }
   }
-
+ static async getShippingLabel(shipmentId, accessToken, type = 'pdf') {
+    try {
+      const { data } = await axios.get(
+        `${this.API_BASE_URL}/shipment_labels`,
+        {
+          headers: { Authorization: `Bearer ${accessToken}` },
+          params: {
+            shipment_ids: shipmentId,
+            response_type: type // 'pdf' o 'zpl2'
+          },
+          responseType: 'arraybuffer' // para PDF/ZPL binario
+        }
+      );
+      return data; // buffer binario (puedes guardarlo o enviarlo al frontend)
+    } catch (error) {
+      console.error(`[ML Service] Error obteniendo etiqueta ${shipmentId}:`, error.message);
+      throw error;
+    }
+  }
   static async extractShippingAddressSimple(mlOrder) {
     if (!mlOrder.shipping) {
       return 'Sin información de envío';

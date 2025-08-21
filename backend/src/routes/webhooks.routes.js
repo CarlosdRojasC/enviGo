@@ -70,28 +70,24 @@ router.get('/mercadolibre/callback', async (req, res) => {
 // ===== WEBHOOK GENÉRICO PARA MERCADOLIBRE =====
 router.post('/mercadolibre', async (req, res) => {
   try {
-    console.log('🔔 Webhook ML recibido:', {
-      topic: req.body.topic,
-      resource: req.body.resource,
-      user_id: req.body.user_id,
-      application_id: req.body.application_id
-    });
+    console.log('🔔 [ML Webhook] Notificación recibida RAW:', JSON.stringify(req.body, null, 2));
 
-    // ✅ CAMBIO: Validar que sea una notificación de pedidos O de envíos
+    const { topic, resource, user_id: userId } = req.body;
     const acceptedTopics = ['orders', 'orders_v2', 'shipments'];
-    if (!acceptedTopics.includes(req.body.topic)) {
-      console.log(`[ML Webhook Router] Topic ignorado: ${req.body.topic}`);
+
+    // ✅ Validar que sea un topic que nos interesa
+    if (!acceptedTopics.includes(topic)) {
+      console.log(`[ML Webhook] Topic ignorado: ${topic}`);
       return res.status(200).json({ status: 'ignored', reason: 'topic_not_accepted' });
     }
 
-    // Obtener el user_id de la notificación
-    const userId = req.body.user_id;
+    // ✅ Validar user_id
     if (!userId) {
-      console.log('[ML Webhook Router] user_id faltante en la notificación');
+      console.log('[ML Webhook] user_id faltante en la notificación');
       return res.status(200).json({ status: 'ignored', reason: 'missing_user_id' });
     }
 
-    // Buscar el canal que corresponde a este usuario de ML
+    // ✅ Buscar canal correspondiente
     const channel = await Channel.findOne({
       channel_type: 'mercadolibre',
       $or: [
@@ -102,37 +98,37 @@ router.post('/mercadolibre', async (req, res) => {
     });
 
     if (!channel) {
-      console.log(`[ML Webhook Router] No se encontró canal activo para user_id: ${userId}`);
-      return res.status(200).json({ 
+      console.log(`[ML Webhook] No se encontró canal activo para user_id: ${userId}`);
+      return res.status(200).json({
         status: 'ignored',
         reason: 'channel_not_found',
         user_id: userId
       });
     }
 
-    console.log(`[ML Webhook Router] Canal encontrado: ${channel.channel_name} (${channel._id}). Pasando al servicio...`);
+    console.log(`[ML Webhook] Canal encontrado: ${channel.channel_name} (${channel._id}). Procesando en background...`);
 
-    // Procesar el webhook con el canal encontrado
-    const MercadoLibreService = require('../services/mercadolibre.service');
-    const result = await MercadoLibreService.processWebhook(channel._id, req.body);
+    // ⚡ Respondemos a MercadoLibre de inmediato
+    res.status(200).json({ status: 'queued', channel_id: channel._id });
 
-    if (result) {
-      console.log('[ML Webhook Router] Webhook procesado exitosamente por el servicio');
-      res.status(200).json({ 
-        status: 'success', 
-        channel_id: channel._id,
-      });
-    } else {
-      console.log('[ML Webhook Router] El servicio no pudo procesar el webhook');
-      res.status(200).json({ 
-        status: 'ignored', 
-        reason: 'service_processing_failed'
-      });
-    }
+    // 👇 Procesamos en background (no bloqueamos la respuesta a ML)
+    setImmediate(async () => {
+      try {
+        const result = await MercadoLibreService.processWebhook(channel._id, req.body);
+
+        if (result) {
+          console.log(`[ML Webhook Worker] Pedido procesado correctamente para canal ${channel._id}`);
+        } else {
+          console.warn(`[ML Webhook Worker] No se pudo procesar pedido para canal ${channel._id}`);
+        }
+      } catch (err) {
+        console.error(`[ML Webhook Worker] Error procesando webhook para canal ${channel._id}:`, err.message);
+      }
+    });
 
   } catch (error) {
-    console.error('❌ [ML Webhook Router] Error fatal procesando webhook:', error);
-    res.status(200).json({ 
+    console.error('❌ [ML Webhook] Error fatal procesando webhook:', error);
+    res.status(200).json({
       status: 'error',
       message: error.message
     });
