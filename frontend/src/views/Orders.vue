@@ -922,6 +922,8 @@ async function printManifestDirectly(manifestId) {
 async function viewManifest(manifest) {
   const manifestUrl = `/app/manifest/${manifest._id}`;
   window.open(manifestUrl, '_blank', 'width=900,height=700');
+  window.focus();
+  window.print();
 }
 
 
@@ -954,7 +956,7 @@ async function generateManifestAndMarkReady() {
     });
 
     // 3. ✅ IMPRIMIR DIRECTAMENTE
-viewManifest(manifest.manifest);
+viewManifest(manifest);
 
     toast.success(`✅ Manifiesto ${manifest.manifest.manifest_number} creado e impreso`);
     clearSelection();
