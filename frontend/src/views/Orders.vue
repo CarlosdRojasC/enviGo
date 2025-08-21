@@ -956,7 +956,7 @@ async function generateManifestAndMarkReady() {
     });
 
     // 3. ✅ IMPRIMIR DIRECTAMENTE
-viewManifest(manifest);
+viewManifest({ _id: manifest.manifest.id });
 
     toast.success(`✅ Manifiesto ${manifest.manifest.manifest_number} creado e impreso`);
     clearSelection();
