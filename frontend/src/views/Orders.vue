@@ -888,24 +888,23 @@ async function generateManifestAndMarkReady() {
   try {
     console.log('📋 Creando manifiesto guardado...');
 
-    // 1. Crear manifiesto en la base de datos (ahora con objeto { orderIds })
-    const response = await apiService.manifests.create(
-  selectedOrders.value.map(o => o._id) // 👈 solo los IDs
-);
+    // ✅ selectedOrders ya son IDs, no objetos
+    const cleanIds = selectedOrders.value.filter(id => !!id);
+    const response = await apiService.manifests.create({ orderIds: cleanIds });
 
     const manifest = response.data;
     console.log('✅ Manifiesto creado:', manifest);
 
     // 2. Actualizar órdenes localmente
     orders.value.forEach(order => {
-      if (selectedOrders.value.some(sel => sel._id === order._id)) {
+      if (cleanIds.includes(order._id)) {
         order.status = 'ready_for_pickup';
         order.manifest_id = manifest.manifest.id;
         order.updated_at = new Date().toISOString();
       }
     });
 
-    // 3. ✅ IMPRIMIR DIRECTAMENTE
+    // 3. Imprimir
     await printManifestDirectly(manifest.manifest.id);
 
     toast.success(`✅ Manifiesto ${manifest.manifest.manifest_number} creado e impreso`);
@@ -921,7 +920,6 @@ async function generateManifestAndMarkReady() {
     }
   }
 }
-
 
 
 async function handleBulkExport() {
