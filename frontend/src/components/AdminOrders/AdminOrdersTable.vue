@@ -243,10 +243,14 @@
                       <span class="action-icon">📋</span>
                       Duplicar
                     </button>
-                    <button @click="downloadLabel(order._id)" class="dropdown-item">
-                      <span class="action-icon">📄</span>
-                      Descargar Etiqueta
-                    </button>
+                  <button 
+  v-if="getChannelName(order.channel_id) === 'mercadolibre'" 
+  @click="downloadLabel(order._id)" 
+  class="dropdown-item"
+>
+  <span class="action-icon">📄</span>
+  Descargar Etiqueta
+</button>
                     <button @click="$emit('delete-order', order._id)" class="dropdown-item danger">
                       <span class="action-icon">🗑️</span>
                       Eliminar
@@ -347,7 +351,8 @@
 
 <script setup>
 import { computed } from 'vue'
-
+import axios from "axios"
+import { useToast } from "vue-toastification";
 // ==================== PROPS ====================
 const props = defineProps({
   orders: {
@@ -379,7 +384,7 @@ const props = defineProps({
     default: false
   }
 })
-
+const toast = useToast();
 // ==================== EMITS ====================
 const emit = defineEmits([
   'select-order',
@@ -575,20 +580,20 @@ function duplicateOrder(order) {
   console.log('📋 Duplicate order:', order._id)
 }
 async function downloadLabel(orderId) {
-    try {
-      const response = await axios.get(
-        `/api/mercadolibre/orders/${orderId}/label`,
-        { responseType: 'blob' }
-      );
+  try {
+    const response = await axios.get(
+      `/api/mercadolibre/orders/${orderId}/label`,
+      { responseType: "blob" }
+    );
 
-      const blob = new Blob([response.data], { type: 'application/pdf' });
-      const url = window.URL.createObjectURL(blob);
-      window.open(url, '_blank'); // 👈 abre en nueva pestaña para imprimir
-    } catch (err) {
-      console.error('Error descargando etiqueta:', err);
-      this.$toast.error('No se pudo descargar la etiqueta');
-    }
+    const blob = new Blob([response.data], { type: "application/pdf" });
+    const url = window.URL.createObjectURL(blob);
+    window.open(url, "_blank"); // abre en nueva pestaña para imprimir
+  } catch (err) {
+    console.error("Error descargando etiqueta:", err);
+    toast.error("No se pudo descargar la etiqueta");
   }
+}
 </script>
 
 <style scoped>
