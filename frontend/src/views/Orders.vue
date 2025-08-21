@@ -877,23 +877,49 @@ async function handleBulkMarkReady() {
 }
 async function printManifestDirectly(manifestId) {
   try {
-    const response = await apiService.manifests.view(manifestId, {
-      responseType: 'blob'  // 👈 importante para PDF
+    const url = `${import.meta.env.VITE_API_BASE_URL}/manifests/${manifestId}`;
+    
+    // Pedimos el manifiesto
+    const response = await axios.get(url, {
+      responseType: 'arraybuffer' // 👈 sirve para PDF y HTML
     });
 
-    const blob = new Blob([response.data], { type: 'application/pdf' });
-    const url = URL.createObjectURL(blob);
+    // Detectar tipo de contenido
+    const contentType = response.headers['content-type'];
 
-    const printWindow = window.open(url, '_blank', 'width=900,height=700');
-    printWindow.onload = function () {
-      printWindow.focus();
-      printWindow.print();
-    };
+    if (contentType.includes('application/pdf')) {
+      // 👉 Caso PDF
+      const blob = new Blob([response.data], { type: 'application/pdf' });
+      const pdfUrl = URL.createObjectURL(blob);
+
+      const printWindow = window.open(pdfUrl, '_blank', 'width=900,height=700');
+      printWindow.onload = () => {
+        printWindow.focus();
+        printWindow.print();
+      };
+    } else if (contentType.includes('text/html')) {
+      // 👉 Caso HTML
+      const decoder = new TextDecoder('utf-8');
+      const html = decoder.decode(response.data);
+
+      const printWindow = window.open('', '_blank', 'width=900,height=700');
+      printWindow.document.open();
+      printWindow.document.write(html);
+      printWindow.document.close();
+
+      printWindow.onload = () => {
+        printWindow.focus();
+        printWindow.print();
+      };
+    } else {
+      throw new Error(`Tipo de contenido no soportado: ${contentType}`);
+    }
   } catch (error) {
     console.error('❌ Error al imprimir manifiesto:', error);
     toast.error('Error al imprimir manifiesto');
   }
 }
+
 
 async function generateManifestAndMarkReady() {
   if (selectedOrders.value.length === 0) {
