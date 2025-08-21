@@ -12,6 +12,7 @@ const ShipdayService = require('../services/shipday.service');
 const Company = require('../models/Company');
 const circuitController = require('../controllers/circuit.controller');
 const circuitService = require('../services/circuit.service');
+const MercadoLibreService = require('../services/mercadolibre.service');
 
 // ==================== PEDIDOS ====================
 
