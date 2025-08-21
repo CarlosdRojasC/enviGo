@@ -201,7 +201,6 @@ static async syncInitialOrders(channelId) {
       seller: channel.settings.user_id,
       'order.date_created.from': sevenDaysAgo.toISOString(),
       'order.date_created.to': now.toISOString(),
-      'order.status': 'paid',
       sort: 'date_desc',
       limit: 50
     };
