@@ -640,25 +640,43 @@ static async createOrderFromApiData(fullOrder, channel, accessToken) {
       return { address: 'Error al obtener dirección' };
     }
   }
-static async getShippingLabel(orderId, channelId) {
-  // 1️⃣ Buscar el canal
+static async getShippingLabel(orderIdOrPackId, channelId) {
   const channel = await Channel.findById(channelId);
-  
   if (!channel) throw new Error(`Canal ${channelId} no encontrado`);
 
-  // 2️⃣ Obtener access token válido
   const accessToken = await this.getAccessToken(channel);
 
-  // 3️⃣ Consultar la orden en ML para obtener el shipmentId
-  const orderResponse = await axios.get(
-    `${this.API_BASE_URL}/orders/${orderId}`,
-    { headers: { Authorization: `Bearer ${accessToken}` } }
-  );
+  let shipmentId;
 
-  const shipmentId = orderResponse.data.shipping?.id;
-  if (!shipmentId) throw new Error(`No se encontró shipment para orden ${orderId}`);
+  try {
+    // 1️⃣ Intentar como order.id normal
+    const orderResponse = await axios.get(
+      `${this.API_BASE_URL}/orders/${orderIdOrPackId}`,
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+    shipmentId = orderResponse.data.shipping?.id;
 
-  // 4️⃣ Pedir la etiqueta PDF y devolver stream
+  } catch (err) {
+    if (err.response?.status === 404) {
+      console.warn(`⚠️ No se encontró order ${orderIdOrPackId}, probando como pack_id...`);
+
+      // 2️⃣ Intentar como pack_id → obtener shipments
+      const packResponse = await axios.get(
+        `${this.API_BASE_URL}/packs/${orderIdOrPackId}/shipments`,
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+      );
+
+      shipmentId = packResponse.data[0]?.id; // tomar el primero
+    } else {
+      throw err;
+    }
+  }
+
+  if (!shipmentId) {
+    throw new Error(`No se encontró shipment para ${orderIdOrPackId}`);
+  }
+
+  // 3️⃣ Pedir la etiqueta
   return axios({
     method: 'GET',
     url: `${this.API_BASE_URL}/shipments/${shipmentId}/labels`,
