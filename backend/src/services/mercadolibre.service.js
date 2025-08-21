@@ -318,52 +318,56 @@ static async syncInitialOrders(channelId) {
   /**
    * ✅ NUEVO: Verifica si un pedido NO ha sido entregado
    */
-  static async isOrderNotDelivered(mlOrder, accessToken) {
-    console.log(`🔍 [ML Delivery Check] Verificando estado de entrega del pedido ${mlOrder.id}`);
-    
-    // ✅ VERIFICACIÓN 1: Estado general del pedido
-    if (mlOrder.status === 'cancelled' || mlOrder.status === 'invalid') {
-      console.log(`❌ [ML Delivery Check] Pedido ${mlOrder.id} cancelado/inválido`);
-      return false;
-    }
+static async isOrderNotDelivered(mlOrder, accessToken) {
+  console.log(`🔍 [ML Delivery Check] Verificando estado de entrega del pedido ${mlOrder.id}`);
 
-    // ✅ VERIFICACIÓN 2: Estado del shipping
-    if (mlOrder.shipping?.status) {
-      const deliveredStatuses = ['delivered', 'not_delivered', 'cancelled'];
-      
-      if (deliveredStatuses.includes(mlOrder.shipping.status)) {
-        console.log(`❌ [ML Delivery Check] Pedido ${mlOrder.id} ya finalizado (${mlOrder.shipping.status})`);
+  if (mlOrder.status === 'cancelled' || mlOrder.status === 'invalid') {
+    console.log(`❌ [ML Delivery Check] Pedido ${mlOrder.id} cancelado/inválido`);
+    return false;
+  }
+
+  // 🚀 Solo consideramos "finalizados" cuando están efectivamente entregados o cancelados
+  const deliveredStatuses = ['delivered', 'not_delivered', 'cancelled'];
+
+  if (mlOrder.shipping?.status && deliveredStatuses.includes(mlOrder.shipping.status)) {
+    console.log(`❌ [ML Delivery Check] Pedido ${mlOrder.id} ya finalizado (${mlOrder.shipping.status})`);
+    return false;
+  }
+
+  if (mlOrder.shipping?.id) {
+    try {
+      const shipmentResponse = await axios.get(`${this.API_BASE_URL}/shipments/${mlOrder.shipping.id}`, {
+        headers: { 'Authorization': `Bearer ${accessToken}` },
+        timeout: 15000
+      });
+
+      const shipment = shipmentResponse.data;
+
+      // 🚀 Solo filtramos si está realmente entregado o cancelado
+      if (deliveredStatuses.includes(shipment.status)) {
+        console.log(`❌ [ML Delivery Check] Shipment ${mlOrder.shipping.id} completado (${shipment.status})`);
         return false;
       }
-    }
 
-    // ✅ VERIFICACIÓN 3: Consultar shipment para detalles adicionales
-    if (mlOrder.shipping?.id) {
-      try {
-        const shipmentResponse = await axios.get(`${this.API_BASE_URL}/shipments/${mlOrder.shipping.id}`, {
-          headers: { 'Authorization': `Bearer ${accessToken}` },
-          timeout: 15000
-        });
-
-        const shipment = shipmentResponse.data;
-        
-        // Estados que indican que el pedido ya fue completado
-        const completedStatuses = ['delivered', 'not_delivered', 'cancelled'];
-        
-        if (completedStatuses.includes(shipment.status)) {
-          console.log(`❌ [ML Delivery Check] Shipment ${mlOrder.shipping.id} completado (${shipment.status})`);
-          return false;
+      // ✅ Si el pedido tiene delivery_date en el futuro → lo dejamos pasar
+      if (shipment.delivery_preference?.schedule?.date) {
+        const deliveryDate = new Date(shipment.delivery_preference.schedule.date);
+        if (deliveryDate > new Date()) {
+          console.log(`📅 [ML Delivery Check] Pedido ${mlOrder.id} programado para futuro (${deliveryDate}), se mantiene`);
+          return true;
         }
-
-      } catch (error) {
-        console.error(`⚠️ [ML Delivery Check] Error consultando shipment ${mlOrder.shipping.id}:`, error.message);
-        // Si hay error consultando, asumimos que no está entregado para no perder pedidos
       }
-    }
 
-    console.log(`✅ [ML Delivery Check] Pedido ${mlOrder.id} NO entregado`);
-    return true;
+    } catch (error) {
+      console.error(`⚠️ [ML Delivery Check] Error consultando shipment ${mlOrder.shipping.id}:`, error.message);
+      // Mejor asumir que no está entregado
+      return true;
+    }
   }
+
+  console.log(`✅ [ML Delivery Check] Pedido ${mlOrder.id} NO entregado`);
+  return true;
+}
 
   /**
    * ✅ FUNCIÓN DE DETECCIÓN FLEX MEJORADA
