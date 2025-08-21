@@ -593,18 +593,17 @@ function debugOrder(order) {
 function duplicateOrder(order) {
   console.log('📋 Duplicate order:', order._id)
 }
-async function downloadLabel(orderId) {
+async function downloadLabel(externalOrderId) {
   try {
     const response = await axios.get(
-      `/api/mercadolibre/orders/${orderId}/label`,
+      `/api/mercadolibre/orders/${externalOrderId}/label`,
       { responseType: 'blob' }
     );
 
-    console.log('📄 Respuesta etiqueta:', response);
-
-    if (response.headers['content-type'] !== 'application/pdf') {
+    if (!response.headers['content-type'].includes('application/pdf')) {
       console.error('❌ El backend no devolvió un PDF:', response.headers['content-type']);
-      return alert('El backend no devolvió un PDF');
+      toast.error('El backend no devolvió un PDF');
+      return;
     }
 
     const blob = new Blob([response.data], { type: 'application/pdf' });
@@ -612,9 +611,10 @@ async function downloadLabel(orderId) {
     window.open(url, '_blank');
   } catch (err) {
     console.error('Error descargando etiqueta:', err);
-    alert('No se pudo descargar la etiqueta');
+    toast.error('No se pudo descargar la etiqueta');
   }
 }
+
 </script>
 
 <style scoped>
