@@ -640,25 +640,25 @@ static async createOrderFromApiData(fullOrder, channel, accessToken) {
       return { address: 'Error al obtener dirección' };
     }
   }
- static async getShippingLabel(shipmentId, accessToken, type = 'pdf') {
-    try {
-      const { data } = await axios.get(
-        `${this.API_BASE_URL}/shipment_labels`,
-        {
-          headers: { Authorization: `Bearer ${accessToken}` },
-          params: {
-            shipment_ids: shipmentId,
-            response_type: type // 'pdf' o 'zpl2'
-          },
-          responseType: 'arraybuffer' // para PDF/ZPL binario
-        }
-      );
-      return data; // buffer binario (puedes guardarlo o enviarlo al frontend)
-    } catch (error) {
-      console.error(`[ML Service] Error obteniendo etiqueta ${shipmentId}:`, error.message);
-      throw error;
-    }
+static async getShippingLabel(shipmentId, accessToken, type = 'pdf') {
+  try {
+    const { data } = await axios.get(
+      `${this.API_BASE_URL}/shipment_labels`,
+      {
+        headers: { Authorization: `Bearer ${accessToken}` },
+        params: {
+          shipment_ids: shipmentId,
+          response_type: type // 'pdf' o 'zpl2'
+        },
+        responseType: 'arraybuffer'
+      }
+    );
+    return data;
+  } catch (error) {
+    console.error(`[ML Service] Error obteniendo etiqueta ${shipmentId}:`, error.message);
+    throw error;
   }
+}
   static async extractShippingAddressSimple(mlOrder) {
     if (!mlOrder.shipping) {
       return 'Sin información de envío';

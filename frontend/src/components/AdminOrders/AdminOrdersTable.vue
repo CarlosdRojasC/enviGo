@@ -243,6 +243,10 @@
                       <span class="action-icon">📋</span>
                       Duplicar
                     </button>
+                    <button v-if="order.channel_name === 'mercadolibre'" @click="downloadLabel(order._id)" class="dropdown-item">
+                      <span class="action-icon">📄</span>
+                      Descargar Etiqueta
+                    </button>
                     <button @click="$emit('delete-order', order._id)" class="dropdown-item danger">
                       <span class="action-icon">🗑️</span>
                       Eliminar
@@ -570,6 +574,21 @@ function debugOrder(order) {
 function duplicateOrder(order) {
   console.log('📋 Duplicate order:', order._id)
 }
+function downloadLabel(orderId) {
+    try {
+      const response = await axios.get(
+        `/api/mercadolibre/orders/${orderId}/label`,
+        { responseType: 'blob' }
+      );
+
+      const blob = new Blob([response.data], { type: 'application/pdf' });
+      const url = window.URL.createObjectURL(blob);
+      window.open(url, '_blank'); // 👈 abre en nueva pestaña para imprimir
+    } catch (err) {
+      console.error('Error descargando etiqueta:', err);
+      this.$toast.error('No se pudo descargar la etiqueta');
+    }
+  }
 </script>
 
 <style scoped>
