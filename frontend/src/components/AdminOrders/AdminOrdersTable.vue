@@ -574,7 +574,7 @@ function debugOrder(order) {
 function duplicateOrder(order) {
   console.log('📋 Duplicate order:', order._id)
 }
-function downloadLabel(orderId) {
+async function downloadLabel(orderId) {
     try {
       const response = await axios.get(
         `/api/mercadolibre/orders/${orderId}/label`,
