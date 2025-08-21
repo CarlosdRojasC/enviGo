@@ -225,23 +225,20 @@ async function loadDashboardStats() {
 async function loadInvoiceableOrders() {
   if (!selectedCompanyId.value) return;
   if (!invoiceForm.value.period_start || !invoiceForm.value.period_end) {
-      toast.error('Debes seleccionar un rango de fechas válido.');
-      return;
+    toast.error('Debes seleccionar un rango de fechas válido.');
+    return;
   }
     
   loadingOrders.value = true;
   try {
-    // 1. Preparamos los parámetros de consulta (query params)
-    const params = {
-      // El company_id también debe ir aquí para que el backend lo reciba en req.query
+    // 🔑 Los filtros se pasan DIRECTO, no dentro de { params }
+    const filters = {
       company_id: selectedCompanyId.value, 
       startDate: invoiceForm.value.period_start,
       endDate: invoiceForm.value.period_end
     };
     
-    // 2. La llamada a la API ahora solo pasa un objeto de configuración con los 'params'
-    // Tu apiService se encargará de construir la URL: /invoiceable-orders?company_id=...&startDate=...
-    const { data } = await apiService.billing.getInvoiceableOrders({ params });
+    const { data } = await apiService.billing.getInvoiceableOrders(filters);
     
     invoiceableOrders.value = data.orders;
     ordersSummary.value = data.summary;
