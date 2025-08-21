@@ -556,7 +556,9 @@ static async createOrderFromApiData(fullOrder, channel, accessToken) {
   const shippingInfo = await this.getShippingInfo(fullOrder, accessToken);
 
   // ✅ Usar pack_id como identificador principal (si existe)
-  const uniqueOrderId = fullOrder.pack_id ? `pack_${fullOrder.pack_id}` : fullOrder.id.toString();
+  const uniqueOrderId = fullOrder.pack_id 
+  ? fullOrder.pack_id.toString()  // 👈 solo el número de pack_id
+  : fullOrder.id.toString();
 
   // ✅ Calcular monto total sumando ítems (por seguridad)
   const items = (fullOrder.order_items || []).map(i => ({
