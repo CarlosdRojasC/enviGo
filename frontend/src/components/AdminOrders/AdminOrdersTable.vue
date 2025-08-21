@@ -243,7 +243,7 @@
                       <span class="action-icon">📋</span>
                       Duplicar
                     </button>
-                    <button v-if="order.channel_name == 'mercadolibre'" @click="downloadLabel(order._id)" class="dropdown-item">
+                    <button @click="downloadLabel(order._id)" class="dropdown-item">
                       <span class="action-icon">📄</span>
                       Descargar Etiqueta
                     </button>
