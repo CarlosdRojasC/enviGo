@@ -223,6 +223,12 @@ markMultipleAsReady: async (orderIds) => {
       throw error;
     }
   },
+  downloadLabel: (externalOrderId) => {
+    console.log('🏷️ API: Descargando etiqueta para orden externa:', externalOrderId);
+    return api.get(`/orders/${externalOrderId}/label`, {
+      responseType: 'blob'
+    });
+  },
 
 /**
  * Marcar múltiples pedidos como listos para retiro

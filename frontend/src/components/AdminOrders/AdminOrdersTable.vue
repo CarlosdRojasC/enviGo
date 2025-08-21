@@ -597,9 +597,7 @@ function duplicateOrder(order) {
 }
 async function downloadLabel(externalOrderId) {
   try {
-    const response = await apiService.get(`/orders/${externalOrderId}/label`, {
-      responseType: 'blob',
-    });
+    const response = await apiService.orders.downloadLabel(externalOrderId);
 
     if (!response.headers['content-type'].includes('application/pdf')) {
       console.error('❌ El backend no devolvió un PDF:', response.headers['content-type']);
