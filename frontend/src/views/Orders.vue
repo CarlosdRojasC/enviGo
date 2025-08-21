@@ -887,32 +887,31 @@ async function generateManifestAndMarkReady() {
 
   try {
     console.log('📋 Creando manifiesto guardado...');
-
-    // ✅ selectedOrders ya son IDs, no objetos
-    const cleanIds = selectedOrders.value.filter(id => !!id);
-    const response = await apiService.manifests.create({ orderIds: cleanIds });
-
+    
+    // 1. Crear manifiesto en la base de datos
+    const response = await apiService.manifests.create(selectedOrders.value);
     const manifest = response.data;
+    
     console.log('✅ Manifiesto creado:', manifest);
-
+    
     // 2. Actualizar órdenes localmente
     orders.value.forEach(order => {
-      if (cleanIds.includes(order._id)) {
+      if (selectedOrders.value.includes(order._id)) {
         order.status = 'ready_for_pickup';
         order.manifest_id = manifest.manifest.id;
         order.updated_at = new Date().toISOString();
       }
     });
 
-    // 3. Imprimir
+    // 3. ✅ IMPRIMIR DIRECTAMENTE
     await printManifestDirectly(manifest.manifest.id);
-
+    
     toast.success(`✅ Manifiesto ${manifest.manifest.manifest_number} creado e impreso`);
     clearSelection();
 
   } catch (error) {
     console.error('❌ Error creando manifiesto:', error);
-
+    
     if (error.response?.status === 403) {
       toast.error('No tienes permisos para crear manifiestos');
     } else {

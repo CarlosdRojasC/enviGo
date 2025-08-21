@@ -199,27 +199,6 @@ async function createPDFBuffer(manifest) {
 
 class ManifestController {
   
-
-async getPendingPickups(req, res) {
-  try {
-    const filters = { status: 'pending_pickup' };
-    if (req.user.role !== 'admin') {
-      filters.company_id = req.user.company_id;
-    }
-
-    const manifests = await Manifest.find(filters)
-      .populate('company_id', 'name address')
-      .populate('generated_by', 'full_name email')
-      .sort({ generated_at: -1 })
-      .lean();
-
-    res.json(manifests);
-  } catch (error) {
-    console.error('❌ Error obteniendo pendientes de recolección:', error);
-    res.status(500).json({ error: 'Error interno del servidor' });
-  }
-}
-
   // ==================== CREAR MANIFIESTO ====================
   async create(req, res) {
     const session = await mongoose.startSession();
@@ -369,14 +348,12 @@ async getPendingPickups(req, res) {
       const manifest = new Manifest({
         manifest_number: manifestNumber,
         company_id: companyId,
-        pickup_address: company.address,
         order_ids: orders.map(o => o._id),
         total_orders: orders.length,
         total_packages: totalPackages,
         communes,
-        status: 'pending_pickup',
         generated_by: new mongoose.Types.ObjectId(userId),
-        manifest_data: manifestData,
+        manifest_data: manifestData
       });
 
       console.log('🔍 DEBUG: Datos del manifiesto antes de guardar:', {

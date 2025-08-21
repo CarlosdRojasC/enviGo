@@ -13,8 +13,6 @@ router.post('/', authenticateToken, manifestController.create);
 // Listar manifiestos (admin ve todos, otros solo los de su empresa)
 router.get('/', authenticateToken, manifestController.getAll);
 
-router.get('/pending-pickups', authenticateToken, isAdmin, manifestController.getPendingPickups);
-
 // Obtener manifiesto específico (admin ve todos, otros solo los de su empresa)
 router.get('/:id', authenticateToken, manifestController.getById);
 
