@@ -867,10 +867,14 @@ router.get('/:orderId/label', async (req, res) => {
       });
     }
 
-    const pdfResponse = await MercadoLibreService.getShippingLabel(orderId, order.channel_id);
+    // 👇 importante: usar el external_order_id que está en la BD
+    const pdfResponse = await MercadoLibreService.getShippingLabel(
+      order.external_order_id,
+      order.channel_id
+    );
 
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `inline; filename="label-${orderId}.pdf"`);
+    res.setHeader('Content-Disposition', `inline; filename="label-${order.external_order_id}.pdf"`);
 
     pdfResponse.data.pipe(res);
   } catch (err) {
