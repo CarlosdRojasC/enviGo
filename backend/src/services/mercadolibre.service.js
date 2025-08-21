@@ -641,63 +641,57 @@ static async createOrderFromApiData(fullOrder, channel, accessToken) {
     }
   }
 static async getShippingLabel(orderId, channelId) {
-  // 1️⃣ Buscar canal
+  console.log('🟢 [ML Service] Iniciando getShippingLabel');
+  console.log('➡️ Recibido:', { orderId, channelId });
+
+  // 1️⃣ Buscar el canal
   const channel = await Channel.findById(channelId);
-  if (!channel) throw new Error(`Canal ${channelId} no encontrado`);
+  if (!channel) {
+    throw new Error(`Canal ${channelId} no encontrado en BD`);
+  }
+  console.log('✅ Canal encontrado:', { name: channel.name, _id: channel._id });
 
-  // 2️⃣ Access token válido
+  // 2️⃣ Obtener access token válido
   const accessToken = await this.getAccessToken(channel);
+  console.log('🔑 Token obtenido OK (longitud):', accessToken.length);
 
+  // 3️⃣ Consultar la orden en ML para obtener el shipmentId
+  console.log(`📡 Consultando ML /orders/${orderId}`);
+  let orderResponse;
   try {
-    // 3️⃣ Consultar orden en ML
-    console.log(`🟢 Solicitando etiqueta para external_order_id: ${orderId}`);
-
-    const orderResponse = await axios.get(
+    orderResponse = await axios.get(
       `${this.API_BASE_URL}/orders/${orderId}`,
       { headers: { Authorization: `Bearer ${accessToken}` } }
     );
+  } catch (err) {
+    console.error('❌ Error consultando orden en ML:', err.response?.data || err.message);
+    throw new Error(`ML no reconoce la orden ${orderId}: ${JSON.stringify(err.response?.data)}`);
+  }
 
-    console.log("📦 Orden encontrada en ML:", {
-      id: orderResponse.data.id,
-      shipping: orderResponse.data.shipping,
-      pack_id: orderResponse.data.pack_id
-    });
+  console.log('📦 Respuesta de ML /orders:', {
+    id: orderResponse.data.id,
+    status: orderResponse.data.status,
+    shipping: orderResponse.data.shipping
+  });
 
-    let shipmentId = orderResponse.data.shipping?.id;
+  const shipmentId = orderResponse.data.shipping?.id;
+  if (!shipmentId) {
+    throw new Error(`⚠️ No se encontró shipment para la orden ${orderId}`);
+  }
+  console.log('✅ shipmentId obtenido:', shipmentId);
 
-    // 4️⃣ Si no hay shipping.id → usar pack_id
-    if (!shipmentId && orderResponse.data.pack_id) {
-      console.warn(`⚠️ No se encontró shipmentId, probando con pack_id: ${orderResponse.data.pack_id}`);
-
-      // Ojo: con pack_id hay que consultar los shipments asociados
-      const packResponse = await axios.get(
-        `${this.API_BASE_URL}/packs/${orderResponse.data.pack_id}/shipments`,
-        { headers: { Authorization: `Bearer ${accessToken}` } }
-      );
-
-      console.log("📦 Respuesta de pack shipments:", packResponse.data);
-
-      if (Array.isArray(packResponse.data) && packResponse.data.length > 0) {
-        shipmentId = packResponse.data[0].id;
-      }
-    }
-
-    if (!shipmentId) {
-      throw new Error(`No se encontró shipmentId ni packId válido para la orden ${orderId}`);
-    }
-
-    console.log(`✅ Usando shipmentId: ${shipmentId}`);
-
-    // 5️⃣ Obtener etiqueta PDF
-    return axios({
+  // 4️⃣ Pedir la etiqueta PDF usando el shipmentId
+  try {
+    console.log(`📡 Solicitando etiqueta ML /shipments/${shipmentId}/labels`);
+    return await axios({
       method: 'GET',
-      url: `${this.API_BASE_URL}/shipment_labels?shipment_ids=${shipmentId}`,
+      url: `${this.API_BASE_URL}/shipments/${shipmentId}/labels`,
       headers: { Authorization: `Bearer ${accessToken}` },
       responseType: 'stream'
     });
   } catch (err) {
-    console.error('❌ [ML Label] Error obteniendo etiqueta:', err.response?.data || err.message);
-    throw err;
+    console.error('❌ Error obteniendo etiqueta de shipment:', err.response?.data || err.message);
+    throw new Error(`ML no devolvió la etiqueta para shipment ${shipmentId}: ${JSON.stringify(err.response?.data)}`);
   }
 }
 

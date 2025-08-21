@@ -855,10 +855,15 @@ router.delete('/:id', async (req, res) => {
 router.get('/:orderId/label', async (req, res) => {
   try {
     const { orderId } = req.params;
-    console.log('🟢 Solicitando etiqueta para external_order_id:', orderId);
+    console.log('🟢 [Label] Solicitando etiqueta para external_order_id recibido en URL:', orderId);
 
+    // Buscar en la BD
     const order = await Order.findOne({ external_order_id: String(orderId) });
-    console.log('📦 Orden encontrada en BD:', order ? order._id : 'NO');
+    console.log('📦 [Label] Orden encontrada en BD:', order ? {
+      _id: order._id,
+      external_order_id: order.external_order_id,
+      channel_id: order.channel_id
+    } : 'NO');
 
     if (!order) {
       return res.status(404).json({ 
@@ -867,7 +872,13 @@ router.get('/:orderId/label', async (req, res) => {
       });
     }
 
-    // 👇 importante: usar el external_order_id que está en la BD
+    // 🚨 Debug extra: ver exactamente qué datos usamos para llamar a ML
+    console.log('➡️ [Label] Llamando a MercadoLibreService.getShippingLabel con:', {
+      external_order_id: order.external_order_id,
+      channel_id: order.channel_id
+    });
+
+    // Importante: pasar el external_order_id guardado en la BD
     const pdfResponse = await MercadoLibreService.getShippingLabel(
       order.external_order_id,
       order.channel_id
@@ -885,6 +896,7 @@ router.get('/:orderId/label', async (req, res) => {
     });
   }
 });
+
 // ==================== TRACKING DE PEDIDOS ====================
 /**
  * Generar timeline de eventos del pedido

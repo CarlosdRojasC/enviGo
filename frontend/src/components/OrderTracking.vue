@@ -49,7 +49,7 @@
       </div>
 
       <!-- PRUEBA DE ENTREGA - SOLO para pedidos entregados -->
-      <div v-if="tracking.current_status === 'delivered' && hasProofOfDelivery" class="proof-section">
+      <div v-if="tracking.current_status === 'delivered,invoiced' && hasProofOfDelivery" class="proof-section">
         <div class="section-header">
           <h3>📸 Prueba de Entrega</h3>
         </div>
