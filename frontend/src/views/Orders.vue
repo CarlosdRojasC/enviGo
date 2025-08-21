@@ -875,7 +875,61 @@ async function handleBulkMarkReady() {
     toast.error('Error al marcar pedidos como listos')
   }
 }
-
+async function printManifestDirectly(manifestId) {
+  try {
+    console.log('🖨️ Obteniendo datos del manifiesto para impresión:', manifestId);
+    
+    // Obtener datos completos del manifiesto
+    const { data: manifestData } = await apiService.manifests.getById(manifestId);
+    
+    // Generar HTML de impresión
+    const printContent = createManifestPrintHTML(manifestData);
+    
+    // ✅ IMPRESIÓN DIRECTA: Crear iframe oculto
+    const printFrame = document.createElement('iframe');
+    printFrame.style.position = 'absolute';
+    printFrame.style.left = '-9999px';
+    printFrame.style.top = '-9999px';
+    printFrame.style.width = '0px';
+    printFrame.style.height = '0px';
+    
+    document.body.appendChild(printFrame);
+    
+    try {
+      const frameDoc = printFrame.contentDocument || printFrame.contentWindow.document;
+      frameDoc.open();
+      frameDoc.write(printContent);
+      frameDoc.close();
+      
+      // ✅ Imprimir directamente cuando esté listo
+      printFrame.onload = () => {
+        setTimeout(() => {
+          printFrame.contentWindow.focus();
+          printFrame.contentWindow.print();
+          
+          // ✅ Limpiar después de imprimir
+          setTimeout(() => {
+            document.body.removeChild(printFrame);
+          }, 1000);
+        }, 500);
+      };
+      
+      // Marcar como impreso
+      await apiService.manifests.updateStatus(manifestId, 'printed');
+      
+      toast.success('✅ Manifiesto enviado a impresión');
+      
+    } catch (error) {
+      console.error('❌ Error en impresión:', error);
+      toast.error('Error al preparar impresión');
+      document.body.removeChild(printFrame);
+    }
+    
+  } catch (error) {
+    console.error('❌ Error obteniendo manifiesto:', error);
+    toast.error('Error al cargar datos para impresión');
+  }
+}
 async function generateManifestAndMarkReady() {
   if (selectedOrders.value.length === 0) {
     toast.warning('Selecciona al menos un pedido');
