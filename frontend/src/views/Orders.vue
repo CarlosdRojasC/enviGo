@@ -923,8 +923,6 @@ async function printManifestDirectly(manifestId) {
 async function viewManifest(manifest) {
   const manifestUrl = `/app/manifest/${manifest._id}`;
   window.open(manifestUrl, '_blank', 'width=900,height=700');
-  window.focus();
-  window.print();
 }
 
 
