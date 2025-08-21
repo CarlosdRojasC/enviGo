@@ -244,7 +244,7 @@
                       Duplicar
                     </button>
                   <button 
-  v-if="getChannelName(order.channel_type) === 'mercadolibre'" 
+  v-if="getChannelType(order.channel_id) === 'mercadolibre'" 
   @click="downloadLabel(order._id)" 
   class="dropdown-item"
 >
@@ -484,6 +484,20 @@ function getChannelName(channelId) {
   }
   
   return 'Canal'
+}
+function getChannelType(channelId) {
+  // Si viene populado como objeto
+  if (typeof channelId === 'object' && channelId?.channel_type) {
+    return channelId.channel_type
+  }
+
+  // Si solo viene el ID, buscar en la lista de canales
+  if (typeof channelId === 'string' && channels.value) {
+    const channel = channels.value.find(c => c._id === channelId)
+    return channel?.channel_type || null
+  }
+
+  return null
 }
 /**
  * Format currency
