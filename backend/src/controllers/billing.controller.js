@@ -1363,15 +1363,23 @@ async bulkMarkAsPaid(req, res) {
 // ✅ OBTENER PEDIDOS FACTURABLES (solo delivered)
 async getInvoiceableOrders(req, res) {
   try {
-    // --- PASO 1: LEER PARÁMETROS DE LA URL ---
     const { company_id, startDate, endDate } = req.query;
-    const companyId = req.user.role === 'admin' ? company_id : req.user.company_id;
-    
-    if (!companyId) {
+
+    // Si es admin puede elegir empresa, si no, solo la suya
+    const companyIdRaw = req.user.role === 'admin' ? company_id : req.user.company_id;
+    if (!companyIdRaw) {
       return res.status(400).json({ error: 'Company ID requerido' });
     }
 
-    // --- PASO 2: CONSTRUIR LA CONSULTA BASE ---
+    // Convertir a ObjectId seguro
+    let companyId;
+    try {
+      companyId = new mongoose.Types.ObjectId(String(companyIdRaw));
+    } catch {
+      return res.status(400).json({ error: 'company_id inválido' });
+    }
+
+    // Query base
     const query = {
       company_id: companyId,
       status: 'delivered',
@@ -1379,30 +1387,29 @@ async getInvoiceableOrders(req, res) {
       invoice_id: null
     };
 
-    // --- PASO 3: AÑADIR FILTRO DE FECHAS SI SE PROPORCIONAN ---
+    // Filtro por fechas
     if (startDate && endDate) {
-      query.delivery_date = {
-        $gte: new Date(startDate), // Mayor o igual que la fecha de inicio
-        $lte: new Date(endDate + 'T23:59:59Z') // Menor o igual que el final del día de la fecha de fin (en UTC)
-      };
+      const start = new Date(`${startDate}T00:00:00.000Z`);
+      const end   = new Date(`${endDate}T23:59:59.999Z`);
+      query.delivery_date = { $gte: start, $lte: end };
       console.log(`📦 Buscando pedidos facturables para empresa ${companyId} entre ${startDate} y ${endDate}`);
     } else {
       console.log(`📦 Buscando TODOS los pedidos facturables para empresa ${companyId}`);
     }
-    
+
     const startTime = new Date();
 
-    // --- PASO 4: EJECUTAR LA CONSULTA CON LOS FILTROS ---
+    // Ejecutar consulta
     const [orders, totalCount] = await Promise.all([
       Order.find(query)
         .select('order_number customer_name delivery_date shipping_cost')
         .sort({ delivery_date: -1 })
-        .limit(200) // Se mantiene un límite por seguridad
+        .limit(200)
         .lean(),
       Order.countDocuments(query)
     ]);
 
-    // Calcular resumen
+    // Resumen
     const totalAmount = orders.reduce((sum, order) => sum + (order.shipping_cost || 0), 0);
     const dates = orders.map(o => o.delivery_date).filter(Boolean);
     const minDate = dates.length > 0 ? new Date(Math.min(...dates.map(d => new Date(d)))) : null;
@@ -1419,10 +1426,7 @@ async getInvoiceableOrders(req, res) {
     const executionTime = new Date() - startTime;
     console.log(`✅ Encontrados ${orders.length}/${totalCount} pedidos facturables en ${executionTime}ms`);
 
-    res.json({
-      orders,
-      summary
-    });
+    res.json({ orders, summary });
 
   } catch (error) {
     console.error('❌ Error obteniendo pedidos facturables:', error);
@@ -1436,12 +1440,7 @@ async generateInvoiceImproved(req, res) {
   
   try {
     await session.withTransaction(async () => {
-      const {
-        company_id,
-        period_start,
-        period_end,
-        order_ids
-      } = req.body;
+      const { company_id, period_start, period_end, order_ids } = req.body;
 
       console.log(`🧾 Iniciando generación de factura para empresa: ${company_id}`);
 
@@ -1455,10 +1454,18 @@ async generateInvoiceImproved(req, res) {
         });
       }
 
-      // Validar que todos los pedidos sean facturables
+      // Convertir company_id a ObjectId seguro
+      let companyObjectId;
+      try {
+        companyObjectId = new mongoose.Types.ObjectId(String(company_id));
+      } catch {
+        return res.status(400).json({ error: 'company_id inválido' });
+      }
+
+      // Validar pedidos facturables
       const orders = await Order.find({
         _id: { $in: order_ids.map(id => new mongoose.Types.ObjectId(id)) },
-        company_id: new mongoose.Types.ObjectId(company_id),
+        company_id: companyObjectId,
         status: 'delivered',
         'billing_status.is_billable': true,
         invoice_id: null
@@ -1471,16 +1478,14 @@ async generateInvoiceImproved(req, res) {
         throw new Error(`${invalidOrders} pedidos no son facturables o ya pertenecen a otra factura.`);
       }
 
-      const company = await Company.findById(company_id).session(session);
+      const company = await Company.findById(companyObjectId).session(session);
       if (!company) {
         throw new Error('Empresa no encontrada');
       }
 
       // --- LÓGICA MODIFICADA ---
-      // Se elimina la búsqueda de factura existente para permitir múltiples facturas por mes.
-      // Siempre se creará una nueva factura.
-
-      console.log(`✨ Creando nueva factura para ${company.name} para el período ${period_start} a ${period_end}`);
+      // Siempre crea nueva factura (varias facturas por mes permitidas)
+      console.log(`✨ Creando nueva factura para ${company.name} período ${period_start} a ${period_end}`);
       
       const subtotal = orders.reduce((acc, order) => acc + (order.shipping_cost || 0), 0);
       const tax_amount = Math.round(subtotal * 0.19);
@@ -1491,10 +1496,10 @@ async generateInvoiceImproved(req, res) {
       const invoice_number = `INV-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}-${String(invoiceCount).padStart(4, '0')}`;
 
       const newInvoice = new Invoice({
-        company_id,
+        company_id: companyObjectId,
         invoice_number,
-        month: new Date(period_end).getMonth() + 1, // Se sigue guardando para reportes
-        year: new Date(period_end).getFullYear(),  // Se sigue guardando para reportes
+        month: new Date(period_end).getMonth() + 1,
+        year: new Date(period_end).getFullYear(),
         total_orders: orders.length,
         price_per_order: company.price_per_order,
         subtotal,
@@ -1538,7 +1543,6 @@ async generateInvoiceImproved(req, res) {
     await session.endSession();
   }
 }
-
 // ✅ REVERTIR FACTURACIÓN (volver pedidos de 'invoiced' a 'delivered')
 async revertInvoicing(req, res) {
   const session = await mongoose.startSession();
