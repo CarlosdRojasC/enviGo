@@ -353,6 +353,7 @@
 import { computed } from 'vue'
 import axios from "axios"
 import { useToast } from "vue-toastification";
+import api from '../../services/api';
 // ==================== PROPS ====================
 const props = defineProps({
   orders: {
@@ -385,6 +386,7 @@ const props = defineProps({
   }
 })
 const toast = useToast();
+
 // ==================== EMITS ====================
 const emit = defineEmits([
   'select-order',
@@ -595,10 +597,9 @@ function duplicateOrder(order) {
 }
 async function downloadLabel(externalOrderId) {
   try {
-    const response = await axios.get(
-  `/api/orders/${externalOrderId}/label`,
-  { responseType: 'blob' }
-);
+    const response = await api.get(`/orders/${externalOrderId}/label`, {
+      responseType: 'blob',
+    });
 
     if (!response.headers['content-type'].includes('application/pdf')) {
       console.error('❌ El backend no devolvió un PDF:', response.headers['content-type']);

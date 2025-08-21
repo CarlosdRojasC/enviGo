@@ -643,6 +643,7 @@ static async createOrderFromApiData(fullOrder, channel, accessToken) {
 static async getShippingLabel(orderId, channelId) {
   // 1️⃣ Buscar el canal
   const channel = await Channel.findById(channelId);
+  
   if (!channel) throw new Error(`Canal ${channelId} no encontrado`);
 
   // 2️⃣ Obtener access token válido
