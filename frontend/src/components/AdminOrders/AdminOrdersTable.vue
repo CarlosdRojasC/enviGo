@@ -596,9 +596,9 @@ function duplicateOrder(order) {
 async function downloadLabel(externalOrderId) {
   try {
     const response = await axios.get(
-      `/api/mercadolibre/orders/${externalOrderId}/label`,
-      { responseType: 'blob' }
-    );
+  `/api/orders/${externalOrderId}/label`,
+  { responseType: 'blob' }
+);
 
     if (!response.headers['content-type'].includes('application/pdf')) {
       console.error('❌ El backend no devolvió un PDF:', response.headers['content-type']);

@@ -851,6 +851,31 @@ router.delete('/:id', async (req, res) => {
     res.status(500).json({ error: 'Error interno del servidor' });
   }
 });
+router.get('/:orderId/label', async (req, res) => {
+  try {
+    const { orderId } = req.params;
+
+    // Buscar el pedido en la BD
+    const order = await Order.findOne({ external_order_id: orderId });
+    if (!order) {
+      return res.status(404).json({ error: 'Orden no encontrada en BD' });
+    }
+
+    // Obtener la etiqueta desde MercadoLibre
+    const pdfResponse = await MercadoLibreService.getShippingLabel(orderId, order.channel_id);
+
+    // Configurar headers de PDF
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="label-${orderId}.pdf"`);
+
+    // Enviar el stream directamente
+    pdfResponse.data.pipe(res);
+  } catch (err) {
+    console.error('❌ [ML Label] Error obteniendo etiqueta:', err.message);
+    res.status(500).json({ error: 'No se pudo obtener la etiqueta', details: err.message });
+  }
+});
+
 // ==================== TRACKING DE PEDIDOS ====================
 /**
  * Generar timeline de eventos del pedido

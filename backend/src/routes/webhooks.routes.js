@@ -198,30 +198,5 @@ router.post('/shopify/:channel_id', async (req, res) => {
     res.status(500).json({ success: false, error: error.message });
   }
 });
-router.get('/orders/:orderId/label', async (req, res) => {
-  try {
-    const { orderId } = req.params;
-
-    // Buscar el pedido en la BD para obtener el channel_id
-    const order = await Order.findOne({ external_order_id: orderId });
-    if (!order) {
-      return res.status(404).json({ error: 'Orden no encontrada en BD' });
-    }
-
-    // Obtener la etiqueta desde ML
-    const pdfResponse = await MercadoLibreService.getShippingLabel(orderId, order.channel_id);
-
-    // Configurar headers para PDF
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `inline; filename="label-${orderId}.pdf"`);
-
-    // Pipear el stream directo al response
-    pdfResponse.data.pipe(res);
-  } catch (err) {
-    console.error('❌ [ML Label] Error obteniendo etiqueta:', err.message);
-    res.status(500).json({ error: 'No se pudo obtener la etiqueta', details: err.message });
-  }
-});
-
 
 module.exports = router;
