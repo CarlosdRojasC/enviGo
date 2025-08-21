@@ -640,47 +640,30 @@ static async createOrderFromApiData(fullOrder, channel, accessToken) {
       return { address: 'Error al obtener dirección' };
     }
   }
-static async getShippingLabel(orderIdOrPackId, channelId) {
+static async getShippingLabel(orderId, channelId) {
   const channel = await Channel.findById(channelId);
-  if (!channel) throw new Error(`Canal ${channelId} no encontrado`);
-
   const accessToken = await this.getAccessToken(channel);
 
-  let shipmentId;
+  // 1. Obtener shipment_id de la orden
+  const orderResponse = await axios.get(
+    `${this.API_BASE_URL}/orders/${orderId}`,
+    { headers: { Authorization: `Bearer ${accessToken}` } }
+  );
 
-  try {
-    // 1️⃣ Intentar como order.id normal
-    const orderResponse = await axios.get(
-      `${this.API_BASE_URL}/orders/${orderIdOrPackId}`,
-      { headers: { Authorization: `Bearer ${accessToken}` } }
-    );
-    shipmentId = orderResponse.data.shipping?.id;
-
-  } catch (err) {
-    if (err.response?.status === 404) {
-      console.warn(`⚠️ No se encontró order ${orderIdOrPackId}, probando como pack_id...`);
-
-      // 2️⃣ Intentar como pack_id → obtener shipments
-      const packResponse = await axios.get(
-        `${this.API_BASE_URL}/packs/${orderIdOrPackId}/shipments`,
-        { headers: { Authorization: `Bearer ${accessToken}` } }
-      );
-
-      shipmentId = packResponse.data[0]?.id; // tomar el primero
-    } else {
-      throw err;
-    }
-  }
-
+  const shipmentId = orderResponse.data.shipping?.id;
   if (!shipmentId) {
-    throw new Error(`No se encontró shipment para ${orderIdOrPackId}`);
+    throw new Error(`No se encontró shipment para orden ${orderId}`);
   }
 
-  // 3️⃣ Pedir la etiqueta
+  // 2. Usar el endpoint correcto para descargar la etiqueta en PDF
   return axios({
     method: 'GET',
-    url: `${this.API_BASE_URL}/shipments/${shipmentId}/labels`,
+    url: `${this.API_BASE_URL}/shipment_labels`,
     headers: { Authorization: `Bearer ${accessToken}` },
+    params: {
+      shipment_ids: shipmentId,
+      savePdf: 'Y'  // para recibir PDF directamente
+    },
     responseType: 'stream'
   });
 }
