@@ -919,6 +919,16 @@ async function printManifestDirectly(manifestId) {
     toast.error('Error al imprimir manifiesto');
   }
 }
+async function viewManifest(manifest) {
+  const manifestUrl = `/app/manifest/${manifest._id}`;
+  const printWindow = window.open(manifestUrl, '_blank', 'width=900,height=700');
+
+  // Cuando cargue la página del manifiesto → disparar impresión
+  printWindow.onload = () => {
+    printWindow.focus();
+    printWindow.print();
+  };
+}
 
 
 async function generateManifestAndMarkReady() {
@@ -963,16 +973,6 @@ viewManifest(manifest.manifest);
       toast.error('Error al crear el manifiesto');
     }
   }
-}
-function viewManifest(manifest) {
-  const manifestUrl = `/app/manifest/${manifest._id}`;
-  const printWindow = window.open(manifestUrl, '_blank', 'width=900,height=700');
-
-  // Cuando cargue la página del manifiesto → disparar impresión
-  printWindow.onload = () => {
-    printWindow.focus();
-    printWindow.print();
-  };
 }
 
 async function handleBulkExport() {
@@ -1598,7 +1598,7 @@ function redirectToChannels() {
 
 onMounted(async () => {
   console.log('🚀 Orders.vue montado. Esperando ID de compañía para cargas secundarias...');
-
+ window.print();
   try {
     // 1. Cargamos ÚNICAMENTE la lista de pedidos.
     // El backend ya debería saber qué pedidos mostrar basado en el token del usuario.
