@@ -539,6 +539,7 @@ const loadingOrderDetails = ref(false)
 const orderTrackingRef = ref(null)
 const showManifestModal = ref(false);
 const currentManifestId = ref(null);
+const printManifest = ref(false);
 // ==================== NUEVO STATE PARA CANALES ====================
 const availableChannels = ref([])
 const loadingChannels = ref(false)
