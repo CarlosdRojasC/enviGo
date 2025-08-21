@@ -877,59 +877,27 @@ async function handleBulkMarkReady() {
 }
 async function printManifestDirectly(manifestId) {
   try {
-    console.log('🖨️ Obteniendo datos del manifiesto para impresión:', manifestId);
-    
-    // Obtener datos completos del manifiesto
-    const { data: manifestData } = await apiService.manifests.getById(manifestId);
-    
-    // Generar HTML de impresión
-    const printContent = createManifestPrintHTML(manifestData);
-    
-    // ✅ IMPRESIÓN DIRECTA: Crear iframe oculto
-    const printFrame = document.createElement('iframe');
-    printFrame.style.position = 'absolute';
-    printFrame.style.left = '-9999px';
-    printFrame.style.top = '-9999px';
-    printFrame.style.width = '0px';
-    printFrame.style.height = '0px';
-    
-    document.body.appendChild(printFrame);
-    
-    try {
-      const frameDoc = printFrame.contentDocument || printFrame.contentWindow.document;
-      frameDoc.open();
-      frameDoc.write(printContent);
-      frameDoc.close();
-      
-      // ✅ Imprimir directamente cuando esté listo
-      printFrame.onload = () => {
-        setTimeout(() => {
-          printFrame.contentWindow.focus();
-          printFrame.contentWindow.print();
-          
-          // ✅ Limpiar después de imprimir
-          setTimeout(() => {
-            document.body.removeChild(printFrame);
-          }, 1000);
-        }, 500);
-      };
-      
-      // Marcar como impreso
-      await apiService.manifests.updateStatus(manifestId, 'printed');
-      
-      toast.success('✅ Manifiesto enviado a impresión');
-      
-    } catch (error) {
-      console.error('❌ Error en impresión:', error);
-      toast.error('Error al preparar impresión');
-      document.body.removeChild(printFrame);
-    }
-    
+    // Pedimos el PDF/HTML del manifiesto
+    const response = await apiService.manifests.view(manifestId);
+
+    // Crear un blob con el contenido del manifiesto
+    const blob = new Blob([response.data], { type: 'application/pdf' });
+
+    // Crear una URL temporal
+    const url = URL.createObjectURL(blob);
+
+    // Abrir en una nueva ventana para imprimir
+    const printWindow = window.open(url, '_blank', 'width=900,height=700');
+    printWindow.onload = function () {
+      printWindow.focus();
+      printWindow.print();
+    };
   } catch (error) {
-    console.error('❌ Error obteniendo manifiesto:', error);
-    toast.error('Error al cargar datos para impresión');
+    console.error('❌ Error al imprimir manifiesto:', error);
+    toast.error('Error al imprimir manifiesto');
   }
 }
+
 async function generateManifestAndMarkReady() {
   if (selectedOrders.value.length === 0) {
     toast.warning('Selecciona al menos un pedido');
@@ -958,8 +926,8 @@ async function generateManifestAndMarkReady() {
     });
 
     // 3. ✅ IMPRIMIR DIRECTAMENTE
-    viewManifest(manifest);
-    
+await printManifestDirectly(manifest.manifest.id);    
+
     toast.success(`✅ Manifiesto ${manifest.manifest.manifest_number} creado e impreso`);
     clearSelection();
 
