@@ -199,7 +199,7 @@ const props = defineProps({
 });
 
 // Emits
-const emit = defineEmits(['close']);
+const emit = defineEmits(['close','readyToPrint']);
 
 // Stores & Utils
 const auth = useAuthStore();
@@ -473,6 +473,7 @@ async function confirmPickup() {
 // ==================== LIFECYCLE ====================
 onMounted(() => {
   loadManifestData();
+  emit('readyToPrint');
 });
 </script>
 

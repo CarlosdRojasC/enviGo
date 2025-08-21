@@ -121,6 +121,7 @@
   v-if="showManifestModal" 
   :manifestId="currentManifestId"
   @close="showManifestModal = false"
+  @readyToPrint="printManifest"
 />
 <Modal v-model="showCreateOrderModal" title="➕ Crear Nuevo Pedido" width="800px">
   <div v-if="showCreateOrderModal" class="create-order-form">
