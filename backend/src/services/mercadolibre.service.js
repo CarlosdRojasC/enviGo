@@ -172,148 +172,131 @@ class MercadoLibreService {
    * ✅ SINCRONIZACIÓN INICIAL ÚNICAMENTE (solo para configuración inicial)
    * Solo trae pedidos NO ENTREGADOS de los últimos 7 días
    */
-static async syncInitialOrders(channelId) {
-  console.log('🔄 [ML Initial Sync] Iniciando sincronización inicial para canal:', channelId);
-  
-  const channel = await Channel.findById(channelId);
-  if (!channel) {
-    throw new Error('Canal no encontrado');
-  }
-
-  console.log(`🔄 [ML Initial Sync] Sincronización inicial para canal ${channel.channel_name}`);
-
-  // ✅ SOLO 7 DÍAS ATRÁS PARA SINCRONIZACIÓN INICIAL
-  const now = new Date();
-  const sevenDaysAgo = new Date();
-  sevenDaysAgo.setDate(now.getDate() - 7);
-
-  console.log('📅 [ML Initial Sync] Rango de fechas:', {
-    dateFrom: sevenDaysAgo.toISOString(),
-    dateTo: now.toISOString()
-  });
-
-  try {
-    const accessToken = await this.getAccessToken(channel);
+ static async syncInitialOrders(channelId) {
+    console.log('🔄 [ML Initial Sync] Iniciando sincronización inicial para canal:', channelId);
     
-    // ✅ FILTRAR SOLO PEDIDOS PAGADOS
-    const apiUrl = `${this.API_BASE_URL}/orders/search`;
-    const params = {
-      seller: channel.settings.user_id,
-      'order.date_created.from': sevenDaysAgo.toISOString(),
-      'order.date_created.to': now.toISOString(),
-      sort: 'date_desc',
-      limit: 50
-    };
-
-    console.log('🌐 [ML Initial Sync] Consultando pedidos con params:', params);
-
-    const response = await axios.get(apiUrl, {
-      headers: {
-        'Authorization': `Bearer ${accessToken}`,
-        'Accept': 'application/json'
-      },
-      params: params,
-      timeout: 30000
-    });
-
-    const orderIds = response.data.results || [];
-    let syncedCount = 0;
-    let errorCount = 0;
-    let skippedCount = 0;
-
-    for (const basicOrder of orderIds) {
-      try {
-        console.log(`📦 [ML Initial Sync] Verificando pedido ${basicOrder.id}...`);
-        
-        const fullOrderResponse = await axios.get(`${this.API_BASE_URL}/orders/${basicOrder.id}`, {
-          headers: { 'Authorization': `Bearer ${accessToken}` },
-          timeout: 15000
-        });
-
-        const fullOrder = fullOrderResponse.data;
-
-        // ✅ VERIFICAR SI ES FLEX Y NO ESTÁ ENTREGADO
-        const isFlex = await this.isFlexOrder(fullOrder, accessToken);
-        const isNotDelivered = await this.isOrderNotDelivered(fullOrder, accessToken);
-
-        // 🚨 NUEVO: Permitir pedidos con fecha futura aunque estén marcados como entregados
-        let allowFutureOrder = false;
-        const estimatedDateStr = fullOrder.shipping?.estimated_delivery_time?.date 
-          || fullOrder.shipping?.date_first_printed;
-        if (estimatedDateStr) {
-          const deliveryDate = new Date(estimatedDateStr);
-          if (deliveryDate > now) {
-            console.log(`⏩ [ML Initial Sync] Pedido ${fullOrder.id} tiene fecha futura (${estimatedDateStr}), se incluirá aunque figure entregado.`);
-            allowFutureOrder = true;
-          }
-        }
-
-        if (!isFlex) {
-          console.log(`⏭️ [ML Initial Sync] Pedido ${fullOrder.id} omitido (no es Flex)`);
-          skippedCount++;
-          continue;
-        }
-
-        if (!isNotDelivered && !allowFutureOrder) {
-          console.log(`⏭️ [ML Initial Sync] Pedido ${fullOrder.id} omitido (ya entregado y sin fecha futura)`);
-          skippedCount++;
-          continue;
-        }
-
-        console.log(`✅ [ML Initial Sync] Procesando pedido Flex válido ${fullOrder.id}`);
-
-        const existingOrder = await Order.findOne({
-          external_order_id: fullOrder.id.toString(),
-          channel_id: channel._id
-        });
-
-        if (!existingOrder) {
-          await this.createOrderFromApiData(fullOrder, channel, accessToken);
-          console.log(`➕ [ML Initial Sync] Pedido ${fullOrder.id} creado`);
-          syncedCount++;
-        } else {
-          console.log(`⏭️ [ML Initial Sync] Pedido ${fullOrder.id} ya existe`);
-          skippedCount++;
-        }
-        
-        await new Promise(resolve => setTimeout(resolve, 500));
-        
-      } catch (error) {
-        console.error(`❌ [ML Initial Sync] Error procesando pedido ${basicOrder.id}:`, error.message);
-        errorCount++;
-      }
+    const channel = await Channel.findById(channelId);
+    if (!channel) {
+      throw new Error('Canal no encontrado');
     }
 
-    // ✅ MARCAR COMO INICIALIZADO
-    channel.last_sync_at = new Date();
-    channel.sync_status = 'success';
-    channel.settings.initial_sync_completed = true;
-    channel.markModified('settings');
-    await channel.save();
+    console.log(`🔄 [ML Initial Sync] Sincronización inicial para canal ${channel.channel_name}`);
 
-    console.log(`✅ [ML Initial Sync] Sincronización inicial completada:`);
-    console.log(`   - ${syncedCount} pedidos Flex válidos sincronizados`);
-    console.log(`   - ${skippedCount} pedidos omitidos`);
-    console.log(`   - ${errorCount} errores`);
+    // Traemos últimos 7 días
+    const now = new Date();
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(now.getDate() - 7);
 
-    return {
-      success: true,
-      syncedCount,
-      errorCount,
-      skippedCount,
-      totalFound: orderIds.length
-    };
+    console.log('📅 [ML Initial Sync] Rango de fechas:', {
+      dateFrom: sevenDaysAgo.toISOString(),
+      dateTo: now.toISOString()
+    });
 
-  } catch (error) {
-    console.error('❌ [ML Initial Sync] Error en sincronización inicial:', error.message);
-    
-    channel.sync_status = 'error';
-    channel.last_sync_at = new Date();
-    await channel.save();
-    
-    throw error;
+    try {
+      const accessToken = await this.getAccessToken(channel);
+
+      const apiUrl = `${this.API_BASE_URL}/orders/search`;
+      const params = {
+        seller: channel.settings.user_id,
+        'order.date_created.from': sevenDaysAgo.toISOString(),
+        'order.date_created.to': now.toISOString(),
+        sort: 'date_desc',
+        limit: 50
+      };
+
+      console.log('🌐 [ML Initial Sync] Consultando pedidos con params:', params);
+
+      const response = await axios.get(apiUrl, {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Accept': 'application/json'
+        },
+        params: params,
+        timeout: 30000
+      });
+
+      const orderIds = response.data.results || [];
+      let syncedCount = 0;
+      let errorCount = 0;
+      let skippedCount = 0;
+
+      for (const basicOrder of orderIds) {
+        try {
+          console.log(`📦 [ML Initial Sync] Verificando pedido ${basicOrder.id}...`);
+
+          const fullOrderResponse = await axios.get(`${this.API_BASE_URL}/orders/${basicOrder.id}`, {
+            headers: { 'Authorization': `Bearer ${accessToken}` },
+            timeout: 15000
+          });
+
+          const fullOrder = fullOrderResponse.data;
+
+          // ✅ Solo validar si es Flex
+          const isFlex = await this.isFlexOrder(fullOrder, accessToken);
+          if (!isFlex) {
+            console.log(`⏭️ [ML Initial Sync] Pedido ${fullOrder.id} omitido (no es Flex)`);
+            skippedCount++;
+            continue;
+          }
+
+          console.log(`✅ [ML Initial Sync] Procesando pedido Flex ${fullOrder.id}`);
+
+          const existingOrder = await Order.findOne({
+            external_order_id: fullOrder.id.toString(),
+            channel_id: channel._id
+          });
+
+          if (!existingOrder) {
+            await this.createOrderFromApiData(fullOrder, channel, accessToken, fullOrder.id.toString());
+            console.log(`➕ [ML Initial Sync] Pedido ${fullOrder.id} creado`);
+            syncedCount++;
+          } else {
+            // actualizar estado si ya existe
+            existingOrder.status = this.mapOrderStatus(fullOrder);
+            existingOrder.raw_data = fullOrder;
+            await existingOrder.save();
+            console.log(`🔄 [ML Initial Sync] Pedido ${fullOrder.id} ya existía, estado actualizado`);
+            skippedCount++;
+          }
+
+          await new Promise(resolve => setTimeout(resolve, 500));
+
+        } catch (error) {
+          console.error(`❌ [ML Initial Sync] Error procesando pedido ${basicOrder.id}:`, error.message);
+          errorCount++;
+        }
+      }
+
+      // ✅ Marcar canal como inicializado
+      channel.last_sync_at = new Date();
+      channel.sync_status = 'success';
+      channel.settings.initial_sync_completed = true;
+      channel.markModified('settings');
+      await channel.save();
+
+      console.log(`✅ [ML Initial Sync] Sincronización inicial completada:`);
+      console.log(`   - ${syncedCount} pedidos Flex sincronizados`);
+      console.log(`   - ${skippedCount} pedidos omitidos`);
+      console.log(`   - ${errorCount} errores`);
+
+      return {
+        success: true,
+        syncedCount,
+        errorCount,
+        skippedCount,
+        totalFound: orderIds.length
+      };
+
+    } catch (error) {
+      console.error('❌ [ML Initial Sync] Error en sincronización inicial:', error.message);
+
+      channel.sync_status = 'error';
+      channel.last_sync_at = new Date();
+      await channel.save();
+
+      throw error;
+    }
   }
-}
 
   /**
    * ✅ NUEVO: Verifica si un pedido NO ha sido entregado
