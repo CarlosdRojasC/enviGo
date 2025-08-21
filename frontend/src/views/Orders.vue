@@ -877,16 +877,13 @@ async function handleBulkMarkReady() {
 }
 async function printManifestDirectly(manifestId) {
   try {
-    // Pedimos el PDF/HTML del manifiesto
-    const response = await apiService.manifests.view(manifestId);
+    const response = await apiService.manifests.view(manifestId, {
+      responseType: 'blob'  // 👈 importante para PDF
+    });
 
-    // Crear un blob con el contenido del manifiesto
     const blob = new Blob([response.data], { type: 'application/pdf' });
-
-    // Crear una URL temporal
     const url = URL.createObjectURL(blob);
 
-    // Abrir en una nueva ventana para imprimir
     const printWindow = window.open(url, '_blank', 'width=900,height=700');
     printWindow.onload = function () {
       printWindow.focus();
