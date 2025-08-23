@@ -73,7 +73,7 @@
     <td class="col-tracking">
   <div class="tracking-container">
     <!-- Delivered - Show Proof -->
-    <div v-if="order.status === 'delivered'" class="tracking-section delivered">
+    <div v-if="order.status === 'delivered' || order.status === 'invoiced'" class="tracking-section delivered">
       <button 
         @click.stop="$emit('view-proof')" 
         class="tracking-btn proof-btn"
