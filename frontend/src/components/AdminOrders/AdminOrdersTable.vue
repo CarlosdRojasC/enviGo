@@ -52,8 +52,8 @@
             :key="order._id"
             class="order-row"
             :class="{ 
-              'selected': isOrderSelected(order)
-              
+              'selected': isOrderSelected(order),
+              'shipday-assigned': !!order.shipday_order_id 
             }"
           >
             <!-- CHECKBOX -->
