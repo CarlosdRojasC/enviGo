@@ -239,16 +239,16 @@ export function useOrdersSelection(orders) {
       }
     }
     
-    const invalidOrders = selectedOrderObjects.value.filter(order => 
-      order.shipday_order_id
-    )
+    // const invalidOrders = selectedOrderObjects.value.filter(order => 
+    //   order.shipday_order_id
+    // )
     
-    if (invalidOrders.length > 0) {
-      return {
-        valid: false,
-        message: `${invalidOrders.length} pedidos ya están asignados en Shipday`
-      }
-    }
+    // if (invalidOrders.length > 0) {
+    //   return {
+    //     valid: false,
+    //     message: `${invalidOrders.length} pedidos ya están asignados en Shipday`
+    //   }
+    // }
     
     return {
       valid: true,
