@@ -383,7 +383,7 @@ async syncChannel(channel) {
         limit: apiParams.limit
       });
       
-      const orders = await shopifyService.getOrders(apiParams);
+      const orders = await ShopifyService.syncOrders(channel, dateFrom, dateTo);;
       console.log(`📦 Obtenidos ${orders.length} pedidos de Shopify`);
       
       if (orders.length === 0) {
