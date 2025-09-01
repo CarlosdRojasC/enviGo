@@ -11,12 +11,14 @@ export function useOrdersSelection(orders) {
    * Orders that can be selected (not already assigned to Shipday)
    */
   const selectableOrders = computed(() => {
-     return orders.value.filter(order => {
-    const isAssignable = !order.shipday_driver_id; // Se puede asignar si NO tiene conductor
-    const isCorrectStatus = ['pending', 'ready_for_pickup'].includes(order.status);
-    return isAssignable && isCorrectStatus;
-  });
+  return orders.value.filter(order => {
+    // bloquear SOLO si ya está en Shipday
+    if (order.shipday_order_id) return false
+
+    // permitir pendientes y listos, aunque tengan driver
+    return ['pending', 'ready_for_pickup'].includes(order.status)
   })
+})
 
   /**
    * Check if all selectable orders are selected
