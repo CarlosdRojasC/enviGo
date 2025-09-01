@@ -39,7 +39,6 @@
           <button 
             @click="$emit('bulk-assign')"
             class="bulk-btn primary assign"
-            :disabled="!canAssignDrivers"
             title="Asignar conductor a todos los pedidos seleccionados"
           >
             <span class="btn-icon">🚚</span>
