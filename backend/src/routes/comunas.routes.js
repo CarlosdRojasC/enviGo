@@ -53,6 +53,7 @@ const ENVIGO_COMMUNES = [
   'Cerro Navia',
   'Pudahuel',
   'Maipú',
+  'Maipu',
   
   // Zona Sur-Oriente
   'La Florida',
@@ -101,7 +102,8 @@ const COMMUNES_BY_ZONE = {
     'Renca', 
     'Cerro Navia', 
     'Pudahuel', 
-    'Maipú'
+    'Maipú',
+    'Maipu'
   ],
   'Zona Sur-Oriente': [
     'La Florida', 

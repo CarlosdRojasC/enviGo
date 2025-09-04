@@ -37,6 +37,7 @@ const shippingZone = {
     "Conchalí",
     "Lo Prado",
     "Maipú",
+    "Maipu",
     "Pudahuel",
     "Renca"
   ]
