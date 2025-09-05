@@ -37,6 +37,7 @@
             <option value="pending">⏳ Pendiente</option>
             <option value="processing">⚙️ Procesando</option>
             <option value="ready_for_pickup">📦 Listo para recoger</option>
+            <option value="warehouse_received">🏬 Recibido en bodega</option>
             <option value="assigned">🚚 Asignado</option>
             <option value="shipped">🚛 Enviado</option>
             <option value="delivered">✅ Entregado</option>
@@ -549,6 +550,7 @@ function getStatusDisplayName(status) {
     'ready_for_pickup': 'Listo',
     'assigned': 'Asignado',
     'out_for_delivery': 'En Entrega',
+    'warehouse_received': 'Recibido en Bodega',
     'shipped': 'Enviado',
     'delivered': 'Entregado',
     'cancelled': 'Cancelado'
