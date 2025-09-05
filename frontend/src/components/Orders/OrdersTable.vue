@@ -322,7 +322,7 @@ const visiblePages = computed(() => {
 // Methods
 function isOrderSelectable(order) {
   // Define logic for which orders can be selected
-  return !order.shipday_order_id && ['pending', 'ready_for_pickup'].includes(order.status)
+  return !order.shipday_order_id && ['pending', 'ready_for_pickup', 'warehouse_received'].includes(order.status)
 }
 </script>
 
