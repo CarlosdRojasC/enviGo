@@ -290,7 +290,7 @@ const canGenerateLabels = computed(() => {
   // Verificar que todos los pedidos seleccionados sean válidos para etiquetas
   return props.selectedOrders.every(orderId => {
     const order = props.orders.find(o => o._id === orderId)
-    return order && ['pending', 'ready_for_pickup'].includes(order.status)
+    return order && ['pending', 'ready_for_pickup','warehouse_received'].includes(order.status)
   })
 })
 

@@ -247,7 +247,7 @@ const showBreakdown = ref(false)
  */
 const assignableCount = computed(() => {
    return props.selectedOrders.filter(order => 
-    ['pending', 'ready_for_pickup'].includes(order.status)
+    ['pending', 'ready_for_pickup','warehouse_received'].includes(order.status)
   ).length
 })
 

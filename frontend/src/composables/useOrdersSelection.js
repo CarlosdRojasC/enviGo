@@ -16,7 +16,7 @@ export function useOrdersSelection(orders) {
     if (order.shipday_order_id) return false
 
     // permitir pendientes y listos, aunque tengan driver
-    return ['pending', 'ready_for_pickup'].includes(order.status)
+    return ['pending', 'ready_for_pickup','warehouse_received'].includes(order.status)
   })
 })
 
