@@ -1,25 +1,15 @@
-const nodemailer = require('nodemailer');
+const { Resend } = require('resend');
 const handlebars = require('handlebars');
 const path = require('path');
 const fs = require('fs').promises;
 
 class NotificationService {
   constructor() {
-    // Configurar Gmail
-    this.emailTransporter = nodemailer.createTransport({
-  host: "smtp.gmail.com",
-  port: 587,
-  secure: false,
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASSWORD,
-  },
-  // --- AÑADE ESTAS LÍNEAS ---
-  logger: true,
-  debug: true,
-});
+    // Configurar Resend en lugar de Nodemailer
+    // Asegúrate de poner RESEND_API_KEY en tus variables de entorno de Railway
+    this.resend = new Resend(process.env.RESEND_API_KEY);
 
-    // Cache para templates
+    // Cache para templates (esto no cambia)
     this.templateCache = new Map();
   }
 
@@ -80,18 +70,19 @@ extractShipdayIdAndBuildUrl(webhookData, order) {
       const html = template(templateData);
 
       // Configurar email
-      const mailOptions = {
-        from: `"${templateData.company_name}" <${process.env.EMAIL_FROM}>`,
+      const { data, error } = await this.resend.emails.send({
+        from: `"${templateData.company_name}" <contacto@envigo.cl>`,
         to: order.customer_email,
         subject: `🚚 Tu pedido está en camino - #${order.order_number}`,
         html: html
-      };
+      });
 
-      // Enviar email
-      const result = await this.emailTransporter.sendMail(mailOptions);
+       if (error) {
+        // Si hay un error, lánzalo para que el catch lo capture
+        throw error;
+      }
       console.log(`✅ Email enviado a: ${order.customer_email}`);
-      
-      return result;
+      return data;
 
     } catch (error) {
       console.error('❌ Error enviando email:', error);
@@ -114,23 +105,24 @@ async sendDeliveredEmail(order, webhookData) {
     const html = template(templateData);
 
     // Configurar email
-    const mailOptions = {
-      from: `"${templateData.company_name}" <${process.env.EMAIL_FROM}>`,
+    const { data, error } = await this.resend.emails.send({
+      from: `"${templateData.company_name}" <contacto@envigo.cl>`,
       to: order.customer_email,
       subject: `✅ Pedido entregado - #${order.order_number}`,
       html: html
-    };
+    });
 
-    // Enviar email
-    const result = await this.emailTransporter.sendMail(mailOptions);
-    console.log(`✅ Email "Entregado" enviado a: ${order.customer_email}`);
-    
-    return result;
+      if (error) {
+        // Si hay un error, lánzalo para que el catch lo capture
+        throw error;
+      }
+      console.log(`✅ Email enviado a: ${order.customer_email}`);
+      return data;
 
-  } catch (error) {
-    console.error('❌ Error enviando email de entrega:', error);
-    throw error;
-  }
+    } catch (error) {
+      console.error('❌ Error enviando email:', error);
+      throw error;
+    }
 }
 /**
    * Enviar un email de resumen para múltiples pedidos marcados como listos
@@ -201,11 +193,9 @@ async prepareDeliveredTemplateData(order, webhookData) {
   // Información del conductor del webhook
   const driverInfo = webhookData.carrier ? {
     name: webhookData.carrier.name || 'Conductor',
-    phone: webhookData.carrier.phone || '',
     email: webhookData.carrier.email || ''
   } : (order.driver_info || {
     name: 'Conductor',
-    phone: ''
   });
 
   return {
