@@ -280,8 +280,8 @@ static validateShippingAddress(shopifyOrder) {
   const address = shopifyOrder.shipping_address || shopifyOrder.billing_address;
   
   // Validar campos críticos de dirección
-  if (!address.address1 || address.address1.trim().length < 10) {
-    errors.push('Dirección muy corta o faltante (mínimo 10 caracteres)');
+  if (!address.address1 || address.address1.trim().length < 5) {
+    errors.push('Dirección muy corta o faltante (mínimo 5 caracteres)');
   }
   
   if (!address.city || address.city.trim().length < 3) {
