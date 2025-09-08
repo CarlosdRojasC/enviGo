@@ -271,9 +271,11 @@ if (shipdayOrderDetails) {
       return res.status(403).json({ error: ERRORS.FORBIDDEN });
     }
 
+    /*
     if ((order.status === 'delivered' || order.status === 'cancelled') && status !== order.status) {
       return res.status(400).json({ error: 'No se puede cambiar el estado de un pedido entregado o cancelado' });
     }
+      */
 
     // 🆕 LÓGICA MEJORADA PARA ESTADO "DELIVERED"
     order.status = status;
@@ -689,6 +691,34 @@ async getOrdersTrend(req, res) {
       } catch (error) {
     console.error('Error obteniendo tendencia de pedidos:', error);
     res.status(500).json({ error: ERRORS.SERVER_ERROR });
+  }
+}
+async bulkUpdateStatus(req, res) {
+  try {
+    const { orderIds, status } = req.body;
+
+    if (!orderIds || !Array.isArray(orderIds) || orderIds.length === 0) {
+      return res.status(400).json({ error: 'Se requiere un array de IDs de pedidos.' });
+    }
+    if (!Object.values(ORDER_STATUS).includes(status)) {
+      return res.status(400).json({ error: 'Estado no válido' });
+    }
+
+    const result = await Order.updateMany(
+      { _id: { $in: orderIds } },
+      { $set: { status: status, updated_at: new Date() } }
+    );
+
+    console.log(`✅ Estado actualizado para ${result.modifiedCount} pedidos a "${status}"`);
+
+    res.json({
+      message: `${result.modifiedCount} de ${orderIds.length} pedidos han sido actualizados.`,
+      updatedCount: result.modifiedCount,
+    });
+
+  } catch (error) {
+    console.error('Error en la actualización masiva de estado:', error);
+    res.status(500).json({ error: 'Error interno del servidor' });
   }
 }
 

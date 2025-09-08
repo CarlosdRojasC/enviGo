@@ -661,40 +661,41 @@ function handleQuickAction(action) {
  * Handle bulk status change
  */
 async function handleBulkStatusChange(newStatus) {
-  logger.process(`[AdminOrders] 🔄 Starting bulk status change to: ${newStatus}`)
-  
-/*  const validation = validateSelection()
-  if (!validation.valid) {
-    logger.warn('[AdminOrders] ⚠️ Selection validation failed:', validation.message)
-    toast.error(validation.message)
-    return
-  }
-*/
-   const statusName = await getStatusName(newStatus)
-  const confirmed = confirm(
-    `¿Cambiar estado de ${selectedOrders.value.length} pedidos a "${statusName}"?`
-  )
-  
-  if (!confirmed) {
-    logger.dev('[AdminOrders] ❌ Bulk status change cancelled by user')
-    return
+  const orderIds = selectedOrders.value;
+
+  if (orderIds.length === 0) {
+    toast.warning('No hay pedidos seleccionados.');
+    return;
   }
 
+  const statusName = getStatusName(newStatus);
+  const confirmed = confirm(
+    `¿Confirmas el cambio de estado de ${orderIds.length} pedidos a "${statusName}"?`
+  );
+
+  if (!confirmed) {
+    logger.dev('[AdminOrders] Cambio de estado masivo cancelado por el usuario.');
+    return;
+  }
+
+  logger.process(`[AdminOrders] Iniciando cambio de estado masivo para ${orderIds.length} pedidos al estado: ${newStatus}`);
+
   try {
-    // Implementation would depend on your API
-    // This is a placeholder for bulk status update
-    const promises = selectedOrderObjects.value.map(order => 
-      handleStatusUpdate({ orderId: order._id, newStatus })
-    )
+    // Se llama al nuevo endpoint de acción masiva que creamos en el backend
+    await apiService.post('/orders/bulk-actions/status', {
+      orderIds: orderIds,
+      status: newStatus
+    });
+
+    toast.success(`Se actualizó el estado de ${orderIds.length} pedidos correctamente.`);
     
-    await Promise.all(promises)
-    logger.success(`[AdminOrders] ✅ Bulk status updated for ${selectedOrders.value.length} orders`)
-    toast.success(`Estado actualizado para ${selectedOrders.value.length} pedidos`)
-    clearSelection()
-    
+    // Se limpia la selección y se recargan los datos
+    clearSelection();
+    refreshOrders();
+
   } catch (error) {
-    logger.error('[AdminOrders] ❌ Error in bulk status change:', error)
-    toast.error('Error al cambiar estado masivo')
+    logger.error('[AdminOrders] ❌ Error en el cambio de estado masivo:', error);
+    toast.error(error.response?.data?.message || 'No se pudo completar la acción masiva.');
   }
 }
 

@@ -897,6 +897,8 @@ router.get('/:orderId/label', async (req, res) => {
   }
 });
 
+router.post('/bulk-actions/status', authenticateToken, isAdmin, orderController.bulkUpdateStatus);
+
 // ==================== TRACKING DE PEDIDOS ====================
 /**
  * Generar timeline de eventos del pedido
