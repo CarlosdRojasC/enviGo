@@ -37,10 +37,11 @@
         <!-- Primary Actions -->
         <div class="primary-actions">
           <button 
-            @click="$emit('bulk-assign')"
-            class="bulk-btn primary assign"
-            title="Asignar conductor a todos los pedidos seleccionados"
-          >
+  @click="$emit('bulk-assign')"
+  class="bulk-btn primary assign"
+  :disabled="!canAssignDrivers"
+  :title="canAssignDrivers ? 'Asignar conductor a los pedidos aplicables' : 'Ningún pedido seleccionado puede ser asignado'"
+>
             <span class="btn-icon">🚚</span>
             <span class="btn-text">Asignar Conductor</span>
             <span class="btn-count">{{ assignableCount }}</span>
@@ -246,10 +247,12 @@ const showBreakdown = ref(false)
  * Count of orders that can be assigned to drivers
  */
 const assignableCount = computed(() => {
-   return props.selectedOrders.filter(order => 
-    ['pending', 'ready_for_pickup','warehouse_received'].includes(order.status)
+  const nonAssignableStatuses = ['delivered', 'cancelled'];
+  return props.selectedOrders.filter(order => 
+    !nonAssignableStatuses.includes(order.status)
   ).length
 })
+
 
 /**
  * Check if any orders can be assigned to drivers

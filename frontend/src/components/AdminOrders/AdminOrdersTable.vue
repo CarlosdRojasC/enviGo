@@ -62,6 +62,7 @@
                 type="checkbox" 
                 :checked="isOrderSelected(order)"
                 @change="$emit('select-order', order)"
+                :disabled="order.status !== 'pending' && order.status !== 'ready_for_pickup' && order.status !== 'warehouse_received'"
                 class="order-checkbox"
               />
             </td>
