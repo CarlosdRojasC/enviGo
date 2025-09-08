@@ -663,13 +663,13 @@ function handleQuickAction(action) {
 async function handleBulkStatusChange(newStatus) {
   logger.process(`[AdminOrders] 🔄 Starting bulk status change to: ${newStatus}`)
   
-  const validation = validateSelection()
+/*  const validation = validateSelection()
   if (!validation.valid) {
     logger.warn('[AdminOrders] ⚠️ Selection validation failed:', validation.message)
     toast.error(validation.message)
     return
   }
-
+*/
    const statusName = await getStatusName(newStatus)
   const confirmed = confirm(
     `¿Cambiar estado de ${selectedOrders.value.length} pedidos a "${statusName}"?`
