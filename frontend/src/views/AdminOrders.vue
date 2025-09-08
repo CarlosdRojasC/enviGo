@@ -682,10 +682,10 @@ async function handleBulkStatusChange(newStatus) {
 
   try {
     // Se llama al nuevo endpoint de acción masiva que creamos en el backend
-    await apiService.post('/orders/bulk-actions/status', {
-      orderIds: orderIds,
-      status: newStatus
-    });
+    await apiService.orders.bulkUpdateStatus({
+    orderIds: orderIds,
+    status: newStatus
+  });
 
     toast.success(`Se actualizó el estado de ${orderIds.length} pedidos correctamente.`);
     
