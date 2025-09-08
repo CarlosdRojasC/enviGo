@@ -62,7 +62,6 @@
                 type="checkbox" 
                 :checked="isOrderSelected(order)"
                 @change="$emit('select-order', order)"
-                :disabled="order.status !== 'pending' && order.status !== 'ready_for_pickup' && order.status !== 'warehouse_received'"
                 class="order-checkbox"
               />
             </td>
@@ -223,7 +222,6 @@
                 <button 
                   @click="$emit('assign-driver', order)" 
                   class="btn-action assign"
-                 :disabled="order.status !== 'pending' && order.status !== 'ready_for_pickup' && order.status !== 'warehouse_received'"
                  :title="['pending', 'ready_for_pickup', 'warehouse_received'].includes(order.status) ? 'Asignar conductor' : 'No se puede asignar en este estado'"
                 >
                   <span class="action-icon">🚚</span>
