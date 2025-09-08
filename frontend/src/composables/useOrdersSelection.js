@@ -10,12 +10,8 @@ export function useOrdersSelection(orders) {
   /**
    * Orders that can be selected (not already assigned to Shipday)
    */
-  const selectableOrders = computed(() => {
-  return orders.value.filter(order => {
-
-    // permitir pendientes y listos, aunque tengan driver
-    return ['pending', 'ready_for_pickup','warehouse_received'].includes(order.status)
-  })
+const selectableOrders = computed(() => {
+  return orders.value; // Permite que "Seleccionar Todo" aplique a todos los pedidos visibles
 })
 
   /**
@@ -84,10 +80,10 @@ export function useOrdersSelection(orders) {
    */
   function toggleOrderSelection(order) {
     // Don't allow selection of orders already assigned to Shipday
-    if (order.shipday_order_id) {
-      console.warn('⚠️ Cannot select order already assigned to Shipday:', order.order_number)
-      return
-    }
+    // if (order.shipday_order_id) {
+    //   console.warn('⚠️ Cannot select order already assigned to Shipday:', order.order_number)
+    //   return
+    // }
 
     const index = selectedOrders.value.indexOf(order._id)
     
