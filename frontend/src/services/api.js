@@ -936,6 +936,31 @@ const labels = {
     });
   }
 }
+const pickups = {
+  // Obtener todos los retiros (con filtros opcionales)
+  getAll: (params = {}) => {
+    console.log('API: Obteniendo todas las rutas de retiro', params);
+    return api.get('/pickups', { params });
+  },
+
+  // Obtener un retiro por su ID
+  getById: (id) => {
+    console.log('API: Obteniendo retiro por ID:', id);
+    return api.get(`/pickups/${id}`);
+  },
+
+  // Asignar un conductor a un retiro
+  assignDriver: (pickupId, driverId) => {
+    console.log(`API: Asignando conductor ${driverId} a retiro ${pickupId}`);
+    return api.patch(`/pickups/${pickupId}/assign`, { driver_id: driverId });
+  },
+
+  // Actualizar el estado de un retiro
+  updateStatus: (pickupId, status) => {
+    console.log(`API: Actualizando estado de retiro ${pickupId} a ${status}`);
+    return api.patch(`/pickups/${pickupId}/status`, { status });
+  }
+};
 // ACTUALIZAR la exportación para incluir shipday
 // Exportar todos los servicios
 export const apiService = {
@@ -954,7 +979,8 @@ export const apiService = {
   manifests,
   mercadolibre,
   jumpseller,
-  labels
+  labels,
+  pickups
 }
 
 // Exportar instancia de axios para casos especiales

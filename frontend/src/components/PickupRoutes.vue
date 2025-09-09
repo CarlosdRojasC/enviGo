@@ -23,19 +23,19 @@
           <tr v-if="loading">
             <td colspan="8" class="text-center py-4">Cargando retiros...</td>
           </tr>
-          <tr v-else-if="pickupOrders.length === 0">
+          <tr v-else-if="pickups.length === 0">
             <td colspan="8" class="text-center py-4">No hay rutas de retiro pendientes.</td>
           </tr>
-          <tr v-for="(pickup, index) in pickupOrders" :key="pickup._id" class="table-row">
+          <tr v-for="(pickup, index) in pickups" :key="pickup._id" class="table-row">
             <td class="px-4 py-2">{{ index + 1 }}</td>
             <td class="px-4 py-2">
-              <span class="manifest-link">{{ pickup.manifest_data?.manifest_id || 'N/A' }}</span>
+              <span class="manifest-link">{{ pickup.manifest_id?.manifest_number || 'N/A' }}</span>
             </td>
             <td class="px-4 py-2">{{ pickup.company_id?.name || 'N/A' }}</td>
-            <td class="px-4 py-2">{{ pickup.shipping_address }}</td>
-            <td class="px-4 py-2 text-center">{{ pickup.pickup_orders?.length || 0 }}</td>
-            <td class="px-4 py-2 text-center">{{ calculateTotalPackages(pickup) }}</td>
-            <td class="px-4 py-2">{{ formatDate(pickup.order_date) }}</td>
+            <td class="px-4 py-2">{{ pickup.pickup_address }}</td>
+            <td class="px-4 py-2 text-center">{{ pickup.total_orders }}</td>
+            <td class="px-4 py-2 text-center">{{ pickup.total_packages }}</td>
+            <td class="px-4 py-2">{{ formatDate(pickup.created_at) }}</td>
             <td class="px-4 py-2">
               <button @click="assignDriver(pickup)" class="action-btn">Asignar Conductor</button>
             </td>
@@ -48,39 +48,22 @@
 
 <script setup>
 import { ref, onMounted } from 'vue';
-import { apiService } from '../services/api'; // Asegúrate que la ruta sea correcta
+import { apiService } from '../services/api';
 
-const pickupOrders = ref([]);
+const pickups = ref([]);
 const loading = ref(true);
 
-async function fetchPickupOrders() {
+async function fetchPickups() {
   loading.value = true;
   try {
-    // 1. Pedimos a la API SOLO los puntos de retiro
-    const { data } = await apiService.orders.getAll({ is_pickup: 'true' });
-    
-    // 2. Para obtener el total de bultos, necesitamos los detalles de cada orden
-    //    Hacemos una llamada adicional para obtener esa información
-    const detailedOrders = await Promise.all(
-        data.map(async (pickup) => {
-            const orderDetails = await apiService.orders.getByIds(pickup.pickup_orders);
-            pickup.detailed_orders = orderDetails.data;
-            return pickup;
-        })
-    );
-    pickupOrders.value = detailedOrders;
-
+    // Usamos el nuevo servicio de 'pickups' que creamos
+    const { data } = await apiService.pickups.getAll();
+    pickups.value = data;
   } catch (error) {
     console.error("Error al cargar las rutas de retiro:", error);
   } finally {
     loading.value = false;
   }
-}
-
-// Función para sumar los bultos de las órdenes detalladas
-function calculateTotalPackages(pickup) {
-    if (!pickup.detailed_orders) return pickup.pickup_orders?.length || 0;
-    return pickup.detailed_orders.reduce((sum, order) => sum + (order.load1Packages || 1), 0);
 }
 
 function formatDate(dateString) {
@@ -90,12 +73,12 @@ function formatDate(dateString) {
   });
 }
 
-function assignDriver(pickupOrder) {
-  console.log('Abrir modal para asignar conductor a:', pickupOrder);
+function assignDriver(pickup) {
+  console.log('Abrir modal para asignar conductor a:', pickup);
   // Aquí puedes implementar la lógica para abrir tu modal de asignación
 }
 
-onMounted(fetchPickupOrders);
+onMounted(fetchPickups);
 </script>
 
 <style scoped>
@@ -126,6 +109,7 @@ onMounted(fetchPickupOrders);
 }
 .data-table th, .data-table td {
   border-bottom: 1px solid #e5e7eb;
+  white-space: nowrap;
 }
 .data-table th {
   background-color: #f9fafb;

@@ -8,6 +8,7 @@ const ExcelJS = require('exceljs');
 const fs = require('fs').promises;
 const path = require('path');
 const mongoose = require('mongoose');
+const Pickup = require('../models/Pickup'); // <--- AÑADE ESTA LÍNEA
 
 // ==================== MÉTODOS AUXILIARES (FUERA DE LA CLASE) ====================
 
@@ -368,6 +369,23 @@ class ManifestController {
 
       console.log('✅ Manifiesto guardado en base de datos');
 
+      // Crear el Punto de Retiro (Pickup) asociado al manifiesto
+if (company.address) {
+  const newPickup = new Pickup({
+    company_id: companyId,
+    manifest_id: manifest._id,
+    pickup_address: company.address,
+    orders_to_pickup: orders.map(o => o._id),
+    total_orders: manifest.total_orders,
+    total_packages: manifest.total_packages,
+    status: 'pending_assignment'
+  });
+  await newPickup.save({ session });
+  console.log(`✅ Punto de Retiro creado para el manifiesto ${manifest.manifest_number}`);
+} else {
+  console.warn(`⚠️ Manifiesto ${manifest.manifest_number} creado, pero no se generó el retiro porque la empresa no tiene dirección.`);
+}
+
       // Actualizar estado de las órdenes
       const updateResult = await Order.updateMany(
         { _id: { $in: orders.map(o => o._id) } },
@@ -401,7 +419,7 @@ class ManifestController {
 
       // Respuesta exitosa (compatible con tu frontend)
       res.status(201).json({
-        message: 'Manifiesto creado exitosamente',
+        message: 'Manifiesto y Ruta de Retiro creados exitosamente',
         manifest: {
           id: manifest._id,
           manifest_number: manifestNumber,
