@@ -140,22 +140,11 @@ paymentNote: {
   pickup_city: { type: String },
   pickup_phone: { type: String },
 
-
-    is_pickup: {   // <--- CAMPO NUEVO: Identifica si la orden es un retiro.
-    type: Boolean,
-    default: false
-  },
-  pickup_orders: [{ // <--- CAMPO NUEVO: Guarda los IDs de los pedidos a retirar.
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Order'
-  }],
-
   // Estados y fechas
   status: { 
     type: String, 
     enum: ['pending',
     'ready_for_pickup',
-    'in_pickup_route',
     'out_for_delivery', 
     'warehouse_received',
     'invoiced',

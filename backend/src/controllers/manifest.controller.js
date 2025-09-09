@@ -368,49 +368,6 @@ class ManifestController {
 
       console.log('✅ Manifiesto guardado en base de datos');
 
-const companyChannel = await Channel.findOne({ company_id: companyId }).lean().session(session);
-if (!companyChannel) {
-    console.error(`Error Crítico: La empresa ${company.name} no tiene ningún canal de venta configurado. No se puede crear el punto de retiro.`);
-    // Abortamos la transacción para no dejar un manifiesto sin su ruta de retiro
-    await session.abortTransaction();
-    return res.status(400).json({ error: `La empresa ${company.name} no tiene un canal de venta. No se pudo crear la ruta.` });
-}
-
-// 2. Creamos la orden de retiro usando el canal de la empresa
-console.log(`✅ Usando el canal ${companyChannel.channel_name} para crear el Punto de Retiro.`);
-
-const pickupOrder = new Order({
-  company_id: companyId,
-  channel_id: companyChannel._id, // Usamos el ID del canal encontrado
-  is_pickup: true,
-  
-  // Datos para cumplir con la validación del modelo
-  order_number: `PICKUP-${manifest.manifest_number}`,
-  external_order_id: `PICKUP-${manifest.manifest_number}`,
-  customer_name: `Retiro en ${company.name}`,
-  shipping_address: company.address,
-  shipping_commune: company.address, // Puedes mejorar esto si tienes la comuna por separado en el modelo Company
-  
-  // Asociamos los pedidos originales
-  pickup_orders: orders.map(o => o._id),
-  
-  // Usamos un estado inicial válido
-  status: 'pending', 
-  
-  order_date: new Date(),
-  manifest_data: {
-    manifest_id: manifest._id,
-    generated_by: req.user.email
-  }
-});
-
-// Guardamos dentro de la misma transacción
-await pickupOrder.save({ session });
-
-console.log(`✅ Punto de Retiro ${pickupOrder.order_number} creado exitosamente.`);
-
-
-
       // Actualizar estado de las órdenes
       const updateResult = await Order.updateMany(
         { _id: { $in: orders.map(o => o._id) } },
@@ -444,7 +401,7 @@ console.log(`✅ Punto de Retiro ${pickupOrder.order_number} creado exitosamente
 
       // Respuesta exitosa (compatible con tu frontend)
       res.status(201).json({
-        message: 'Manifiesto y punto de retiro creados exitosamente',
+        message: 'Manifiesto creado exitosamente',
         manifest: {
           id: manifest._id,
           manifest_number: manifestNumber,
@@ -454,8 +411,7 @@ console.log(`✅ Punto de Retiro ${pickupOrder.order_number} creado exitosamente
           status: manifest.status,
           company_name: company.name
         },
-        manifest_data: manifestData,
-        pickupOrder
+        manifest_data: manifestData
       });
 
     } catch (error) {

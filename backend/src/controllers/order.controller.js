@@ -254,34 +254,7 @@ if (shipdayOrderDetails) {
     res.status(500).json({ error: ERRORS.SERVER_ERROR });
   }
 }
-async getByIds(req, res) {
-    try {
-      const { orderIds } = req.body;
 
-      if (!orderIds || !Array.isArray(orderIds) || orderIds.length === 0) {
-        return res.status(400).json({ error: 'Se requiere un array de IDs de pedidos.' });
-      }
-
-      const filters = {
-        _id: { $in: orderIds }
-      };
-
-      // Filtro de seguridad: si no es admin, solo puede buscar en su propia empresa
-      if (req.user.role !== 'admin') {
-        filters.company_id = req.user.company_id;
-      }
-
-      const orders = await Order.find(filters)
-        .populate('company_id', 'name') // Opcional: Trae el nombre de la empresa
-        .lean(); // .lean() para que la consulta sea más rápida
-
-      res.json(orders);
-
-    } catch (error) {
-      console.error('Error obteniendo pedidos por IDs:', error);
-      res.status(500).json({ error: 'Error interno del servidor.' });
-    }
-  }
  async updateStatus(req, res) {
   try {
     const { id } = req.params;
