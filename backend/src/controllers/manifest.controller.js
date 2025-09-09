@@ -368,6 +368,25 @@ class ManifestController {
 
       console.log('✅ Manifiesto guardado en base de datos');
 
+      // Crear el Punto de Retiro asociado
+const pickupOrder = new Order({
+  company_id: companyId,
+  customer_name: `Retiro en ${company.name}`, // Nombre descriptivo
+  shipping_address: company.address,          // Dirección de la empresa
+  is_pickup: true,                            // ¡La marcamos como retiro!
+  pickup_orders: orders.map(o => o._id),      // Asociamos los pedidos del manifiesto
+  status: 'confirmed',                        // La dejamos lista para asignar a un conductor
+  order_date: new Date(),
+  manifest_data: {                            // Guardamos una referencia al manifiesto
+    manifest_id: manifest._id,
+    generated_by: req.user.email 
+  }
+});
+await pickupOrder.save({ session });
+
+console.log(`✅ Punto de Retiro creado para el manifiesto ${manifest.manifest_number}`);
+
+
       // Actualizar estado de las órdenes
       const updateResult = await Order.updateMany(
         { _id: { $in: orders.map(o => o._id) } },
@@ -401,7 +420,7 @@ class ManifestController {
 
       // Respuesta exitosa (compatible con tu frontend)
       res.status(201).json({
-        message: 'Manifiesto creado exitosamente',
+        message: 'Manifiesto y punto de retiro creados exitosamente',
         manifest: {
           id: manifest._id,
           manifest_number: manifestNumber,
@@ -411,7 +430,8 @@ class ManifestController {
           status: manifest.status,
           company_name: company.name
         },
-        manifest_data: manifestData
+        manifest_data: manifestData,
+        pickupOrder
       });
 
     } catch (error) {

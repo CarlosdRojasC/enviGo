@@ -17,8 +17,7 @@
         🏢 <span>Empresas</span>
       </router-link>
       <router-link v-if="auth.isAdmin" to="/app/admin/pickup-routes" class="nav-item">
-          <i class="fas fa-route"></i>
-          <span>Rutas de Recolección</span>
+                   📍<span>Rutas de Recolección</span>
         </router-link>
       <router-link v-if="auth.isAdmin" to="/app/admin/orders" class="nav-item">
         📦 <span>Pedidos Globales</span>

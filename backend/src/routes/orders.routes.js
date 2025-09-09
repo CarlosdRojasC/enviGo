@@ -123,6 +123,7 @@ const validateOrderPermissions = (req, res, next) => {
 
 router.post('/', authenticateToken, validateOrderPermissions, validateOrderCreation, orderController.create);
 router.get('/:id', authenticateToken, validateMongoId('id'), orderController.getById);
+router.post('/by-ids', authenticateToken, orderController.getByIds);
 router.patch('/:id/status', authenticateToken, validateMongoId('id'), isAdmin, orderController.updateStatus);
 
 router.patch('/:id/ready', authenticateToken, validateMongoId('id'), async (req, res) => {

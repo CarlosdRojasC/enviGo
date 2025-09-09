@@ -1,72 +1,43 @@
 <template>
-  <div class="p-6">
-    <!-- Header -->
-    <div class="flex items-center justify-between mb-4">
-      <h1 class="text-2xl font-bold">Rutas de Recolección</h1>
-      <button
-        @click="fetchPendingPickups"
-        class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded hover:bg-blue-700"
-      >
-        🔄 Actualizar
-      </button>
+  <div class="page-container">
+    <div class="page-header">
+      <h1 class="page-title">📍 Rutas de Retiro</h1>
+      <p class="page-subtitle">Gestiona los retiros pendientes en las direcciones de tus clientes.</p>
     </div>
 
-    <!-- Tabla -->
-    <div class="overflow-x-auto border rounded-lg">
-      <table class="min-w-full divide-y divide-gray-200">
-        <thead class="bg-gray-50">
+    <div class="table-container">
+      <table class="data-table">
+        <thead>
           <tr>
             <th class="px-4 py-2 text-left text-sm font-semibold">#</th>
             <th class="px-4 py-2 text-left text-sm font-semibold">Manifiesto</th>
             <th class="px-4 py-2 text-left text-sm font-semibold">Empresa</th>
             <th class="px-4 py-2 text-left text-sm font-semibold">Dirección retiro</th>
-            <th class="px-4 py-2 text-left text-sm font-semibold">Órdenes</th>
-            <th class="px-4 py-2 text-left text-sm font-semibold">Bultos</th>
+            <th class="px-4 py-2 text-left text-sm font-semibold text-center">Órdenes</th>
+            <th class="px-4 py-2 text-left text-sm font-semibold text-center">Bultos</th>
             <th class="px-4 py-2 text-left text-sm font-semibold">Fecha</th>
             <th class="px-4 py-2 text-left text-sm font-semibold">Acciones</th>
           </tr>
         </thead>
-        <tbody class="divide-y divide-gray-200">
-          <tr
-            v-for="(m, idx) in manifests"
-            :key="m._id"
-            class="hover:bg-gray-50"
-          >
-            <td class="px-4 py-2 text-sm">{{ idx + 1 }}</td>
-            <td class="px-4 py-2 font-mono text-sm">{{ m.manifest_number }}</td>
-            <td class="px-4 py-2 text-sm">{{ m.company_id?.name || '—' }}</td>
-            <td class="px-4 py-2 text-sm">
-              <span v-if="m.pickup_address">
-                {{ formatAddress(m.pickup_address) }}
-              </span>
-              <span v-else>—</span>
-            </td>
-            <td class="px-4 py-2 text-sm">{{ m.total_orders }}</td>
-            <td class="px-4 py-2 text-sm">{{ m.total_packages }}</td>
-            <td class="px-4 py-2 text-sm">{{ formatDate(m.generated_at) }}</td>
-            <td class="px-4 py-2 text-sm">
-              <button
-                @click="viewManifest(m)"
-                class="px-3 py-1 text-sm border rounded hover:bg-gray-100"
-              >
-                Ver
-              </button>
-              <button
-                @click="downloadPDF(m)"
-                class="ml-2 px-3 py-1 text-sm border rounded hover:bg-gray-100"
-              >
-                PDF
-              </button>
-            </td>
+        <tbody>
+          <tr v-if="loading">
+            <td colspan="8" class="text-center py-4">Cargando retiros...</td>
           </tr>
-
-          <!-- No results -->
-          <tr v-if="manifests.length === 0">
-            <td
-              colspan="8"
-              class="px-4 py-6 text-center text-sm text-gray-500"
-            >
-              No hay manifiestos pendientes de recolección.
+          <tr v-else-if="pickupOrders.length === 0">
+            <td colspan="8" class="text-center py-4">No hay rutas de retiro pendientes.</td>
+          </tr>
+          <tr v-for="(pickup, index) in pickupOrders" :key="pickup._id" class="table-row">
+            <td class="px-4 py-2">{{ index + 1 }}</td>
+            <td class="px-4 py-2">
+              <span class="manifest-link">{{ pickup.manifest_data?.manifest_id || 'N/A' }}</span>
+            </td>
+            <td class="px-4 py-2">{{ pickup.company_id?.name || 'N/A' }}</td>
+            <td class="px-4 py-2">{{ pickup.shipping_address }}</td>
+            <td class="px-4 py-2 text-center">{{ pickup.pickup_orders?.length || 0 }}</td>
+            <td class="px-4 py-2 text-center">{{ calculateTotalPackages(pickup) }}</td>
+            <td class="px-4 py-2">{{ formatDate(pickup.order_date) }}</td>
+            <td class="px-4 py-2">
+              <button @click="assignDriver(pickup)" class="action-btn">Asignar Conductor</button>
             </td>
           </tr>
         </tbody>
@@ -76,65 +47,112 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
-import { apiService }  from '../services/api'
-import { useToast } from 'vue-toastification';
-const manifests = ref([])
-const toast = useToast();
+import { ref, onMounted } from 'vue';
+import { apiService } from '../services/api'; // Asegúrate que la ruta sea correcta
 
-onMounted(() => {
-  fetchPendingPickups()
-})
+const pickupOrders = ref([]);
+const loading = ref(true);
 
-async function fetchPendingPickups() {
+async function fetchPickupOrders() {
+  loading.value = true;
   try {
-    const { data } = await apiService.manifests.getAll({
-      status: 'pending_pickup'
-    })
-    manifests.value = data.manifests || []
+    // 1. Pedimos a la API SOLO los puntos de retiro
+    const { data } = await apiService.orders.getAll({ is_pickup: 'true' });
+    
+    // 2. Para obtener el total de bultos, necesitamos los detalles de cada orden
+    //    Hacemos una llamada adicional para obtener esa información
+    const detailedOrders = await Promise.all(
+        data.map(async (pickup) => {
+            const orderDetails = await apiService.orders.getByIds(pickup.pickup_orders);
+            pickup.detailed_orders = orderDetails.data;
+            return pickup;
+        })
+    );
+    pickupOrders.value = detailedOrders;
+
   } catch (error) {
-    console.error('❌ Error obteniendo pending_pickup:', error)
-    toast.error('Error al obtener los manifiestos pendientes')
+    console.error("Error al cargar las rutas de retiro:", error);
+  } finally {
+    loading.value = false;
   }
 }
 
-function formatDate(dateStr) {
-  if (!dateStr) return '—'
-  const d = new Date(dateStr)
-  return d.toLocaleString('es-CL')
+// Función para sumar los bultos de las órdenes detalladas
+function calculateTotalPackages(pickup) {
+    if (!pickup.detailed_orders) return pickup.pickup_orders?.length || 0;
+    return pickup.detailed_orders.reduce((sum, order) => sum + (order.load1Packages || 1), 0);
 }
 
-function formatAddress(addr) {
-  if (!addr) return ''
-  return [
-    addr.street,
-    addr.number,
-    addr.commune,
-    addr.city,
-    addr.region
-  ]
-    .filter(Boolean)
-    .join(', ')
+function formatDate(dateString) {
+  if (!dateString) return 'N/A';
+  return new Date(dateString).toLocaleDateString('es-CL', {
+    year: 'numeric', month: 'short', day: 'numeric'
+  });
 }
 
-function viewManifest(manifest) {
-  toast.info(`Abrir detalle de manifiesto ${manifest.manifest_number}`)
-  // Aquí puedes usar router.push a la vista detalle si la tienes
+function assignDriver(pickupOrder) {
+  console.log('Abrir modal para asignar conductor a:', pickupOrder);
+  // Aquí puedes implementar la lógica para abrir tu modal de asignación
 }
 
-async function downloadPDF(manifest) {
-  try {
-    const { data } = await apiService.manifests.downloadPDF(manifest._id)
-    const blob = new Blob([data], { type: 'application/pdf' })
-    const url = window.URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = `manifest_${manifest.manifest_number}.pdf`
-    link.click()
-    window.URL.revokeObjectURL(url)
-  } catch (error) {
-    console.error('❌ Error descargando PDF:', error)
-    toast.error('Error al descargar PDF del manifiesto')
-  }
-}
+onMounted(fetchPickupOrders);
 </script>
+
+<style scoped>
+/* Estilos genéricos para la página y la tabla, puedes adaptarlos */
+.page-container {
+  padding: 24px;
+}
+.page-header {
+  margin-bottom: 24px;
+}
+.page-title {
+  font-size: 2rem;
+  font-weight: 700;
+}
+.page-subtitle {
+  font-size: 1rem;
+  color: #6b7280;
+}
+.table-container {
+  background-color: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  overflow: hidden;
+}
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.data-table th, .data-table td {
+  border-bottom: 1px solid #e5e7eb;
+}
+.data-table th {
+  background-color: #f9fafb;
+  color: #374151;
+}
+.table-row:hover {
+  background-color: #f9fafb;
+}
+.text-center {
+  text-align: center;
+}
+.manifest-link {
+  color: #4f46e5;
+  font-weight: 500;
+  cursor: pointer;
+}
+.action-btn {
+  background-color: #4f46e5;
+  color: white;
+  border: none;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+.action-btn:hover {
+  background-color: #4338ca;
+}
+</style>

@@ -131,6 +131,7 @@ const users = {
 const orders = {
   getAll: (params = {}) => api.get('/orders', { params }),
   getById: (id) => api.get(`/orders/${id}`),
+  getByIds: (orderIds) => api.post('/orders/by-ids', { orderIds }),
   create: (orderData) => api.post('/orders', orderData),
   remove: (orderId) => api.delete(`/orders/${orderId}`),
   bulkUpdateStatus: (data) => api.post('/orders/bulk-actions/status', data),
