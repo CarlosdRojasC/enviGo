@@ -371,15 +371,26 @@ class ManifestController {
       // Crear el Punto de Retiro asociado
 const pickupOrder = new Order({
   company_id: companyId,
-  customer_name: `Retiro en ${company.name}`, // Nombre descriptivo
-  shipping_address: company.address,          // Dirección de la empresa
-  is_pickup: true,                            // ¡La marcamos como retiro!
-  pickup_orders: orders.map(o => o._id),      // Asociamos los pedidos del manifiesto
-  status: 'confirmed',                        // La dejamos lista para asignar a un conductor
+  channel_id: orders[0].channel_id, // Usamos el channel_id del primer pedido
+  is_pickup: true,
+  
+  // Datos para cumplir con la validación del modelo
+  order_number: `PICKUP-${manifest.manifest_number}`,
+  external_order_id: `PICKUP-${manifest.manifest_number}`,
+  customer_name: `Retiro en ${company.name}`,
+  shipping_address: company.address,
+  shipping_commune: company.address, // Puedes ajustar esto si tienes la comuna separada
+  
+  // Asociamos los pedidos originales
+  pickup_orders: orders.map(o => o._id),
+  
+  // Usamos un estado inicial válido
+  status: 'pending', 
+  
   order_date: new Date(),
-  manifest_data: {                            // Guardamos una referencia al manifiesto
+  manifest_data: {
     manifest_id: manifest._id,
-    generated_by: req.user.email 
+    generated_by: req.user.email
   }
 });
 await pickupOrder.save({ session });
