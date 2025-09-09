@@ -34,7 +34,6 @@ const allowedOrigins = [
   'https://www.envigo.cl',
   'https://demosistema.up.railway.app',
     process.env.FRONTEND_URL,
-  null
 ];
 
 const corsOptions = {
@@ -64,7 +63,10 @@ async function initializeSyncScheduler() {
   }
 }
 
-app.use(cors(corsOptions));
+app.use(cors({
+  origin: allowedOrigins,
+  credentials: true
+}));
 
 // Rate limiting
 const limiter = rateLimit({
