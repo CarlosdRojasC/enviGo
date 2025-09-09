@@ -277,6 +277,41 @@ async prepareTemplateData(order, webhookData) {
     this.templateCache.set(templateName, compiled);
     return compiled;
   }
+  async sendInvoiceEmail(email, companyName, invoiceData) {
+    const content = `
+      <h2>Hola ${companyName},</h2>
+      
+      <p>Te informamos que se ha generado una nueva factura por los servicios prestados. A continuación, encontrarás los detalles:</p>
+      
+      <div class="invoice-details" style="background: #f8f9fa; border-left: 4px solid #667eea; padding: 20px; margin: 25px 0; border-radius: 8px;">
+        <h3>Resumen de la Factura</h3>
+        <div style="display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #dee2e6;"><strong>Número de Factura:</strong> <span>${invoiceData.number}</span></div>
+        <div style="display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #dee2e6;"><strong>Período de Servicio:</strong> <span>${invoiceData.period}</span></div>
+        <div style="display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #dee2e6;"><strong>Fecha de Emisión:</strong> <span>${invoiceData.issue_date}</span></div>
+        <div style="display: flex; justify-content: space-between; padding: 10px 0;"><strong>Fecha de Vencimiento:</strong> <span>${invoiceData.due_date}</span></div>
+         <div style="background: #eef2ff; padding: 15px; text-align: right; border-radius: 8px; margin-top: 20px;">
+            <strong style="font-size: 20px; color: #3730a3;">Monto Total: ${invoiceData.total_amount}</strong>
+          </div>
+      </div>
+      
+      <p>Puedes descargar una copia de tu factura en formato PDF haciendo clic en el siguiente botón:</p>
+      
+      <div style="text-align: center;">
+          <a href="${invoiceData.download_url}" class="button">Descargar Factura PDF</a>
+      </div>
+      
+      <p>Si tienes alguna pregunta sobre esta factura, no dudes en ponerte en contacto con nuestro equipo de soporte.</p>
+    `;
+
+    const mailOptions = {
+      from: `"enviGo Facturación" <${process.env.SMTP_FROM}>`,
+      to: email,
+      subject: `Nueva Factura #${invoiceData.number} de enviGo`,
+      html: this.getBaseTemplate(content, `Factura ${invoiceData.number}`)
+    };
+
+    return this.sendMail(mailOptions);
+  }
 }
 
 module.exports = new NotificationService();

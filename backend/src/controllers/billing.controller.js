@@ -853,39 +853,69 @@ async generateInvoice(req, res) {
       billingCycle: company.billing_cycle || 'monthly'
     };
   }
-  async sendInvoice(req, res) {
-  try {
-    const { id } = req.params;
-    
-    if (req.user.role !== 'admin') {
-      return res.status(403).json({ error: ERRORS.FORBIDDEN });
+async sendInvoice(req, res) {
+    try {
+      const { id } = req.params;
+      
+      if (req.user.role !== 'admin') {
+        return res.status(403).json({ error: ERRORS.FORBIDDEN });
+      }
+      
+      const invoice = await Invoice.findById(id).populate('company_id', 'name email contact_email');
+      if (!invoice) {
+        return res.status(404).json({ error: 'Factura no encontrada' });
+      }
+      
+      if (invoice.status !== 'draft') {
+        return res.status(400).json({ error: 'Solo se pueden enviar facturas en borrador' });
+      }
+      
+      // 1. Cambiar estado a 'sent' y guardar
+      invoice.status = 'sent';
+      invoice.sent_at = new Date();
+      await invoice.save();
+      
+      // 2. Preparar y enviar el email a través de NotificationService
+      const companyEmail = invoice.company_id.contact_email || invoice.company_id.email;
+      if (companyEmail) {
+        try {
+          // Formateamos los datos para que se vean bien en el correo
+          const formattedData = {
+            number: invoice.invoice_number,
+            period: `${format(new Date(invoice.period_start), 'dd/MM/yyyy')} - ${format(new Date(invoice.period_end), 'dd/MM/yyyy')}`,
+            issue_date: format(new Date(invoice.created_at), 'dd/MM/yyyy'),
+            due_date: format(new Date(invoice.due_date), 'dd/MM/yyyy'),
+            total_amount: `$${new Intl.NumberFormat('es-CL').format(invoice.total_amount)}`,
+            // Importante: Asegúrate de que esta URL sea la correcta
+            download_url: `${process.env.BASE_URL}/api/billing/invoices/${invoice._id}/download` 
+          };
+
+          // Corregido: Llamar a NotificationService
+          await NotificationService.sendInvoiceEmail(
+            companyEmail, 
+            invoice.company_id.name,
+            formattedData
+          );
+          
+          console.log(`📤 Factura ${invoice.invoice_number} enviada a ${invoice.company_id.name} (${companyEmail})`);
+
+        } catch (emailError) {
+          console.error(`🚨 Fallo al enviar el email de la factura ${invoice.invoice_number}:`, emailError);
+        }
+      } else {
+         console.warn(`⚠️ La empresa ${invoice.company_id.name} no tiene un email registrado para enviar la factura.`);
+      }
+
+      res.json({ 
+        message: 'Factura enviada exitosamente',
+        invoice 
+      });
+
+    } catch (error) {
+      console.error('Error enviando factura:', error);
+      res.status(500).json({ error: ERRORS.SERVER_ERROR });
     }
-    
-    const invoice = await Invoice.findById(id).populate('company_id', 'name email');
-    if (!invoice) {
-      return res.status(404).json({ error: 'Factura no encontrada' });
-    }
-    
-    if (invoice.status !== 'draft') {
-      return res.status(400).json({ error: 'Solo se pueden enviar facturas en borrador' });
-    }
-    
-    // Cambiar estado a 'sent'
-    invoice.status = 'sent';
-    invoice.sent_at = new Date();
-    await invoice.save();
-    
-    console.log(`📤 Factura ${invoice.invoice_number} enviada a ${invoice.company_id.name}`);
-    
-    res.json({ 
-      message: 'Factura enviada exitosamente',
-      invoice 
-    });
-  } catch (error) {
-    console.error('Error enviando factura:', error);
-    res.status(500).json({ error: ERRORS.SERVER_ERROR });
   }
-}
   // Borrar una factura individual
 async deleteInvoice(req, res) {
   try {
