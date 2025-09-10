@@ -22,6 +22,7 @@ const manifestRoutes = require('./manifest.routes');
 const notificationRoutes = require('./notifications.routes');
 const driverHistoryRoutes = require('./driverHistory.routes');
 const labelRoutes = require('./labels.routes');
+const pickupRoutes = require('./pickup.routes');
 
 router.use('/auth', authRoutes);
 
@@ -54,5 +55,6 @@ router.use('/channels', channelRoutes);
 router.use('/manifests', manifestRoutes); 
 router.use('/driver-history', driverHistoryRoutes);
 router.use('/labels', labelRoutes);
+router.use('/pickups', pickupRoutes);
 
 module.exports = router;
