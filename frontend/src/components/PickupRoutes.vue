@@ -435,42 +435,32 @@ async function fetchPickups() {
 /**
  * Fetch available drivers
  */
-  async function fetchAvailableDrivers() {
-    loadingDrivers.value = true
+async function fetchAvailableDrivers() {
+  try {
+    console.log('👥 Obteniendo conductores disponibles desde Shipday...');
     
-    try {
-      console.log('👥 Fetching available drivers from Shipday...')
-      
-      const response = await shipdayService.getDrivers()
-      console.log('📋 Drivers API response:', response)
-      
-      // Handle different response formats
-      let drivers = []
-      if (response.data?.data) {
-        drivers = response.data.data
-      } else if (response.data && Array.isArray(response.data)) {
-        drivers = response.data
-      } else {
-        drivers = []
-      }
-      
-      // Filter active drivers
-      availableDrivers.value = drivers.filter(driver => driver.isActive)
-      
-      console.log('✅ Available drivers loaded:', {
-        total: drivers.length,
-        active: availableDrivers.value.length,
-        drivers: availableDrivers.value.map(d => ({ id: d.id, name: d.name, email: d.email }))
-      })
-      
-    } catch (error) {
-      console.error('❌ Error fetching drivers:', error)
-      toast.error('Error al cargar conductores')
-      availableDrivers.value = []
-    } finally {
-      loadingDrivers.value = false
+    // Usamos el servicio de shipday que ya tienes en api.js
+    const response = await apiService.shipday.getDrivers();
+    
+    let drivers = [];
+    // Esta lógica maneja diferentes formatos de respuesta, es muy robusta
+    if (response.data?.data) {
+      drivers = response.data.data;
+    } else if (response.data && Array.isArray(response.data)) {
+      drivers = response.data;
     }
+
+    // Filtramos solo los conductores activos, como en tu composable
+    availableDrivers.value = drivers.filter(driver => driver.isActive);
+    
+    console.log('✅ Conductores activos cargados:', availableDrivers.value.length);
+    
+  } catch (error) {
+    console.error("Error al cargar conductores de Shipday:", error);
+    toast.error("No se pudieron cargar los conductores de Shipday");
+    availableDrivers.value = [];
   }
+}
 
 
 /**
