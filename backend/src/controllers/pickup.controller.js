@@ -54,55 +54,50 @@ class PickupController {
    */
 async assignDriver(req, res) {
     try {
-      const { driver_id } = req.body;
+      // Este es el ID de SHIPDAY que envía el frontend
+      const { driver_id: shipdayDriverId } = req.body;
       const { id: pickupId } = req.params;
 
-      if (!driver_id) {
-        return res.status(400).json({ error: 'Se requiere el ID del conductor.' });
+      if (!shipdayDriverId) {
+        return res.status(400).json({ error: 'Se requiere el ID del conductor de Shipday.' });
       }
 
-      // 1. Obtenemos todos los datos que necesitamos
-      const [pickup, driver] = await Promise.all([
-        Pickup.findById(pickupId).populate('company_id', 'name'),
-        Driver.findById(driver_id).lean() // Asumimos que tu modelo Driver tiene el 'shipday_id'
-      ]);
+      // 1. Buscamos nuestro conductor local que corresponde al de Shipday
+      const localDriver = await Driver.findOne({ shipday_id: shipdayDriverId });
+      if (!localDriver) {
+        return res.status(404).json({ error: 'El conductor de Shipday no se encuentra sincronizado en la base de datos local.' });
+      }
 
+      // 2. Obtenemos el pickup
+      const pickup = await Pickup.findById(pickupId).populate('company_id', 'name');
       if (!pickup) return res.status(404).json({ error: 'Retiro no encontrado' });
-      if (!driver || !driver.shipday_id) return res.status(404).json({ error: 'Conductor no encontrado o sin ID de Shipday.' });
+      
+      // ... (El resto de la lógica para crear la orden en Shipday que te di antes sigue igual)
+      // Solo nos aseguramos de usar los IDs correctos
 
-      // 2. Formateamos los datos para Shipday
-      // La "orden" para Shipday es ir a la dirección del pickup (cliente)
-      // y la "entrega" es en tu bodega.
       const shipdayOrderData = {
         orderNumber: `PICKUP-${pickup.manifest_id?.manifest_number || pickup._id.toString().slice(-6)}`,
         customerName: `Retiro en ${pickup.company_id.name}`,
         customerAddress: pickup.pickup_address,
-        // La "bodega" es el destino final de la tarea de retiro
         restaurantName: "Bodega enviGo",
         restaurantAddress: "Tu Dirección de Bodega, Santiago, Chile", // <-- IMPORTANTE: Pon aquí tu dirección real
         deliveryInstruction: `Retirar ${pickup.total_orders} órdenes (${pickup.total_packages} bultos). Manifiesto: ${pickup.manifest_id?.manifest_number}`,
       };
       
-      console.log(`🚢 Creando tarea de retiro en Shipday para: ${shipdayOrderData.customerName}`);
-
-      // 3. Creamos la orden en Shipday
       const shipdayOrder = await ShipdayService.createOrder(shipdayOrderData);
       if (!shipdayOrder || !shipdayOrder.orderId) {
         throw new Error('No se pudo crear la orden en Shipday.');
       }
       
-      // 4. Asignamos el conductor a la orden recién creada en Shipday
-      await ShipdayService.assignOrder(shipdayOrder.orderId, driver.shipday_id);
-      
-      console.log(`✅ Tarea ${shipdayOrder.orderId} creada y asignada al conductor ${driver.name} en Shipday.`);
+      // Usamos el shipdayDriverId directamente para asignar en Shipday
+      await ShipdayService.assignOrder(shipdayOrder.orderId, shipdayDriverId);
 
-      // 5. Actualizamos nuestro documento Pickup con toda la información
-      pickup.driver_id = driver_id;
+      // 3. Actualizamos nuestro documento con el ID LOCAL del conductor
+      pickup.driver_id = localDriver._id; // <-- Guardamos el Mongo ID
       pickup.status = 'assigned';
       pickup.assigned_at = new Date();
       pickup.shipday_order_id = shipdayOrder.orderId;
-      // Asumimos que el servicio de Shipday puede devolver la URL de seguimiento
-      pickup.shipday_tracking_url = shipdayOrder.trackingLink || ''; 
+      pickup.shipday_tracking_url = shipdayOrder.trackingLink || '';
 
       await pickup.save();
 

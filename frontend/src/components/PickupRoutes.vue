@@ -315,11 +315,11 @@
           <div class="driver-selection">
             <h4>Seleccionar Conductor:</h4>
             <select v-model="selectedDriverId" class="driver-select">
-              <option value="">-- Seleccionar conductor --</option>
-              <option v-for="driver in availableDrivers" :key="driver._id" :value="driver._id">
-                {{ driver.name }} - {{ driver.phone }}
-              </option>
-            </select>
+  <option value="">-- Seleccionar conductor --</option>
+  <option v-for="driver in availableDrivers" :key="driver.id" :value="driver.id">
+    {{ driver.name }} - {{ driver.phone }}
+  </option>
+</select>
           </div>
         </div>
         <div class="modal-footer">
@@ -435,15 +435,43 @@ async function fetchPickups() {
 /**
  * Fetch available drivers
  */
-async function fetchAvailableDrivers() {
-  try {
-    const { data } = await apiService.drivers.getAvailable();
-    availableDrivers.value = data;
-  } catch (error) {
-    console.error("Error al cargar conductores:", error);
-    toast.error("Error al cargar conductores disponibles");
+  async function fetchAvailableDrivers() {
+    loadingDrivers.value = true
+    
+    try {
+      console.log('👥 Fetching available drivers from Shipday...')
+      
+      const response = await shipdayService.getDrivers()
+      console.log('📋 Drivers API response:', response)
+      
+      // Handle different response formats
+      let drivers = []
+      if (response.data?.data) {
+        drivers = response.data.data
+      } else if (response.data && Array.isArray(response.data)) {
+        drivers = response.data
+      } else {
+        drivers = []
+      }
+      
+      // Filter active drivers
+      availableDrivers.value = drivers.filter(driver => driver.isActive)
+      
+      console.log('✅ Available drivers loaded:', {
+        total: drivers.length,
+        active: availableDrivers.value.length,
+        drivers: availableDrivers.value.map(d => ({ id: d.id, name: d.name, email: d.email }))
+      })
+      
+    } catch (error) {
+      console.error('❌ Error fetching drivers:', error)
+      toast.error('Error al cargar conductores')
+      availableDrivers.value = []
+    } finally {
+      loadingDrivers.value = false
+    }
   }
-}
+
 
 /**
  * Selection methods
