@@ -4,6 +4,8 @@ const User = require('../models/User');
 const ShipdayService = require('../services/shipday.service.js');
 const { ERRORS } = require('../config/constants');
 const circuitController = require('./circuit.controller');
+const Driver = require('../models/Driver');
+
 class DriverController {
   /**
    * Obtiene la lista de todos los conductores. Solo para administradores.
