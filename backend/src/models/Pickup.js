@@ -29,6 +29,12 @@ const pickupSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Driver', // Asumiendo que tienes un modelo 'Driver'
   },
+    shipday_order_id: {
+    type: Number,
+  },
+  shipday_tracking_url: {
+    type: String,
+  },
   total_orders: {
     type: Number,
     required: true,
