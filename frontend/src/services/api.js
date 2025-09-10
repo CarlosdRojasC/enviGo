@@ -802,6 +802,8 @@ const drivers = {
   
   // Obtener conductores por empresa (si necesitas)
   getByCompany: (companyId) => api.get(`/companies/${companyId}/drivers`),
+  
+syncWithShipday: () => api.post('/drivers/sync-with-shipday'),
 
 getDeliveredOrders: (params) => {
       console.log('📦 API: Obteniendo pedidos entregados para pagos');

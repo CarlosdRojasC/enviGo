@@ -32,6 +32,8 @@ router.delete('/:driverId',
   isAdmin, 
   driverController.deleteDriver
 );
+router.post('/sync-with-shipday', authenticateToken, isAdmin, driverController.syncWithShipday);
+
 // Obtener pedidos entregados por conductores para pagos
 router.get('/delivered-orders', 
   authenticateToken, 

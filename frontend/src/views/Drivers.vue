@@ -10,6 +10,9 @@
         <i class="icon-plus"></i>
         Nuevo Conductor
       </button>
+      <button @click="syncDrivers" class="btn-secondary">
+  🔄 Sincronizar con Shipday
+</button>
     </div>
 
     <!-- Filtros y Búsqueda -->
@@ -469,6 +472,17 @@ const handleDriverSuccess = (event) => {
   showNotification(event.message, 'success')
   closeModals()
 }
+const syncDrivers = async () => {
+  try {
+    toast.info("Iniciando sincronización con Shipday...");
+    const { data } = await apiService.drivers.syncWithShipday();
+    toast.success(`${data.message} (${data.created} creados, ${data.updated} actualizados)`);
+    // Vuelve a cargar la lista de conductores locales para reflejar los cambios
+    fetchDrivers(); // Asumiendo que tienes una función que carga los drivers locales
+  } catch (error) {
+    toast.error("Error al sincronizar: " + error.message);
+  }
+}
 
 const closeModals = () => {
   showCreateForm.value = false
@@ -593,6 +607,19 @@ const viewDriverPayments = (driver) => {
   gap: 8px;
   transition: background 0.2s;
 }
+.btn-secondary {
+  background: #6b7280;
+  color: white;
+  border: none;
+  padding: 12px 20px;
+  border-radius: 8px;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: background 0.2s;
+  margin-left: 12px; }
 
 .btn-primary:hover {
   background: #2563eb;
