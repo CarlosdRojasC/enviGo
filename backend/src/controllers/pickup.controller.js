@@ -68,13 +68,11 @@ async assignDriver(req, res) {
         return res.status(404).json({ error: 'El conductor de Shipday no se encuentra sincronizado en la base de datos local.' });
       }
 
-      // 2. Obtenemos el pickup
+      // 2. Obtenemos el pickup y los datos de la empresa
       const pickup = await Pickup.findById(pickupId).populate('company_id', 'name');
       if (!pickup) return res.status(404).json({ error: 'Retiro no encontrado' });
       
-      // ... (El resto de la lógica para crear la orden en Shipday que te di antes sigue igual)
-      // Solo nos aseguramos de usar los IDs correctos
-
+      // 3. Formateamos y creamos la orden en Shipday
       const shipdayOrderData = {
         orderNumber: `PICKUP-${pickup.manifest_id?.manifest_number || pickup._id.toString().slice(-6)}`,
         customerName: `Retiro en ${pickup.company_id.name}`,
@@ -89,10 +87,10 @@ async assignDriver(req, res) {
         throw new Error('No se pudo crear la orden en Shipday.');
       }
       
-      // Usamos el shipdayDriverId directamente para asignar en Shipday
+      // 4. Asignamos el conductor a la orden recién creada en Shipday
       await ShipdayService.assignOrder(shipdayOrder.orderId, shipdayDriverId);
 
-      // 3. Actualizamos nuestro documento con el ID LOCAL del conductor
+      // 5. Actualizamos nuestro documento Pickup con el ID LOCAL del conductor
       pickup.driver_id = localDriver._id; // <-- Guardamos el Mongo ID
       pickup.status = 'assigned';
       pickup.assigned_at = new Date();
@@ -101,7 +99,10 @@ async assignDriver(req, res) {
 
       await pickup.save();
 
-      res.json({ message: 'Conductor asignado y tarea creada en Shipday exitosamente', pickup });
+      // Para la respuesta, poblamos los datos del conductor para que el frontend los muestre inmediatamente
+      const populatedPickup = await pickup.populate('driver_id', 'name phone');
+
+      res.json({ message: 'Conductor asignado y tarea creada en Shipday exitosamente', pickup: populatedPickup });
 
     } catch (error) {
       console.error('Error asignando conductor y creando en Shipday:', error);
