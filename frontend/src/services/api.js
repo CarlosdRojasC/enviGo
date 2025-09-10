@@ -792,6 +792,8 @@ const drivers = {
   // Obtener todos los conductores (desde tu BD local)
   getAll: () => api.get('/drivers'),
   
+  getAvailable: () => api.get('/drivers'), // Reutilizamos la ruta existente
+
   // Crear conductor en tu BD local
   create: (driverData) => api.post('/drivers', driverData),
   

@@ -14,10 +14,11 @@ class PickupController {
       if (driver_id) filters.driver_id = driver_id;
 
       const pickups = await Pickup.find(filters)
-        .populate('company_id', 'name')
-        .populate('manifest_id', 'manifest_number')
-        .sort({ created_at: -1 })
-        .lean();
+  .populate('company_id', 'name email') // Traemos también el email de la empresa
+  .populate('manifest_id', 'manifest_number')
+  .populate('driver_id', 'name phone') // <-- AÑADE ESTA LÍNEA PARA TRAER LOS DATOS DEL CONDUCTOR
+  .sort({ created_at: -1 })
+  .lean();
 
       res.json(pickups);
     } catch (error) {
