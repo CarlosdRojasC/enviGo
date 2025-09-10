@@ -269,9 +269,12 @@ import { ref, computed, onMounted, watch } from 'vue'
 import DriverForm from './DriverForm.vue'
 import { shipdayService } from '../services/shipday'
 import { useRouter } from 'vue-router'
+import { apiService } from '../services/api';
+import { useToast } from 'vue-toastification';
 
+const router = useRouter();
+const toast = useToast();
 
-const router = useRouter()
 // Estado
 const drivers = ref([])
 const loading = ref(false)
