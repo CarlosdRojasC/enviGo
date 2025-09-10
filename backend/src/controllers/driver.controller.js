@@ -234,7 +234,7 @@ async createDriver(req, res) {
     }
   }
 
-  async syncWithShipday(req, res) {
+async syncWithShipday(req, res) {
   try {
     console.log('🔄 Iniciando sincronización de conductores con Shipday...');
     
@@ -247,25 +247,23 @@ async createDriver(req, res) {
     let updatedCount = 0;
 
     for (const shipdayDriver of shipdayDrivers) {
-      // Buscamos si ya existe por su shipday_id
       const existingDriver = await Driver.findOne({ shipday_id: shipdayDriver.id });
 
       // --- INICIO DE LA CORRECCIÓN ---
       const driverData = {
-        full_name: shipdayDriver.name, // <-- CORREGIDO: Usamos 'full_name'
+        full_name: shipdayDriver.name,
         email: shipdayDriver.email,
-        phone: shipdayDriver.phone || 'No disponible', // <-- CORREGIDO: Añadimos un valor por defecto
-        shipday_id: shipdayDriver.id, // <-- CORREGIDO: Mantenemos el nombre correcto
+        phone: shipdayDriver.phone || 'No disponible',
+        shipday_driver_id: shipdayDriver.id, // <-- CORREGIDO: Usamos 'shipday_driver_id'
+        shipday_id: shipdayDriver.id, // Mantenemos compatibilidad por si lo usas en otro lado
         is_active: shipdayDriver.isActive,
       };
       // --- FIN DE LA CORRECCIÓN ---
 
       if (existingDriver) {
-        // Si existe, lo actualizamos
         await Driver.updateOne({ _id: existingDriver._id }, driverData);
         updatedCount++;
       } else {
-        // Si no existe, lo creamos
         await Driver.create(driverData);
         createdCount++;
       }
