@@ -148,24 +148,24 @@ export function useOrdersData() {
   /**
    * ✅ Fetch orders with filters and pagination - CORREGIDA
    */
-  async function fetchOrders(filters = {}) {
+  async function fetchOrders(params = {}) {
     try {
       loadingOrders.value = true
       loadingStates.value.fetching = true
-      lastAppliedFilters.value = filters
+      lastAppliedFilters.value = params
 
       // ✅ LIMPIAR Y VALIDAR FILTROS ANTES DE ENVIAR
-      const cleanedFilters = cleanAndValidateFilters(filters)
+      const cleanedFilters = cleanAndValidateFilters(params)
       
-      const params = {
+      const queryParams  = {
         page: pagination.value.page,
         limit: pagination.value.limit,
         ...cleanedFilters
       }
       
-      logger.debug('📊 Fetching orders with cleaned params:', logger.sanitize(params))
+      logger.debug('📊 Fetching orders with cleaned params:', logger.sanitize(queryParams))
       
-      const { data } = await apiService.orders.getAll(params)
+      const { data } = await apiService.orders.getAll(queryParams)
 
       // ✅ ACTUALIZAR CACHE
       dataCache.value.lastFetch = Date.now()
