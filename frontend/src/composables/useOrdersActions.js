@@ -3,7 +3,7 @@ import { ref } from 'vue'
 import { useToast } from 'vue-toastification'
 import { apiService } from '../services/api'
 
-export function useOrdersActions(newOrder, isCreatingOrder, fetchOrders) {
+export function useOrdersActions(newOrder, isCreatingOrder, fetchOrders, filters) {
   const toast = useToast()
 
   // ==================== STATE ====================
@@ -175,7 +175,7 @@ async function handleCreateOrder() {
     console.log('✅ Order created:', response.data)
     
     // Refresh orders list
-    await fetchOrders()
+    await fetchOrders(filters.value)
     
     // Reset form
     resetNewOrderForm()
@@ -218,7 +218,7 @@ async function handleCreateOrder() {
       console.log('✅ Status updated successfully')
       
       // Refresh orders to show changes
-      await fetchOrders()
+      await fetchOrders(filters.value)
       
       return true
       
@@ -259,7 +259,8 @@ async function handleCreateOrder() {
       console.log('✅ Order deleted successfully')
       
       // Refresh orders
-      await fetchOrders()
+      await fetchOrders(filters.value)
+
       
       return true
       
@@ -303,7 +304,7 @@ async function handleCreateOrder() {
       console.log('✅ Order duplicated successfully')
       
       // Refresh orders
-      await fetchOrders()
+      await fetchOrders(filters.value)
       
       return true
       
