@@ -52,9 +52,12 @@ class DriverHistoryService {
   static async getPendingPayments(driverId, companyId = null) {
     try {
       const filters = {
-        driver_id: driverId,
-        payment_status: 'pending'
-      };
+  driver_id: driverId,
+  $or: [
+    { payment_status: 'pending' },
+    { invoiced: true }   // incluye las facturadas
+  ]
+};
 
       if (companyId) {
         filters.company_id = companyId;
