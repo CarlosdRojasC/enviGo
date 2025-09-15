@@ -467,9 +467,9 @@ async generateInvoice(req, res) {
         doc.text('enviGo', 50, 50);
         doc.fontSize(10).font('Helvetica');
         doc.text('Sistema de Gestión de Envíos', 50, 75);
-        doc.text('RUT: 12.345.678-9', 50, 90);
+        doc.text('RUT: 78.200.293-7', 50, 90);
         doc.text('Santiago, Chile', 50, 105);
-        doc.text('Email: facturacion@envigo.cl', 50, 120);
+        doc.text('Email: contacto@envigo.cl', 50, 120);
 
         // Información de la factura
         doc.fontSize(16).font('Helvetica-Bold');
