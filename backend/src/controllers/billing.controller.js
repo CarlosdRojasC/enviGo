@@ -881,13 +881,12 @@ async sendInvoice(req, res) {
         try {
           // Formateamos los datos para que se vean bien en el correo
           const formattedData = {
-            number: invoice.invoice_number,
-            period: `${format(new Date(invoice.period_start), 'dd/MM/yyyy')} - ${format(new Date(invoice.period_end), 'dd/MM/yyyy')}`,
-            issue_date: format(new Date(invoice.created_at), 'dd/MM/yyyy'),
-            due_date: format(new Date(invoice.due_date), 'dd/MM/yyyy'),
-            total_amount: `$${new Intl.NumberFormat('es-CL').format(invoice.total_amount)}`,
-            // Importante: Asegúrate de que esta URL sea la correcta
-            download_url: `${process.env.BASE_URL}/api/billing/invoices/${invoice._id}/download` 
+              number: invoice.invoice_number,
+              period: `${new Date(invoice.period_start).toLocaleDateString('es-ES')} - ${new Date(invoice.period_end).toLocaleDateString('es-ES')}`,
+              issue_date: new Date(invoice.created_at).toLocaleDateString('es-ES'),
+              due_date: new Date(invoice.due_date).toLocaleDateString('es-ES'),
+              total_amount: `$${new Intl.NumberFormat('es-CL').format(invoice.total_amount)}`,
+              download_url: `${process.env.BASE_URL}/api/billing/invoices/${invoice._id}/download` 
           };
 
           // Corregido: Llamar a NotificationService
