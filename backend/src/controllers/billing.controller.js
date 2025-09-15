@@ -887,6 +887,7 @@ async sendInvoice(req, res) {
               issue_date: new Date(invoice.created_at).toLocaleDateString('es-ES'),
               due_date: new Date(invoice.due_date).toLocaleDateString('es-ES'),
               total_amount: `$${new Intl.NumberFormat('es-CL').format(invoice.total_amount)}`,
+              total_orders: invoice.total_orders, // ✅ Agregar este campo
               download_url: `${process.env.BASE_URL}/api/billing/invoices/${invoice._id}/download` 
           };
 
