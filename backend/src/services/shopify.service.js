@@ -140,13 +140,13 @@ class ShopifyService {
   const errors = [];
   
   // Verificar que exista al menos una dirección
-  if (!shopifyOrder.shipping_address && !shopifyOrder.billing_address) {
-    errors.push('Pedido sin dirección de envío ni facturación');
+  if (!shopifyOrder.shipping_address) {
+    errors.push('Pedido sin dirección de envío');
     return { isValid: false, errors };
   }
   
   // Priorizar shipping_address, luego billing_address
-  const address = shopifyOrder.shipping_address || shopifyOrder.billing_address;
+  const address = shopifyOrder.shipping_address;
   
   // Validar campos críticos de dirección
   if (!address.address1 || address.address1.trim().length < 10) {
@@ -226,7 +226,7 @@ static async processWebhook(channelId, webhookData) {
     
     // 4. Filtrar por comunas permitidas (solo para pedidos nuevos)
     const allowedCommunes = channel.accepted_communes || [];
-    const orderCommune = webhookData.shipping_address?.city || webhookData.billing_address?.city || '';
+    const orderCommune = webhookData.shipping_address?.city  || '';
     
     if (!this.isCommuneAllowed(orderCommune, allowedCommunes)) {
       console.log(`🚫 Pedido #${webhookData.name} rechazado por comuna "${orderCommune}"`);
@@ -271,13 +271,13 @@ static validateShippingAddress(shopifyOrder) {
   const errors = [];
   
   // Verificar que exista al menos una dirección
-  if (!shopifyOrder.shipping_address && !shopifyOrder.billing_address) {
-    errors.push('Pedido sin dirección de envío ni facturación');
+  if (!shopifyOrder.shipping_address) {
+    errors.push('Pedido sin dirección de envío');
     return { isValid: false, errors };
   }
   
   // Priorizar shipping_address, luego billing_address
-  const address = shopifyOrder.shipping_address || shopifyOrder.billing_address;
+  const address = shopifyOrder.shipping_address;
   
   // Validar campos críticos de dirección
   if (!address.address1 || address.address1.trim().length < 5) {
@@ -487,8 +487,8 @@ static async updateExistingOrder(existingOrder, shopifyOrder) {
       status: newStatus,
       total_amount: parseFloat(shopifyOrder.total_price) || 0,
       shipping_cost: fixedShippingCost,
-      shipping_commune: this.normalizeCommune(shopifyOrder.shipping_address?.city || shopifyOrder.billing_address?.city || ''),
-      shipping_state: shopifyOrder.shipping_address?.province || shopifyOrder.billing_address?.province || 'Región Metropolitana',
+      shipping_commune: this.normalizeCommune(shopifyOrder.shipping_address?.city || ''),
+      shipping_state: shopifyOrder.shipping_address?.province || 'Región Metropolitana',
       items: this.mapOrderItems(shopifyOrder.line_items),
       items_count: shopifyOrder.line_items?.length || 0,
       notes: shopifyOrder.note,
@@ -567,7 +567,7 @@ static async syncOrders(channel, dateFrom, dateTo) {
       params.append('financial_status', 'paid'); // Solo pedidos pagados
       
       params.append('limit', '100'); // Máximo 100 pedidos del día
-      params.append('fields', 'id,name,email,created_at,updated_at,total_price,currency,financial_status,fulfillment_status,shipping_address,billing_address,customer,line_items,note,cancelled_at,phone'); // Solo campos necesarios
+      params.append('fields', 'id,name,email,created_at,updated_at,total_price,currency,financial_status,fulfillment_status,shipping_address,customer,line_items,note,cancelled_at,phone'); // Solo campos necesarios
       params.append('order', 'created_at desc'); // Más recientes primero
       
       console.log(`🔍 URL consultada: ${this.getApiUrl(channel)}/orders.json?${params}`);
