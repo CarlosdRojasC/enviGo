@@ -554,10 +554,10 @@ async generateInvoice(req, res) {
         
         yPosition += 20;
         doc.fontSize(9).font('Helvetica');
-        doc.text('Banco: Banco de Chile', 50, yPosition);
-        doc.text('Cuenta Corriente: 123-456-789', 50, yPosition + 15);
-        doc.text('RUT: 12.345.678-9', 50, yPosition + 30);
-        doc.text('Email: facturacion@envigo.cl', 50, yPosition + 45);
+        doc.text('Banco: Mercado Pago', 50, yPosition);
+        doc.text('Cuenta Vista: 1094296676', 50, yPosition + 15);
+        doc.text('RUT: 78.200.293-7', 50, yPosition + 30);
+        doc.text('Email: contacto@envigo.cl', 50, yPosition + 45);
 
         // Footer
         doc.fontSize(8).font('Helvetica');
