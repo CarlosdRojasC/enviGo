@@ -6,6 +6,8 @@ const labelController = require('../controllers/label.controller');
 const { authenticateToken, isAdmin } = require('../middlewares/auth.middleware');
 const PDFDocument = require('pdfkit');
 const sanitize = require('sanitize-filename');
+const JsBarcode = require('jsbarcode');
+const { createCanvas } = require('canvas');
 
 const Order = require('../models/Order');
 // Todas las rutas requieren autenticación
@@ -77,11 +79,11 @@ router.post('/print-pdf/:orderId', async (req, res) => {
     drawCommune(doc, order, margin, y, pageW - margin * 2);
     y += 40;
 
-    // Info del cliente
+    // Info del cliente (ajustar posición Y)
     drawCleanCustomerInfo(doc, order, margin, y, pageW - margin * 2);
     
-    // Footer con código de barras simple
-    await drawFooterWithBarcode(doc, order, margin, pageH - 90, pageW - margin * 2);
+    // Footer con código de barras (más espacio)
+    await drawFooterWithBarcode(doc, order, margin, pageH - 110, pageW - margin * 2);
 
     doc.end();
 
@@ -113,7 +115,7 @@ function drawCommune(doc, order, x, y, width) {
      });
 }
 
-// 📱 FUNCIÓN: Footer simple con código de barras
+// 📱 FUNCIÓN: Footer simple con código de barras MEJORADO
 async function drawFooterWithBarcode(doc, order, x, y, width) {
   // Línea superior
   doc.moveTo(x, y)
@@ -122,22 +124,22 @@ async function drawFooterWithBarcode(doc, order, x, y, width) {
      .strokeColor('#e5e7eb')
      .stroke();
 
-  y += 12;
+  y += 15;
 
   // Generar código de barras simple
   const barcodeValue = order.envigo_label.unique_code;
   
   try {
-    // Crear canvas para el código de barras
-    const canvas = createCanvas(200, 50);
+    // Crear canvas para el código de barras con tamaño más grande
+    const canvas = createCanvas(300, 80);
     
-    // Generar código de barras Code 128
+    // Generar código de barras Code 128 más visible
     JsBarcode(canvas, barcodeValue, {
       format: "CODE128",
-      width: 2,
-      height: 35,
-      displayValue: false, // No mostrar texto debajo del código
-      margin: 0,
+      width: 3, // Más ancho
+      height: 50, // Más alto
+      displayValue: false,
+      margin: 10, // Margen para mejor visibilidad
       background: "#ffffff",
       lineColor: "#000000"
     });
@@ -145,11 +147,11 @@ async function drawFooterWithBarcode(doc, order, x, y, width) {
     // Convertir canvas a buffer
     const barcodeBuffer = canvas.toBuffer('image/png');
 
-    // Insertar código de barras en el PDF
-    const barcodeWidth = 140;
-    const barcodeHeight = 28;
+    // Insertar código de barras más grande en el PDF
+    const barcodeWidth = 180;
+    const barcodeHeight = 40;
     const barcodeX = x + (width - barcodeWidth) / 2;
-    const barcodeY = y + 5;
+    const barcodeY = y;
     
     doc.image(barcodeBuffer, barcodeX, barcodeY, {
       width: barcodeWidth,
@@ -157,32 +159,56 @@ async function drawFooterWithBarcode(doc, order, x, y, width) {
     });
 
     // Texto del código debajo del código de barras
-    doc.font('Helvetica')
-       .fontSize(9)
-       .fillColor('#374151')
-       .text(barcodeValue, x, barcodeY + barcodeHeight + 5, {
+    doc.font('Helvetica-Bold')
+       .fontSize(11)
+       .fillColor('#111827')
+       .text(barcodeValue, x, barcodeY + barcodeHeight + 8, {
          width: width,
          align: 'center'
        });
 
-  } catch (barcodeError) {
-    console.error('Error generando código de barras:', barcodeError);
-    
-    // Fallback: mostrar solo el código de texto
+    // Instrucción pequeña
     doc.font('Helvetica')
-       .fontSize(12)
+       .fontSize(7)
+       .fillColor('#6b7280')
+       .text('Código de seguimiento', x, barcodeY + barcodeHeight + 22, {
+         width: width,
+         align: 'center'
+       });
+
+    console.log(`✅ Código de barras generado para: ${barcodeValue}`);
+
+  } catch (barcodeError) {
+    console.error('❌ Error generando código de barras:', barcodeError);
+    
+    // Fallback mejorado: mostrar código con marco
+    doc.rect(x + 20, y, width - 40, 40)
+       .lineWidth(1)
+       .strokeColor('#d1d5db')
+       .stroke();
+
+    doc.font('Helvetica-Bold')
+       .fontSize(16)
        .fillColor('#111827')
        .text(barcodeValue, x, y + 15, {
          width: width,
          align: 'center'
        });
+
+    doc.font('Helvetica')
+       .fontSize(8)
+       .fillColor('#ef4444')
+       .text('(Error generando código de barras)', x, y + 35, {
+         width: width,
+         align: 'center'
+       });
   }
 
-  // Mensaje de agradecimiento
+  // Mensaje de agradecimiento más abajo
   doc.font('Helvetica-Bold')
      .fontSize(12)
      .fillColor('#374151')
-     .text('Gracias por tu confianza', x, y + 50, {
+     .text('¡Gracias por tu confianza!', x, y + 60, {
        width: width,
        align: 'center'
      });
@@ -195,7 +221,7 @@ async function drawFooterWithBarcode(doc, order, x, y, width) {
   doc.font('Helvetica')
      .fontSize(8)
      .fillColor('#9ca3af')
-     .text(website.replace(/^https?:\/\//, ''), x, y + 68, {
+     .text(website.replace(/^https?:\/\//, ''), x, y + 76, {
        width: width,
        align: 'center'
      });
@@ -255,7 +281,7 @@ router.post('/print-bulk-pdf', async (req, res) => {
 
       drawCleanCustomerInfo(doc, order, margin, y, pageW - margin * 2);
       
-      await drawFooterWithBarcode(doc, order, margin, pageH - 90, pageW - margin * 2);
+      await drawFooterWithBarcode(doc, order, margin, pageH - 110, pageW - margin * 2);
     }
 
     doc.end();
@@ -325,62 +351,109 @@ function drawCleanCode(doc, order, x, y, width) {
 }
 
 function drawCleanCustomerInfo(doc, order, x, y, width) {
-  const fields = [
-    { label: 'DESTINATARIO', value: order.customer_name },
-    { label: 'DIRECCIÓN', value: order.shipping_address },
-    { label: 'TELÉFONO', value: order.customer_phone }
-  ];
-
   let currentY = y;
   
-  fields.forEach((field, index) => {
-    if (field.value) {
-      // Label
-      doc.font('Helvetica-Bold')
-         .fontSize(9)
-         .fillColor('#6b7280')
-         .text(field.label, x, currentY);
+  // DESTINATARIO
+  if (order.customer_name) {
+    doc.font('Helvetica-Bold')
+       .fontSize(9)
+       .fillColor('#6b7280')
+       .text('DESTINATARIO', x, currentY);
 
-      // Valor
-      doc.font('Helvetica')
-         .fontSize(12)
-         .fillColor('#111827')
-         .text(field.value, x, currentY + 12, {
-           width: width - 20,
-           lineGap: 2
-         });
+    doc.font('Helvetica')
+       .fontSize(12)
+       .fillColor('#111827')
+       .text(order.customer_name, x, currentY + 12, {
+         width: width - 20,
+         lineGap: 2
+       });
 
-      currentY += 32;
+    currentY += 40; // Más espacio después del destinatario
 
-      // Línea separadora
-      if (index < fields.length - 1) {
-        doc.moveTo(x, currentY - 8)
-           .lineTo(x + width, currentY - 8)
-           .lineWidth(0.25)
-           .strokeColor('#f3f4f6')
-           .stroke();
-      }
-    }
-  });
+    // Línea separadora
+    doc.moveTo(x, currentY - 8)
+       .lineTo(x + width, currentY - 8)
+       .lineWidth(0.25)
+       .strokeColor('#f3f4f6')
+       .stroke();
+  }
+
+  // DIRECCIÓN - Más espacio
+  if (order.shipping_address) {
+    doc.font('Helvetica-Bold')
+       .fontSize(9)
+       .fillColor('#6b7280')
+       .text('DIRECCIÓN', x, currentY);
+
+    doc.font('Helvetica')
+       .fontSize(12)
+       .fillColor('#111827')
+       .text(order.shipping_address, x, currentY + 12, {
+         width: width - 20,
+         lineGap: 3
+       });
+
+    // Calcular altura del texto de dirección
+    const addressHeight = doc.heightOfString(order.shipping_address, {
+      width: width - 20
+    });
+
+    currentY += Math.max(50, addressHeight + 25); // Mucho más espacio para la dirección
+
+    // Línea separadora más visible
+    doc.moveTo(x, currentY - 8)
+       .lineTo(x + width, currentY - 8)
+       .lineWidth(0.5)
+       .strokeColor('#e5e7eb')
+       .stroke();
+  }
+
+  // TELÉFONO - Separado claramente
+  if (order.customer_phone) {
+    doc.font('Helvetica-Bold')
+       .fontSize(9)
+       .fillColor('#6b7280')
+       .text('TELÉFONO', x, currentY);
+
+    doc.font('Helvetica')
+       .fontSize(12)
+       .fillColor('#111827')
+       .text(order.customer_phone, x, currentY + 12, {
+         width: width - 20,
+         lineGap: 2
+       });
+
+    currentY += 35; // Espacio después del teléfono
+  }
 
   // Comentarios especiales
   if (order.comment) {
+    currentY += 10;
+    
+    // Línea separadora antes de comentarios
+    doc.moveTo(x, currentY)
+       .lineTo(x + width, currentY)
+       .lineWidth(0.5)
+       .strokeColor('#fca5a5')
+       .stroke();
+    
     currentY += 15;
     
     doc.font('Helvetica-Bold')
        .fontSize(9)
        .fillColor('#dc2626')
-       .text('INSTRUCCIONES ESPECIALES', x, currentY);
+       .text('⚠️ INSTRUCCIONES ESPECIALES', x, currentY);
     
     doc.font('Helvetica')
        .fontSize(10)
        .fillColor('#dc2626')
        .text(order.comment, x, currentY + 12, {
          width: width - 20,
-         lineGap: 1
+         lineGap: 2
        });
   }
 }
+
 
 router.get(
     '/proof/:orderId/download',
