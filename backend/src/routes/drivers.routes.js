@@ -59,9 +59,10 @@ router.get('/delivered-orders',
       
       console.log('📅 Fechas convertidas:', { dateFromObj, dateToObj });
       
-      // Buscar órdenes entregadas con conductor asignado
+      // 🔥 CAMBIO PRINCIPAL: Buscar órdenes entregadas Y facturadas con conductor asignado
       const orders = await Order.find({
-        status: 'delivered', // Solo pedidos entregados
+        // ✅ INCLUIR TANTO DELIVERED COMO INVOICED
+        status: { $in: ['delivered', 'invoiced'] }, 
         delivery_date: {
           $gte: dateFromObj,
           $lte: dateToObj
@@ -71,10 +72,10 @@ router.get('/delivered-orders',
           { 'shipday_driver_id': { $exists: true, $ne: null, $ne: '' } }
         ]
       })
-      .select('order_number customer_name shipping_address shipping_commune delivery_date driver_info shipday_driver_id')
+      .select('order_number customer_name shipping_address shipping_commune delivery_date driver_info shipday_driver_id status isPaid paidAt')
       .lean();
       
-      console.log(`📦 Encontradas ${orders.length} órdenes entregadas`);
+      console.log(`📦 Encontradas ${orders.length} órdenes entregadas/facturadas`);
       
       // Si no hay órdenes, devolver respuesta vacía pero exitosa
       if (orders.length === 0) {
@@ -102,7 +103,12 @@ router.get('/delivered-orders',
         total_orders: orders.length,
         total_amount: orders.length * 1700, // $1.700 por entrega
         date_range: { date_from, date_to },
-        unique_drivers: uniqueDrivers.size
+        unique_drivers: uniqueDrivers.size,
+        // 📊 ESTADÍSTICAS ADICIONALES
+        delivered_count: orders.filter(o => o.status === 'delivered').length,
+        invoiced_count: orders.filter(o => o.status === 'invoiced').length,
+        paid_count: orders.filter(o => o.isPaid === true).length,
+        pending_count: orders.filter(o => !o.isPaid).length
       };
       
       console.log('📊 Estadísticas:', stats);

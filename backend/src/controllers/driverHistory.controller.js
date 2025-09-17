@@ -167,91 +167,99 @@ async getAllDeliveriesForPayments(req, res) {
       date_to, 
       driver_id, 
       company_id, 
-      payment_status = 'pending' // Por defecto busca pendientes
+      payment_status = 'pending' 
     } = req.query;
 
-    console.log('💰 Obteniendo entregas con filtros:', { payment_status, date_from, date_to });
+    console.log('💰 Obteniendo entregas para pagos:', { 
+      date_from, 
+      date_to, 
+      driver_id, 
+      company_id, 
+      payment_status 
+    });
 
-    // 1. Construir el filtro de base para la consulta
-    const filters = {
-      status: 'delivered',
+    // 🔥 CAMBIO PRINCIPAL: Filtros base para órdenes (incluir invoiced)
+    const orderFilters = {
+      // ✅ INCLUIR TANTO DELIVERED COMO INVOICED
+      status: { $in: ['delivered', 'invoiced'] },
       $or: [
         { shipday_driver_id: { $exists: true, $ne: null, $ne: '' } },
         { 'driver_info.name': { $exists: true, $ne: null, $ne: '' } }
       ]
     };
 
-    // 2. Añadir filtro de ESTADO DE PAGO (Punto clave)
+    // Filtro por estado de pago
     if (payment_status === 'pending') {
-      // Busca órdenes que no han sido pagadas
-      filters.$or = [
-        { isPaid: { $exists: false } },
-        { isPaid: false }
+      orderFilters.$and = [
+        {
+          $or: [
+            { isPaid: { $exists: false } },
+            { isPaid: false }
+          ]
+        }
       ];
     } else if (payment_status === 'paid') {
-      // Busca órdenes que ya fueron pagadas
-      filters.isPaid = true;
+      orderFilters.isPaid = true;
     }
-    // Si payment_status es 'all', no se añade ningún filtro de pago.
+    // Si payment_status === 'all', no agregar filtro de pago
 
-    // 3. Añadir filtros opcionales
+    // Filtros de fecha
     if (date_from || date_to) {
-      filters.delivery_date = {};
-      if (date_from) filters.delivery_date.$gte = new Date(date_from);
-      if (date_to) filters.delivery_date.$lte = new Date(date_to + 'T23:59:59.999Z');
+      orderFilters.delivery_date = {};
+      if (date_from) orderFilters.delivery_date.$gte = new Date(date_from);
+      if (date_to) orderFilters.delivery_date.$lte = new Date(date_to + 'T23:59:59.999Z');
     }
-    if (driver_id) filters.shipday_driver_id = driver_id;
-    if (company_id) filters.company_id = new mongoose.Types.ObjectId(company_id);
 
-    console.log('🔍 Filtros de MongoDB aplicados:', JSON.stringify(filters, null, 2));
+    // Filtros adicionales
+    if (driver_id) orderFilters.shipday_driver_id = driver_id;
+    if (company_id) orderFilters.company_id = new mongoose.Types.ObjectId(company_id);
 
-    // 4. Ejecutar la consulta a la base de datos
-    const orders = await Order.find(filters)
-      .populate('company_id', 'name')
+    console.log('🔍 Filtros aplicados:', JSON.stringify(orderFilters, null, 2));
+
+    const orders = await Order.find(orderFilters)
+      .populate('company_id', 'name email phone')
       .sort({ delivery_date: -1 })
-      .lean(); // .lean() para mayor rendimiento
+      .lean();
 
-    console.log(`📊 Órdenes encontradas: ${orders.length}`);
+    console.log('📊 Órdenes encontradas:', orders.length);
 
-    // 5. Transformar los datos para el frontend (Punto clave)
+    // Convertir a formato de entregas
     const deliveries = orders.map(order => ({
-      _id: order._id.toString(), // Importante para que el front lo use en los clics
+      _id: order._id,
       driver_id: order.shipday_driver_id,
-      driver_name: order.driver_info?.name || 'Conductor Asignado',
-      driver_email: order.driver_info?.email,
+      driver_name: order.driver_info?.name || 'Conductor',
+      driver_email: order.driver_info?.email || 'no-email@shipday.com',
+      company_id: order.company_id,
+      order_id: order._id,
       order_number: order.order_number,
       customer_name: order.customer_name,
       delivery_address: order.shipping_address,
       delivered_at: order.delivery_date,
-      company_name: order.company_id?.name || 'N/A',
-      payment_amount: 1700, // O el campo que uses para el monto
-      
-      // ESTA ES LA LÍNEA MÁS IMPORTANTE PARA TU FRONTEND
+      payment_amount: 1700,
       payment_status: order.isPaid ? 'paid' : 'pending',
-      
-      paid_at: order.paidAt || null, // Asegúrate de enviar la fecha de pago
+      paid_at: order.paidAt,
+      // 📋 CAMPO ADICIONAL PARA DEBUGGING
+      order_status: order.status, // 'delivered' o 'invoiced'
+      company_name: order.company_id?.name
     }));
 
-    // 6. Agrupar por conductor y enviar la respuesta
-    const driverGroups = DriverHistoryController.groupDeliveriesByDriverStatic(deliveries);
-
-    const summary = {
-      total_deliveries: deliveries.length,
-      unique_drivers: driverGroups.length,
-      total_amount: deliveries.reduce((sum, d) => sum + d.payment_amount, 0),
-    };
+    // Agrupar por conductor
+    const grouped = this.groupDeliveriesByDriver(deliveries);
 
     res.json({
       success: true,
-      data: {
-        summary,
-        drivers: driverGroups,
-      }
+      data: grouped,
+      total_deliveries: deliveries.length,
+      total_amount: deliveries.length * 1700,
+      filters_applied: { date_from, date_to, driver_id, company_id, payment_status }
     });
 
   } catch (error) {
-    console.error('❌ Error en getAllDeliveriesForPayments:', error);
-    res.status(500).json({ success: false, error: error.message });
+    console.error('❌ Error obteniendo entregas para pagos:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: error.message 
+    });
   }
 }
 
@@ -453,15 +461,16 @@ async payAllPendingToDriver(req, res) {
 
     console.log(`💸 Pagando todas las entregas pendientes del conductor: ${driverId}`);
 
-    // Buscar todas las órdenes pendientes del conductor
+    // 🔥 CAMBIO: Buscar todas las órdenes pendientes del conductor (delivered E invoiced)
     const pendingOrders = await Order.find({
-      status: 'delivered',
+      // ✅ INCLUIR TANTO DELIVERED COMO INVOICED
+      status: { $in: ['delivered', 'invoiced'] },
       shipday_driver_id: driverId,
       $or: [
         { isPaid: { $exists: false } },
         { isPaid: false }
       ]
-    }).select('_id order_number customer_name');
+    }).select('_id order_number customer_name status');
 
     if (pendingOrders.length === 0) {
       return res.status(400).json({
@@ -496,6 +505,12 @@ async payAllPendingToDriver(req, res) {
     const totalAmount = pendingOrders.length * 1700; // Precio fijo por entrega
 
     console.log(`✅ Pagadas ${orderResult.modifiedCount} entregas por $${totalAmount}`);
+    console.log(`📋 Estados de pedidos pagados:`, 
+      pendingOrders.reduce((acc, order) => {
+        acc[order.status] = (acc[order.status] || 0) + 1;
+        return acc;
+      }, {})
+    );
 
     res.json({
       success: true,
@@ -504,7 +519,12 @@ async payAllPendingToDriver(req, res) {
         driver_id: driverId,
         orders_paid: orderResult.modifiedCount,
         total_amount: totalAmount,
-        order_numbers: pendingOrders.map(o => o.order_number)
+        order_numbers: pendingOrders.map(o => o.order_number),
+        // 📊 BREAKDOWN POR ESTADO
+        status_breakdown: pendingOrders.reduce((acc, order) => {
+          acc[order.status] = (acc[order.status] || 0) + 1;
+          return acc;
+        }, {})
       }
     });
 
@@ -517,119 +537,7 @@ async payAllPendingToDriver(req, res) {
   }
 }
 
-/**
- * Obtener entregas con filtro de estado de pago correcto
- */
-async getAllDeliveriesForPayments(req, res) {
-  try {
-    const { 
-      date_from, 
-      date_to, 
-      driver_id, 
-      company_id, 
-      payment_status = 'pending' 
-    } = req.query;
 
-    console.log('💰 Obteniendo entregas para pagos:', { 
-      date_from, 
-      date_to, 
-      driver_id, 
-      company_id, 
-      payment_status 
-    });
-
-    // Filtros base para órdenes
-    const orderFilters = {
-      status: 'delivered',
-      $or: [
-        { shipday_driver_id: { $exists: true, $ne: null, $ne: '' } },
-        { 'driver_info.name': { $exists: true, $ne: null, $ne: '' } }
-      ]
-    };
-
-    // Filtro por estado de pago
-    if (payment_status === 'pending') {
-      orderFilters.$and = [
-        {
-          $or: [
-            { isPaid: { $exists: false } },
-            { isPaid: false }
-          ]
-        }
-      ];
-    } else if (payment_status === 'paid') {
-      orderFilters.isPaid = true;
-    }
-    // Si payment_status === 'all', no agregar filtro de pago
-
-    // Filtros de fecha
-    if (date_from || date_to) {
-      orderFilters.delivery_date = {};
-      if (date_from) orderFilters.delivery_date.$gte = new Date(date_from);
-      if (date_to) orderFilters.delivery_date.$lte = new Date(date_to + 'T23:59:59.999Z');
-    }
-
-    // Filtros adicionales
-    if (driver_id) orderFilters.shipday_driver_id = driver_id;
-    if (company_id) orderFilters.company_id = new mongoose.Types.ObjectId(company_id);
-
-    console.log('🔍 Filtros aplicados:', JSON.stringify(orderFilters, null, 2));
-
-    const orders = await Order.find(orderFilters)
-      .populate('company_id', 'name email phone')
-      .sort({ delivery_date: -1 })
-      .lean();
-
-    console.log('📊 Órdenes encontradas:', orders.length);
-
-    // Convertir a formato de entregas
-    const deliveries = orders.map(order => ({
-      _id: order._id,
-      driver_id: order.shipday_driver_id,
-      driver_name: order.driver_info?.name || 'Conductor',
-      driver_email: order.driver_info?.email || 'no-email@shipday.com',
-      company_id: order.company_id,
-      order_id: order._id,
-      order_number: order.order_number,
-      customer_name: order.customer_name,
-      delivery_address: order.shipping_address,
-      delivered_at: order.delivery_date,
-      payment_amount: 1700,
-      payment_status: order.isPaid ? 'paid' : 'pending',
-      paid_at: order.paidAt || null,
-      source: 'orders'
-    }));
-
-    // Agrupar por conductor
-    const driverGroups = DriverHistoryController.groupDeliveriesByDriverStatic(deliveries);
-
-    const summary = {
-      total_deliveries: deliveries.length,
-      unique_drivers: driverGroups.length,
-      total_amount: deliveries.reduce((sum, d) => sum + d.payment_amount, 0),
-      data_source: 'orders',
-      payment_filter: payment_status
-    };
-
-    res.json({
-      success: true,
-      data: {
-        period: { date_from, date_to },
-        filters: { driver_id, company_id, payment_status },
-        summary,
-        drivers: driverGroups,
-        all_deliveries: deliveries.slice(0, 100)
-      }
-    });
-
-  } catch (error) {
-    console.error('❌ Error obteniendo entregas para pagos:', error);
-    res.status(500).json({ 
-      success: false, 
-      error: error.message 
-    });
-  }
-}
 }
 
 module.exports = new DriverHistoryController();
