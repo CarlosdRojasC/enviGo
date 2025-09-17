@@ -785,12 +785,43 @@ export default {
     },
 
     isValidMLCode(code) {
-      // 🔍 Validación básica de códigos ML
-      // ML usa códigos como: MLM1234567890, MLA1234567890, etc.
-      const mlPattern = /^ML[A-Z]\d{9,12}$/i
-      return mlPattern.test(code) || code.length >= 8 // Flexibilidad para otros formatos
-    },
-
+  try {
+    const cleanCode = code.trim()
+    
+    // 🚫 Rechazar códigos muy cortos
+    if (cleanCode.length < 8) {
+      return false
+    }
+    
+    // ✅ Patrones REALES de MercadoLibre:
+    const realMLPatterns = [
+      // 📦 Código de envío (11 dígitos): 45527256007
+      /^[0-9]{11}$/,
+      
+      // 📋 Pack ID (16 dígitos): 2000009247959781
+      /^[0-9]{16}$/,
+      
+      // 🏪 Número de orden (10 dígitos): 2549275327
+      /^[0-9]{10}$/,
+      
+      // 👤 Código de usuario (2 letras + 14 números): VO20250317155530
+      /^[A-Z]{2}[0-9]{14}$/,
+      
+      // 🔢 Rangos numéricos ML (8-20 dígitos)
+      /^[0-9]{8,20}$/,
+      
+      // 🔤 Códigos alfanuméricos ML (8-25 caracteres)
+      /^[A-Z0-9]{8,25}$/i
+    ]
+    
+    return realMLPatterns.some(pattern => pattern.test(cleanCode))
+    
+  } catch (error) {
+    console.warn('Error validando código ML:', error)
+    // En caso de error, aceptar códigos de 8+ caracteres
+    return code && code.length >= 8
+  }
+},
     isDuplicateCode(code) {
       return this.scannedLabels.some(label => label.barcode_value === code)
     },

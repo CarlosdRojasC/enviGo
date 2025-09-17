@@ -58,6 +58,4 @@ router.use('/labels', labelRoutes);
 router.use('/pickups', pickupRoutes);
 router.use('/driver-scanner', driverScannerRoutes);
 
-DRIVER_SCANNER_TOKEN = process.env.DRIVER_SCANNER_TOKEN;
-
 module.exports = router;
