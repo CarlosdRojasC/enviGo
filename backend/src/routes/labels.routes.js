@@ -303,10 +303,9 @@ router.post('/print-bulk-pdf', async (req, res) => {
     });
 
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `inline; filename=etiquetas-envigo-${orders.length}.pdf`);
+    res.setHeader('Content-Disposition', `inline; filename=etiquetas-${orders.length}.pdf`);
     doc.pipe(res);
 
-    // Generar cada etiqueta con el diseño mejorado
     for (const order of orders) {
       if (!order.envigo_label) continue;
 
@@ -314,38 +313,54 @@ router.post('/print-bulk-pdf', async (req, res) => {
 
       const pageW = doc.page.width;
       const pageH = doc.page.height;
-      const cardX = 12;
-      const cardY = 12;
-      const cardW = pageW - cardX * 2;
-      const cardH = pageH - cardY * 2;
+      
+      // Fondo limpio
+      doc.rect(0, 0, pageW, pageH)
+         .fillColor('#ffffff')
+         .fill();
 
-      // Usar las mismas funciones mejoradas
-      drawModernCardBackground(doc, cardX, cardY, cardW, cardH);
+      doc.rect(8, 8, pageW - 16, pageH - 16)
+         .lineWidth(0.5)
+         .strokeColor('#e5e7eb')
+         .stroke();
 
-      const innerX = cardX + 20;
-      let cursorY = cardY + 20;
+      const margin = 20;
+      let y = 25;
 
-      drawHeaderSection(doc, order, innerX, cursorY, cardW);
-      cursorY += 55;
+      // Usar las mismas funciones limpias
+      drawCleanHeader(doc, order, margin, y, pageW - margin * 2);
+      y += 60;
 
-      drawUniqueCodeSection(doc, order, innerX, cursorY, cardW);
-      cursorY += 65;
+      drawCleanCode(doc, order, margin, y, pageW - margin * 2);
+      y += 70;
 
-      drawServiceZone(doc, order, innerX, cursorY, cardW);
-      cursorY += 40;
+      drawCleanZone(doc, order, margin, y, pageW - margin * 2);
+      y += 40;
 
-      drawCustomerInfo(doc, order, innerX, cursorY, cardW);
-
-      drawFooterSection(doc, order, innerX, cardY + cardH - 80, cardW);
+      drawCleanCustomerInfo(doc, order, margin, y, pageW - margin * 2);
+      
+      drawCleanFooter(doc, order, margin, pageH - 70, pageW - margin * 2);
     }
 
     doc.end();
 
   } catch (error) {
-    console.error('Error generando etiquetas masivas mejoradas:', error);
+    console.error('Error generando etiquetas masivas limpias:', error);
     res.status(500).json({ error: 'Error interno al generar el PDF masivo.' });
   }
 });
+function drawCardBackground(doc, x, y, w, h, radius) {
+  // Fondo blanco simple
+  doc.rect(x, y, w, h)
+     .fillColor('#ffffff')
+     .fill();
+
+  // Borde sutil
+  doc.rect(x, y, w, h)
+     .lineWidth(0.5)
+     .strokeColor('#e5e7eb')
+     .stroke();
+}
 
 router.get(
     '/proof/:orderId/download',
