@@ -243,15 +243,27 @@ async getAllDeliveriesForPayments(req, res) {
       company_name: order.company_id?.name
     }));
 
-    // Agrupar por conductor
-    const grouped = this.groupDeliveriesByDriver(deliveries);
+    // Agrupar por conductor usando el método estático
+    const driverGroups = DriverHistoryController.groupDeliveriesByDriverStatic(deliveries);
+
+    const summary = {
+      total_deliveries: deliveries.length,
+      unique_drivers: driverGroups.length,
+      total_amount: deliveries.reduce((sum, d) => sum + d.payment_amount, 0),
+      data_source: 'orders',
+      payment_filter: payment_status
+    };
 
     res.json({
       success: true,
-      data: grouped,
-      total_deliveries: deliveries.length,
-      total_amount: deliveries.length * 1700,
-      filters_applied: { date_from, date_to, driver_id, company_id, payment_status }
+      data: {
+        period: { date_from, date_to },
+        filters: { driver_id, company_id, payment_status },
+        summary,
+        drivers: driverGroups,
+        // 📊 Para debugging, incluir una muestra de los datos
+        sample_deliveries: deliveries.slice(0, 5)
+      }
     });
 
   } catch (error) {
