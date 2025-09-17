@@ -6,15 +6,79 @@ const User = require('../models/User');
 
 // Middleware de autenticación simple para repartidores
 function authenticateDriver(req, res, next) {
-  const token = req.query.token || req.headers.authorization?.replace('Bearer ', '');
+  // Obtener token desde múltiples fuentes
+  const tokenFromHeader = req.headers.authorization?.replace('Bearer ', '');
+  const tokenFromQuery = req.query.token;
+  const tokenFromBody = req.body.token;
   
-  if (!token || token !== process.env.DRIVER_SCANNER_TOKEN) {
-    return res.status(401).json({ error: 'Token de acceso requerido' });
+  const providedToken = tokenFromHeader || tokenFromQuery || tokenFromBody;
+  
+  // Token esperado desde variables de entorno
+  const expectedToken = process.env.DRIVER_SCANNER_TOKEN;
+  
+  if (!expectedToken) {
+    console.error('❌ DRIVER_SCANNER_TOKEN no está configurado en las variables de entorno');
+    return res.status(500).json({ 
+      error: 'Configuración del servidor incompleta' 
+    });
   }
   
+  if (!providedToken) {
+    return res.status(401).json({ 
+      error: 'Token de acceso requerido',
+      hint: 'Contacta al administrador para obtener acceso'
+    });
+  }
+  
+  if (providedToken !== expectedToken) {
+    console.warn(`⚠️ Intento de acceso con token inválido: ${providedToken.substring(0, 8)}...`);
+    return res.status(401).json({ 
+      error: 'Token de acceso inválido' 
+    });
+  }
+  
+  // Token válido, continuar
   next();
 }
-
+// 🔐 Verificar si el token es válido
+router.get('/verify-access', async (req, res) => {
+  try {
+    const tokenFromQuery = req.query.token;
+    const expectedToken = process.env.DRIVER_SCANNER_TOKEN;
+    
+    if (!expectedToken) {
+      return res.status(500).json({ 
+        error: 'Configuración del servidor incompleta',
+        valid: false
+      });
+    }
+    
+    if (!tokenFromQuery || tokenFromQuery !== expectedToken) {
+      return res.status(401).json({ 
+        error: 'Token de acceso inválido',
+        valid: false
+      });
+    }
+    
+    // Token válido, devolver información del sistema
+    res.json({
+      valid: true,
+      message: 'Acceso autorizado',
+      system_info: {
+        name: 'EnviGo Driver Scanner',
+        version: '1.0.0',
+        timestamp: new Date().toISOString()
+      }
+    });
+    
+  } catch (error) {
+    console.error('Error verificando acceso:', error);
+    res.status(500).json({ 
+      error: 'Error interno del servidor',
+      valid: false
+    });
+  }
+});
 // 📋 Obtener lista de clientes activos
 router.get('/clients', authenticateDriver, async (req, res) => {
   try {
