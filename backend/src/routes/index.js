@@ -23,7 +23,7 @@ const notificationRoutes = require('./notifications.routes');
 const driverHistoryRoutes = require('./driverHistory.routes');
 const labelRoutes = require('./labels.routes');
 const pickupRoutes = require('./pickup.routes');
-const driverScannerRoutes = require('./driverScanner.routes');
+const driverScannerRoutes = require('./driver-scanner.routes');
 router.use('/auth', authRoutes);
 
 // Empresas
