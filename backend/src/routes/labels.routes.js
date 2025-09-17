@@ -208,7 +208,7 @@ async function drawFooterWithBarcode(doc, order, x, y, width) {
   doc.font('Helvetica-Bold')
      .fontSize(12)
      .fillColor('#374151')
-     .text('¡Gracias por tu confianza!', x, y + 60, {
+     .text('¡Gracias por tu confianza!', x, y + 80, {
        width: width,
        align: 'center'
      });
@@ -221,7 +221,7 @@ async function drawFooterWithBarcode(doc, order, x, y, width) {
   doc.font('Helvetica')
      .fontSize(8)
      .fillColor('#9ca3af')
-     .text(website.replace(/^https?:\/\//, ''), x, y + 76, {
+     .text(website.replace(/^https?:\/\//, ''), x, y + 96, {
        width: width,
        align: 'center'
      });
