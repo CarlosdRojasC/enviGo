@@ -24,6 +24,8 @@ const driverHistoryRoutes = require('./driverHistory.routes');
 const labelRoutes = require('./labels.routes');
 const pickupRoutes = require('./pickup.routes');
 const driverScannerRoutes = require('./driver-scanner.routes');
+
+
 router.use('/auth', authRoutes);
 
 // Empresas
@@ -56,6 +58,7 @@ router.use('/manifests', manifestRoutes);
 router.use('/driver-history', driverHistoryRoutes);
 router.use('/labels', labelRoutes);
 router.use('/pickups', pickupRoutes);
+
 router.use('/driver-scanner', driverScannerRoutes);
 
 module.exports = router;

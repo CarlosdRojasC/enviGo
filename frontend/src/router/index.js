@@ -151,11 +151,11 @@ const routes = [
         meta: { roles: ['admin'] }
       },
       {
-       path: '/driver-scanner',
-       name: 'DriverMLScanner', 
-       component: () => import('../views/DriverMLScanner.vue'),
-       meta: { requiresAuth: false }
-     },
+  path: '/driver-scanner',
+  name: 'DriverMLScanner', 
+  component: () => import('../views/DriverMLScanner.vue'),
+  meta: { requiresAuth: false }
+},
       {
         path: 'admin/driver-payments',
         name: 'AdminDriverPayments',
