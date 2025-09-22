@@ -454,24 +454,19 @@ async function drawCleanCustomerInfo(doc, order, x, y, width) {
     // Formatear información para Circuit Route Planner
     const companyName = order.company_id?.name || 'Cliente';
     
-    const circuitData = [
-      order.customer_name || '',
-      order.shipping_address || '',
-      order.shipping_commune ? `${order.shipping_commune}, Chile` : 'Chile',
-      order.customer_phone ? `Tel: ${order.customer_phone}` : '',
-      `Pedido: ${order.order_number}`,
-      `Empresa: ${companyName}`,
-      `Código: ${order.envigo_label.unique_code}`
-    ].filter(line => line.trim() !== '').join('\n');
+    const circuitData = `${order.customer_name || ''}
+${order.shipping_address || ''}
+${order.shipping_commune || ''}, Chile
+${order.customer_phone || ''}`;
 
     // Generar QR Code más pequeño
-    const qrBuffer = await QRCode.toBuffer(circuitData, {
-      type: 'png',
-      width: 100,
-      margin: 1,
-      color: { dark: '#000000', light: '#FFFFFF' },
-      errorCorrectionLevel: 'M'
-    });
+    const qrBuffer = QRCode.toBufferSync(circuitData, {
+  type: 'png',
+  width: 200,  // Más grande
+  margin: 2,   // Más margen
+  color: { dark: '#000000', light: '#FFFFFF' },
+  errorCorrectionLevel: 'L'  // Nivel bajo = QR más simple
+});
 
     // Línea separadora
     doc.moveTo(x, currentY)
