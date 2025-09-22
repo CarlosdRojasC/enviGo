@@ -82,10 +82,8 @@ router.post('/print-pdf/:orderId', async (req, res) => {
 
     // Info del cliente (ajustar posición Y)
     drawCleanCustomerInfo(doc, order, margin, y, pageW - margin * 2);
-    
-    // Footer con código de barras (más espacio)
-    await drawFooterWithQRCode(doc, order, margin, pageH - 100, pageW - margin * 2);
 
+   
     doc.end();
 
   } catch (error) {
@@ -280,7 +278,6 @@ router.post('/print-bulk-pdf', async (req, res) => {
 
       drawCleanCustomerInfo(doc, order, margin, y, pageW - margin * 2);
       
-      await drawFooterWithQRCode(doc, order, margin, pageH - 100, pageW - margin * 2);
     }
 
     doc.end();
@@ -450,6 +447,61 @@ function drawCleanCustomerInfo(doc, order, x, y, width) {
          width: width - 20,
          lineGap: 2
        });
+  }
+  currentY += 10; // Solo 10px de separación
+  
+  try {
+    // Formatear información para Circuit Route Planner
+    const companyName = order.company_id?.name || 'Cliente';
+    
+    const circuitData = [
+      order.customer_name || '',
+      order.shipping_address || '',
+      order.shipping_commune ? `${order.shipping_commune}, Chile` : 'Chile',
+      order.customer_phone ? `Tel: ${order.customer_phone}` : '',
+      `Pedido: ${order.order_number}`,
+      `Empresa: ${companyName}`,
+      `Código: ${order.envigo_label.unique_code}`
+    ].filter(line => line.trim() !== '').join('\n');
+
+    // Generar QR Code más pequeño
+    const qrBuffer = QRCode.toBufferSync(circuitData, {
+      type: 'png',
+      width: 100,
+      margin: 1,
+      color: { dark: '#000000', light: '#FFFFFF' },
+      errorCorrectionLevel: 'M'
+    });
+
+    // Línea separadora
+    doc.moveTo(x, currentY)
+       .lineTo(x + width, currentY)
+       .lineWidth(0.5)
+       .strokeColor('#e5e7eb')
+       .stroke();
+
+    currentY += 8;
+
+    // QR Code pequeño y centrado
+    const qrSize = 60;
+    const qrX = x + (width - qrSize) / 2;
+    
+    doc.image(qrBuffer, qrX, currentY, {
+      width: qrSize,
+      height: qrSize
+    });
+
+    // Instrucción pequeña
+    doc.font('Helvetica')
+       .fontSize(6)
+       .fillColor('#6b7280')
+       .text('Escanea con Circuit', x, currentY + qrSize + 3, {
+         width: width,
+         align: 'center'
+       });
+
+  } catch (qrError) {
+    console.error('❌ Error generando QR Code:', qrError);
   }
 }
 
