@@ -42,7 +42,7 @@ router.post('/print-pdf/:orderId', async (req, res) => {
     }
 
     const doc = new PDFDocument({
-      size: [283.5, 566.3], // 10x20 cm (más alto)
+      size: [283.5, 566.3], // 10x20 cm
       margins: { top: 0, bottom: 0, left: 0, right: 0 }
     });
 
@@ -80,11 +80,11 @@ router.post('/print-pdf/:orderId', async (req, res) => {
     drawCommune(doc, order, margin, y, pageW - margin * 2);
     y += 40;
 
-    // Info del cliente con altura controlada
-    const customerInfoHeight = drawCleanCustomerInfo(doc, order, margin, y, pageW - margin * 2);
-    y += customerInfoHeight + 20;
+    // Info del cliente - POSICIÓN FIJA para evitar NaN
+    drawCleanCustomerInfo(doc, order, margin, y, pageW - margin * 2);
+    y = pageH - 140; // Posición fija para el QR desde abajo
 
-    // QR Code con más espacio garantizado
+    // QR Code en posición fija
     await drawFooterWithQRCode(doc, order, margin, y, pageW - margin * 2);
 
     doc.end();
@@ -95,10 +95,9 @@ router.post('/print-pdf/:orderId', async (req, res) => {
   }
 });
 
-// FUNCIÓN MEJORADA: Info del cliente con altura controlada
+// FUNCIÓN SIMPLIFICADA: Info del cliente SIN retornar altura
 function drawCleanCustomerInfo(doc, order, x, y, width) {
   let currentY = y;
-  const startY = y;
   
   // DESTINATARIO
   if (order.customer_name) {
@@ -125,13 +124,10 @@ function drawCleanCustomerInfo(doc, order, x, y, width) {
        .fillColor('#6b7280')
        .text('DIRECCIÓN', x, currentY);
 
-    // Limitar altura del texto de dirección
-    const addressLines = order.shipping_address.split(' ');
+    // Limitar longitud de la dirección
     let addressText = order.shipping_address;
-    
-    // Si la dirección es muy larga, cortarla
-    if (addressLines.length > 8) {
-      addressText = addressLines.slice(0, 8).join(' ') + '...';
+    if (addressText.length > 80) {
+      addressText = addressText.substring(0, 80) + '...';
     }
 
     doc.font('Helvetica')
@@ -139,11 +135,10 @@ function drawCleanCustomerInfo(doc, order, x, y, width) {
        .fillColor('#111827')
        .text(addressText, x, currentY + 12, {
          width: width - 10,
-         lineGap: 2,
-         height: 40 // Limitar altura máxima
+         lineGap: 2
        });
 
-    currentY += 55; // Altura fija para la dirección
+    currentY += 50; // Altura fija
   }
 
   // TELÉFONO
@@ -161,27 +156,32 @@ function drawCleanCustomerInfo(doc, order, x, y, width) {
     currentY += 30;
   }
 
-  // Retornar la altura total usada
-  return currentY - startY;
+  // NO retornamos altura, usamos posición fija
 }
 
-// FUNCIÓN MEJORADA: QR Code más compacto
+// FUNCIÓN SIMPLIFICADA: QR Code con validación de coordenadas
 async function drawFooterWithQRCode(doc, order, x, y, width) {
   try {
+    // Validar coordenadas antes de usar
+    if (isNaN(x) || isNaN(y) || isNaN(width)) {
+      console.error('❌ Coordenadas inválidas:', { x, y, width });
+      throw new Error('Coordenadas inválidas para el QR');
+    }
+
     // Formatear información para Circuit Route Planner
     const companyName = order.company_id?.name || 'Cliente';
     
-    // Formato optimizado y más corto
+    // Datos del QR más simples
     const circuitData = [
       order.customer_name || '',
       order.shipping_address || '',
       order.shipping_commune ? `${order.shipping_commune}, Chile` : 'Chile',
-      order.customer_phone ? `Tel: ${order.customer_phone}` : '',
+      order.customer_phone || '',
       `#${order.order_number}`,
-      order.notes ? `Notas: ${order.notes.substring(0, 50)}${order.notes.length > 50 ? '...' : ''}` : ''
+      companyName
     ].filter(line => line.trim() !== '').join('\n');
 
-    // Generar QR Code más pequeño
+    // Generar QR Code
     const qrBuffer = await QRCode.toBuffer(circuitData, {
       type: 'png',
       width: 120,
@@ -193,59 +193,58 @@ async function drawFooterWithQRCode(doc, order, x, y, width) {
       errorCorrectionLevel: 'M'
     });
 
-    // Línea separadora
-    doc.moveTo(x, y)
-       .lineTo(x + width, y)
-       .lineWidth(0.5)
-       .strokeColor('#e5e7eb')
-       .stroke();
+    // Línea separadora - VALIDAR coordenadas
+    if (!isNaN(x) && !isNaN(y) && !isNaN(width)) {
+      doc.moveTo(x, y)
+         .lineTo(x + width, y)
+         .lineWidth(0.5)
+         .strokeColor('#e5e7eb')
+         .stroke();
+    }
 
-    y += 10;
+    let currentY = y + 10;
 
     // Título del QR
     doc.font('Helvetica-Bold')
        .fontSize(10)
        .fillColor('#374151')
-       .text('QR para Circuit Route Planner', x, y, {
+       .text('QR para Circuit Route Planner', x, currentY, {
          width: width,
          align: 'center'
        });
 
-    y += 20;
+    currentY += 20;
 
-    // QR Code
+    // QR Code centrado
     const qrSize = 80;
     const qrX = x + (width - qrSize) / 2;
     
-    doc.image(qrBuffer, qrX, y, {
-      width: qrSize,
-      height: qrSize
-    });
+    // Validar coordenadas del QR antes de insertar
+    if (!isNaN(qrX) && !isNaN(currentY) && !isNaN(qrSize)) {
+      doc.image(qrBuffer, qrX, currentY, {
+        width: qrSize,
+        height: qrSize
+      });
+    }
 
-    // Código de seguimiento al lado del QR
+    currentY += qrSize + 10;
+
+    // Código de seguimiento
     doc.font('Helvetica-Bold')
        .fontSize(14)
        .fillColor('#111827')
-       .text(order.envigo_label.unique_code, x, y + qrSize + 10, {
+       .text(order.envigo_label.unique_code, x, currentY, {
          width: width,
          align: 'center'
        });
+
+    currentY += 20;
 
     // Instrucción
     doc.font('Helvetica')
        .fontSize(8)
        .fillColor('#6b7280')
-       .text('Escanea con Circuit para agregar parada', x, y + qrSize + 30, {
-         width: width,
-         align: 'center'
-       });
-
-    // Website más abajo
-    const website = order.company_id?.website || 'www.envigo.cl';
-    doc.font('Helvetica')
-       .fontSize(7)
-       .fillColor('#9ca3af')
-       .text(website.replace(/^https?:\/\//, ''), x, y + qrSize + 45, {
+       .text('Escanea con Circuit para agregar parada', x, currentY, {
          width: width,
          align: 'center'
        });
@@ -255,38 +254,29 @@ async function drawFooterWithQRCode(doc, order, x, y, width) {
   } catch (qrError) {
     console.error('❌ Error generando QR Code:', qrError);
     
-    // Fallback simple
-    doc.font('Helvetica-Bold')
-       .fontSize(16)
-       .fillColor('#111827')
-       .text(order.envigo_label.unique_code, x, y + 20, {
-         width: width,
-         align: 'center'
-       });
+    // Fallback simple y seguro
+    try {
+      doc.font('Helvetica-Bold')
+         .fontSize(16)
+         .fillColor('#111827')
+         .text(order.envigo_label.unique_code, x, y + 20, {
+           width: width,
+           align: 'center'
+         });
+
+      doc.font('Helvetica')
+         .fontSize(8)
+         .fillColor('#ef4444')
+         .text('(Error generando QR Code)', x, y + 40, {
+           width: width,
+           align: 'center'
+         });
+    } catch (fallbackError) {
+      console.error('❌ Error en fallback:', fallbackError);
+    }
   }
 }
 
-// FUNCIÓN MEJORADA: Comuna más compacta
-function drawCommune(doc, order, x, y, width) {
-  const commune = order.shipping_commune || 'SIN COMUNA';
-  
-  doc.rect(x, y - 2, width, 25)
-     .fillColor('#f8fafc')
-     .fill();
-
-  doc.rect(x, y - 2, width, 25)
-     .lineWidth(0.5)
-     .strokeColor('#e2e8f0')
-     .stroke();
-
-  doc.font('Helvetica-Bold')
-     .fontSize(14)
-     .fillColor('#374151')
-     .text(commune.toUpperCase(), x, y + 6, {
-       width: width,
-       align: 'center'
-     });
-}
 
 // ==================== ETIQUETAS MASIVAS CON CÓDIGO DE BARRAS ====================
 router.post('/print-bulk-pdf', async (req, res) => {
@@ -307,7 +297,7 @@ router.post('/print-bulk-pdf', async (req, res) => {
 
     const doc = new PDFDocument({
       layout: 'portrait',
-      size: [283.5, 566.3], // 10x20 cm (más alto)
+      size: [283.5, 566.3], // 10x20 cm
       autoFirstPage: false,
       margins: { top: 0, bottom: 0, left: 0, right: 0 }
     });
@@ -331,7 +321,7 @@ router.post('/print-bulk-pdf', async (req, res) => {
       const margin = 20;
       let y = 25;
 
-      // Layout mejorado
+      // Layout con posiciones fijas
       drawCleanHeader(doc, order, margin, y, pageW - margin * 2);
       y += 50;
 
@@ -341,10 +331,11 @@ router.post('/print-bulk-pdf', async (req, res) => {
       drawCommune(doc, order, margin, y, pageW - margin * 2);
       y += 40;
 
-      const customerInfoHeight = drawCleanCustomerInfo(doc, order, margin, y, pageW - margin * 2);
-      y += customerInfoHeight + 20;
+      // Info del cliente
+      drawCleanCustomerInfo(doc, order, margin, y, pageW - margin * 2);
 
-      await drawFooterWithQRCode(doc, order, margin, y, pageW - margin * 2);
+      // QR en posición fija desde abajo
+      await drawFooterWithQRCode(doc, order, margin, pageH - 140, pageW - margin * 2);
     }
 
     doc.end();
