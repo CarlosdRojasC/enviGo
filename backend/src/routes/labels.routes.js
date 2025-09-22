@@ -81,7 +81,7 @@ router.post('/print-pdf/:orderId', async (req, res) => {
     y += 30;
 
     // Info del cliente (ajustar posición Y)
-    drawCleanCustomerInfo(doc, order, margin, y, pageW - margin * 2);
+    await drawCleanCustomerInfo(doc, order, margin, y, pageW - margin * 2);
 
    
     doc.end();
@@ -276,7 +276,7 @@ router.post('/print-bulk-pdf', async (req, res) => {
       drawCommune(doc, order, margin, y, pageW - margin * 2);
       y += 30;
 
-      drawCleanCustomerInfo(doc, order, margin, y, pageW - margin * 2);
+      await drawCleanCustomerInfo(doc, order, margin, y, pageW - margin * 2);
       
     }
 
@@ -346,7 +346,7 @@ function drawCleanCode(doc, order, x, y, width) {
      });
 }
 
-function drawCleanCustomerInfo(doc, order, x, y, width) {
+async function drawCleanCustomerInfo(doc, order, x, y, width) {
   let currentY = y;
   
   // DESTINATARIO
@@ -465,7 +465,7 @@ function drawCleanCustomerInfo(doc, order, x, y, width) {
     ].filter(line => line.trim() !== '').join('\n');
 
     // Generar QR Code más pequeño
-    const qrBuffer = QRCode.toBufferSync(circuitData, {
+    const qrBuffer = await QRCode.toBuffer(circuitData, {
       type: 'png',
       width: 100,
       margin: 1,
