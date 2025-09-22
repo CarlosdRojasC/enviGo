@@ -8,6 +8,7 @@ const PDFDocument = require('pdfkit');
 const sanitize = require('sanitize-filename');
 const JsBarcode = require('jsbarcode');
 const { createCanvas } = require('canvas');
+const QRCode = require('qrcode');
 
 const Order = require('../models/Order');
 // Todas las rutas requieren autenticación
@@ -83,7 +84,7 @@ router.post('/print-pdf/:orderId', async (req, res) => {
     drawCleanCustomerInfo(doc, order, margin, y, pageW - margin * 2);
     
     // Footer con código de barras (más espacio)
-    await drawFooterWithBarcode(doc, order, margin, pageH - 110, pageW - margin * 2);
+    await drawFooterWithQRCode(doc, order, margin, pageH - 110, pageW - margin * 2);
 
     doc.end();
 
@@ -116,7 +117,7 @@ function drawCommune(doc, order, x, y, width) {
 }
 
 // 📱 FUNCIÓN: Footer simple con código de barras MEJORADO
-async function drawFooterWithBarcode(doc, order, x, y, width) {
+async function drawFooterWithQRCode(doc, order, x, y, width) {
   // Línea superior
   doc.moveTo(x, y)
      .lineTo(x + width, y)
@@ -126,43 +127,59 @@ async function drawFooterWithBarcode(doc, order, x, y, width) {
 
   y += 15;
 
-  // Generar código de barras simple
-  const barcodeValue = order.envigo_label.unique_code;
-  
   try {
-    // Crear canvas para el código de barras con tamaño más grande
-    const canvas = createCanvas(300, 80);
+    // Formatear información para Circuit Route Planner
+    const companyName = order.company_id?.name || 'Cliente';
     
-    // Generar código de barras Code 128 más visible
-    JsBarcode(canvas, barcodeValue, {
-      format: "CODE128",
-      width: 3, // Más ancho
-      height: 50, // Más alto
-      displayValue: false,
-      margin: 10, // Margen para mejor visibilidad
-      background: "#ffffff",
-      lineColor: "#000000"
+    // Formato que Circuit Route Planner puede leer al escanear
+    const circuitData = [
+      order.customer_name || '',
+      order.shipping_address || '',
+      order.shipping_commune ? `${order.shipping_commune}, Chile` : 'Chile',
+      order.customer_phone ? `Tel: ${order.customer_phone}` : '',
+      `Pedido: ${order.order_number}`,
+      `Empresa: ${companyName}`,
+      order.notes ? `Notas: ${order.notes}` : '',
+      `Código: ${order.envigo_label.unique_code}`
+    ].filter(line => line.trim() !== '').join('\n');
+
+    // Generar QR Code
+    const qrBuffer = await QRCode.toBuffer(circuitData, {
+      type: 'png',
+      width: 150,
+      margin: 1,
+      color: {
+        dark: '#000000',
+        light: '#FFFFFF'
+      },
+      errorCorrectionLevel: 'M'
     });
 
-    // Convertir canvas a buffer
-    const barcodeBuffer = canvas.toBuffer('image/png');
-
-    // Insertar código de barras más grande en el PDF
-    const barcodeWidth = 180;
-    const barcodeHeight = 40;
-    const barcodeX = x + (width - barcodeWidth) / 2;
-    const barcodeY = y;
+    // Tamaño y posición del QR
+    const qrSize = 100;
+    const qrX = x + (width - qrSize) / 2;
+    const qrY = y;
     
-    doc.image(barcodeBuffer, barcodeX, barcodeY, {
-      width: barcodeWidth,
-      height: barcodeHeight
+    // Insertar QR code en el PDF
+    doc.image(qrBuffer, qrX, qrY, {
+      width: qrSize,
+      height: qrSize
     });
 
-    // Texto del código debajo del código de barras
+    // Título arriba del QR
+    doc.font('Helvetica-Bold')
+       .fontSize(10)
+       .fillColor('#374151')
+       .text('QR para Circuit Route Planner', x, qrY - 15, {
+         width: width,
+         align: 'center'
+       });
+
+    // Código de seguimiento debajo del QR
     doc.font('Helvetica-Bold')
        .fontSize(11)
        .fillColor('#111827')
-       .text(barcodeValue, x, barcodeY + barcodeHeight + 8, {
+       .text(order.envigo_label.unique_code, x, qrY + qrSize + 8, {
          width: width,
          align: 'center'
        });
@@ -171,17 +188,17 @@ async function drawFooterWithBarcode(doc, order, x, y, width) {
     doc.font('Helvetica')
        .fontSize(7)
        .fillColor('#6b7280')
-       .text('Código de seguimiento', x, barcodeY + barcodeHeight + 22, {
+       .text('Escanea con Circuit para agregar parada', x, qrY + qrSize + 22, {
          width: width,
          align: 'center'
        });
 
-    console.log(`✅ Código de barras generado para: ${barcodeValue}`);
+    console.log(`✅ QR Code para Circuit generado para: ${order.order_number}`);
 
-  } catch (barcodeError) {
-    console.error('❌ Error generando código de barras:', barcodeError);
+  } catch (qrError) {
+    console.error('❌ Error generando QR Code:', qrError);
     
-    // Fallback mejorado: mostrar código con marco
+    // Fallback: mostrar código con marco
     doc.rect(x + 20, y, width - 40, 40)
        .lineWidth(1)
        .strokeColor('#d1d5db')
@@ -190,7 +207,7 @@ async function drawFooterWithBarcode(doc, order, x, y, width) {
     doc.font('Helvetica-Bold')
        .fontSize(16)
        .fillColor('#111827')
-       .text(barcodeValue, x, y + 15, {
+       .text(order.envigo_label.unique_code, x, y + 15, {
          width: width,
          align: 'center'
        });
@@ -198,7 +215,7 @@ async function drawFooterWithBarcode(doc, order, x, y, width) {
     doc.font('Helvetica')
        .fontSize(8)
        .fillColor('#ef4444')
-       .text('(Error generando código de barras)', x, y + 35, {
+       .text('(Error generando QR Code)', x, y + 35, {
          width: width,
          align: 'center'
        });
@@ -208,7 +225,7 @@ async function drawFooterWithBarcode(doc, order, x, y, width) {
   doc.font('Helvetica-Bold')
      .fontSize(12)
      .fillColor('#374151')
-     .text('¡Gracias por tu confianza!', x, y + 80, {
+     .text('¡Gracias por tu confianza!', x, y + 120, {
        width: width,
        align: 'center'
      });
@@ -221,7 +238,7 @@ async function drawFooterWithBarcode(doc, order, x, y, width) {
   doc.font('Helvetica')
      .fontSize(8)
      .fillColor('#9ca3af')
-     .text(website.replace(/^https?:\/\//, ''), x, y + 96, {
+     .text(website.replace(/^https?:\/\//, ''), x, y + 136, {
        width: width,
        align: 'center'
      });
@@ -281,7 +298,7 @@ router.post('/print-bulk-pdf', async (req, res) => {
 
       drawCleanCustomerInfo(doc, order, margin, y, pageW - margin * 2);
       
-      await drawFooterWithBarcode(doc, order, margin, pageH - 110, pageW - margin * 2);
+      await drawFooterWithQRCode(doc, order, margin, pageH - 110, pageW - margin * 2);
     }
 
     doc.end();
