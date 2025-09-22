@@ -70,21 +70,21 @@ router.post('/print-pdf/:orderId', async (req, res) => {
 
     // Header
     drawCleanHeader(doc, order, margin, y, pageW - margin * 2);
-    y += 60;
+    y += 50;
 
     // Código único
     drawCleanCode(doc, order, margin, y, pageW - margin * 2);
-    y += 70;
+    y += 50;
 
     // Comuna (en lugar de zona metropolitana)
     drawCommune(doc, order, margin, y, pageW - margin * 2);
-    y += 40;
+    y += 30;
 
     // Info del cliente (ajustar posición Y)
     drawCleanCustomerInfo(doc, order, margin, y, pageW - margin * 2);
     
     // Footer con código de barras (más espacio)
-    await drawFooterWithQRCode(doc, order, margin, pageH - 110, pageW - margin * 2);
+    await drawFooterWithQRCode(doc, order, margin, pageH - 100, pageW - margin * 2);
 
     doc.end();
 
@@ -98,11 +98,11 @@ router.post('/print-pdf/:orderId', async (req, res) => {
 function drawCommune(doc, order, x, y, width) {
   const commune = order.shipping_commune || 'SIN COMUNA';
   
-  doc.rect(x, y - 2, width, 30)
+  doc.rect(x, y - 2, width, 20)
      .fillColor('#f8fafc')
      .fill();
 
-  doc.rect(x, y - 2, width, 30)
+  doc.rect(x, y - 2, width, 20)
      .lineWidth(0.5)
      .strokeColor('#e2e8f0')
      .stroke();
@@ -165,24 +165,6 @@ async function drawFooterWithQRCode(doc, order, x, y, width) {
       width: qrSize,
       height: qrSize
     });
-
-    // Título arriba del QR
-    doc.font('Helvetica-Bold')
-       .fontSize(10)
-       .fillColor('#374151')
-       .text('QR para Circuit Route Planner', x, qrY - 15, {
-         width: width,
-         align: 'center'
-       });
-
-    // Código de seguimiento debajo del QR
-    doc.font('Helvetica-Bold')
-       .fontSize(11)
-       .fillColor('#111827')
-       .text(order.envigo_label.unique_code, x, qrY + qrSize + 8, {
-         width: width,
-         align: 'center'
-       });
 
     // Instrucción pequeña
     doc.font('Helvetica')
@@ -288,17 +270,17 @@ router.post('/print-bulk-pdf', async (req, res) => {
       let y = 25;
 
       drawCleanHeader(doc, order, margin, y, pageW - margin * 2);
-      y += 60;
+      y += 50;
 
       drawCleanCode(doc, order, margin, y, pageW - margin * 2);
-      y += 70;
+      y += 60;
 
       drawCommune(doc, order, margin, y, pageW - margin * 2);
-      y += 40;
+      y += 30;
 
       drawCleanCustomerInfo(doc, order, margin, y, pageW - margin * 2);
       
-      await drawFooterWithQRCode(doc, order, margin, pageH - 110, pageW - margin * 2);
+      await drawFooterWithQRCode(doc, order, margin, pageH - 100, pageW - margin * 2);
     }
 
     doc.end();
@@ -348,11 +330,11 @@ function drawCleanCode(doc, order, x, y, width) {
   const code = order.envigo_label.unique_code;
   
   // Fondo sutil
-  doc.rect(x, y, width, 50)
+  doc.rect(x, y, width, 40)
      .fillColor('#f9fafb')
      .fill();
 
-  doc.rect(x, y, width, 50)
+  doc.rect(x, y, width, 40)
      .lineWidth(0.5)
      .strokeColor('#e5e7eb')
      .stroke();
@@ -381,11 +363,11 @@ function drawCleanCustomerInfo(doc, order, x, y, width) {
        .fontSize(12)
        .fillColor('#111827')
        .text(order.customer_name, x, currentY + 12, {
-         width: width - 20,
+         width: width - 15,
          lineGap: 2
        });
 
-    currentY += 40; // Más espacio después del destinatario
+    currentY += 30; // Más espacio después del destinatario
 
     // Línea separadora
     doc.moveTo(x, currentY - 8)
@@ -406,7 +388,7 @@ function drawCleanCustomerInfo(doc, order, x, y, width) {
        .fontSize(12)
        .fillColor('#111827')
        .text(order.shipping_address, x, currentY + 12, {
-         width: width - 20,
+         width: width - 10,
          lineGap: 3
        });
 
