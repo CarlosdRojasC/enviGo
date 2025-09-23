@@ -1616,10 +1616,6 @@ function redirectToChannels() {
   closeCreateOrderModal()
   toast.info('Redirigiendo a la configuración de canales...')
 }
-
-// ==================== LIFECYCLE ====================
-
-onMounted(async () => {
   
   function openBulkUploadModal() {
   showBulkUploadModal.value = true
@@ -1739,6 +1735,11 @@ async function handleBulkUpload() {
     isBulkUploading.value = false
   }
 }
+
+// ==================== LIFECYCLE ====================
+
+onMounted(async () => {
+
   
   console.log('🚀 Orders.vue montado. Esperando ID de compañía para cargas secundarias...');
   try {
