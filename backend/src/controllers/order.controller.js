@@ -880,8 +880,8 @@ if (req.user.role === 'admin') {
 }
 
 // Simplificar opciones para clientes (sin Circuit/ShipDay)
-const create_in_circuit = req.user.role === 'admin' ? (req.body.create_in_circuit || 'false') : 'false';
-const create_in_shipday = req.user.role === 'admin' ? (req.body.create_in_shipday || 'false') : 'false';
+const shouldCreateInCircuit = false;
+const shouldCreateInShipday = false;
 
   try {
     // 3. Leer el archivo Excel desde el buffer de memoria
