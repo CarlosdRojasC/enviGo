@@ -24,7 +24,7 @@ const driverHistoryRoutes = require('./driverHistory.routes');
 const labelRoutes = require('./labels.routes');
 const pickupRoutes = require('./pickup.routes');
 const driverScannerRoutes = require('./driver-scanner.routes');
-const collectionRoutes = require('./collection.route');
+const collectionRoutes = require('./collection.routes');
 
 
 
