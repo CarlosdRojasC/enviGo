@@ -42,7 +42,7 @@ router.post('/print-pdf/:orderId', async (req, res) => {
     }
 
     const doc = new PDFDocument({
-      size: [283.5, 566.3], // 10x15 cm
+      size: [283.5, 425.25], // 10x15 cm exacto
       margins: { top: 0, bottom: 0, left: 0, right: 0 }
     });
 
@@ -59,7 +59,7 @@ router.post('/print-pdf/:orderId', async (req, res) => {
        .fillColor('#ffffff')
        .fill();
 
-    // Borde perimetral
+    // Borde perimetral suave
     doc.rect(8, 8, pageW - 16, pageH - 16)
        .lineWidth(0.5)
        .strokeColor('#e5e7eb')
@@ -68,161 +68,152 @@ router.post('/print-pdf/:orderId', async (req, res) => {
     const margin = 20;
     let y = 25;
 
-    // Header
-    drawCleanHeader(doc, order, margin, y, pageW - margin * 2);
-    y += 50;
+    // 📍 HEADER - Nombre empresa y código único
+    drawSimpleHeader(doc, order, margin, y, pageW - margin * 2);
+    y += 80;
 
-    // Código único
-    drawCleanCode(doc, order, margin, y, pageW - margin * 2);
-    y += 50;
-
-    // Comuna (en lugar de zona metropolitana)
+    // 🏘️ COMUNA DESTACADA
     drawCommune(doc, order, margin, y, pageW - margin * 2);
-    y += 30;
+    y += 55;
 
-    // Info del cliente (ajustar posición Y)
-    await drawCleanCustomerInfo(doc, order, margin, y, pageW - margin * 2);
+    // 👤 INFORMACIÓN DEL CLIENTE
+    drawCustomerInfo(doc, order, margin, y, pageW - margin * 2);
+    
+    // 🙏 FOOTER SIMPLE
+    drawSimpleFooter(doc, order, margin, pageH - 80, pageW - margin * 2);
 
-   
     doc.end();
 
   } catch (error) {
-    console.error('Error generando etiqueta con código de barras:', error);
+    console.error('Error generando etiqueta simple:', error);
     res.status(500).json({ error: 'Error interno al generar el PDF.' });
   }
 });
 
-// 🏘️ FUNCIÓN: Comuna destacada
-function drawCommune(doc, order, x, y, width) {
-  const commune = order.shipping_commune || 'SIN COMUNA';
-  
-  doc.rect(x, y - 2, width, 20)
-     .fillColor('#f8fafc')
-     .fill();
+// 📍 FUNCIÓN: Header simple con empresa y código
+function drawSimpleHeader(doc, order, x, y, width) {
+  const companyName = order.company_id?.name || order.company_name || 'enviGo';
+  const uniqueCode = order.envigo_label?.unique_code || order._id.toString().slice(-6);
 
-  doc.rect(x, y - 2, width, 20)
-     .lineWidth(0.5)
-     .strokeColor('#e2e8f0')
+  // Nombre de la empresa
+  doc.font('Helvetica-Bold')
+     .fontSize(18)
+     .fillColor('#111827')
+     .text(companyName, x, y, {
+       width: width,
+       align: 'center'
+     });
+
+  // Línea divisoria
+  doc.moveTo(x + 40, y + 35)
+     .lineTo(x + width - 40, y + 35)
+     .lineWidth(1)
+     .strokeColor('#d1d5db')
      .stroke();
 
+  // Código único destacado
   doc.font('Helvetica-Bold')
      .fontSize(16)
      .fillColor('#374151')
+     .text(`Pedido: ${uniqueCode}`, x, y + 50, {
+       width: width,
+       align: 'center'
+     });
+}
+
+// 🏘️ FUNCIÓN: Comuna destacada (igual que antes)
+function drawCommune(doc, order, x, y, width) {
+  const commune = order.shipping_commune || 'SIN COMUNA';
+  
+  // Fondo gris claro para destacar
+  doc.rect(x, y - 5, width, 35)
+     .fillColor('#f8fafc')
+     .fill();
+
+  // Borde de la comuna
+  doc.rect(x, y - 5, width, 35)
+     .lineWidth(1)
+     .strokeColor('#e2e8f0')
+     .stroke();
+
+  // Texto de la comuna en mayúsculas y centrado
+  doc.font('Helvetica-Bold')
+     .fontSize(18)
+     .fillColor('#1f2937')
      .text(commune.toUpperCase(), x, y + 8, {
        width: width,
        align: 'center'
      });
 }
 
-// 📱 FUNCIÓN: Footer simple con código de barras MEJORADO
-async function drawFooterWithQRCode(doc, order, x, y, width) {
-  // Línea superior
+// 👤 FUNCIÓN: Información del cliente
+function drawCustomerInfo(doc, order, x, y, width) {
+  const lineHeight = 22;
+  let currentY = y;
+
+  // Función helper para agregar campos
+  function addField(label, value, fontSize = 12) {
+    if (!value || value === '') return;
+    
+    doc.font('Helvetica-Bold')
+       .fontSize(fontSize)
+       .fillColor('#374151')
+       .text(`${label}:`, x, currentY);
+    
+    doc.font('Helvetica')
+       .fontSize(fontSize)
+       .fillColor('#111827')
+       .text(value, x + 80, currentY, {
+         width: width - 80,
+         lineGap: 2
+       });
+    
+    currentY += lineHeight;
+  }
+
+  // Campos de información
+  addField('Cliente', order.customer_name, 13);
+  addField('Teléfono', order.customer_phone, 12);
+  addField('Dirección', order.shipping_address, 12);
+  
+  if (order.comment && order.comment.trim()) {
+    currentY += 5; // Espacio extra antes del comentario
+    addField('Comentario', order.comment, 11);
+  }
+}
+
+// 🙏 FUNCIÓN: Footer simple
+function drawSimpleFooter(doc, order, x, y, width) {
+  // Línea divisoria superior
   doc.moveTo(x, y)
      .lineTo(x + width, y)
      .lineWidth(0.5)
      .strokeColor('#e5e7eb')
      .stroke();
 
-  y += 15;
-
-  try {
-    // Formatear información para Circuit Route Planner
-    const companyName = order.company_id?.name || 'Cliente';
-    
-    // Formato que Circuit Route Planner puede leer al escanear
-    const circuitData = [
-      order.customer_name || '',
-      order.shipping_address || '',
-      order.shipping_commune ? `${order.shipping_commune}, Chile` : 'Chile',
-      order.customer_phone ? `Tel: ${order.customer_phone}` : '',
-      `Pedido: ${order.order_number}`,
-      `Empresa: ${companyName}`,
-      order.notes ? `Notas: ${order.notes}` : '',
-      `Código: ${order.envigo_label.unique_code}`
-    ].filter(line => line.trim() !== '').join('\n');
-
-    // Generar QR Code
-    const qrBuffer = await QRCode.toBuffer(circuitData, {
-      type: 'png',
-      width: 150,
-      margin: 1,
-      color: {
-        dark: '#000000',
-        light: '#FFFFFF'
-      },
-      errorCorrectionLevel: 'M'
-    });
-
-    // Tamaño y posición del QR
-    const qrSize = 100;
-    const qrX = x + (width - qrSize) / 2;
-    const qrY = y;
-    
-    // Insertar QR code en el PDF
-    doc.image(qrBuffer, qrX, qrY, {
-      width: qrSize,
-      height: qrSize
-    });
-
-    // Instrucción pequeña
-    doc.font('Helvetica')
-       .fontSize(7)
-       .fillColor('#6b7280')
-       .text('Escanea con Circuit para agregar parada', x, qrY + qrSize + 22, {
-         width: width,
-         align: 'center'
-       });
-
-    console.log(`✅ QR Code para Circuit generado para: ${order.order_number}`);
-
-  } catch (qrError) {
-    console.error('❌ Error generando QR Code:', qrError);
-    
-    // Fallback: mostrar código con marco
-    doc.rect(x + 20, y, width - 40, 40)
-       .lineWidth(1)
-       .strokeColor('#d1d5db')
-       .stroke();
-
-    doc.font('Helvetica-Bold')
-       .fontSize(16)
-       .fillColor('#111827')
-       .text(order.envigo_label.unique_code, x, y + 15, {
-         width: width,
-         align: 'center'
-       });
-
-    doc.font('Helvetica')
-       .fontSize(8)
-       .fillColor('#ef4444')
-       .text('(Error generando QR Code)', x, y + 35, {
-         width: width,
-         align: 'center'
-       });
-  }
-
-  // Mensaje de agradecimiento más abajo
+  // Mensaje de agradecimiento
   doc.font('Helvetica-Bold')
-     .fontSize(12)
+     .fontSize(14)
      .fillColor('#374151')
-     .text('¡Gracias por tu confianza!', x, y + 120, {
+     .text('¡Gracias por tu confianza!', x, y + 20, {
        width: width,
        align: 'center'
      });
 
-  // Website
+  // Website (si existe)
   const website = order.company_id?.website || 
                  order.channel_id?.store_url || 
                  'www.envigo.cl';
 
   doc.font('Helvetica')
-     .fontSize(8)
+     .fontSize(10)
      .fillColor('#9ca3af')
-     .text(website.replace(/^https?:\/\//, ''), x, y + 136, {
+     .text(website.replace(/^https?:\/\//, ''), x, y + 45, {
        width: width,
        align: 'center'
      });
 }
+
 
 // ==================== ETIQUETAS MASIVAS CON CÓDIGO DE BARRAS ====================
 router.post('/print-bulk-pdf', async (req, res) => {
@@ -243,15 +234,16 @@ router.post('/print-bulk-pdf', async (req, res) => {
 
     const doc = new PDFDocument({
       layout: 'portrait',
-      size: [283.5, 566.3],
+      size: [283.5, 425.25], // 10x15 cm
       autoFirstPage: false,
       margins: { top: 0, bottom: 0, left: 0, right: 0 }
     });
 
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `inline; filename=etiquetas-${orders.length}.pdf`);
+    res.setHeader('Content-Disposition', `inline; filename=etiquetas-simples-bulk.pdf`);
     doc.pipe(res);
 
+    // Generar una etiqueta por página
     for (const order of orders) {
       if (!order.envigo_label) continue;
 
@@ -261,23 +253,32 @@ router.post('/print-bulk-pdf', async (req, res) => {
       const pageH = doc.page.height;
       
       // Fondo limpio
-      doc.rect(0, 0, pageW, pageH).fillColor('#ffffff').fill();
-      doc.rect(8, 8, pageW - 16, pageH - 16).lineWidth(0.5).strokeColor('#e5e7eb').stroke();
+      doc.rect(0, 0, pageW, pageH)
+         .fillColor('#ffffff')
+         .fill();
+
+      // Borde perimetral
+      doc.rect(8, 8, pageW - 16, pageH - 16)
+         .lineWidth(0.5)
+         .strokeColor('#e5e7eb')
+         .stroke();
 
       const margin = 20;
       let y = 25;
 
-      drawCleanHeader(doc, order, margin, y, pageW - margin * 2);
-      y += 50;
+      // Header
+      drawSimpleHeader(doc, order, margin, y, pageW - margin * 2);
+      y += 80;
 
-      drawCleanCode(doc, order, margin, y, pageW - margin * 2);
-      y += 60;
-
+      // Comuna
       drawCommune(doc, order, margin, y, pageW - margin * 2);
-      y += 30;
+      y += 55;
 
-      await drawCleanCustomerInfo(doc, order, margin, y, pageW - margin * 2);
+      // Info cliente
+      drawCustomerInfo(doc, order, margin, y, pageW - margin * 2);
       
+      // Footer
+      drawSimpleFooter(doc, order, margin, pageH - 80, pageW - margin * 2);
     }
 
     doc.end();
