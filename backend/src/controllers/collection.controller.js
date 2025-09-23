@@ -3,7 +3,7 @@ const User = require('../models/User');
 const Notification = require('../models/Notification');
 const NotificationService = require('../services/notification.service');
 const Pickup = require('../models/Pickup');
-
+const Manifest = require('../models/Manifest');
 class CollectionController {
   /**
    * Solicitar colecta (para clientes)
