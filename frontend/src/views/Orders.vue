@@ -1792,16 +1792,16 @@ async function handleCollectionRequest(requestData) {
     
     await apiService.collections.request({
       packageCount: requestData.packageCount,
-      notes: requestData.notes,
-      company_id: companyId.value
+      collectionDate: requestData.collectionDate,
+      notes: requestData.notes
     })
     
     showCollectionModal.value = false
-    toast.success('Solicitud de colecta enviada. Te contactaremos pronto.')
+    toast.success('Solicitud de colecta creada. Aparecerá en el panel de recolecciones.')
     
   } catch (error) {
     console.error('Error solicitando colecta:', error)
-    toast.error('Error al solicitar colecta')
+    toast.error('Error al solicitar colecta: ' + (error.response?.data?.error || error.message))
   } finally {
     isRequestingCollection.value = false
   }

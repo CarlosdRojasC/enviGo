@@ -54,9 +54,11 @@
         </div>
 
         <div class="package-highlight">
-            <h3>📦 Detalles de la Colecta</h3>
-            <p><strong>Cantidad de paquetes:</strong> {{package_count}}</p>
-        </div>
+  <h3>📦 Detalles de la Colecta</h3>
+  <p><strong>Fecha solicitada:</strong> {{collection_date}}</p>
+  <p><strong>Cantidad de paquetes:</strong> {{package_count}}</p>
+</div>
+
 
         {{#if notes}}
         <div class="notes-section">
@@ -66,9 +68,9 @@
         {{/if}}
 
         <div style="text-align: center;">
-            <a href="{{frontend_url}}/admin/collections" class="action-button">
-                Ver Panel de Colectas
-            </a>
+            <a href="{{frontend_url}}/app/admin/pickups" class="action-button">
+  Ver Panel de Recolecciones
+</a>
         </div>
 
         <div class="footer">

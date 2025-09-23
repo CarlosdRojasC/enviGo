@@ -13,7 +13,20 @@
           <p><strong>Dirección:</strong> {{ companyAddress }}</p>
         </div>
       </div>
-
+<div class="form-group">
+  <label class="required">Fecha preferida para colecta</label>
+  <input 
+    type="date" 
+    v-model="collectionDate"
+    :min="minDate"
+    :max="maxDate"
+    class="date-input"
+    required
+  />
+  <small class="help-text">
+    Selecciona cuándo prefieres que recojan los paquetes
+  </small>
+</div>
       <div class="form-section">
         <div class="form-group">
           <label class="required">Cantidad de paquetes</label>
@@ -83,9 +96,21 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['close', 'submit'])
-
+const collectionDate = ref('')
 const packageCount = ref(1)
 const notes = ref('')
+
+const minDate = computed(() => {
+  const tomorrow = new Date()
+  tomorrow.setDate(tomorrow.getDate() + 1)
+  return tomorrow.toISOString().split('T')[0]
+})
+
+const maxDate = computed(() => {
+  const maxDate = new Date()
+  maxDate.setDate(maxDate.getDate() + 14)
+  return maxDate.toISOString().split('T')[0]
+})
 
 // Resetear formulario cuando se abre
 watch(() => props.show, (show) => {
@@ -96,10 +121,11 @@ watch(() => props.show, (show) => {
 })
 
 function handleSubmit() {
-  if (!packageCount.value || packageCount.value < 1) return
+  if (!packageCount.value || !collectionDate.value) return
   
   emit('submit', {
     packageCount: packageCount.value,
+    collectionDate: collectionDate.value,
     notes: notes.value
   })
 }

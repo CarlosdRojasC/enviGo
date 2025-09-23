@@ -21,6 +21,22 @@ const pickupSchema = new mongoose.Schema({
     enum: ['pending_assignment', 'assigned', 'in_transit_to_warehouse', 'completed', 'cancelled'],
     default: 'pending_assignment',
   },
+  // Agregar estos campos al schema existente
+pickup_type: {
+  type: String,
+  enum: ['admin_created', 'collection_request'],
+  default: 'admin_created'
+},
+
+estimated_packages: {
+  type: Number,
+  default: 0
+},
+
+requested_by: {
+  type: mongoose.Schema.Types.ObjectId,
+  ref: 'User'
+},
   orders_to_pickup: [{
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Order',
