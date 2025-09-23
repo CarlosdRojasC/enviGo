@@ -95,9 +95,9 @@ function drawSimpleHeader(doc, order, x, y, width) {
   const companyName = order.company_id?.name || order.company_name || 'enviGo';
   const uniqueCode = order.envigo_label?.unique_code || order._id.toString().slice(-6);
 
-  // Nombre de la empresa
+  // Nombre de la empresa (más pequeño para dar espacio)
   doc.font('Helvetica-Bold')
-     .fontSize(18)
+     .fontSize(16)
      .fillColor('#111827')
      .text(companyName, x, y, {
        width: width,
@@ -105,17 +105,17 @@ function drawSimpleHeader(doc, order, x, y, width) {
      });
 
   // Línea divisoria
-  doc.moveTo(x + 40, y + 35)
-     .lineTo(x + width - 40, y + 35)
+  doc.moveTo(x + 40, y + 25)
+     .lineTo(x + width - 40, y + 25)
      .lineWidth(1)
      .strokeColor('#d1d5db')
      .stroke();
 
-  // Código único destacado
+  // Código único destacado (más grande)
   doc.font('Helvetica-Bold')
-     .fontSize(16)
-     .fillColor('#374151')
-     .text(`Pedido: ${uniqueCode}`, x, y + 50, {
+     .fontSize(18)
+     .fillColor('#1f2937')
+     .text(`Pedido: ${uniqueCode}`, x, y + 35, {
        width: width,
        align: 'center'
      });
@@ -214,8 +214,7 @@ function drawSimpleFooter(doc, order, x, y, width) {
      });
 }
 
-
-// ==================== ETIQUETAS MASIVAS CON CÓDIGO DE BARRAS ====================
+// ==================== ETIQUETAS MASIVAS SIMPLES ====================
 router.post('/print-bulk-pdf', async (req, res) => {
   try {
     const { orderIds } = req.body;
@@ -288,219 +287,6 @@ router.post('/print-bulk-pdf', async (req, res) => {
     res.status(500).json({ error: 'Error interno al generar el PDF masivo.' });
   }
 });
-
-// ==================== FUNCIONES AUXILIARES LIMPIAS ====================
-function drawCleanHeader(doc, order, x, y, width) {
-  const companyName = order.company_id?.name || 'ENVIGO';
-  
-  // Línea superior
-  doc.moveTo(x, y)
-     .lineTo(x + width, y)
-     .lineWidth(1)
-     .strokeColor('#374151')
-     .stroke();
-
-  y += 15;
-
-  // Nombre de empresa
-  doc.font('Helvetica-Bold')
-     .fontSize(16)
-     .fillColor('#1f2937')
-     .text(companyName.toUpperCase(), x, y);
-
-  // Número de pedido
-  const orderText = `#${order.order_number || '0000'}`;
-  const orderWidth = doc.widthOfString(orderText);
-  doc.font('Helvetica')
-     .fontSize(12)
-     .fillColor('#6b7280')
-     .text(orderText, x + width - orderWidth, y + 3);
-
-  // Línea separadora
-  doc.moveTo(x, y + 25)
-     .lineTo(x + width, y + 25)
-     .lineWidth(0.5)
-     .strokeColor('#d1d5db')
-     .stroke();
-}
-
-function drawCleanCode(doc, order, x, y, width) {
-  const code = order.envigo_label.unique_code;
-  
-  // Fondo sutil
-  doc.rect(x, y, width, 50)
-     .fillColor('#f9fafb')
-     .fill();
-
-  doc.rect(x, y, width, 50)
-     .lineWidth(0.5)
-     .strokeColor('#e5e7eb')
-     .stroke();
-
-  // Código principal
-  doc.font('Helvetica-Bold')
-     .fontSize(28)
-     .fillColor('#111827')
-     .text(code, x, y + 15, {
-       width: width,
-       align: 'center'
-     });
-}
-
-async function drawCleanCustomerInfo(doc, order, x, y, width) {
-  let currentY = y;
-  
-  // DESTINATARIO
-  if (order.customer_name) {
-    doc.font('Helvetica-Bold')
-       .fontSize(9)
-       .fillColor('#6b7280')
-       .text('DESTINATARIO', x, currentY);
-
-    doc.font('Helvetica')
-       .fontSize(12)
-       .fillColor('#111827')
-       .text(order.customer_name, x, currentY + 12, {
-         width: width - 20,
-         lineGap: 2
-       });
-
-    currentY += 40; // Más espacio después del destinatario
-
-    // Línea separadora
-    doc.moveTo(x, currentY - 8)
-       .lineTo(x + width, currentY - 8)
-       .lineWidth(0.25)
-       .strokeColor('#f3f4f6')
-       .stroke();
-  }
-
-  // DIRECCIÓN - Más espacio
-  if (order.shipping_address) {
-    doc.font('Helvetica-Bold')
-       .fontSize(9)
-       .fillColor('#6b7280')
-       .text('DIRECCIÓN', x, currentY);
-
-    doc.font('Helvetica')
-       .fontSize(12)
-       .fillColor('#111827')
-       .text(order.shipping_address, x, currentY + 12, {
-         width: width - 20,
-         lineGap: 3
-       });
-
-    // Calcular altura del texto de dirección
-    const addressHeight = doc.heightOfString(order.shipping_address, {
-      width: width - 20
-    });
-
-    currentY += Math.max(50, addressHeight + 25); // Mucho más espacio para la dirección
-
-    // Línea separadora más visible
-    doc.moveTo(x, currentY - 8)
-       .lineTo(x + width, currentY - 8)
-       .lineWidth(0.5)
-       .strokeColor('#e5e7eb')
-       .stroke();
-  }
-
-  // TELÉFONO - Separado claramente
-  if (order.customer_phone) {
-    doc.font('Helvetica-Bold')
-       .fontSize(9)
-       .fillColor('#6b7280')
-       .text('TELÉFONO', x, currentY);
-
-    doc.font('Helvetica')
-       .fontSize(12)
-       .fillColor('#111827')
-       .text(order.customer_phone, x, currentY + 12, {
-         width: width - 20,
-         lineGap: 2
-       });
-
-    currentY += 35; // Espacio después del teléfono
-  }
-
-  // Comentarios especiales
-  if (order.comment) {
-    currentY += 10;
-    
-    // Línea separadora antes de comentarios
-    doc.moveTo(x, currentY)
-       .lineTo(x + width, currentY)
-       .lineWidth(0.5)
-       .strokeColor('#fca5a5')
-       .stroke();
-    
-    currentY += 15;
-    
-    doc.font('Helvetica-Bold')
-       .fontSize(9)
-       .fillColor('#dc2626')
-       .text('⚠️ INSTRUCCIONES ESPECIALES', x, currentY);
-    
-    doc.font('Helvetica')
-       .fontSize(10)
-       .fillColor('#dc2626')
-       .text(order.comment, x, currentY + 12, {
-         width: width - 20,
-         lineGap: 2
-       });
-  }
-  currentY += 10; // Solo 10px de separación
-  
-  try {
-    // Formatear información para Circuit Route Planner
-    const companyName = order.company_id?.name || 'Cliente';
-    
-    const circuitData = `${order.customer_name || ''}
-${order.shipping_address || ''}
-${order.shipping_commune || ''}, Chile
-${order.customer_phone || ''}`;
-
-    // Generar QR Code más pequeño
-    const qrBuffer = QRCode.toBufferSync(circuitData, {
-  type: 'png',
-  width: 200,  // Más grande
-  margin: 2,   // Más margen
-  color: { dark: '#000000', light: '#FFFFFF' },
-  errorCorrectionLevel: 'L'  // Nivel bajo = QR más simple
-});
-
-    // Línea separadora
-    doc.moveTo(x, currentY)
-       .lineTo(x + width, currentY)
-       .lineWidth(0.5)
-       .strokeColor('#e5e7eb')
-       .stroke();
-
-    currentY += 8;
-
-    // QR Code pequeño y centrado
-    const qrSize = 60;
-    const qrX = x + (width - qrSize) / 2;
-    
-    doc.image(qrBuffer, qrX, currentY, {
-      width: qrSize,
-      height: qrSize
-    });
-
-    // Instrucción pequeña
-    doc.font('Helvetica')
-       .fontSize(6)
-       .fillColor('#6b7280')
-       .text('Escanea con Circuit', x, currentY + qrSize + 3, {
-         width: width,
-         align: 'center'
-       });
-
-  } catch (qrError) {
-    console.error('❌ Error generando QR Code:', qrError);
-  }
-}
-
 
 router.get(
     '/proof/:orderId/download',
