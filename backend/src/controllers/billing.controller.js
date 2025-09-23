@@ -54,9 +54,7 @@ async generateInvoice(req, res) {
     const tax_amount = Math.round(subtotal * 0.19);
     const total_amount = subtotal + tax_amount;
     
-    const invoiceCount = await Invoice.countDocuments({}) + 1;
-    const now = new Date();
-    const invoice_number = `INV-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}-${String(invoiceCount).padStart(4, '0')}`;
+    const invoice_number = await this.generateUniqueInvoiceNumber();
 
     const newInvoice = new Invoice({
       company_id,
@@ -94,7 +92,57 @@ async generateInvoice(req, res) {
     res.status(500).json({ error: 'Error interno del servidor al generar la factura' });
   }
 }
-
+async generateUniqueInvoiceNumber(session = null) {
+  const now = new Date();
+  const yearMonth = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}`;
+  
+  let attempt = 0;
+  const maxAttempts = 10;
+  
+  while (attempt < maxAttempts) {
+    try {
+      // Buscar el último número de factura para este año-mes
+      const lastInvoice = await Invoice.findOne({
+        invoice_number: { $regex: `^INV-${yearMonth}-` }
+      })
+      .sort({ invoice_number: -1 })
+      .session(session);
+      
+      let nextNumber = 1;
+      if (lastInvoice) {
+        const lastNumber = parseInt(lastInvoice.invoice_number.split('-')[2]);
+        nextNumber = lastNumber + 1;
+      }
+      
+      const invoice_number = `INV-${yearMonth}-${String(nextNumber).padStart(4, '0')}`;
+      
+      // Verificar que no existe (doble verificación)
+      const exists = await Invoice.findOne({ invoice_number }).session(session);
+      
+      if (!exists) {
+        console.log(`✅ Número de factura generado: ${invoice_number}`);
+        return invoice_number;
+      }
+      
+      // Si existe, incrementar y reintentar
+      console.log(`⚠️ Número ${invoice_number} ya existe, reintentando...`);
+      attempt++;
+      
+    } catch (error) {
+      console.error(`❌ Error generando número de factura (intento ${attempt + 1}):`, error);
+      attempt++;
+      
+      if (attempt >= maxAttempts) {
+        throw new Error(`No se pudo generar un número de factura único después de ${maxAttempts} intentos`);
+      }
+      
+      // Esperar un poco antes de reintentar
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+  }
+  
+  throw new Error('No se pudo generar un número de factura único');
+}
   async generateBulkInvoices(req, res) {
     try {
       const {
@@ -147,9 +195,7 @@ async generateInvoice(req, res) {
           const tax_amount = Math.round(subtotal * 0.19);
           const total_amount = subtotal + tax_amount;
 
-          const invoiceCount = await Invoice.countDocuments({}) + generatedInvoices.length + 1;
-          const now = new Date();
-          const invoice_number = `INV-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}-${String(invoiceCount).padStart(4, '0')}`;
+          const invoice_number = await this.generateUniqueInvoiceNumber();
 
           const invoice = new Invoice({
             company_id: company._id,
@@ -1332,9 +1378,7 @@ async duplicateInvoice(req, res) {
       return res.status(404).json({ error: 'Factura no encontrada' });
     }
     
-    const invoiceCount = await Invoice.countDocuments({}) + 1;
-    const now = new Date();
-    const invoice_number = `INV-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}-${String(invoiceCount).padStart(4, '0')}`;
+    const invoice_number = await this.generateUniqueInvoiceNumber();
     
     const duplicateInvoice = new Invoice({
       ...originalInvoice.toObject(),
@@ -1522,9 +1566,7 @@ async generateInvoiceImproved(req, res) {
       const tax_amount = Math.round(subtotal * 0.19);
       const total_amount = subtotal + tax_amount;
       
-      const invoiceCount = await Invoice.countDocuments({}).session(session) + 1;
-      const now = new Date();
-      const invoice_number = `INV-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}-${String(invoiceCount).padStart(4, '0')}`;
+      const invoice_number = await this.generateUniqueInvoiceNumber(session);
 
       const newInvoice = new Invoice({
         company_id: companyObjectId,
