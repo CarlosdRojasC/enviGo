@@ -27,6 +27,17 @@ async requestCollection(req, res) {
       return res.status(404).json({ error: 'Empresa no encontrada' });
     }
 
+    // Crear manifiesto temporal para la colecta
+const tempManifest = await Manifest.create({
+  company_id: company_id,
+  manifest_number: `COLECTA-${Date.now()}`, // ← Cambiar prefijo
+  manifest_type: 'collection_request',
+  status: 'pending',
+  total_orders: 0,
+  orders: [],
+  title: `Colecta ${company.name} - ${new Date(collectionDate).toLocaleDateString('es-CL')}` // ← Agregar título descriptivo
+});
+
     // Crear pickup directamente en el sistema
  const pickup = await Pickup.create({
   company_id: company_id,
@@ -44,16 +55,7 @@ async requestCollection(req, res) {
   notes: notes || '',
   created_at: new Date()
 });
-// Crear manifiesto temporal para la colecta
-const tempManifest = await Manifest.create({
-  company_id: company_id,
-  manifest_number: `COLECTA-${Date.now()}`, // ← Cambiar prefijo
-  manifest_type: 'collection_request',
-  status: 'pending',
-  total_orders: 0,
-  orders: [],
-  title: `Colecta ${company.name} - ${new Date(collectionDate).toLocaleDateString('es-CL')}` // ← Agregar título descriptivo
-});
+
 
     // Preparar datos para notificación
     const notificationData = {
