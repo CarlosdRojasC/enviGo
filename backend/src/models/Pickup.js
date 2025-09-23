@@ -22,11 +22,22 @@ const pickupSchema = new mongoose.Schema({
     default: 'pending_assignment',
   },
   // Agregar estos campos al schema existente
+pickup_name: {
+  type: String,
+  default: 'Retiro'
+},
+
+pickup_description: {
+  type: String,
+  default: ''
+},
+
 pickup_type: {
   type: String,
   enum: ['admin_created', 'collection_request'],
   default: 'admin_created'
 },
+
 
 estimated_packages: {
   type: Number,

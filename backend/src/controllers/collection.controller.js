@@ -9,8 +9,12 @@ class CollectionController {
    * Solicitar colecta (para clientes)
    */
 async requestCollection(req, res) {
+    
   try {
-    const { packageCount, collectionDate, notes } = req.body;
+    console.log('Datos recibidos:', req.body); // ← Agregar esta línea
+  
+  const { packageCount, collectionDate, notes } = req.body;
+  console.log('collectionDate extraída:', collectionDate); // ← Y esta
     const company_id = req.user.company_id;
     
     if (!company_id) {
@@ -24,19 +28,31 @@ async requestCollection(req, res) {
     }
 
     // Crear pickup directamente en el sistema
-    const pickup = await Pickup.create({
+ const pickup = await Pickup.create({
   company_id: company_id,
-  manifest_id: null, // ← Cambiar: no es requerido para colectas
+  manifest_id: tempManifest._id, // Usar el manifiesto temporal
   pickup_address: company.address || 'Dirección a confirmar',
-  status: 'pending_assignment', // ← Cambiar: usar el estado correcto
-  total_orders: 0, // ← Agregar: campo requerido
-  total_packages: packageCount, // ← Ya estaba bien
-  orders_to_pickup: [], // ← Agregar: array vacío inicial
-  pickup_date: new Date(collectionDate),
-  notes: notes || '',
+  pickup_commune: 'A definir',
+  status: 'pending_assignment',
+  total_orders: 0,
+  total_packages: packageCount,
+  orders_to_pickup: [],
   pickup_type: 'collection_request',
+  pickup_name: `Colecta - ${company.name}`, // ← AGREGAR ESTE CAMPO
+  pickup_description: `Colecta de ${packageCount} paquetes solicitada para ${new Date(collectionDate).toLocaleDateString('es-CL')}`, // ← Y ESTE
   requested_by: req.user._id,
+  notes: notes || '',
   created_at: new Date()
+});
+// Crear manifiesto temporal para la colecta
+const tempManifest = await Manifest.create({
+  company_id: company_id,
+  manifest_number: `COLECTA-${Date.now()}`, // ← Cambiar prefijo
+  manifest_type: 'collection_request',
+  status: 'pending',
+  total_orders: 0,
+  orders: [],
+  title: `Colecta ${company.name} - ${new Date(collectionDate).toLocaleDateString('es-CL')}` // ← Agregar título descriptivo
 });
 
     // Preparar datos para notificación
