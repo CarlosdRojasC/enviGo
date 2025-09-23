@@ -21,7 +21,7 @@ router.get('/stats', authenticateToken, orderController.getStats);
 router.get('/trend', authenticateToken, orderController.getOrdersTrend);
 router.get('/export', authenticateToken, isAdmin, orderController.exportOrders);
 router.get('/export-dashboard', authenticateToken, orderController.exportForDashboard);
-router.get('/import-template', authenticateToken, isAdmin, orderController.downloadImportTemplate);
+router.get('/import-template', authenticateToken, orderController.downloadImportTemplate);
 router.post(
   '/bulk-upload',
   authenticateToken,

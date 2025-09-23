@@ -1735,6 +1735,7 @@ async function handleBulkUpload() {
   try {
     const formData = new FormData()
     formData.append('file', selectedBulkFile.value)
+    // Para clientes, NO enviar company_id - se usa automáticamente del token
     
     const { data } = await apiService.orders.bulkUpload(formData)
     
@@ -1767,7 +1768,6 @@ async function handleBulkUpload() {
     isBulkUploading.value = false
   }
 }
-
 // ==================== LIFECYCLE ====================
 
 onMounted(async () => {

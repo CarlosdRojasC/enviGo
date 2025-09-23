@@ -863,14 +863,25 @@ async bulkUpload(req, res) {
   }
 
   // 2. Obtener parámetros del cuerpo de la petición
-  const { company_id, create_in_shipday = 'true' } = req.body; // create_in_shipday viene como string del FormData
-  
+let company_id;
+
+if (req.user.role === 'admin') {
+  // Admin puede especificar empresa
+  company_id = req.body.company_id;
   if (!company_id) {
     return res.status(400).json({ error: 'No se especificó la empresa para la subida masiva.' });
   }
+} else {
+  // Clientes usan su propia empresa automáticamente
+  company_id = req.user.company_id;
+  if (!company_id) {
+    return res.status(400).json({ error: 'No se pudo identificar tu empresa.' });
+  }
+}
 
-  // Convertir string a boolean
-  const shouldCreateInShipday = create_in_shipday === 'true' || create_in_shipday === true;
+// Simplificar opciones para clientes (sin Circuit/ShipDay)
+const create_in_circuit = req.user.role === 'admin' ? (req.body.create_in_circuit || 'false') : 'false';
+const create_in_shipday = req.user.role === 'admin' ? (req.body.create_in_shipday || 'false') : 'false';
 
   try {
     // 3. Leer el archivo Excel desde el buffer de memoria
