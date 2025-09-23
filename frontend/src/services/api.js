@@ -459,6 +459,10 @@ getAllForAdmin: () => api.get('/channels/admin/all'),
     return api.get(`/companies/${companyId}/channels`);
   }
 }
+const collections =  {
+  request: (data) => api.post('/collections/request', data),
+  getRequests: () => api.get('/collections/requests')
+}
 const mercadolibre = {
   getAuthorizationUrl: (data) => api.post('/channels/mercadolibre/auth-url', data)
 }
@@ -994,7 +998,8 @@ export const apiService = {
   mercadolibre,
   jumpseller,
   labels,
-  pickups
+  pickups,
+  collections
 }
 
 // Exportar instancia de axios para casos especiales

@@ -14,6 +14,7 @@
       @create-order="handleCreateOrder"
       @bulk-upload="openBulkUploadModal" 
       @toggle-auto-refresh="toggleAutoRefresh"
+      @request-collection="openCollectionModal"
     />
 
     <!-- Filtros modernos -->
@@ -449,6 +450,14 @@
   @clear-file="clearBulkFile"
   @upload="handleBulkUpload"
 />
+<CollectionRequestModal
+  :show="showCollectionModal"
+  :company-name="auth.user?.company?.name || 'Tu empresa'"
+  :company-address="auth.user?.company?.address || 'Dirección no disponible'"
+  :is-requesting="isRequestingCollection"
+  @close="showCollectionModal = false"
+  @submit="handleCollectionRequest"
+/>
 </template>
 
 <script setup>
@@ -585,6 +594,10 @@ const bulkUploadFeedback = ref('')
 const bulkUploadStatus = ref('')
 const createInCircuit = ref(true)
 const createInShipday = ref(false)
+
+const showCollectionModal = ref(false)
+const isRequestingCollection = ref(false)
+
 // ✅
 // ⚡ TIEMPO REAL: Estado para actualización automática
 const realTimeEnabled = ref(true)
@@ -1766,6 +1779,31 @@ async function handleBulkUpload() {
     toast.error(`Error: ${errorMessage}`)
   } finally {
     isBulkUploading.value = false
+  }
+}
+  function openCollectionModal() {
+  showCollectionModal.value = true
+}
+
+// Función para enviar solicitud
+async function handleCollectionRequest(requestData) {
+  try {
+    isRequestingCollection.value = true
+    
+    await apiService.collections.request({
+      packageCount: requestData.packageCount,
+      notes: requestData.notes,
+      company_id: companyId.value
+    })
+    
+    showCollectionModal.value = false
+    toast.success('Solicitud de colecta enviada. Te contactaremos pronto.')
+    
+  } catch (error) {
+    console.error('Error solicitando colecta:', error)
+    toast.error('Error al solicitar colecta')
+  } finally {
+    isRequestingCollection.value = false
   }
 }
 // ==================== LIFECYCLE ====================

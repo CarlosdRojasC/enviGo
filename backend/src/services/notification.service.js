@@ -317,6 +317,50 @@ async sendInvoiceEmail(email, companyName, invoiceData) {
     throw error;
   }
 }
+
+/**
+ * Enviar notificación de solicitud de colecta al admin
+ */
+async sendCollectionRequestToAdmin(collectionData) {
+  try {
+    console.log(`📦 Enviando solicitud de colecta de ${collectionData.company_name}`);
+
+    // Preparar datos para el template
+    const templateData = {
+      company_name: collectionData.company_name,
+      company_address: collectionData.company_address,
+      company_phone: collectionData.company_phone,
+      contact_name: collectionData.contact_name,
+      package_count: collectionData.package_count,
+      notes: collectionData.notes,
+      requested_at: new Date().toLocaleString('es-CL'),
+      frontend_url: process.env.FRONTEND_URL
+    };
+
+    // Cargar y compilar template
+    const template = await this.getTemplate('collection-request.hbs');
+    const html = template(templateData);
+
+    // Enviar email usando Resend
+    const { data, error } = await this.resend.emails.send({
+      from: `"enviGo Colectas" <contacto@envigo.cl>`,
+      to: process.env.ADMIN_EMAIL || 'admin@envigo.cl',
+      subject: `🚚 Nueva solicitud de colecta - ${collectionData.company_name}`,
+      html: html
+    });
+
+    if (error) {
+      throw error;
+    }
+
+    console.log(`✅ Solicitud de colecta enviada a admin`);
+    return data;
+
+  } catch (error) {
+    console.error('❌ Error enviando solicitud de colecta:', error);
+    throw error;
+  }
+}
 }
 
 module.exports = new NotificationService();

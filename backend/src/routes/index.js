@@ -24,6 +24,8 @@ const driverHistoryRoutes = require('./driverHistory.routes');
 const labelRoutes = require('./labels.routes');
 const pickupRoutes = require('./pickup.routes');
 const driverScannerRoutes = require('./driver-scanner.routes');
+const collectionRoutes = require('./collection.route');
+
 
 
 router.use('/auth', authRoutes);
@@ -60,5 +62,7 @@ router.use('/labels', labelRoutes);
 router.use('/pickups', pickupRoutes);
 
 router.use('/driver-scanner', driverScannerRoutes);
+router.use('/collections', collectionRoutes);
+
 
 module.exports = router;

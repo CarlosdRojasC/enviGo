@@ -50,6 +50,14 @@
           <span class="btn-icon">⬆️</span>
           <span class="btn-text">Subida Masiva</span>
         </button>
+        <button 
+  @click="$emit('request-collection')" 
+  class="action-btn collection-btn"
+  title="Solicitar que recojan tus paquetes"
+>
+  <span class="btn-icon">📦</span>
+  <span class="btn-text">Solicitar Colecta</span>
+</button>
       </div>
     </div>
 
@@ -211,6 +219,7 @@ defineEmits([
   'export', 
   'create-order',
   'bulk-upload',
+  'request-collection',
   'toggle-auto-refresh'
 ])
 
@@ -602,6 +611,15 @@ function formatLastUpdate(timestamp) {
   border-radius: 2px;
   transition: width 1s ease;
   box-shadow: 0 0 8px rgba(255, 255, 255, 0.3);
+}
+.collection-btn {
+  background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
+  color: white;
+}
+
+.collection-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(14, 165, 233, 0.3);
 }
 
 /* ==================== UPDATE INFO ==================== */

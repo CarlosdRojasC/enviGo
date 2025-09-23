@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Nueva Solicitud de Colecta</title>
+    <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { background: #f8fafc; padding: 20px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #3b82f6; }
+        .company-info { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px; margin: 20px 0; }
+        .info-row { display: flex; margin-bottom: 10px; }
+        .info-label { font-weight: bold; min-width: 120px; color: #374151; }
+        .info-value { color: #6b7280; }
+        .package-highlight { background: #fef3c7; padding: 15px; border-radius: 8px; border-left: 4px solid #f59e0b; margin: 20px 0; }
+        .notes-section { background: #f0f9ff; padding: 15px; border-radius: 8px; margin: 20px 0; }
+        .action-button { display: inline-block; background: #3b82f6; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; margin: 20px 0; }
+        .footer { text-align: center; margin-top: 30px; color: #6b7280; font-size: 14px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h2>🚚 Nueva Solicitud de Colecta</h2>
+            <p>Se ha recibido una nueva solicitud de colecta que requiere atención.</p>
+        </div>
+
+        <div class="company-info">
+            <h3>Información de la Empresa</h3>
+            <div class="info-row">
+                <div class="info-label">Empresa:</div>
+                <div class="info-value">{{company_name}}</div>
+            </div>
+            <div class="info-row">
+                <div class="info-label">Dirección:</div>
+                <div class="info-value">{{company_address}}</div>
+            </div>
+            {{#if company_phone}}
+            <div class="info-row">
+                <div class="info-label">Teléfono:</div>
+                <div class="info-value">{{company_phone}}</div>
+            </div>
+            {{/if}}
+            {{#if contact_name}}
+            <div class="info-row">
+                <div class="info-label">Contacto:</div>
+                <div class="info-value">{{contact_name}}</div>
+            </div>
+            {{/if}}
+            <div class="info-row">
+                <div class="info-label">Solicitado:</div>
+                <div class="info-value">{{requested_at}}</div>
+            </div>
+        </div>
+
+        <div class="package-highlight">
+            <h3>📦 Detalles de la Colecta</h3>
+            <p><strong>Cantidad de paquetes:</strong> {{package_count}}</p>
+        </div>
+
+        {{#if notes}}
+        <div class="notes-section">
+            <h3>📝 Notas Adicionales</h3>
+            <p>{{notes}}</p>
+        </div>
+        {{/if}}
+
+        <div style="text-align: center;">
+            <a href="{{frontend_url}}/admin/collections" class="action-button">
+                Ver Panel de Colectas
+            </a>
+        </div>
+
+        <div class="footer">
+            <p>Este email fue generado automáticamente por el sistema enviGo.</p>
+            <p>Para gestionar las colectas, accede al panel de administración.</p>
+        </div>
+    </div>
+</body>
+</html>
