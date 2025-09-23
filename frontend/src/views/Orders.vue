@@ -1665,21 +1665,58 @@ function clearBulkFile() {
 async function downloadBulkTemplate() {
   try {
     downloadingTemplate.value = true
-    const response = await apiService.orders.downloadCustomerTemplate()
     
-    const url = window.URL.createObjectURL(new Blob([response.data]))
+    // Crear plantilla simple en el frontend
+    const templateData = [
+      // Encabezados
+      [
+        'Número de Pedido*',
+        'Nombre Cliente*', 
+        'Email Cliente',
+        'Teléfono Cliente',
+        'Dirección*',
+        'Comuna*',
+        'Región',
+        'Monto Total*',
+        'Costo Envío',
+        'Notas'
+      ],
+      // Ejemplo de datos
+      [
+        'PED-001',
+        'Juan Pérez',
+        'juan@email.com',
+        '+56912345678',
+        'Av. Providencia 1234, Dpto 567',
+        'Providencia',
+        'Región Metropolitana',
+        15000,
+        2500,
+        'Entregar en recepción'
+      ]
+    ]
+    
+    // Convertir a CSV
+    const csvContent = templateData
+      .map(row => row.map(cell => `"${cell}"`).join(','))
+      .join('\n')
+    
+    // Crear y descargar archivo
+    const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url = window.URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
-    link.setAttribute('download', 'plantilla_importacion_pedidos.xlsx')
+    link.setAttribute('download', 'plantilla_pedidos.csv')
     document.body.appendChild(link)
     link.click()
     link.remove()
     window.URL.revokeObjectURL(url)
     
     toast.success('Plantilla descargada exitosamente')
+    
   } catch (error) {
-    console.error('Error downloading template:', error)
-    toast.error('No se pudo descargar la plantilla')
+    console.error('Error generating template:', error)
+    toast.error('No se pudo generar la plantilla')
   } finally {
     downloadingTemplate.value = false
   }
