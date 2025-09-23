@@ -1736,7 +1736,7 @@ async function handleBulkUpload() {
     const formData = new FormData()
     formData.append('file', selectedBulkFile.value)
     
-    const { data } = await apiService.orders.customerBulkUpload(formData)
+    const { data } = await apiService.orders.bulkUpload(formData)
     
     const successful = data.database?.success || 0
     const failed = data.database?.failed || 0
