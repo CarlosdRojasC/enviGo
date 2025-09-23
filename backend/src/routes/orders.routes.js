@@ -311,8 +311,8 @@ router.post('/manifest', authenticateToken, async (req, res) => {
       company: company || {
         name: 'enviGo Admin',
         address: 'Administración Central',
-        phone: '+56912345678',
-        email: 'admin@envigo.cl'
+        phone: '+56986147420',
+        email: 'contacto@envigo.cl'
       },
       orders,
       generationDate: new Date(),

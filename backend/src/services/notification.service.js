@@ -344,7 +344,7 @@ async sendCollectionRequestToAdmin(collectionData) {
     // Enviar email usando Resend
     const { data, error } = await this.resend.emails.send({
       from: `"enviGo Colectas" <contacto@envigo.cl>`,
-      to: process.env.ADMIN_EMAIL || 'admin@envigo.cl',
+      to: process.env.ADMIN_EMAIL || 'contacto@envigo.cl',
       subject: `🚚 Nueva solicitud de colecta - ${collectionData.company_name}`,
       html: html
     });
