@@ -487,7 +487,7 @@ import ExportDropdown from '../components/Orders/ExportDropdown.vue'
 import UnifiedOrdersFilters from '../components/UnifiedOrdersFilters.vue'
 import ManifestModal from '../components/ManifestModal.vue';
 import BulkUploadModal from '../components/Orders/BulkUploadModal.vue'
-
+import CollectionRequestModal from '../components/Orders/CollectionRequestModal.vue'
 
 
 const toast = useToast()
