@@ -42,6 +42,14 @@
           <span class="btn-icon">➕</span>
           <span class="btn-text">Nuevo Pedido</span>
         </button>
+        <button 
+          @click="$emit('bulk-upload')" 
+          class="action-btn bulk-upload-btn"
+          title="Subir múltiples pedidos desde Excel"
+        >
+          <span class="btn-icon">⬆️</span>
+          <span class="btn-text">Subida Masiva</span>
+        </button>
       </div>
     </div>
 
@@ -202,6 +210,7 @@ defineEmits([
   'refresh',
   'export', 
   'create-order',
+  'bulk-upload',
   'toggle-auto-refresh'
 ])
 
@@ -286,6 +295,15 @@ function formatLastUpdate(timestamp) {
   bottom: 0;
   background: linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.05) 100%);
   pointer-events: none;
+}
+.bulk-upload-btn {
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  color: white;
+}
+
+.bulk-upload-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(59, 130, 246, 0.3);
 }
 
 /* ==================== HEADER TOP SECTION ==================== */

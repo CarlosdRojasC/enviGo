@@ -12,6 +12,7 @@
       @refresh="handleRefresh"
       @export="handleExport"
       @create-order="handleCreateOrder"
+      @bulk-upload="openBulkUploadModal" 
       @toggle-auto-refresh="toggleAutoRefresh"
     />
 
@@ -434,7 +435,22 @@
 </Modal>
 
   </div>
-  
+  <!-- Modal de Subida Masiva -->
+<BulkUploadModal
+  :show="showBulkUploadModal"
+  :selected-file="selectedBulkFile"
+  :downloading-template="downloadingTemplate"
+  :is-uploading="isBulkUploading"
+  :upload-feedback="bulkUploadFeedback"
+  :upload-status="bulkUploadStatus"
+  v-model:create-in-circuit="createInCircuit"
+  v-model:create-in-shipday="createInShipday"
+  @close="closeBulkUploadModal"
+  @download-template="downloadBulkTemplate"
+  @file-selected="handleBulkFileSelect"
+  @clear-file="clearBulkFile"
+  @upload="handleBulkUpload"
+/>
 </template>
 
 <script setup>
@@ -463,6 +479,7 @@ import { useOrdersSelection } from '../composables/useOrdersSelection'
 import ExportDropdown from '../components/Orders/ExportDropdown.vue'
 import UnifiedOrdersFilters from '../components/UnifiedOrdersFilters.vue'
 import ManifestModal from '../components/ManifestModal.vue';
+import BulkUploadModal from '../components/Orders/BulkUploadModal.vue'
 
 
 
@@ -561,6 +578,15 @@ const showLabelsModal = ref(false)
 const generatingLabels = ref(false)
 const showLabelsPreviewModal = ref(false)
 const labelsToPreview = ref([])
+
+const showBulkUploadModal = ref(false)
+const selectedBulkFile = ref(null)
+const downloadingTemplate = ref(false)
+const isBulkUploading = ref(false)
+const bulkUploadFeedback = ref('')
+const bulkUploadStatus = ref('')
+const createInCircuit = ref(true)
+const createInShipday = ref(false)
 // ✅
 // ⚡ TIEMPO REAL: Estado para actualización automática
 const realTimeEnabled = ref(true)
@@ -1594,6 +1620,126 @@ function redirectToChannels() {
 // ==================== LIFECYCLE ====================
 
 onMounted(async () => {
+  
+  function openBulkUploadModal() {
+  showBulkUploadModal.value = true
+  console.log('⬆️ Opening customer bulk upload modal')
+}
+
+function closeBulkUploadModal() {
+  showBulkUploadModal.value = false
+  resetBulkUploadState()
+}
+
+function resetBulkUploadState() {
+  selectedBulkFile.value = null
+  bulkUploadFeedback.value = ''
+  bulkUploadStatus.value = ''
+  isBulkUploading.value = false
+  createInCircuit.value = true
+  createInShipday.value = false
+}
+
+function handleBulkFileSelect(event) {
+  const file = event.target.files[0]
+  if (!file) return
+  
+  const allowedTypes = [
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'application/vnd.ms-excel'
+  ]
+  
+  if (!allowedTypes.includes(file.type)) {
+    toast.error('Por favor selecciona un archivo Excel válido (.xlsx o .xls)')
+    return
+  }
+  
+  if (file.size > 10 * 1024 * 1024) {
+    toast.error('El archivo es demasiado grande. Máximo 10MB permitido.')
+    return
+  }
+  
+  selectedBulkFile.value = file
+  bulkUploadFeedback.value = ''
+  bulkUploadStatus.value = ''
+}
+
+function clearBulkFile() {
+  selectedBulkFile.value = null
+}
+
+async function downloadBulkTemplate() {
+  try {
+    downloadingTemplate.value = true
+    const response = await apiService.orders.downloadImportTemplate()
+    
+    const url = window.URL.createObjectURL(new Blob([response.data]))
+    const link = document.createElement('a')
+    link.href = url
+    link.setAttribute('download', 'plantilla_importacion_pedidos.xlsx')
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    window.URL.revokeObjectURL(url)
+    
+    toast.success('✅ Plantilla descargada exitosamente')
+  } catch (error) {
+    console.error('❌ Error downloading template:', error)
+    toast.error('No se pudo descargar la plantilla')
+  } finally {
+    downloadingTemplate.value = false
+  }
+}
+
+async function handleBulkUpload() {
+  if (!selectedBulkFile.value || !companyId.value) {
+    toast.error('Faltan datos requeridos')
+    return
+  }
+  
+  isBulkUploading.value = true
+  bulkUploadFeedback.value = 'Procesando archivo...'
+  bulkUploadStatus.value = 'processing'
+  
+  try {
+    const formData = new FormData()
+    formData.append('file', selectedBulkFile.value)
+    formData.append('company_id', companyId.value)
+    formData.append('create_in_circuit', createInCircuit.value.toString())
+    formData.append('create_in_shipday', createInShipday.value.toString())
+    
+    const { data } = await apiService.orders.bulkUpload(formData)
+    
+    const successful = data.database?.success || 0
+    const failed = data.database?.failed || 0
+    
+    bulkUploadFeedback.value = `Completado: ${successful} pedidos creados`
+    if (failed > 0) {
+      bulkUploadFeedback.value += `, ${failed} fallaron`
+    }
+    
+    bulkUploadStatus.value = failed > 0 ? 'error' : 'success'
+    
+    if (successful > 0) {
+      toast.success(`✅ ${successful} pedidos creados exitosamente`)
+      await fetchOrders()
+    }
+    
+    if (failed > 0) {
+      toast.warning(`⚠️ ${failed} pedidos fallaron`)
+    }
+    
+  } catch (error) {
+    console.error('❌ Error in bulk upload:', error)
+    const errorMessage = error.response?.data?.error || error.message || 'Error desconocido'
+    bulkUploadFeedback.value = `Error: ${errorMessage}`
+    bulkUploadStatus.value = 'error'
+    toast.error(`Error: ${errorMessage}`)
+  } finally {
+    isBulkUploading.value = false
+  }
+}
+  
   console.log('🚀 Orders.vue montado. Esperando ID de compañía para cargas secundarias...');
   try {
     // 1. Cargamos ÚNICAMENTE la lista de pedidos.
