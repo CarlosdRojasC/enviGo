@@ -9,8 +9,8 @@ const pickupSchema = new mongoose.Schema({
   manifest_id: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Manifest',
-    required: true,
-    unique: true, // Solo puede haber un pickup por manifiesto
+    required: false,
+    unique: false, // Solo puede haber un pickup por manifiesto
   },
   pickup_address: {
     type: String,

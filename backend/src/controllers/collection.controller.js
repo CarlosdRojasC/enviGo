@@ -25,17 +25,19 @@ async requestCollection(req, res) {
 
     // Crear pickup directamente en el sistema
     const pickup = await Pickup.create({
-      company_id: company_id,
-      pickup_address: company.address || 'Dirección a confirmar',
-      pickup_commune: 'A definir', // Podrías extraer de company.address
-      pickup_date: new Date(collectionDate),
-      estimated_packages: packageCount,
-      notes: notes || '',
-      status: 'pending',
-      pickup_type: 'collection_request', // Nuevo campo para distinguir
-      requested_by: req.user._id,
-      created_at: new Date()
-    });
+  company_id: company_id,
+  manifest_id: null, // ← Cambiar: no es requerido para colectas
+  pickup_address: company.address || 'Dirección a confirmar',
+  status: 'pending_assignment', // ← Cambiar: usar el estado correcto
+  total_orders: 0, // ← Agregar: campo requerido
+  total_packages: packageCount, // ← Ya estaba bien
+  orders_to_pickup: [], // ← Agregar: array vacío inicial
+  pickup_date: new Date(collectionDate),
+  notes: notes || '',
+  pickup_type: 'collection_request',
+  requested_by: req.user._id,
+  created_at: new Date()
+});
 
     // Preparar datos para notificación
     const notificationData = {
