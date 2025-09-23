@@ -25,7 +25,6 @@ router.get('/import-template', authenticateToken, isAdmin, orderController.downl
 router.post(
   '/bulk-upload',
   authenticateToken,
-  isAdmin,
   upload.single('file'),
   orderController.bulkUpload
 );
