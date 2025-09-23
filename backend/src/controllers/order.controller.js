@@ -924,7 +924,7 @@ const shouldCreateInShipday = false;
           customer_email: String(row['Email Cliente'] || ''),
           customer_phone: String(row['Teléfono Cliente'] || ''),
           shipping_address: String(row['Dirección*']),
-          shipping_commune: String(row['Ciudad*']),
+          shipping_commune: String(row['Comuna*'] || row['Comuna'] || row['Ciudad*']),
           shipping_state: String(row['Estado/Región'] || 'RM'),
           total_amount: parseFloat(row['Monto Total*'] || 0),
           shipping_cost: parseFloat(row['Costo de Envío'] || 0),
