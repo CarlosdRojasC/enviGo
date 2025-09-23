@@ -443,8 +443,6 @@
   :is-uploading="isBulkUploading"
   :upload-feedback="bulkUploadFeedback"
   :upload-status="bulkUploadStatus"
-  v-model:create-in-circuit="createInCircuit"
-  v-model:create-in-shipday="createInShipday"
   @close="closeBulkUploadModal"
   @download-template="downloadBulkTemplate"
   @file-selected="handleBulkFileSelect"
@@ -1667,7 +1665,7 @@ function clearBulkFile() {
 async function downloadBulkTemplate() {
   try {
     downloadingTemplate.value = true
-    const response = await apiService.orders.downloadImportTemplate()
+    const response = await apiService.orders.downloadCustomerTemplate()
     
     const url = window.URL.createObjectURL(new Blob([response.data]))
     const link = document.createElement('a')
@@ -1678,9 +1676,9 @@ async function downloadBulkTemplate() {
     link.remove()
     window.URL.revokeObjectURL(url)
     
-    toast.success('✅ Plantilla descargada exitosamente')
+    toast.success('Plantilla descargada exitosamente')
   } catch (error) {
-    console.error('❌ Error downloading template:', error)
+    console.error('Error downloading template:', error)
     toast.error('No se pudo descargar la plantilla')
   } finally {
     downloadingTemplate.value = false
@@ -1688,8 +1686,8 @@ async function downloadBulkTemplate() {
 }
 
 async function handleBulkUpload() {
-  if (!selectedBulkFile.value || !companyId.value) {
-    toast.error('Faltan datos requeridos')
+  if (!selectedBulkFile.value) {
+    toast.error('Selecciona un archivo')
     return
   }
   
@@ -1700,11 +1698,8 @@ async function handleBulkUpload() {
   try {
     const formData = new FormData()
     formData.append('file', selectedBulkFile.value)
-    formData.append('company_id', companyId.value)
-    formData.append('create_in_circuit', createInCircuit.value.toString())
-    formData.append('create_in_shipday', createInShipday.value.toString())
     
-    const { data } = await apiService.orders.bulkUpload(formData)
+    const { data } = await apiService.orders.customerBulkUpload(formData)
     
     const successful = data.database?.success || 0
     const failed = data.database?.failed || 0
@@ -1717,17 +1712,17 @@ async function handleBulkUpload() {
     bulkUploadStatus.value = failed > 0 ? 'error' : 'success'
     
     if (successful > 0) {
-      toast.success(`✅ ${successful} pedidos creados exitosamente`)
+      toast.success(`${successful} pedidos creados exitosamente`)
       await fetchOrders()
     }
     
     if (failed > 0) {
-      toast.warning(`⚠️ ${failed} pedidos fallaron`)
+      toast.warning(`${failed} pedidos fallaron`)
     }
     
   } catch (error) {
-    console.error('❌ Error in bulk upload:', error)
-    const errorMessage = error.response?.data?.error || error.message || 'Error desconocido'
+    console.error('Error in bulk upload:', error)
+    const errorMessage = error.response?.data?.error || error.message
     bulkUploadFeedback.value = `Error: ${errorMessage}`
     bulkUploadStatus.value = 'error'
     toast.error(`Error: ${errorMessage}`)

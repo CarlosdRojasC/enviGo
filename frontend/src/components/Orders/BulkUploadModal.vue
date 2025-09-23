@@ -112,56 +112,6 @@
         </div>
       </div>
 
-      <!-- Opciones de Integración -->
-      <div class="upload-section">
-        <div class="section-header">
-          <h4 class="section-title">
-            <span class="section-icon">⚙️</span>
-            Opciones de Integración
-          </h4>
-        </div>
-        
-        <div class="integration-options">
-          <div class="option-card">
-            <div class="option-header">
-              <input 
-                type="checkbox" 
-                id="create-in-circuit"
-                :checked="createInCircuit"
-                @change="$emit('update:createInCircuit', $event.target.checked)"
-                class="option-checkbox"
-              />
-              <label for="create-in-circuit" class="option-label">
-                <span class="option-icon">🔄</span>
-                <span class="option-title">Crear en Circuit</span>
-              </label>
-            </div>
-            <p class="option-description">
-              Crear automáticamente las rutas de entrega en Circuit
-            </p>
-          </div>
-          
-          <div class="option-card">
-            <div class="option-header">
-              <input 
-                type="checkbox" 
-                id="create-in-shipday"
-                :checked="createInShipday"
-                @change="$emit('update:createInShipday', $event.target.checked)"
-                class="option-checkbox"
-              />
-              <label for="create-in-shipday" class="option-label">
-                <span class="option-icon">🚢</span>
-                <span class="option-title">Crear en ShipDay</span>
-              </label>
-            </div>
-            <p class="option-description">
-              Sincronizar pedidos con ShipDay para gestión de entregas
-            </p>
-          </div>
-        </div>
-      </div>
-
       <!-- Feedback -->
       <div v-if="uploadFeedback" class="upload-feedback" :class="uploadStatus">
         <div class="feedback-header">

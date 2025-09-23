@@ -1197,5 +1197,11 @@ router.patch('/:id/out-for-delivery', authenticateToken, async (req, res) => {
     res.status(500).json({ error: 'Error actualizando el pedido' });
   }
 });
-
+router.get('/customer-template', authenticateToken, orderController.downloadImportTemplate);
+router.post(
+  '/customer-bulk-upload',
+  authenticateToken,
+  upload.single('file'),
+  orderController.customerBulkUpload  // Nueva función simplificada
+);
 module.exports = router;

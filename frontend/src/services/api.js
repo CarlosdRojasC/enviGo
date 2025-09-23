@@ -426,7 +426,17 @@ markAsDelivered: async (orderId, proofData = {}) => {
       });
       throw error;
     }
-  }
+  },
+  customerBulkUpload: (formData) => api.post('/orders/customer-bulk-upload', formData, {
+  headers: {
+    'Content-Type': 'multipart/form-data'
+  },
+  timeout: 60000
+}),
+
+downloadCustomerTemplate: () => api.get('/orders/customer-template', {
+  responseType: 'blob'
+}),
 }
 
 // Servicios de canales

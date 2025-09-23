@@ -1124,5 +1124,88 @@ async bulkUpload(req, res) {
     res.status(500).json({ error: 'Error interno del servidor' });
   }
 }
+
+async customerBulkUpload(req, res) {
+  // Verificar que el archivo fue subido
+  if (!req.file) {
+    return res.status(400).json({ error: 'No se ha subido ningún archivo.' });
+  }
+
+  // Para clientes, usar automáticamente su empresa
+  const company_id = req.user.company_id;
+  
+  if (!company_id) {
+    return res.status(400).json({ error: 'No se pudo identificar tu empresa.' });
+  }
+
+  try {
+    // Leer el archivo Excel
+    const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
+    const sheetName = workbook.SheetNames[0];
+    const worksheet = workbook.Sheets[sheetName];
+    const data = XLSX.utils.sheet_to_json(worksheet);
+
+    console.log(`📋 Cliente subiendo ${data.length} pedidos...`);
+
+    const results = { success: 0, failed: 0, errors: [] };
+
+    // Buscar el canal de la empresa
+    const channel = await Channel.findOne({ company_id: company_id });
+    if (!channel) {
+      return res.status(400).json({ 
+        error: 'Tu empresa necesita tener al menos un canal configurado para crear pedidos masivos.' 
+      });
+    }
+
+    // Procesar cada fila
+    for (let i = 0; i < data.length; i++) {
+      const row = data[i];
+      
+      try {
+        // Crear pedido simplificado
+        const order = new Order({
+          company_id: company_id,
+          channel_id: channel._id,
+          order_number: row['Número de Pedido*'] || row['order_number'] || `BULK-${Date.now()}-${i}`,
+          customer_name: row['Nombre Cliente*'] || row['customer_name'],
+          customer_email: row['Email Cliente'] || row['customer_email'] || '',
+          customer_phone: row['Teléfono Cliente'] || row['customer_phone'] || '',
+          shipping_address: row['Dirección*'] || row['shipping_address'],
+          shipping_commune: row['Comuna*'] || row['shipping_commune'],
+          shipping_state: row['Región'] || row['shipping_state'] || 'Región Metropolitana',
+          total_amount: parseFloat(row['Monto Total*'] || row['total_amount']) || 0,
+          shipping_cost: parseFloat(row['Costo Envío'] || row['shipping_cost']) || 0,
+          notes: row['Notas'] || row['notes'] || '',
+          status: 'pending',
+          order_date: new Date(),
+          external_order_id: `customer-bulk-${Date.now()}-${i}`
+        });
+
+        await order.save();
+        results.success++;
+        
+      } catch (error) {
+        console.error(`Error en fila ${i + 1}:`, error.message);
+        results.failed++;
+        results.errors.push({
+          row: i + 1,
+          order: row['Número de Pedido*'] || `Fila ${i + 1}`,
+          error: error.message
+        });
+      }
+    }
+
+    return res.status(200).json({
+      message: `Subida completada: ${results.success} pedidos creados`,
+      database: results
+    });
+
+  } catch (error) {
+    console.error('Error en subida masiva del cliente:', error);
+    return res.status(500).json({ 
+      error: 'Error al procesar el archivo Excel.' 
+    });
+  }
+}
 }
 module.exports = new OrderController();
