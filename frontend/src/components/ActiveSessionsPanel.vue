@@ -224,7 +224,7 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import apiService from '../services/api'
+import { apiService } from '../services/api'
 
 // Para el toast, usa tu sistema existente o crea uno simple
 const showToast = (message, type = 'success') => {
