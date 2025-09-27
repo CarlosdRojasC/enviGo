@@ -25,7 +25,6 @@ const userSchema = new mongoose.Schema({
   // --- 🆕 CAMPOS PARA SEGURIDAD Y LOGIN MEJORADO ---
   failed_login_attempts: { type: Number, default: 0 },
   locked_until: { type: Date },
-  last_login_ip: { type: String },
   password_reset_token: { type: String },
   password_reset_expires: { type: Date },
   password_change_required: { type: Boolean, default: false },
@@ -35,6 +34,9 @@ const userSchema = new mongoose.Schema({
   // --- CAMPOS EXISTENTES ---
   is_active: { type: Boolean, default: true },
   last_login: { type: Date },
+  last_login_ip: { type: String },
+  last_activity: { type: Date, default: Date.now },
+  session_invalidated_at: { type: Date }, // 🔥 AGREGAR ESTE CAMPO
   created_at: { type: Date, default: Date.now },
   updated_at: { type: Date, default: Date.now }
 });
