@@ -1,10 +1,11 @@
-// backend/src/middlewares/auth.middleware.js
+// backend/src/middlewares/auth.middleware.js (ACTUALIZACIÓN)
 const jwt = require('jsonwebtoken');
 const { ROLES, ERRORS } = require('../config/constants');
+const User = require('../models/User');
 const crypto = require('crypto');
 
-// Verificar token JWT
-const authenticateToken = (req, res, next) => {
+// Verificar token JWT con validación de sesión
+const authenticateToken = async (req, res, next) => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
 
@@ -12,13 +13,47 @@ const authenticateToken = (req, res, next) => {
     return res.status(401).json({ error: ERRORS.UNAUTHORIZED });
   }
 
-  jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
-    if (err) {
-      return res.status(403).json({ error: ERRORS.FORBIDDEN });
+  try {
+    // Verificar y decodificar el token
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    
+    // Buscar el usuario en la base de datos
+    const user = await User.findById(decoded.id);
+    
+    if (!user || !user.is_active) {
+      return res.status(401).json({ error: 'Usuario no activo' });
     }
-    req.user = user;
+
+    // Verificar si la sesión fue invalidada
+    if (user.session_invalidated_at && 
+        decoded.iat * 1000 < user.session_invalidated_at.getTime()) {
+      return res.status(401).json({ 
+        error: 'Sesión invalidada. Por favor, inicia sesión nuevamente.',
+        code: 'SESSION_INVALIDATED'
+      });
+    }
+
+    // Actualizar último acceso
+    user.last_activity = new Date();
+    await user.save({ validateBeforeSave: false });
+
+    req.user = decoded;
+    req.token = token;
     next();
-  });
+
+  } catch (err) {
+    if (err.name === 'TokenExpiredError') {
+      return res.status(401).json({ 
+        error: 'Token expirado',
+        code: 'TOKEN_EXPIRED'
+      });
+    } else if (err.name === 'JsonWebTokenError') {
+      return res.status(403).json({ error: ERRORS.FORBIDDEN });
+    } else {
+      console.error('Error en authenticateToken:', err);
+      return res.status(500).json({ error: ERRORS.SERVER_ERROR });
+    }
+  }
 };
 
 // Verificar si es administrador
@@ -40,6 +75,7 @@ const isCompanyOwner = (req, res, next) => {
   }
   next();
 };
+
 const isAdminOrCompanyOwner = (req, res, next) => {
   if (req.user.role !== ROLES.COMPANY_OWNER && req.user.role !== ROLES.ADMIN) {
     return res.status(403).json({ 
@@ -48,6 +84,7 @@ const isAdminOrCompanyOwner = (req, res, next) => {
   }
   next();
 };
+
 // Verificar acceso a empresa específica
 const hasCompanyAccess = (req, res, next) => {
   const companyId = req.params.companyId || req.query.company_id;
@@ -77,8 +114,8 @@ const requiresCompany = (req, res, next) => {
 
 const verifyShopifyWebhook = (req, res, next) => {
   const hmac = req.get('X-Shopify-Hmac-Sha256');
-  const body = req.rawBody; // Necesitarás el body en formato raw
-  const secret = process.env.SHOPIFY_WEBHOOK_SECRET; // Debes guardar este secreto
+  const body = req.rawBody;
+  const secret = process.env.SHOPIFY_WEBHOOK_SECRET;
 
   if (!hmac || !body) {
     return res.status(401).send('No autorizado');
@@ -95,7 +132,6 @@ const verifyShopifyWebhook = (req, res, next) => {
     res.status(401).send('No autorizado');
   }
 };
-
 
 module.exports = {
   authenticateToken,

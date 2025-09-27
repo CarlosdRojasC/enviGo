@@ -1,4 +1,3 @@
-// backend/src/migrations/init-invoice-counters.js
 require('dotenv').config();
 const mongoose = require('mongoose');
 

@@ -21,7 +21,33 @@
         </div>
       </div>
     </div>
+<div class="profile-tabs">
+      <button 
+        @click="activeTab = 'profile'"
+        :class="['tab-btn', { active: activeTab === 'profile' }]"
+      >
+        👤 Mi Perfil
+      </button>
+      
+      <button 
+        @click="activeTab = 'security'"
+        :class="['tab-btn', { active: activeTab === 'security' }]"
+      >
+        🔒 Seguridad
+      </button>
+      
+      <!-- Solo mostrar para administradores -->
+      <button 
+        v-if="auth.isAdmin"
+        @click="activeTab = 'sessions'"
+        :class="['tab-btn', { active: activeTab === 'sessions' }]"
+      >
+        👥 Sesiones Activas
+      </button>
+    </div>
 
+    <!-- 🔥 AGREGAR AQUÍ EL WRAPPER DE CONTENIDO -->
+    <div class="tab-content">
     <!-- Content -->
     <div class="profile-content">
       <!-- Avatar Section -->
@@ -147,7 +173,10 @@
           </div>
         </div>
       </div>
-
+    <div v-if="activeTab === 'sessions' && auth.isAdmin" class="tab-pane">
+        <ActiveSessionsPanel />
+      </div>
+    </div>
       <!-- Account Information -->
       <div class="profile-section">
         <div class="section-header">
@@ -315,6 +344,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useAuthStore } from '../store/auth'
 import { useToast } from 'vue-toastification'
+import ActiveSessionsPanel from './ActiveSessionsPanel.vue'
 
 const auth = useAuthStore()
 const toast = useToast()
@@ -333,6 +363,11 @@ const originalData = ref({})
 const hasChanges = ref(false)
 const saving = ref(false)
 const isConnected = ref(true)
+const activeTab = ref('profile')
+
+if (auth.isAdmin) {
+  activeTab.value = 'sessions'
+}
 
 // Password modal
 const showPasswordModal = ref(false)
@@ -1382,5 +1417,55 @@ onMounted(() => {
   .security-item:hover {
     transform: translateY(-1px);
   }
+}
+/* 🔥 AGREGAR ESTOS ESTILOS AL FINAL */
+
+/* ==================== TABS ==================== */
+.profile-tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 2rem;
+  border-bottom: 2px solid #f3f4f6;
+  background: white;
+  border-radius: 12px 12px 0 0;
+  padding: 0 1rem;
+}
+
+.tab-btn {
+  padding: 1rem 1.5rem;
+  border: none;
+  background: transparent;
+  color: #6b7280;
+  font-weight: 500;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: all 0.2s ease;
+  font-size: 0.95rem;
+  border-radius: 8px 8px 0 0;
+}
+
+.tab-btn:hover {
+  color: #8BC53F;
+  background: rgba(139, 197, 63, 0.05);
+}
+
+.tab-btn.active {
+  color: #8BC53F;
+  border-bottom-color: #8BC53F;
+  background: rgba(139, 197, 63, 0.1);
+  font-weight: 600;
+}
+
+.tab-content {
+  min-height: 500px;
+}
+
+.tab-pane {
+  animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 </style>

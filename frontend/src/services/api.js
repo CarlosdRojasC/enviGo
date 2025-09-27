@@ -75,8 +75,10 @@ const auth = {
   updateProfile: (profileData) => api.put('/auth/profile', profileData),
   getSettings: () => api.get('/auth/settings'),
   updateSettings: (settingsData) => api.put('/auth/settings', settingsData),
-  getActiveSessions: () => api.get('/auth/sessions'),
-  terminateSession: (sessionId) => api.delete(`/auth/sessions/${sessionId}`)
+getActiveSessions: () => api.get('/sessions/active'),
+  getSessionStats: () => api.get('/sessions/stats'),
+  terminateSession: (sessionId) => api.delete(`/sessions/${sessionId}`),
+  terminateAllSessions: () => api.post('/sessions/terminate-all')
 }
 
 
