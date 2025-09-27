@@ -14,11 +14,20 @@ class AuthController {
       const { email, password, remember_me = false } = req.body;
       const clientIP = req.ip || req.connection.remoteAddress;
 
-      const user = await User.findOne({ email, is_active: true }).populate('company_id');
-      if (!user) {
-        this.logFailedAttempt(email, clientIP, 'USER_NOT_FOUND');
-        return res.status(401).json({ error: ERRORS.INVALID_CREDENTIALS });
-      }
+      const user = await User.findOne({ email }).populate('company_id');
+if (!user) {
+  this.logFailedAttempt(email, clientIP, 'USER_NOT_FOUND');
+  return res.status(401).json({ error: ERRORS.INVALID_CREDENTIALS });
+}
+
+// 🔥 NUEVA VALIDACIÓN: Verificar si el usuario está desactivado
+if (!user.is_active) {
+  this.logFailedAttempt(email, clientIP, 'USER_DISABLED');
+  return res.status(403).json({ 
+    error: 'Tu cuenta ha sido desactivada. Contacta al administrador.',
+    code: 'USER_DISABLED' 
+  });
+}
 
       // Verificar si la cuenta está bloqueada
       if (user.locked_until && user.locked_until > new Date()) {
