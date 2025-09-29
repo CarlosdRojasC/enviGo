@@ -375,14 +375,14 @@ import { ref, onMounted, onUnmounted, nextTick, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../store/auth'
 import { scannerService } from '../services/scanner.service'
-import { toast } from '../services/toast.service'
+import { useToast } from 'vue-toastification';
 
 export default {
   name: 'MLScanner',
   setup() {
     const router = useRouter()
     const authStore = useAuthStore()
-
+    const toast = useToast();
     // ==================== REFS REACTIVOS ====================
     
     // Estado general
