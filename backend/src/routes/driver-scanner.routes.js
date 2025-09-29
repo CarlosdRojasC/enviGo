@@ -45,6 +45,7 @@ router.post('/finalize-session', authenticateToken, ScannerController.finalizeSe
  * GET /api/scanner/stats/:companyId?
  * Obtener estadísticas ML
  */
+
 router.get('/stats/:companyId?', authenticateToken, ScannerController.getMLStats)
 
 module.exports = router
