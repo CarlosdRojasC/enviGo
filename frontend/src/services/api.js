@@ -984,19 +984,19 @@ const pickups = {
 
 const scanner = {
   // Obtener clientes disponibles para scanner
-  getClients: () => api.get('/scanner/clients'),
+  getClients: () => api.get('/driver-scanner/clients'),
   
   // Procesar código ML
-  processMLBarcode: (formData) => api.post('/scanner/process-ml-barcode', formData, {
+  processMLBarcode: (formData) => api.post('/driver-scanner/process-ml-barcode', formData, {
     headers: { 'Content-Type': 'multipart/form-data' }
   }),
   
   // Finalizar sesión
-  finalizeSession: (sessionData) => api.post('/scanner/finalize-session', sessionData),
+  finalizeSession: (sessionData) => api.post('/driver-scanner/finalize-session', sessionData),
   
   // Stats ML para dashboard
   getMLStats: (companyId = null) => {
-    const endpoint = companyId ? `/scanner/stats/${companyId}` : '/scanner/stats'
+    const endpoint = companyId ? `/driver-scanner/stats/${companyId}` : '/driver-scanner/stats'
     return api.get(endpoint)
   }
 }

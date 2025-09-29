@@ -7,7 +7,7 @@ export const scannerService = {
    */
   getCompanyClients() {
     console.log('📋 API: Obteniendo clientes para scanner')
-    return api.get('/scanner/clients')
+    return api.get('/driver-scanner/clients')
   },
 
   /**
@@ -15,7 +15,7 @@ export const scannerService = {
    */
   processMLBarcode(formData) {
     console.log('📦 API: Procesando código de barras ML')
-    return api.post('/scanner/process-ml-barcode', formData, {
+    return api.post('/driver-scanner/process-ml-barcode', formData, {
       headers: {
         'Content-Type': 'multipart/form-data'
       }
@@ -27,7 +27,7 @@ export const scannerService = {
    */
   finalizeSession(sessionData) {
     console.log('✅ API: Finalizando sesión de scanner')
-    return api.post('/scanner/finalize-session', sessionData)
+    return api.post('/driver-scanner/finalize-session', sessionData)
   },
 
   /**
@@ -35,7 +35,7 @@ export const scannerService = {
    */
   getMLStats(companyId = null) {
     console.log('📊 API: Obteniendo estadísticas ML')
-    const endpoint = companyId ? `/scanner/stats/${companyId}` : '/scanner/stats'
+    const endpoint = companyId ? `/driver-scanner/stats/${companyId}` : '/driver-scanner/stats'
     return api.get(endpoint)
   }
 }
