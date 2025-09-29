@@ -180,7 +180,34 @@ paymentNote: {
     last_printed_at: { type: Date },
     last_printed_by: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
   },
+  ml_info: {
+  barcode: String,
+  ml_id: String,
+  tracking_code: String,
+  country: String,
+  parsed_data: Schema.Types.Mixed
+},
+
+created_via_scanner: {
+  type: Boolean,
+  default: false
+},
+
+scanner_timestamp: Date,
+
+needs_completion: {
+  type: Boolean,
+  default: false
+},
+
+source: {
+  type: String,
+  enum: ['web', 'api', 'ml_scanner', 'shopify', 'woocommerce', 'jumpseller'],
+  default: 'web'
+}
 });
+
+
 
 // Middleware para actualizar updated_at
 orderSchema.pre('save', function(next) {

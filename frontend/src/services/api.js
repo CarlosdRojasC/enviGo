@@ -981,6 +981,26 @@ const pickups = {
     return api.patch(`/pickups/${pickupId}/status`, { status });
   }
 };
+
+const scanner = {
+  // Obtener clientes disponibles para scanner
+  getClients: () => api.get('/scanner/clients'),
+  
+  // Procesar código ML
+  processMLBarcode: (formData) => api.post('/scanner/process-ml-barcode', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  }),
+  
+  // Finalizar sesión
+  finalizeSession: (sessionData) => api.post('/scanner/finalize-session', sessionData),
+  
+  // Stats ML para dashboard
+  getMLStats: (companyId = null) => {
+    const endpoint = companyId ? `/scanner/stats/${companyId}` : '/scanner/stats'
+    return api.get(endpoint)
+  }
+}
+
 // ACTUALIZAR la exportación para incluir shipday
 // Exportar todos los servicios
 export const apiService = {
@@ -992,6 +1012,7 @@ export const apiService = {
   drivers,
   billing,
   dashboard,
+  scanner,
   users,
   shipday,
   notifications,
