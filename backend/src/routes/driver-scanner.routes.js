@@ -1,50 +1,61 @@
 const express = require('express')
 const router = express.Router()
-const multer = require('multer')
-const { authenticateToken } = require('../middlewares/auth.middleware')
-const ScannerController = require('../controllers/scanner.controller')
+const Company = require('../models/Company')
 
-// Configurar multer para uploads
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: {
-    fileSize: 5 * 1024 * 1024 // 5MB
-  },
-  fileFilter: (req, file, cb) => {
-    if (file.mimetype.startsWith('image/')) {
-      cb(null, true)
-    } else {
-      cb(new Error('Solo se permiten imágenes'))
-    }
-  }
-})
+// ==================== RUTA PARA OBTENER CLIENTES (SIN AUTENTICACIÓN) ====================
 
 /**
  * GET /api/scanner/clients
- * Obtener clientes disponibles para escaneo
+ * Obtener clientes disponibles para escaneo (SIN autenticación de enviGo)
  */
-router.get('/clients', authenticateToken, ScannerController.getClients)
+router.get('/clients', async (req, res) => {
+  try {
+    console.log('📋 Scanner: Obteniendo clientes...')
+
+    // Obtener todas las empresas activas
+    const clients = await Company.find({
+      // is_active: true  // Si tienes este campo, úsalo
+      status: 'active'  // O si usas 'status'
+    })
+    .select('_id name email phone address type')
+    .sort({ name: 1 })
+    .limit(50)
+
+    console.log(`✅ Scanner: ${clients.length} clientes encontrados`)
+
+    res.json({
+      success: true,
+      data: clients.map(client => ({
+        id: client._id,
+        name: client.name,
+        email: client.email || '',
+        phone: client.phone || '',
+        address: client.address || '',
+        type: client.type || 'Cliente'
+      }))
+    })
+
+  } catch (error) {
+    console.error('❌ Scanner: Error obteniendo clientes:', error)
+    res.status(500).json({
+      success: false,
+      message: 'Error obteniendo lista de clientes'
+    })
+  }
+})
+
+// ==================== RUTA TEMPORAL PARA TESTING ====================
 
 /**
- * POST /api/scanner/process-ml-barcode
- * Procesar código de barras de ML
+ * GET /api/scanner/test
+ * Ruta de prueba para verificar que el scanner funciona
  */
-router.post('/process-ml-barcode', 
-  authenticateToken, 
-  upload.single('image'), 
-  ScannerController.processMLBarcode
-)
-
-/**
- * POST /api/scanner/finalize-session
- * Finalizar sesión de escaneo
- */
-router.post('/finalize-session', authenticateToken, ScannerController.finalizeSession)
-
-/**
- * GET /api/scanner/stats
- * Obtener estadísticas ML (usar query param ?companyId=123)
- */
-router.get('/stats', authenticateToken, ScannerController.getMLStats)
+router.get('/test', (req, res) => {
+  res.json({
+    success: true,
+    message: 'Scanner backend funcionando correctamente',
+    timestamp: new Date().toISOString()
+  })
+})
 
 module.exports = router
