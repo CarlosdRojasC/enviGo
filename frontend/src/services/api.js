@@ -984,7 +984,7 @@ const pickups = {
 
 const scanner = {
   // Obtener clientes disponibles para scanner
-  getClients: () => api.get('/driver-scanner/clients'),
+  getClients: () => api.get('/driver-scanner/public-clients'),
   
   // Procesar código ML
   processMLBarcode: (formData) => api.post('/driver-scanner/process-ml-barcode', formData, {

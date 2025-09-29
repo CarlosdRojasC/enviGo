@@ -7,7 +7,7 @@ export const scannerService = {
    */
   getCompanyClients() {
     console.log('📋 API: Obteniendo clientes para scanner')
-    return api.get('/driver-scanner/clients')
+    return api.get('/driver-scanner/public-clients')
   },
 
   /**
