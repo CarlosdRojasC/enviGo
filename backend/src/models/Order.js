@@ -185,7 +185,7 @@ paymentNote: {
   ml_id: String,
   tracking_code: String,
   country: String,
-  parsed_data: Schema.Types.Mixed
+  parsed_data: { type: mongoose.Schema.Types.Mixed }
 },
 
 created_via_scanner: {

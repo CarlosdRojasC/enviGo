@@ -374,8 +374,8 @@
 import { ref, onMounted, onUnmounted, nextTick, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../store/auth'
-import { scannerService } from '../services/'
-import toast from '../../services/toast.service'
+import { scannerService } from '../services/scanner.service'
+import { toast } from '../services/toast.service'
 
 export default {
   name: 'MLScanner',
