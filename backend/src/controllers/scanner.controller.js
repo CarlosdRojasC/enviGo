@@ -204,7 +204,7 @@ class ScannerController {
    */
   static async getMLStats(req, res) {
     try {
-      const companyId = req.params.companyId || req.user.company_id
+      const companyId = req.query.companyId
 
       const stats = {
         total_scanned: await Order.countDocuments({ 

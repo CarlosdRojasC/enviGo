@@ -42,10 +42,9 @@ router.post('/process-ml-barcode',
 router.post('/finalize-session', authenticateToken, ScannerController.finalizeSession)
 
 /**
- * GET /api/scanner/stats/:companyId?
- * Obtener estadísticas ML
+ * GET /api/scanner/stats
+ * Obtener estadísticas ML (usar query param ?companyId=123)
  */
-
-router.get('/stats/:companyId?', authenticateToken, ScannerController.getMLStats)
+router.get('/stats', authenticateToken, ScannerController.getMLStats)
 
 module.exports = router
