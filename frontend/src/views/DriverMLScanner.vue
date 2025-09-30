@@ -62,332 +62,340 @@
           </div>
         </div>
       </div>
-    <!-- ==================== PASO 1: SELECCIÓN DE CLIENTE ==================== -->
-    <div v-if="!selectedClient" class="client-selection">
-      <div class="selection-card">
-        <h2>🏢 Seleccionar Cliente</h2>
-        <p>Elige para qué cliente vas a recolectar paquetes:</p>
-        
-        <!-- Buscador de Clientes -->
-        <div class="search-container">
-          <div class="search-input-wrapper">
-            <span class="search-icon">🔍</span>
-            <input 
-              v-model="clientSearch" 
-              @input="filterClients"
-              type="text" 
-              placeholder="Buscar cliente por nombre o email..." 
-              class="client-search"
-              autofocus
-            />
-            <button 
-              v-if="clientSearch" 
-              @click="clearSearch" 
-              class="clear-search"
+
+      <!-- ==================== PASO 1: SELECCIÓN DE CLIENTE ==================== -->
+      <div v-if="!selectedClient" class="client-selection">
+        <div class="selection-card">
+          <h2>🏢 Seleccionar Cliente</h2>
+          <p>Elige para qué cliente vas a recolectar paquetes:</p>
+          
+          <!-- Buscador de Clientes -->
+          <div class="search-container">
+            <div class="search-input-wrapper">
+              <span class="search-icon">🔍</span>
+              <input 
+                v-model="clientSearch" 
+                @input="filterClients"
+                type="text" 
+                placeholder="Buscar cliente por nombre o email..." 
+                class="client-search"
+                autofocus
+              />
+              <button 
+                v-if="clientSearch" 
+                @click="clearSearch" 
+                class="clear-search"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+
+          <!-- Lista de Clientes -->
+          <div class="clients-list">
+            <div 
+              v-for="client in filteredClients" 
+              :key="client.id"
+              @click="selectClient(client)"
+              class="client-card"
+              :class="{ 'client-hover': true }"
             >
-              ✕
-            </button>
+              <div class="client-avatar">
+                {{ client.name.charAt(0).toUpperCase() }}
+              </div>
+              <div class="client-info">
+                <h3>{{ client.name }}</h3>
+                <p>{{ client.email }}</p>
+                <div class="client-meta">
+                  <span class="client-type">{{ client.type || 'Cliente' }}</span>
+                  <span v-if="client.phone" class="client-phone">📞 {{ client.phone }}</span>
+                </div>
+              </div>
+              <div class="client-arrow">
+                <span>➜</span>
+              </div>
+            </div>
+
+            <!-- Estado vacío -->
+            <div v-if="filteredClients.length === 0" class="empty-clients">
+              <div class="empty-icon">🔍</div>
+              <h3>No se encontraron clientes</h3>
+              <p v-if="clientSearch">
+                No hay clientes que coincidan con "{{ clientSearch }}"
+              </p>
+              <p v-else>
+                No tienes clientes registrados aún.
+              </p>
+            </div>
+          </div>
+
+          <!-- Loading clientes -->
+          <div v-if="loadingClients" class="loading-clients">
+            <div class="spinner-small"></div>
+            <span>Cargando clientes...</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ==================== PASO 2: INTERFACE DE SCANNER ==================== -->
+      <div v-if="selectedClient && !showResults" class="scanner-interface">
+        
+        <!-- Barra de Acciones -->
+        <div class="action-bar">
+          <button @click="changeClient" class="btn-secondary">
+            ⬅️ Cambiar Cliente
+          </button>
+          <div class="action-center">
+            <span class="current-client">
+              <strong>Cliente:</strong> {{ selectedClient.name }}
+            </span>
+          </div>
+          <button 
+            @click="showResultsList" 
+            class="btn-info"
+            :disabled="scannedOrders.length === 0"
+          >
+            📋 Ver Resultados ({{ scannedOrders.length }})
+          </button>
+        </div>
+
+        <!-- Área Principal del Scanner -->
+        <div class="scanner-main-area">
+          
+          <!-- Card del Scanner -->
+          <div class="scanner-card">
+            <div class="scanner-header-card">
+              <h3>📸 Capturar Etiqueta Completa</h3>
+              <p>Toma una foto de toda la etiqueta de MercadoLibre</p>
+            </div>
+            
+            <!-- Área de captura tipo CamScanner -->
+            <div class="capture-container">
+              <div class="capture-area">
+                
+                <!-- Video para vista previa -->
+                <video 
+                  ref="videoElement" 
+                  class="capture-video" 
+                  autoplay 
+                  playsinline
+                  muted
+                  v-show="isScanning"
+                ></video>
+                
+                <!-- Overlay para guiar la captura -->
+                <div class="capture-overlay" v-show="isScanning">
+                  <div class="capture-frame">
+                    <div class="frame-corners">
+                      <div class="corner top-left"></div>
+                      <div class="corner top-right"></div>
+                      <div class="corner bottom-left"></div>
+                      <div class="corner bottom-right"></div>
+                    </div>
+                    <div class="capture-instructions">
+                      <p>📦 Coloca la etiqueta dentro del marco</p>
+                      <p>Asegúrate que se vea completa y legible</p>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Imagen capturada para revisión -->
+                <div v-if="capturedImage" class="captured-preview">
+                  <img :src="capturedImage" alt="Etiqueta capturada" class="preview-image" />
+                  <div class="preview-actions">
+                    <button @click="retakePhoto" class="btn-secondary">
+                      🔄 Tomar otra
+                    </button>
+                    <button @click="processCapturedImage" class="btn-primary" :disabled="isProcessing">
+                      <span v-if="!isProcessing">✨ Procesar Etiqueta</span>
+                      <span v-else>⏳ Extrayendo datos...</span>
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Mensaje cuando no hay cámara -->
+                <div v-if="!isScanning && !capturedImage" class="no-camera-message">
+                  <div class="camera-icon">📷</div>
+                  <p>Presiona "Iniciar Cámara" para comenzar</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Controles de captura -->
+            <div class="capture-controls">
+              <button 
+                @click="startCamera" 
+                v-if="!isScanning && !capturedImage"
+                class="btn-primary capture-btn"
+              >
+                📷 Iniciar Cámara
+              </button>
+              
+              <div v-if="isScanning" class="camera-actions">
+                <button @click="capturePhoto" class="btn-capture">
+                  📸 Capturar
+                </button>
+                <button @click="stopCamera" class="btn-secondary">
+                  🛑 Cancelar
+                </button>
+              </div>
+            </div>
+          </div>
+          <!-- FIN scanner-card -->
+
+          <!-- Sidebar con información -->
+          <div class="scanner-sidebar">
+            
+            <!-- Último Código Escaneado -->
+            <div v-if="lastScanned" class="last-scanned-card">
+              <h3>✅ Último Escaneado</h3>
+              <div class="scanned-details">
+                <div class="barcode-display">
+                  <span class="barcode-label">Código:</span>
+                  <code class="barcode-value">{{ lastScanned.barcode }}</code>
+                </div>
+                <div class="status-display">
+                  <span class="status-badge" :class="lastScanned.status">
+                    {{ getStatusText(lastScanned.status) }}
+                  </span>
+                </div>
+                <div class="timestamp-display">
+                  {{ formatTime(lastScanned.timestamp) }}
+                </div>
+              </div>
+            </div>
+
+            <!-- Estadísticas de la Sesión -->
+            <div class="session-stats-card">
+              <h3>📊 Sesión Actual</h3>
+              <div class="stats-grid">
+                <div class="stat-item">
+                  <span class="stat-number">{{ scannedOrders.length }}</span>
+                  <span class="stat-label">Total</span>
+                </div>
+                <div class="stat-item success">
+                  <span class="stat-number">{{ getStatusCount('created') }}</span>
+                  <span class="stat-label">Creados</span>
+                </div>
+                <div class="stat-item warning">
+                  <span class="stat-number">{{ getStatusCount('duplicate') }}</span>
+                  <span class="stat-label">Duplicados</span>
+                </div>
+                <div class="stat-item error">
+                  <span class="stat-number">{{ getStatusCount('invalid') }}</span>
+                  <span class="stat-label">Inválidos</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Tips de Uso -->
+            <div class="tips-card">
+              <h3>💡 Tips</h3>
+              <ul class="tips-list">
+                <li>Mantén el código bien iluminado</li>
+                <li>Asegúrate que esté enfocado</li>
+                <li>Evita reflejos en la etiqueta</li>
+                <li>Mantén el teléfono estable</li>
+              </ul>
+            </div>
+          </div>
+          <!-- FIN scanner-sidebar -->
+        </div>
+        <!-- FIN scanner-main-area -->
+      </div>
+      <!-- FIN scanner-interface -->
+
+      <!-- ==================== PASO 3: VISTA DE RESULTADOS ==================== -->
+      <div v-if="showResults" class="results-view">
+        
+        <!-- Header de Resultados -->
+        <div class="results-header">
+          <button @click="backToScanner" class="btn-secondary">
+            ⬅️ Seguir Escaneando
+          </button>
+          <div class="results-title-section">
+            <h2>📋 Pedidos Escaneados</h2>
+            <span class="results-count">{{ scannedOrders.length }} códigos procesados</span>
+          </div>
+          <button 
+            @click="finalizeSession" 
+            class="btn-success"
+            :disabled="getStatusCount('created') === 0"
+          >
+            ✅ Finalizar Sesión
+          </button>
+        </div>
+
+        <!-- Resumen de la Sesión -->
+        <div class="session-summary">
+          <div class="summary-card">
+            <h3>📈 Resumen de la Sesión</h3>
+            <div class="summary-stats">
+              <div class="summary-item total">
+                <span class="number">{{ scannedOrders.length }}</span>
+                <span class="label">Códigos Escaneados</span>
+              </div>
+              <div class="summary-item success">
+                <span class="number">{{ getStatusCount('created') }}</span>
+                <span class="label">Pedidos Creados</span>
+              </div>
+              <div class="summary-item warning">
+                <span class="number">{{ getStatusCount('duplicate') }}</span>
+                <span class="label">Duplicados</span>
+              </div>
+              <div class="summary-item error">
+                <span class="number">{{ getStatusCount('invalid') }}</span>
+                <span class="label">Inválidos</span>
+              </div>
+            </div>
           </div>
         </div>
 
-        <!-- Lista de Clientes -->
-        <div class="clients-list">
+        <!-- Lista de Resultados -->
+        <div class="results-list">
           <div 
-            v-for="client in filteredClients" 
-            :key="client.id"
-            @click="selectClient(client)"
-            class="client-card"
-            :class="{ 'client-hover': true }"
+            v-for="(order, index) in scannedOrders" 
+            :key="order.barcode"
+            class="result-card"
+            :class="order.status"
           >
-            <div class="client-avatar">
-              {{ client.name.charAt(0).toUpperCase() }}
+            <div class="result-index">
+              {{ scannedOrders.length - index }}
             </div>
-            <div class="client-info">
-              <h3>{{ client.name }}</h3>
-              <p>{{ client.email }}</p>
-              <div class="client-meta">
-                <span class="client-type">{{ client.type || 'Cliente' }}</span>
-                <span v-if="client.phone" class="client-phone">📞 {{ client.phone }}</span>
+            <div class="result-content">
+              <div class="result-main">
+                <div class="barcode-info">
+                  <code class="result-barcode">{{ order.barcode }}</code>
+                  <span class="result-timestamp">{{ formatTime(order.timestamp) }}</span>
+                </div>
+                <div class="result-status">
+                  <span class="status-badge" :class="order.status">
+                    {{ getStatusText(order.status) }}
+                  </span>
+                </div>
               </div>
-            </div>
-            <div class="client-arrow">
-              <span>➜</span>
+              <div v-if="order.order_id && order.status === 'created'" class="result-actions">
+                <button 
+                  @click="viewOrder(order.order_id)" 
+                  class="btn-view-order"
+                >
+                  👁️ Ver Pedido
+                </button>
+              </div>
             </div>
           </div>
 
           <!-- Estado vacío -->
-          <div v-if="filteredClients.length === 0" class="empty-clients">
-            <div class="empty-icon">🔍</div>
-            <h3>No se encontraron clientes</h3>
-            <p v-if="clientSearch">
-              No hay clientes que coincidan con "{{ clientSearch }}"
-            </p>
-            <p v-else>
-              No tienes clientes registrados aún.
-            </p>
+          <div v-if="scannedOrders.length === 0" class="empty-results">
+            <div class="empty-icon">📦</div>
+            <h3>No hay códigos escaneados</h3>
+            <p>Los códigos que escanees aparecerán aquí</p>
           </div>
         </div>
-
-        <!-- Loading clientes -->
-        <div v-if="loadingClients" class="loading-clients">
-          <div class="spinner-small"></div>
-          <span>Cargando clientes...</span>
-        </div>
       </div>
+      <!-- FIN results-view -->
     </div>
-
-    <!-- ==================== PASO 2: INTERFACE DE SCANNER ==================== -->
-    <div v-if="selectedClient && !showResults" class="scanner-interface">
-      
-      <!-- Barra de Acciones -->
-      <div class="action-bar">
-        <button @click="changeClient" class="btn-secondary">
-          ⬅️ Cambiar Cliente
-        </button>
-        <div class="action-center">
-          <span class="current-client">
-            <strong>Cliente:</strong> {{ selectedClient.name }}
-          </span>
-        </div>
-        <button 
-          @click="showResultsList" 
-          class="btn-info"
-          :disabled="scannedOrders.length === 0"
-        >
-          📋 Ver Resultados ({{ scannedOrders.length }})
-        </button>
-      </div>
-    </div>
-      <!-- Área Principal del Scanner -->
-      <div class="scanner-main-area">
-        
-        <!-- Card del Scanner -->
-        <div class="scanner-card">
-  <div class="scanner-header-card">
-    <h3>📸 Capturar Etiqueta Completa</h3>
-    <p>Toma una foto de toda la etiqueta de MercadoLibre</p>
-  </div>
-  
-  <!-- Área de captura tipo CamScanner -->
-  <div class="capture-container">
-    <div class="capture-area">
-      
-      <!-- Video para vista previa -->
-      <video 
-        ref="videoElement" 
-        class="capture-video" 
-        autoplay 
-        playsinline
-        muted
-        v-show="isScanning"
-      ></video>
-      
-      <!-- Overlay para guiar la captura -->
-      <div class="capture-overlay" v-show="isScanning">
-        <div class="capture-frame">
-          <div class="frame-corners">
-            <div class="corner top-left"></div>
-            <div class="corner top-right"></div>
-            <div class="corner bottom-left"></div>
-            <div class="corner bottom-right"></div>
-          </div>
-          <div class="capture-instructions">
-            <p>📦 Coloca la etiqueta dentro del marco</p>
-            <p>Asegúrate que se vea completa y legible</p>
-          </div>
-        </div>
-      </div>
-
-      <!-- Imagen capturada para revisión -->
-      <div v-if="capturedImage" class="captured-preview">
-        <img :src="capturedImage" alt="Etiqueta capturada" class="preview-image" />
-        <div class="preview-actions">
-          <button @click="retakePhoto" class="btn-secondary">
-            🔄 Tomar otra
-          </button>
-          <button @click="processCapturedImage" class="btn-primary" :disabled="isProcessing">
-            <span v-if="!isProcessing">✨ Procesar Etiqueta</span>
-            <span v-else>⏳ Extrayendo datos...</span>
-          </button>
-        </div>
-      </div>
-
-      <!-- Mensaje cuando no hay cámara -->
-      <div v-if="!isScanning && !capturedImage" class="no-camera-message">
-        <div class="camera-icon">📷</div>
-        <p>Presiona "Iniciar Cámara" para comenzar</p>
-      </div>
-    </div>
-  </div>
-
-  <!-- Controles de captura -->
-  <div class="capture-controls">
-    <button 
-      @click="startCamera" 
-      v-if="!isScanning && !capturedImage"
-      class="btn-primary capture-btn"
-    >
-      📷 Iniciar Cámara
-    </button>
-    
-    <div v-if="isScanning" class="camera-actions">
-      <button @click="capturePhoto" class="btn-capture">
-        📸 Capturar
-      </button>
-      <button @click="stopCamera" class="btn-secondary">
-        🛑 Cancelar
-      </button>
-    </div>
-  </div>
-
-        <!-- Sidebar con información -->
-        <div class="scanner-sidebar">
-          
-          <!-- Último Código Escaneado -->
-          <div v-if="lastScanned" class="last-scanned-card">
-            <h3>✅ Último Escaneado</h3>
-            <div class="scanned-details">
-              <div class="barcode-display">
-                <span class="barcode-label">Código:</span>
-                <code class="barcode-value">{{ lastScanned.barcode }}</code>
-              </div>
-              <div class="status-display">
-                <span class="status-badge" :class="lastScanned.status">
-                  {{ getStatusText(lastScanned.status) }}
-                </span>
-              </div>
-              <div class="timestamp-display">
-                {{ formatTime(lastScanned.timestamp) }}
-              </div>
-            </div>
-          </div>
-
-          <!-- Estadísticas de la Sesión -->
-          <div class="session-stats-card">
-            <h3>📊 Sesión Actual</h3>
-            <div class="stats-grid">
-              <div class="stat-item">
-                <span class="stat-number">{{ scannedOrders.length }}</span>
-                <span class="stat-label">Total</span>
-              </div>
-              <div class="stat-item success">
-                <span class="stat-number">{{ getStatusCount('created') }}</span>
-                <span class="stat-label">Creados</span>
-              </div>
-              <div class="stat-item warning">
-                <span class="stat-number">{{ getStatusCount('duplicate') }}</span>
-                <span class="stat-label">Duplicados</span>
-              </div>
-              <div class="stat-item error">
-                <span class="stat-number">{{ getStatusCount('invalid') }}</span>
-                <span class="stat-label">Inválidos</span>
-              </div>
-            </div>
-          </div>
-
-          <!-- Tips de Uso -->
-          <div class="tips-card">
-            <h3>💡 Tips</h3>
-            <ul class="tips-list">
-              <li>Mantén el código bien iluminado</li>
-              <li>Asegúrate que esté enfocado</li>
-              <li>Evita reflejos en la etiqueta</li>
-              <li>Mantén el teléfono estable</li>
-            </ul>
-          </div>
-        </div>
-      </div>
-      </div>
-    </div>
-
-    <!-- ==================== PASO 3: VISTA DE RESULTADOS ==================== -->
-    <div v-if="showResults" class="results-view">
-      
-      <!-- Header de Resultados -->
-      <div class="results-header">
-        <button @click="backToScanner" class="btn-secondary">
-          ⬅️ Seguir Escaneando
-        </button>
-        <div class="results-title-section">
-          <h2>📋 Pedidos Escaneados</h2>
-          <span class="results-count">{{ scannedOrders.length }} códigos procesados</span>
-        </div>
-        <button 
-          @click="finalizeSession" 
-          class="btn-success"
-          :disabled="getStatusCount('created') === 0"
-        >
-          ✅ Finalizar Sesión
-        </button>
-      </div>
-
-      <!-- Resumen de la Sesión -->
-      <div class="session-summary">
-        <div class="summary-card">
-          <h3>📈 Resumen de la Sesión</h3>
-          <div class="summary-stats">
-            <div class="summary-item total">
-              <span class="number">{{ scannedOrders.length }}</span>
-              <span class="label">Códigos Escaneados</span>
-            </div>
-            <div class="summary-item success">
-              <span class="number">{{ getStatusCount('created') }}</span>
-              <span class="label">Pedidos Creados</span>
-            </div>
-            <div class="summary-item warning">
-              <span class="number">{{ getStatusCount('duplicate') }}</span>
-              <span class="label">Duplicados</span>
-            </div>
-            <div class="summary-item error">
-              <span class="number">{{ getStatusCount('invalid') }}</span>
-              <span class="label">Inválidos</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Lista de Resultados -->
-      <div class="results-list">
-        <div 
-          v-for="(order, index) in scannedOrders" 
-          :key="order.barcode"
-          class="result-card"
-          :class="order.status"
-        >
-          <div class="result-index">
-            {{ scannedOrders.length - index }}
-          </div>
-          <div class="result-content">
-            <div class="result-main">
-              <div class="barcode-info">
-                <code class="result-barcode">{{ order.barcode }}</code>
-                <span class="result-timestamp">{{ formatTime(order.timestamp) }}</span>
-              </div>
-              <div class="result-status">
-                <span class="status-badge" :class="order.status">
-                  {{ getStatusText(order.status) }}
-                </span>
-              </div>
-            </div>
-            <div v-if="order.order_id && order.status === 'created'" class="result-actions">
-              <button 
-                @click="viewOrder(order.order_id)" 
-                class="btn-view-order"
-              >
-                👁️ Ver Pedido
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <!-- Estado vacío -->
-        <div v-if="scannedOrders.length === 0" class="empty-results">
-          <div class="empty-icon">📦</div>
-          <h3>No hay códigos escaneados</h3>
-          <p>Los códigos que escanees aparecerán aquí</p>
-        </div>
-      </div>
-    </div>
+    <!-- FIN isAccessGranted -->
 
     <!-- ==================== OVERLAY DE LOADING ==================== -->
     <div v-if="isProcessing" class="loading-overlay">
