@@ -163,91 +163,82 @@
         
         <!-- Card del Scanner -->
         <div class="scanner-card">
-          <div class="scanner-header-card">
-            <h3>📱 Escanear Códigos de Barras</h3>
-            <p>Acerca el código de barras de MercadoLibre a la cámara</p>
+  <div class="scanner-header-card">
+    <h3>📸 Capturar Etiqueta Completa</h3>
+    <p>Toma una foto de toda la etiqueta de MercadoLibre</p>
+  </div>
+  
+  <!-- Área de captura tipo CamScanner -->
+  <div class="capture-container">
+    <div class="capture-area">
+      
+      <!-- Video para vista previa -->
+      <video 
+        ref="videoElement" 
+        class="capture-video" 
+        autoplay 
+        playsinline
+        muted
+        v-show="isScanning"
+      ></video>
+      
+      <!-- Overlay para guiar la captura -->
+      <div class="capture-overlay" v-show="isScanning">
+        <div class="capture-frame">
+          <div class="frame-corners">
+            <div class="corner top-left"></div>
+            <div class="corner top-right"></div>
+            <div class="corner bottom-left"></div>
+            <div class="corner bottom-right"></div>
           </div>
-          
-          <!-- Video Scanner -->
-          <div class="video-container">
-            <video 
-              ref="videoElement" 
-              class="scanner-video" 
-              autoplay 
-              playsinline
-              muted
-            ></video>
-            
-            <!-- Overlay del Scanner -->
-            <div class="scanner-overlay">
-              <div class="scan-frame">
-                <div class="scan-corners">
-                  <div class="corner top-left"></div>
-                  <div class="corner top-right"></div>
-                  <div class="corner bottom-left"></div>
-                  <div class="corner bottom-right"></div>
-                </div>
-                <div class="scan-line" :class="{ active: isScanning }"></div>
-              </div>
-              <div class="scan-instructions">
-                <p v-if="!isScanning">Presiona "Iniciar Cámara" para comenzar</p>
-                <p v-else>Mantén el código dentro del marco</p>
-              </div>
-            </div>
-
-            <!-- Mensaje cuando no hay video -->
-            <div v-if="!isScanning" class="no-video-message">
-              <div class="camera-icon">📷</div>
-              <p>Cámara desactivada</p>
-            </div>
-          </div>
-
-          <!-- Controles del Scanner -->
-          <div class="scanner-controls">
-            <button 
-              @click="startScanning" 
-              :disabled="isScanning || isProcessing" 
-              class="btn-primary scanner-btn"
-            >
-              <span v-if="!isScanning">📷 Iniciar Cámara</span>
-              <span v-else>📷 Escaneando...</span>
-            </button>
-            
-            <button 
-              @click="stopScanning" 
-              :disabled="!isScanning" 
-              class="btn-secondary scanner-btn"
-            >
-              🛑 Parar Cámara
-            </button>
-          </div>
-
-          <!-- Separador -->
-          <div class="scanner-divider">
-            <span>O</span>
-          </div>
-
-          <!-- Upload Manual -->
-          <div class="upload-section">
-            <h4>📷 Sube una foto del código</h4>
-            <div class="upload-area">
-              <input 
-                ref="fileInput"
-                @change="processImageUpload" 
-                type="file" 
-                accept="image/*" 
-                capture="environment"
-                class="file-input-hidden"
-                id="file-upload"
-              />
-              <label for="file-upload" class="upload-button">
-                <span class="upload-icon">📁</span>
-                <span>Seleccionar Imagen</span>
-              </label>
-              <p class="upload-hint">JPG, PNG o similar</p>
-            </div>
+          <div class="capture-instructions">
+            <p>📦 Coloca la etiqueta dentro del marco</p>
+            <p>Asegúrate que se vea completa y legible</p>
           </div>
         </div>
+      </div>
+
+      <!-- Imagen capturada para revisión -->
+      <div v-if="capturedImage" class="captured-preview">
+        <img :src="capturedImage" alt="Etiqueta capturada" class="preview-image" />
+        <div class="preview-actions">
+          <button @click="retakePhoto" class="btn-secondary">
+            🔄 Tomar otra
+          </button>
+          <button @click="processCapturedImage" class="btn-primary" :disabled="isProcessing">
+            <span v-if="!isProcessing">✨ Procesar Etiqueta</span>
+            <span v-else>⏳ Extrayendo datos...</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Mensaje cuando no hay cámara -->
+      <div v-if="!isScanning && !capturedImage" class="no-camera-message">
+        <div class="camera-icon">📷</div>
+        <p>Presiona "Iniciar Cámara" para comenzar</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Controles de captura -->
+  <div class="capture-controls">
+    <button 
+      @click="startCamera" 
+      v-if="!isScanning && !capturedImage"
+      class="btn-primary capture-btn"
+    >
+      📷 Iniciar Cámara
+    </button>
+    
+    <div v-if="isScanning" class="camera-actions">
+      <button @click="capturePhoto" class="btn-capture">
+        📸 Capturar
+      </button>
+      <button @click="stopCamera" class="btn-secondary">
+        🛑 Cancelar
+      </button>
+    </div>
+  </div>
 
         <!-- Sidebar con información -->
         <div class="scanner-sidebar">
@@ -305,6 +296,7 @@
             </ul>
           </div>
         </div>
+      </div>
       </div>
     </div>
 
@@ -417,7 +409,7 @@
     </div>
   </div>
 </template>
-<script>
+<script setup>
 import { ref, onMounted, onUnmounted, nextTick, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { scannerService } from '../services/scanner.service'
@@ -441,7 +433,16 @@ export default {
     const isInitialized = ref(false)
     const isProcessing = ref(false)
     const loadingClients = ref(false)
-    
+    const capturedImage = ref(null)
+
+    // Pedidos escaneados
+const scannedOrders = ref([])
+const lastScanned = ref(null)
+const showResults = ref(false)
+
+// Imagen capturada
+const capturedImage = ref(null)
+
     // Clientes
     const clients = ref([])
     const filteredClients = ref([])
@@ -656,95 +657,92 @@ export default {
     /**
      * Iniciar la cámara para escanear
      */
-    async function startScanning() {
-      try {
-        console.log('📷 Iniciando cámara...')
-        
-        // Solicitar permisos de cámara
-        const stream = await navigator.mediaDevices.getUserMedia({ 
-          video: { 
-            facingMode: 'environment', // Cámara trasera
-            width: { ideal: 1920, min: 640 },
-            height: { ideal: 1080, min: 480 }
-          } 
-        })
-        
-        // Asignar stream al video
-        if (videoElement.value) {
-          videoElement.value.srcObject = stream
-          mediaStream = stream
-          isScanning.value = true
-
-          // Esperar a que el video esté listo
-          await nextTick()
-          
-          // Iniciar loop de detección
-          startScanningLoop()
-          
-          toast.success('📷 Cámara iniciada - Enfoca el código de barras')
-        }
-
-      } catch (error) {
-        console.error('❌ Error accediendo a la cámara:', error)
-        
-        let errorMessage = 'No se pudo acceder a la cámara'
-        
-        if (error.name === 'NotAllowedError') {
-          errorMessage = 'Permisos de cámara denegados'
-        } else if (error.name === 'NotFoundError') {
-          errorMessage = 'No se encontró cámara disponible'
-        } else if (error.name === 'NotSupportedError') {
-          errorMessage = 'Cámara no soportada por el navegador'
-        }
-        
-        toast.error(errorMessage)
-      }
+ /**
+ * Iniciar cámara para captura (no para scanning continuo)
+ */
+async function startCamera() {
+  try {
+    console.log('📷 Iniciando cámara para captura...')
+    
+    const stream = await navigator.mediaDevices.getUserMedia({ 
+      video: { 
+        facingMode: 'environment',
+        width: { ideal: 1920, min: 640 },
+        height: { ideal: 1440, min: 480 } // Mejor resolución para OCR
+      } 
+    })
+    
+    if (videoElement.value) {
+      videoElement.value.srcObject = stream
+      mediaStream = stream
+      isScanning.value = true
+      toast.success('📷 Cámara lista - Coloca la etiqueta en el marco')
     }
 
-    /**
-     * Detener la cámara
-     */
-    function stopScanning() {
-      console.log('🛑 Deteniendo cámara...')
-      
-      // Detener interval de scanning
-      if (scannerInterval) {
-        clearInterval(scannerInterval)
-        scannerInterval = null
-      }
-      
-      // Detener stream de video
-      if (mediaStream) {
-        mediaStream.getTracks().forEach(track => {
-          track.stop()
-          console.log('🔴 Track detenido:', track.kind)
-        })
-        mediaStream = null
-      }
-      
-      // Limpiar video element
-      if (videoElement.value) {
-        videoElement.value.srcObject = null
-      }
-      
-      isScanning.value = false
-      toast.info('Cámara detenida')
-    }
+  } catch (error) {
+    console.error('❌ Error accediendo a la cámara:', error)
+    toast.error('No se pudo acceder a la cámara')
+  }
+}
 
-    /**
-     * Loop principal de detección de códigos
-     */
-    function startScanningLoop() {
-      // Intervalo cada segundo para capturar frames
-      scannerInterval = setInterval(() => {
-        if (isScanning.value && !isProcessing.value) {
-          captureAndAnalyzeFrame()
-        }
-      }, 1000)
-      
-      console.log('🔄 Loop de scanning iniciado')
-    }
+/**
+ * Capturar foto de la etiqueta
+ */
+function capturePhoto() {
+  try {
+    if (!videoElement.value || !isScanning.value) return
 
+    // Crear canvas para capturar
+    const canvas = document.createElement('canvas')
+    const context = canvas.getContext('2d')
+    
+    // Configurar tamaño del canvas
+    const videoWidth = videoElement.value.videoWidth
+    const videoHeight = videoElement.value.videoHeight
+    
+    canvas.width = videoWidth
+    canvas.height = videoHeight
+    
+    // Dibujar frame actual
+    context.drawImage(videoElement.value, 0, 0, videoWidth, videoHeight)
+    
+    // Convertir a imagen base64
+    capturedImage.value = canvas.toDataURL('image/jpeg', 0.9)
+    
+    // Detener cámara después de capturar
+    stopCamera()
+    
+    toast.success('📸 Etiqueta capturada - Revisa y procesa')
+    
+  } catch (error) {
+    console.error('❌ Error capturando foto:', error)
+    toast.error('Error capturando la foto')
+  }
+}
+
+/**
+ * Detener cámara
+ */
+function stopCamera() {
+  if (mediaStream) {
+    mediaStream.getTracks().forEach(track => track.stop())
+    mediaStream = null
+  }
+  
+  if (videoElement.value) {
+    videoElement.value.srcObject = null
+  }
+  
+  isScanning.value = false
+}
+
+/**
+ * Tomar otra foto (reset)
+ */
+function retakePhoto() {
+  capturedImage.value = null
+  toast.info('Toma una nueva foto de la etiqueta')
+}
     /**
      * Capturar frame del video y analizar
      */
@@ -809,7 +807,69 @@ export default {
         fileInput.value.value = ''
       }
     }
+/**
+ * Procesar imagen capturada con OCR
+ */
+async function processCapturedImage() {
+  if (!capturedImage.value) return
 
+  try {
+    isProcessing.value = true
+    console.log('🔄 Procesando etiqueta con OCR...')
+
+    // Convertir base64 a blob
+    const response = await fetch(capturedImage.value)
+    const blob = await response.blob()
+
+    // Crear FormData
+    const formData = new FormData()
+    formData.append('image', blob, 'etiqueta-ml.jpg')
+    formData.append('client_id', selectedClient.value.id)
+
+    // Enviar al backend para OCR
+    const result = await scannerService.processMLLabel(formData)
+    
+    if (result.data.success) {
+      const extractedData = result.data.data
+      
+      // Crear objeto de orden escaneada
+      const scannedOrder = {
+        shipping_number: extractedData.shipping_number,
+        status: extractedData.status,
+        order_id: extractedData.order_id || null,
+        timestamp: new Date(),
+        client_name: selectedClient.value.name,
+        client_id: selectedClient.value.id,
+        extracted_data: extractedData
+      }
+      
+      // Agregar a la lista
+      scannedOrders.value.unshift(scannedOrder)
+      lastScanned.value = scannedOrder
+      
+      // Feedback según el resultado
+      if (extractedData.status === 'created') {
+        toast.success(`✅ Pedido creado: ${extractedData.customer_name} - ${extractedData.commune}`)
+      } else if (extractedData.status === 'duplicate') {
+        toast.warning(`⚠️ Envío ya existe: ${extractedData.shipping_number}`)
+      } else if (extractedData.status === 'invalid') {
+        toast.error(`❌ No se pudo extraer información válida`)
+      }
+      
+      // Reset para siguiente captura
+      capturedImage.value = null
+      
+    } else {
+      toast.error(result.data.message || 'Error procesando etiqueta')
+    }
+    
+  } catch (error) {
+    console.error('❌ Error procesando etiqueta:', error)
+    toast.error('Error procesando la etiqueta')
+  } finally {
+    isProcessing.value = false
+  }
+}
     /**
      * Procesar imagen (capturada o subida)
      */
@@ -1109,11 +1169,20 @@ export default {
       clearSearch,
       selectClient,
       changeClient,
+      // Scanner
+isScanning,
+videoElement,
+fileInput,
+// Captura de imagen
+capturedImage,
       
-      // Métodos de scanner
-      startScanning,
-      stopScanning,
-      processImageUpload,
+     // Métodos de scanner
+startCamera,
+capturePhoto,
+stopCamera,
+retakePhoto,
+processCapturedImage,
+processImageUpload,
       
       // Métodos de resultados
       showResultsList,

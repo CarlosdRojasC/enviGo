@@ -9,7 +9,14 @@ export const scannerService = {
     console.log('📋 API: Obteniendo clientes para scanner')
     return api.get('/driver-scanner/public-clients')
   },
-
+processMLLabel(formData) {
+  console.log('📸 API: Procesando etiqueta ML con OCR')
+  return api.post('/driver-scanner/process-ml-label', formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data'
+    }
+  })
+},
   /**
    * Procesar código de barras de MercadoLibre
    */

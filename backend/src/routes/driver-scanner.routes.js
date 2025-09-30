@@ -1,6 +1,7 @@
 const express = require('express')
 const router = express.Router()
 const Company = require('../models/Company')
+const Tesseract = require('tesseract.js');
 
 // ==================== RUTA PARA OBTENER CLIENTES (SIN AUTENTICACIÓN) ====================
 
@@ -44,6 +45,58 @@ router.get('/clients', async (req, res) => {
   }
 })
 
+router.post('/process-ml-label', upload.single('image'), async (req, res) => {
+  try {
+    console.log('📸 Scanner: Procesando etiqueta ML con OCR...');
+
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: 'No se recibió imagen'
+      });
+    }
+
+    if (!req.body.client_id) {
+      return res.status(400).json({
+        success: false,
+        message: 'ID de cliente requerido'
+      });
+    }
+
+    // Procesar imagen con Tesseract OCR
+    console.log('🔍 Ejecutando OCR...');
+    const { data: { text } } = await Tesseract.recognize(
+      req.file.buffer,
+      'spa+eng', // Español + Inglés
+      {
+        logger: m => console.log('OCR:', m.status, m.progress)
+      }
+    );
+
+    console.log('📝 Texto extraído:', text);
+
+    // Por ahora, devolver texto extraído (luego lo parseamos)
+    res.json({
+      success: true,
+      data: {
+        status: 'created',
+        shipping_number: 'TEST-123456',
+        customer_name: 'Cliente de prueba',
+        commune: 'Santiago',
+        raw_text: text,
+        message: 'OCR procesado exitosamente'
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Error procesando etiqueta ML:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error procesando etiqueta',
+      error: error.message
+    });
+  }
+});
 /**
  * GET /api/driver-scanner/public-clients
  * Obtener clientes SIN autenticación (para el scanner web)
