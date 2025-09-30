@@ -1172,10 +1172,7 @@ async function processCapturedImage() {
       clearSearch,
       selectClient,
       changeClient,
-      // Scanner
-isScanning,
-videoElement,
-fileInput,
+
 // Captura de imagen
 capturedImage,
       
