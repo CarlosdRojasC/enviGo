@@ -1135,67 +1135,67 @@ async function processCapturedImage() {
     // ==================== RETURN (EXPOSING TO TEMPLATE) ====================
 
     return {
-      // Nuevas variables de acceso
-      isAccessGranted,
-      accessPassword,
-      isVerifyingAccess,
-      verifyAccess,
-      logout,
-
-      // Estado general
-      isInitialized,
-      isProcessing,
-      loadingClients,
-      
-      // Clientes
-      clients,
-      filteredClients,
-      clientSearch,
-      selectedClient,
-      
-      // Scanner
-      isScanning,
-      videoElement,
-      fileInput,
-      
-      // Pedidos
-      scannedOrders,
-      lastScanned,
-      showResults,
-      
-      // Computed
-      sessionStats,
-      canFinalize,
-      
-      // Métodos de clientes
-      filterClients,
-      clearSearch,
-      selectClient,
-      changeClient,
-
-// Captura de imagen
-capturedImage,
-      
-     // Métodos de scanner
-startCamera,
-capturePhoto,
-stopCamera,
-retakePhoto,
-processCapturedImage,
-processImageUpload,
-      
-      // Métodos de resultados
-      showResultsList,
-      backToScanner,
-      finalizeSession,
-      viewOrder,
-      
-      // Utilidades
-      getStatusText,
-      getStatusCount,
-      formatTime,
-      formatDateTime
-    }
+  // Nuevas variables de acceso
+  isAccessGranted,
+  accessPassword,
+  isVerifyingAccess,
+  verifyAccess,
+  logout,
+  
+  // Estado general
+  isInitialized,
+  isProcessing,
+  loadingClients,
+  
+  // Clientes
+  clients,
+  filteredClients,
+  clientSearch,
+  selectedClient,
+  
+  // Scanner
+  isScanning,
+  videoElement,
+  fileInput,
+  
+  // Captura de imagen
+  capturedImage,
+  
+  // Pedidos
+  scannedOrders,
+  lastScanned,
+  showResults,
+  
+  // Computed
+  sessionStats,
+  canFinalize,
+  
+  // Métodos de clientes
+  filterClients,
+  clearSearch,
+  selectClient,
+  changeClient,
+  
+  // Métodos de scanner
+  startCamera,
+  capturePhoto,
+  stopCamera,
+  retakePhoto,
+  processCapturedImage,
+  processImageUpload,
+  
+  // Métodos de resultados
+  showResultsList,
+  backToScanner,
+  finalizeSession,
+  viewOrder,
+  
+  // Utilidades
+  getStatusText,
+  getStatusCount,
+  formatTime,
+  formatDateTime  // ❌ SIN COMA AQUÍ
+}  // ✅ Cierra el return
   }
 }
 </script>
