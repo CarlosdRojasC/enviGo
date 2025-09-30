@@ -434,10 +434,6 @@ export default {
     const isProcessing = ref(false)
     const loadingClients = ref(false)
 
-    // Pedidos escaneados
-const scannedOrders = ref([])
-const lastScanned = ref(null)
-const showResults = ref(false)
 
 // Imagen capturada
 const capturedImage = ref(null)
