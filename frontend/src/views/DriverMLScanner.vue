@@ -418,251 +418,207 @@
   </div>
 </template>
 <script setup>
-import { ref, onMounted, onUnmounted, nextTick, computed } from 'vue'
+import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { scannerService } from '../services/scanner.service'
-import { useToast } from 'vue-toastification';
+import { useToast } from 'vue-toastification'
 
-export default {
-  name: 'MLScanner',
-  setup() {
-    const router = useRouter()
-    const toast = useToast();
+const router = useRouter()
+const toast = useToast()
 
-    // ==================== NUEVAS VARIABLES DE ACCESO ====================
+// ==================== NUEVAS VARIABLES DE ACCESO ====================
 
-    const isAccessGranted = ref(false)
-    const accessPassword = ref('')
-    const isVerifyingAccess = ref(false)
+const isAccessGranted = ref(false)
+const accessPassword = ref('')
+const isVerifyingAccess = ref(false)
 
-    // ==================== REFS REACTIVOS ====================
-    
-    // Estado general
-    const isInitialized = ref(false)
-    const isProcessing = ref(false)
-    const loadingClients = ref(false)
+// ==================== REFS REACTIVOS ====================
 
+// Estado general
+const isInitialized = ref(false)
+const isProcessing = ref(false)
+const loadingClients = ref(false)
 
 // Imagen capturada
 const capturedImage = ref(null)
 
-    // Clientes
-    const clients = ref([])
-    const filteredClients = ref([])
-    const clientSearch = ref('')
-    const selectedClient = ref(null)
+// Clientes
+const clients = ref([])
+const filteredClients = ref([])
+const clientSearch = ref('')
+const selectedClient = ref(null)
+
+// Scanner
+const isScanning = ref(false)
+const videoElement = ref(null)
+const fileInput = ref(null)
+let scannerInterval = null
+let mediaStream = null
+
+// Pedidos escaneados
+const scannedOrders = ref([])
+const lastScanned = ref(null)
+const showResults = ref(false)
+
+// ==================== COMPUTED PROPERTIES ====================
+
+const sessionStats = computed(() => ({
+  total: scannedOrders.value.length,
+  created: scannedOrders.value.filter(o => o.status === 'created').length,
+  duplicates: scannedOrders.value.filter(o => o.status === 'duplicate').length,
+  invalid: scannedOrders.value.filter(o => o.status === 'invalid').length
+}))
+
+const canFinalize = computed(() => 
+  sessionStats.value.created > 0
+)
+
+// ==================== MÉTODOS PRINCIPALES ====================
+
+async function initializeScanner() {
+  try {
+    console.log('🚀 Inicializando ML Scanner...')
+    isInitialized.value = false
+    await loadClients()
+    isInitialized.value = true
+    toast.success('Scanner ML iniciado correctamente')
+  } catch (error) {
+    console.error('❌ Error inicializando scanner:', error)
+    toast.error('Error inicializando el scanner')
+  }
+}
+
+async function loadClients() {
+  try {
+    loadingClients.value = true
+    console.log('📋 Cargando clientes...')
+
+    const response = await scannerService.getCompanyClients()
     
-    // Scanner
-    const isScanning = ref(false)
-    const videoElement = ref(null)
-    const fileInput = ref(null)
-    let scannerInterval = null
-    let mediaStream = null
-    
-    // Pedidos escaneados
-    const scannedOrders = ref([])
-    const lastScanned = ref(null)
-    const showResults = ref(false)
-
-    // ==================== COMPUTED PROPERTIES ====================
-    
-    const sessionStats = computed(() => ({
-      total: scannedOrders.value.length,
-      created: scannedOrders.value.filter(o => o.status === 'created').length,
-      duplicates: scannedOrders.value.filter(o => o.status === 'duplicate').length,
-      invalid: scannedOrders.value.filter(o => o.status === 'invalid').length
-    }))
-
-    const canFinalize = computed(() => 
-      sessionStats.value.created > 0
-    )
-
-    // ==================== MÉTODOS PRINCIPALES ====================
-
-    /**
-     * Inicializar el scanner al montar el componente
-     */
-    async function initializeScanner() {
-      try {
-        console.log('🚀 Inicializando ML Scanner...')
-        isInitialized.value = false
-        await loadClients()
-        isInitialized.value = true
-        toast.success('Scanner ML iniciado correctamente')
-
-      } catch (error) {
-        console.error('❌ Error inicializando scanner:', error)
-        toast.error('Error inicializando el scanner')
-      }
-    }
-
-    /**
-     * Cargar lista de clientes disponibles
-     */
-    async function loadClients() {
-      try {
-        loadingClients.value = true
-        console.log('📋 Cargando clientes...')
-
-        const response = await scannerService.getCompanyClients()
-        
-        if (response.data.success) {
-          clients.value = response.data.data || []
-          filteredClients.value = clients.value
-          
-          console.log(`✅ ${clients.value.length} clientes cargados`)
-          
-          if (clients.value.length === 0) {
-            toast.warning('No hay clientes registrados')
-          }
-        } else {
-          throw new Error(response.data.message || 'Error cargando clientes')
-        }
-
-      } catch (error) {
-        console.error('❌ Error cargando clientes:', error)
-        toast.error('Error cargando lista de clientes')
-        clients.value = []
-        filteredClients.value = []
-      } finally {
-        loadingClients.value = false
-      }
-    }
-    
-
-    // ==================== GESTIÓN DE CLIENTES ====================
-
-    /**
-     * Filtrar clientes por búsqueda
-     */
-    function filterClients() {
-      const search = clientSearch.value.toLowerCase().trim()
-      
-      if (!search) {
-        filteredClients.value = clients.value
-        return
-      }
-
-      filteredClients.value = clients.value.filter(client => 
-        client.name.toLowerCase().includes(search) ||
-        client.email.toLowerCase().includes(search) ||
-        (client.phone && client.phone.includes(search))
-      )
-
-      console.log(`🔍 Filtro "${search}": ${filteredClients.value.length} resultados`)
-    }
-
-    /**
-     * Limpiar búsqueda de clientes
-     */
-    function clearSearch() {
-      clientSearch.value = ''
+    if (response.data.success) {
+      clients.value = response.data.data || []
       filteredClients.value = clients.value
-    }
-
-    /**
-     * Seleccionar cliente para escanear
-     */
-    function selectClient(client) {
-      selectedClient.value = client
-      console.log('👤 Cliente seleccionado:', client.name)
-      toast.success(`Cliente seleccionado: ${client.name}`)
       
-      // Reset de estado de escaneo
-      scannedOrders.value = []
-      lastScanned.value = null
-      showResults.value = false
-    }
-
-    /**
-     * Cambiar cliente (volver a la selección)
-     */
-    function changeClient() {
-      // Confirmar si hay órdenes escaneadas
-      if (scannedOrders.value.length > 0) {
-        const confirm = window.confirm(
-          `¿Estás seguro? Tienes ${scannedOrders.value.length} códigos escaneados que se perderán.`
-        )
-        if (!confirm) return
-      }
-
-      // Reset completo
-      selectedClient.value = null
-      scannedOrders.value = []
-      lastScanned.value = null
-      showResults.value = false
-      stopScanning()
+      console.log(`✅ ${clients.value.length} clientes cargados`)
       
-      toast.info('Selecciona un nuevo cliente')
-    }
-// ==================== NUEVOS MÉTODOS DE ACCESO ====================
-
-    /**
-     * Verificar contraseña de acceso
-     */
-    async function verifyAccess() {
-      try {
-        isVerifyingAccess.value = true
-        
-        // Por ahora, contraseña hardcodeada (luego la haremos dinámica)
-        const correctPassword = 'envigo2025'
-        
-        if (accessPassword.value === correctPassword) {
-          isAccessGranted.value = true
-          localStorage.setItem('scanner_access', 'granted')
-          toast.success('¡Acceso concedido! Bienvenido al scanner')
-          await initializeScanner()
-        } else {
-          toast.error('Contraseña incorrecta')
-          accessPassword.value = ''
-        }
-        
-      } catch (error) {
-        console.error('❌ Error verificando acceso:', error)
-        toast.error('Error verificando acceso')
-      } finally {
-        isVerifyingAccess.value = false
+      if (clients.value.length === 0) {
+        toast.warning('No hay clientes registrados')
       }
+    } else {
+      throw new Error(response.data.message || 'Error cargando clientes')
     }
+  } catch (error) {
+    console.error('❌ Error cargando clientes:', error)
+    toast.error('Error cargando lista de clientes')
+    clients.value = []
+    filteredClients.value = []
+  } finally {
+    loadingClients.value = false
+  }
+}
 
-    /**
-     * Verificar si ya tiene acceso guardado
-     */
-    function checkExistingAccess() {
-      const savedAccess = localStorage.getItem('scanner_access')
-      if (savedAccess === 'granted') {
-        isAccessGranted.value = true
-        console.log('✅ Acceso previamente concedido')
-        return true
-      }
-      return false
-    }
+// ==================== GESTIÓN DE CLIENTES ====================
 
-    /**
-     * Cerrar sesión del scanner
-     */
-    function logout() {
-      isAccessGranted.value = false
+function filterClients() {
+  const search = clientSearch.value.toLowerCase().trim()
+  
+  if (!search) {
+    filteredClients.value = clients.value
+    return
+  }
+
+  filteredClients.value = clients.value.filter(client => 
+    client.name.toLowerCase().includes(search) ||
+    client.email.toLowerCase().includes(search) ||
+    (client.phone && client.phone.includes(search))
+  )
+
+  console.log(`🔍 Filtro "${search}": ${filteredClients.value.length} resultados`)
+}
+
+function clearSearch() {
+  clientSearch.value = ''
+  filteredClients.value = clients.value
+}
+
+function selectClient(client) {
+  selectedClient.value = client
+  console.log('👤 Cliente seleccionado:', client.name)
+  toast.success(`Cliente seleccionado: ${client.name}`)
+  
+  scannedOrders.value = []
+  lastScanned.value = null
+  showResults.value = false
+}
+
+function changeClient() {
+  if (scannedOrders.value.length > 0) {
+    const confirm = window.confirm(
+      `¿Estás seguro? Tienes ${scannedOrders.value.length} códigos escaneados que se perderán.`
+    )
+    if (!confirm) return
+  }
+
+  selectedClient.value = null
+  scannedOrders.value = []
+  lastScanned.value = null
+  showResults.value = false
+  stopCamera()
+  
+  toast.info('Selecciona un nuevo cliente')
+}
+
+// ==================== MÉTODOS DE ACCESO ====================
+
+async function verifyAccess() {
+  try {
+    isVerifyingAccess.value = true
+    
+    const correctPassword = 'envigo2025'
+    
+    if (accessPassword.value === correctPassword) {
+      isAccessGranted.value = true
+      localStorage.setItem('scanner_access', 'granted')
+      toast.success('¡Acceso concedido! Bienvenido al scanner')
+      await initializeScanner()
+    } else {
+      toast.error('Contraseña incorrecta')
       accessPassword.value = ''
-      localStorage.removeItem('scanner_access')
-      
-      // Reset del estado del scanner
-      selectedClient.value = null
-      scannedOrders.value = []
-      lastScanned.value = null
-      showResults.value = false
-      stopScanning()
-      
-      toast.info('Has salido del scanner')
     }
-    // ==================== FUNCIONALIDAD DEL SCANNER ====================
+  } catch (error) {
+    console.error('❌ Error verificando acceso:', error)
+    toast.error('Error verificando acceso')
+  } finally {
+    isVerifyingAccess.value = false
+  }
+}
 
-    /**
-     * Iniciar la cámara para escanear
-     */
- /**
- * Iniciar cámara para captura (no para scanning continuo)
- */
+function checkExistingAccess() {
+  const savedAccess = localStorage.getItem('scanner_access')
+  if (savedAccess === 'granted') {
+    isAccessGranted.value = true
+    console.log('✅ Acceso previamente concedido')
+    return true
+  }
+  return false
+}
+
+function logout() {
+  isAccessGranted.value = false
+  accessPassword.value = ''
+  localStorage.removeItem('scanner_access')
+  
+  selectedClient.value = null
+  scannedOrders.value = []
+  lastScanned.value = null
+  showResults.value = false
+  stopCamera()
+  
+  toast.info('Has salido del scanner')
+}
+
+// ==================== FUNCIONALIDAD DEL SCANNER ====================
+
 async function startCamera() {
   try {
     console.log('📷 Iniciando cámara para captura...')
@@ -671,7 +627,7 @@ async function startCamera() {
       video: { 
         facingMode: 'environment',
         width: { ideal: 1920, min: 640 },
-        height: { ideal: 1440, min: 480 } // Mejor resolución para OCR
+        height: { ideal: 1440, min: 480 }
       } 
     })
     
@@ -681,51 +637,38 @@ async function startCamera() {
       isScanning.value = true
       toast.success('📷 Cámara lista - Coloca la etiqueta en el marco')
     }
-
   } catch (error) {
     console.error('❌ Error accediendo a la cámara:', error)
     toast.error('No se pudo acceder a la cámara')
   }
 }
 
-/**
- * Capturar foto de la etiqueta
- */
 function capturePhoto() {
   try {
     if (!videoElement.value || !isScanning.value) return
 
-    // Crear canvas para capturar
     const canvas = document.createElement('canvas')
     const context = canvas.getContext('2d')
     
-    // Configurar tamaño del canvas
     const videoWidth = videoElement.value.videoWidth
     const videoHeight = videoElement.value.videoHeight
     
     canvas.width = videoWidth
     canvas.height = videoHeight
     
-    // Dibujar frame actual
     context.drawImage(videoElement.value, 0, 0, videoWidth, videoHeight)
     
-    // Convertir a imagen base64
     capturedImage.value = canvas.toDataURL('image/jpeg', 0.9)
     
-    // Detener cámara después de capturar
     stopCamera()
     
     toast.success('📸 Etiqueta capturada - Revisa y procesa')
-    
   } catch (error) {
     console.error('❌ Error capturando foto:', error)
     toast.error('Error capturando la foto')
   }
 }
 
-/**
- * Detener cámara
- */
 function stopCamera() {
   if (mediaStream) {
     mediaStream.getTracks().forEach(track => track.stop())
@@ -739,80 +682,11 @@ function stopCamera() {
   isScanning.value = false
 }
 
-/**
- * Tomar otra foto (reset)
- */
 function retakePhoto() {
   capturedImage.value = null
   toast.info('Toma una nueva foto de la etiqueta')
 }
-    /**
-     * Capturar frame del video y analizar
-     */
-    async function captureAndAnalyzeFrame() {
-      try {
-        if (!videoElement.value || !isScanning.value || isProcessing.value) return
 
-        // Crear canvas para capturar frame
-        const canvas = document.createElement('canvas')
-        const context = canvas.getContext('2d')
-        
-        // Configurar dimensiones
-        const videoWidth = videoElement.value.videoWidth
-        const videoHeight = videoElement.value.videoHeight
-        
-        if (videoWidth === 0 || videoHeight === 0) return
-        
-        canvas.width = videoWidth
-        canvas.height = videoHeight
-        
-        // Dibujar frame actual
-        context.drawImage(videoElement.value, 0, 0, videoWidth, videoHeight)
-        
-        // Convertir a blob
-        canvas.toBlob(async (blob) => {
-          if (blob) {
-            await processImage(blob)
-          }
-        }, 'image/jpeg', 0.8)
-        
-      } catch (error) {
-        console.error('❌ Error capturando frame:', error)
-      }
-    }
-
-    /**
-     * Procesar imagen subida manualmente
-     */
-    async function processImageUpload(event) {
-      const file = event.target.files[0]
-      
-      if (!file) return
-      
-      console.log('📁 Procesando imagen subida:', file.name)
-      
-      // Validar tipo de archivo
-      if (!file.type.startsWith('image/')) {
-        toast.error('Por favor selecciona una imagen válida')
-        return
-      }
-      
-      // Validar tamaño (máximo 5MB)
-      if (file.size > 5 * 1024 * 1024) {
-        toast.error('La imagen es muy grande (máximo 5MB)')
-        return
-      }
-      
-      await processImage(file)
-      
-      // Limpiar input
-      if (fileInput.value) {
-        fileInput.value.value = ''
-      }
-    }
-/**
- * Procesar imagen capturada con OCR
- */
 async function processCapturedImage() {
   if (!capturedImage.value) return
 
@@ -820,22 +694,18 @@ async function processCapturedImage() {
     isProcessing.value = true
     console.log('🔄 Procesando etiqueta con OCR...')
 
-    // Convertir base64 a blob
     const response = await fetch(capturedImage.value)
     const blob = await response.blob()
 
-    // Crear FormData
     const formData = new FormData()
     formData.append('image', blob, 'etiqueta-ml.jpg')
     formData.append('client_id', selectedClient.value.id)
 
-    // Enviar al backend para OCR
     const result = await scannerService.processMLLabel(formData)
     
     if (result.data.success) {
       const extractedData = result.data.data
       
-      // Crear objeto de orden escaneada
       const scannedOrder = {
         shipping_number: extractedData.shipping_number,
         status: extractedData.status,
@@ -846,11 +716,9 @@ async function processCapturedImage() {
         extracted_data: extractedData
       }
       
-      // Agregar a la lista
       scannedOrders.value.unshift(scannedOrder)
       lastScanned.value = scannedOrder
       
-      // Feedback según el resultado
       if (extractedData.status === 'created') {
         toast.success(`✅ Pedido creado: ${extractedData.customer_name} - ${extractedData.commune}`)
       } else if (extractedData.status === 'duplicate') {
@@ -859,13 +727,10 @@ async function processCapturedImage() {
         toast.error(`❌ No se pudo extraer información válida`)
       }
       
-      // Reset para siguiente captura
       capturedImage.value = null
-      
     } else {
       toast.error(result.data.message || 'Error procesando etiqueta')
     }
-    
   } catch (error) {
     console.error('❌ Error procesando etiqueta:', error)
     toast.error('Error procesando la etiqueta')
@@ -873,331 +738,162 @@ async function processCapturedImage() {
     isProcessing.value = false
   }
 }
-    /**
-     * Procesar imagen (capturada o subida)
-     */
-    async function processImage(imageBlob) {
-      if (isProcessing.value) {
-        console.log('⏳ Ya hay un procesamiento en curso')
-        return
-      }
 
-      try {
-        isProcessing.value = true
-        console.log('🔄 Procesando imagen...')
-
-        // Crear FormData
-        const formData = new FormData()
-        formData.append('image', imageBlob, 'barcode-scan.jpg')
-        formData.append('client_id', selectedClient.value.id)
-
-        // Enviar al backend
-        const response = await scannerService.processMLBarcode(formData)
-        
-        console.log('📊 Respuesta del scanner:', response.data)
-
-        if (response.data.success) {
-          const scanResult = response.data.data
-          
-          // Crear objeto de orden escaneada
-          const scannedOrder = {
-            barcode: scanResult.barcode,
-            status: scanResult.status,
-            order_id: scanResult.order_id || null,
-            timestamp: new Date(),
-            client_name: selectedClient.value.name,
-            client_id: selectedClient.value.id
-          }
-          
-          // Agregar a la lista (más reciente primero)
-          scannedOrders.value.unshift(scannedOrder)
-          lastScanned.value = scannedOrder
-          
-          // Feedback según el estado
-          handleScanResult(scanResult)
-          
-        } else {
-          console.error('❌ Error del scanner:', response.data.message)
-          toast.error(response.data.message || 'Error procesando código de barras')
-        }
-        
-      } catch (error) {
-        console.error('❌ Error procesando imagen:', error)
-        
-        let errorMessage = 'Error procesando código de barras'
-        
-        if (error.response?.status === 413) {
-          errorMessage = 'Imagen muy grande'
-        } else if (error.response?.status === 415) {
-          errorMessage = 'Formato de imagen no soportado'
-        }
-        
-        toast.error(errorMessage)
-      } finally {
-        isProcessing.value = false
-      }
-    }
-
-    /**
-     * Manejar resultado del escaneo
-     */
-    function handleScanResult(scanResult) {
-      const { barcode, status } = scanResult
-      
-      switch (status) {
-        case 'created':
-          toast.success(`✅ Pedido creado: ${barcode}`)
-          // Parar scanning automáticamente para evitar duplicados
-          if (isScanning.value) {
-            setTimeout(() => {
-              // Pequeña pausa antes de seguir escaneando
-            }, 2000)
-          }
-          break
-          
-        case 'duplicate':
-          toast.warning(`⚠️ Código ya existe: ${barcode}`)
-          break
-          
-        case 'invalid':
-          toast.error(`❌ Código inválido: ${barcode}`)
-          break
-          
-        default:
-          toast.info(`ℹ️ Código procesado: ${barcode}`)
-      }
-    }
-
-    // ==================== GESTIÓN DE RESULTADOS ====================
-
-    /**
-     * Mostrar vista de resultados
-     */
-    function showResultsList() {
-      if (scannedOrders.value.length === 0) {
-        toast.warning('No hay códigos escaneados para mostrar')
-        return
-      }
-      
-      showResults.value = true
-      stopScanning()
-      console.log('📋 Mostrando resultados:', scannedOrders.value.length)
-    }
-
-    /**
-     * Volver al scanner desde resultados
-     */
-    function backToScanner() {
-      showResults.value = false
-      console.log('📱 Volviendo al scanner')
-    }
-
-    /**
-     * Finalizar sesión y guardar resultados
-     */
-    async function finalizeSession() {
-      try {
-        if (!canFinalize.value) {
-          toast.error('No hay pedidos creados para finalizar')
-          return
-        }
-
-        const confirm = window.confirm(
-          `¿Finalizar sesión?\n\n` +
-          `• ${sessionStats.value.created} pedidos creados\n` +
-          `• ${sessionStats.value.duplicates} duplicados\n` +
-          `• ${sessionStats.value.invalid} inválidos\n\n` +
-          `Los pedidos creados se guardarán en el sistema.`
-        )
-        
-        if (!confirm) return
-
-        console.log('✅ Finalizando sesión...')
-        isProcessing.value = true
-
-        // Preparar datos de la sesión
-        const sessionData = {
-          client_id: selectedClient.value.id,
-          client_name: selectedClient.value.name,
-          scanned_orders: scannedOrders.value,
-          session_summary: {
-            total_scanned: sessionStats.value.total,
-            created: sessionStats.value.created,
-            duplicates: sessionStats.value.duplicates,
-            invalid: sessionStats.value.invalid,
-            started_at: scannedOrders.value[scannedOrders.value.length - 1]?.timestamp,
-            finished_at: new Date()
-          }
-        }
-
-        // Enviar al backend
-        const response = await scannerService.finalizeSession(sessionData)
-        
-        if (response.data.success) {
-          toast.success(
-            `✅ Sesión finalizada correctamente\n` +
-            `${sessionStats.value.created} pedidos creados`
-          )
-          
-          // Redirigir a órdenes
-          router.push('/orders?filter=ml_scanner')
-        } else {
-          throw new Error(response.data.message || 'Error finalizando sesión')
-        }
-        
-      } catch (error) {
-        console.error('❌ Error finalizando sesión:', error)
-        toast.error('Error finalizando la sesión')
-      } finally {
-        isProcessing.value = false
-      }
-    }
-
-    /**
-     * Ver pedido específico
-     */
-    function viewOrder(orderId) {
-      if (!orderId) return
-      
-      console.log('👁️ Viendo pedido:', orderId)
-      router.push(`/orders/${orderId}`)
-    }
-
-    // ==================== UTILIDADES ====================
-
-    /**
-     * Obtener texto del estado
-     */
-    function getStatusText(status) {
-      const statusMap = {
-        'created': '✅ Creado',
-        'duplicate': '⚠️ Duplicado',
-        'invalid': '❌ Inválido',
-        'processing': '⏳ Procesando'
-      }
-      return statusMap[status] || status
-    }
-
-    /**
-     * Contar órdenes por estado
-     */
-    function getStatusCount(status) {
-      return scannedOrders.value.filter(order => order.status === status).length
-    }
-
-    /**
-     * Formatear tiempo
-     */
-    function formatTime(timestamp) {
-      return new Date(timestamp).toLocaleTimeString('es-CL', {
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit'
-      })
-    }
-
-    /**
-     * Formatear fecha completa
-     */
-    function formatDateTime(timestamp) {
-      return new Date(timestamp).toLocaleString('es-CL', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-      })
-    }
-
-    // ==================== LIFECYCLE HOOKS ====================
-
-    onMounted(async () => {
-      console.log('🚀 MLScanner montado')
-        // Verificar si ya tiene acceso antes de inicializar
-      if (checkExistingAccess()) {
-        await initializeScanner()
-      }
-    })
-
-    onUnmounted(() => {
-      console.log('🔴 MLScanner desmontado')
-      
-      // Cleanup
-      stopScanning()
-      
-      if (scannerInterval) {
-        clearInterval(scannerInterval)
-      }
-      
-      console.log('🧹 Cleanup completado')
-    })
-
-    // ==================== RETURN (EXPOSING TO TEMPLATE) ====================
-
-    return {
-  // Nuevas variables de acceso
-  isAccessGranted,
-  accessPassword,
-  isVerifyingAccess,
-  verifyAccess,
-  logout,
+async function processImageUpload(event) {
+  const file = event.target.files[0]
   
-  // Estado general
-  isInitialized,
-  isProcessing,
-  loadingClients,
+  if (!file) return
   
-  // Clientes
-  clients,
-  filteredClients,
-  clientSearch,
-  selectedClient,
+  console.log('📁 Procesando imagen subida:', file.name)
   
-  // Scanner
-  isScanning,
-  videoElement,
-  fileInput,
+  if (!file.type.startsWith('image/')) {
+    toast.error('Por favor selecciona una imagen válida')
+    return
+  }
   
-  // Captura de imagen
-  capturedImage,
+  if (file.size > 5 * 1024 * 1024) {
+    toast.error('La imagen es muy grande (máximo 5MB)')
+    return
+  }
   
-  // Pedidos
-  scannedOrders,
-  lastScanned,
-  showResults,
-  
-  // Computed
-  sessionStats,
-  canFinalize,
-  
-  // Métodos de clientes
-  filterClients,
-  clearSearch,
-  selectClient,
-  changeClient,
-  
-  // Métodos de scanner
-  startCamera,
-  capturePhoto,
-  stopCamera,
-  retakePhoto,
-  processCapturedImage,
-  processImageUpload,
-  
-  // Métodos de resultados
-  showResultsList,
-  backToScanner,
-  finalizeSession,
-  viewOrder,
-  
-  // Utilidades
-  getStatusText,
-  getStatusCount,
-  formatTime,
-  formatDateTime  // ❌ SIN COMA AQUÍ
-}  // ✅ Cierra el return
+  if (fileInput.value) {
+    fileInput.value.value = ''
   }
 }
+
+// ==================== GESTIÓN DE RESULTADOS ====================
+
+function showResultsList() {
+  if (scannedOrders.value.length === 0) {
+    toast.warning('No hay códigos escaneados para mostrar')
+    return
+  }
+  
+  showResults.value = true
+  stopCamera()
+  console.log('📋 Mostrando resultados:', scannedOrders.value.length)
+}
+
+function backToScanner() {
+  showResults.value = false
+  console.log('📱 Volviendo al scanner')
+}
+
+async function finalizeSession() {
+  try {
+    if (!canFinalize.value) {
+      toast.error('No hay pedidos creados para finalizar')
+      return
+    }
+
+    const confirm = window.confirm(
+      `¿Finalizar sesión?\n\n` +
+      `• ${sessionStats.value.created} pedidos creados\n` +
+      `• ${sessionStats.value.duplicates} duplicados\n` +
+      `• ${sessionStats.value.invalid} inválidos\n\n` +
+      `Los pedidos creados se guardarán en el sistema.`
+    )
+    
+    if (!confirm) return
+
+    console.log('✅ Finalizando sesión...')
+    isProcessing.value = true
+
+    const sessionData = {
+      client_id: selectedClient.value.id,
+      client_name: selectedClient.value.name,
+      scanned_orders: scannedOrders.value,
+      session_summary: {
+        total_scanned: sessionStats.value.total,
+        created: sessionStats.value.created,
+        duplicates: sessionStats.value.duplicates,
+        invalid: sessionStats.value.invalid,
+        started_at: scannedOrders.value[scannedOrders.value.length - 1]?.timestamp,
+        finished_at: new Date()
+      }
+    }
+
+    const response = await scannerService.finalizeSession(sessionData)
+    
+    if (response.data.success) {
+      toast.success(
+        `✅ Sesión finalizada correctamente\n` +
+        `${sessionStats.value.created} pedidos creados`
+      )
+      
+      router.push('/orders?filter=ml_scanner')
+    } else {
+      throw new Error(response.data.message || 'Error finalizando sesión')
+    }
+  } catch (error) {
+    console.error('❌ Error finalizando sesión:', error)
+    toast.error('Error finalizando la sesión')
+  } finally {
+    isProcessing.value = false
+  }
+}
+
+function viewOrder(orderId) {
+  if (!orderId) return
+  
+  console.log('👁️ Viendo pedido:', orderId)
+  router.push(`/orders/${orderId}`)
+}
+
+// ==================== UTILIDADES ====================
+
+function getStatusText(status) {
+  const statusMap = {
+    'created': '✅ Creado',
+    'duplicate': '⚠️ Duplicado',
+    'invalid': '❌ Inválido',
+    'processing': '⏳ Procesando'
+  }
+  return statusMap[status] || status
+}
+
+function getStatusCount(status) {
+  return scannedOrders.value.filter(order => order.status === status).length
+}
+
+function formatTime(timestamp) {
+  return new Date(timestamp).toLocaleTimeString('es-CL', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit'
+  })
+}
+
+function formatDateTime(timestamp) {
+  return new Date(timestamp).toLocaleString('es-CL', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  })
+}
+
+// ==================== LIFECYCLE HOOKS ====================
+
+onMounted(async () => {
+  console.log('🚀 MLScanner montado')
+  if (checkExistingAccess()) {
+    await initializeScanner()
+  }
+})
+
+onUnmounted(() => {
+  console.log('🔴 MLScanner desmontado')
+  
+  stopCamera()
+  
+  if (scannerInterval) {
+    clearInterval(scannerInterval)
+  }
+  
+  console.log('🧹 Cleanup completado')
+})
 </script>
 <style scoped>
 /* ==================== VARIABLES CSS ==================== */
