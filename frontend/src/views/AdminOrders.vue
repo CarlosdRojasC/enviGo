@@ -585,35 +585,63 @@ function getChannelIcon(channelType) {
 // Función para manejar la confirmación de entrega
 async function handleConfirmDelivery(proofData) {
   try {
-    logger.process('[AdminOrders] 📦 Confirmando entrega con prueba fotográfica...')
+    // Guardar referencia a la orden ANTES de cerrar el modal
+    const orderToUpdate = { ...selectedOrder.value }
     
+    if (!orderToUpdate || !orderToUpdate._id) {
+      logger.error('[AdminOrders] ❌ No hay orden seleccionada')
+      toast.error('Error: No se pudo identificar el pedido')
+      return
+    }
+    
+    logger.process('[AdminOrders] 📦 Confirmando entrega con prueba fotográfica...')
+    logger.dev('[AdminOrders] Datos de prueba:', {
+      orderId: orderToUpdate._id,
+      orderNumber: orderToUpdate.order_number,
+      hasPhoto: !!proofData.photo,
+      recipientName: proofData.recipient_name
+    })
+    
+    // Llamar al API para marcar como entregado
     const response = await apiService.orders.markAsDelivered(
-      selectedOrder.value._id,
+      orderToUpdate._id,
       proofData
     )
     
-    logger.success('[AdminOrders] ✅ Pedido marcado como entregado:', response.data)
+    logger.success('[AdminOrders] ✅ Pedido marcado como entregado:', {
+      orderId: response.data.order._id,
+      orderNumber: response.data.order.order_number,
+      status: response.data.order.status,
+      hasProof: !!response.data.order.proof_of_delivery
+    })
     
-    // Actualizar orden localmente
-    const updatedOrder = orders.value.find(o => o._id === selectedOrder.value._id)
+    // Actualizar orden localmente en la lista
+    const updatedOrder = orders.value.find(o => o._id === orderToUpdate._id)
     if (updatedOrder) {
       updatedOrder.status = 'delivered'
       updatedOrder.delivery_date = new Date().toISOString()
       updatedOrder.proof_of_delivery = response.data.order.proof_of_delivery
+      logger.dev('[AdminOrders] Orden actualizada localmente')
     }
     
     // Cerrar modal
     closeDeliveryProofModal()
     
-    // Mostrar notificación
-    toast.success(`Pedido #${selectedOrder.value.order_number} entregado exitosamente`)
+    // Mostrar notificación de éxito
+    toast.success(`✅ Pedido #${orderToUpdate.order_number} entregado exitosamente`)
     
-    // Refrescar datos
+    // Refrescar lista de órdenes
+    logger.process('[AdminOrders] 🔄 Refrescando lista de órdenes...')
     await refreshOrders()
     
   } catch (error) {
     logger.error('[AdminOrders] ❌ Error confirmando entrega:', error)
-    toast.error('Error al confirmar la entrega. Intenta de nuevo.')
+    
+    const errorMessage = error.response?.data?.error || 
+                        error.message || 
+                        'Error al confirmar la entrega'
+    
+    toast.error(`❌ ${errorMessage}`)
   }
 }
 
