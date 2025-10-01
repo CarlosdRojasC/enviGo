@@ -361,6 +361,77 @@ async sendCollectionRequestToAdmin(collectionData) {
     throw error;
   }
 }
+/**
+ * Enviar email de confirmación de entrega
+ */
+async sendDeliveryConfirmationEmail(order) {
+  try {
+    console.log(`📧 Enviando email de confirmación de entrega para orden #${order.order_number}`);
+
+    // Validar que hay email del cliente
+    if (!order.customer_email) {
+      console.warn('⚠️ No hay email del cliente, saltando envío');
+      return;
+    }
+
+    // Preparar datos para el template
+    const templateData = {
+      customer_name: order.customer_name || 'Cliente',
+      order_number: order.order_number,
+      shipping_address: order.shipping_address,
+      company_name: order.company_id?.name || 'Tu tienda',
+      company_email: order.company_id?.email || 'contacto@envigo.cl',
+      company_phone: order.company_id?.phone || '',
+      company_website: order.company_id?.website || '',
+      
+      // Fecha formateada
+      formatted_date: new Date(order.delivery_date).toLocaleString('es-CL', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      }),
+      
+      // Información del conductor
+      driver: {
+        name: order.driver_info?.name || 'Conductor asignado',
+        phone: order.driver_info?.phone || 'No disponible'
+      },
+      
+      // Pruebas de entrega
+      has_proofs: !!(order.proof_of_delivery?.photo_url || order.proof_of_delivery?.signature_url),
+      delivery_photos: order.proof_of_delivery?.photo_url ? [order.proof_of_delivery.photo_url] : [],
+      signature_url: order.proof_of_delivery?.signature_url || null,
+      
+      // URL de tracking
+      tracking_url: order.shipday_tracking_url || 
+                   `${process.env.FRONTEND_URL}/tracking/${order.order_number}`,
+      
+      // Ubicación de entrega (si existe)
+      delivery_location: order.proof_of_delivery?.delivery_location || null
+    };
+
+    // Cargar template
+    const template = await this.loadTemplate('delivery-confirmed');
+    const html = template(templateData);
+
+    // Enviar email
+    await this.resend.emails.send({
+      from: 'enviGo <no-reply@envigo.cl>',
+      to: order.customer_email,
+      subject: `✅ Pedido #${order.order_number} entregado - ${order.company_id?.name || 'Tu tienda'}`,
+      html: html
+    });
+
+    console.log(`✅ Email de confirmación de entrega enviado a ${order.customer_email}`);
+
+  } catch (error) {
+    console.error('❌ Error enviando email de confirmación de entrega:', error);
+    throw error;
+  }
+}
 }
 
 module.exports = new NotificationService();

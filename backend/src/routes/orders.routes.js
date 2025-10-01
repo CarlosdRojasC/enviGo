@@ -15,6 +15,7 @@ const circuitController = require('../controllers/circuit.controller');
 const circuitService = require('../services/circuit.service');
 const MercadoLibreService = require('../services/mercadolibre.service');
 const CloudinaryService = require('../services/cloudinary.service');
+const NotificationService = require('../services/notification.service');
 
 
 // ==================== PEDIDOS ====================
@@ -1074,7 +1075,10 @@ router.patch('/:id/deliver', authenticateToken, async (req, res) => {
     });
 
     // Validar que existe la orden
-    const order = await Order.findById(req.params.id);
+    const order = await Order.findById(req.params.id)
+      .populate('company_id')  // ← AGREGAR para datos de la empresa
+      .populate('channel_id'); // ← AGREGAR para datos del canal
+      
     if (!order) {
       return res.status(404).json({ error: 'Pedido no encontrado' });
     }
@@ -1137,7 +1141,6 @@ router.patch('/:id/deliver', authenticateToken, async (req, res) => {
         console.log('✅ Firma subida exitosamente:', signatureResult.url);
       } catch (error) {
         console.error('❌ Error subiendo firma:', error);
-        // No fallar si solo falla la firma, continuar
         console.warn('⚠️ Continuando sin firma');
       }
     }
@@ -1154,6 +1157,20 @@ router.patch('/:id/deliver', authenticateToken, async (req, res) => {
       hasSignature: !!proofData.signature_url,
       deliveryDate: order.delivery_date
     });
+
+    // 📧 ENVIAR EMAIL DE CONFIRMACIÓN
+    try {
+      console.log('📧 Enviando email de confirmación de entrega...');
+      
+      const notificationService = new NotificationService();
+      await notificationService.sendDeliveryConfirmationEmail(order);
+      
+      console.log('✅ Email de confirmación enviado exitosamente');
+    } catch (emailError) {
+      console.error('❌ Error enviando email de confirmación:', emailError);
+      // No fallar el endpoint si el email falla
+      console.warn('⚠️ El pedido se marcó como entregado pero el email no se pudo enviar');
+    }
 
     // Respuesta exitosa
     res.json({
