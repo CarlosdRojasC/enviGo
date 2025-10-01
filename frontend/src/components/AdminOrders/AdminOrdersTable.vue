@@ -227,6 +227,16 @@
                   <span class="action-icon">🚚</span>
                   <span class="action-text">Asignar</span>
                 </button>
+                <button 
+  v-if="order.status === 'out_for_delivery' || order.status === 'assigned'"
+  @click="$emit('mark-delivered', order)" 
+  class="btn-action deliver"
+  :disabled="false"
+  :title="'Marcar como entregado con prueba fotográfica'"
+>
+  <span class="action-icon">📦</span>
+  <span class="action-text">Entregar</span>
+</button>
 
                 <div class="action-dropdown">
                   <button class="btn-action more" title="Más acciones">
@@ -1293,5 +1303,21 @@ async function downloadLabel(externalOrderId) {
 .order-row:hover .status-badge {
   transform: scale(1.05);
   transition: transform 0.2s ease;
+}
+/* Botón de entregar */
+.btn-action.deliver {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: white;
+}
+
+.btn-action.deliver:hover:not(:disabled) {
+  background: linear-gradient(135deg, #059669 0%, #047857 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(16, 185, 129, 0.3);
+}
+
+.btn-action.deliver:disabled {
+  background: #d1d5db;
+  cursor: not-allowed;
 }
 </style>

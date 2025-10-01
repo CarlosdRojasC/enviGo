@@ -11,7 +11,8 @@ export function useOrdersModals() {
   const showBulkUploadModal = ref(false)
   const showAssignModal = ref(false)
   const showBulkAssignModal = ref(false)
-  
+  const showDeliveryProofModal = ref(false)
+
   // Selected items
   const selectedOrder = ref(null)
   
@@ -38,7 +39,17 @@ export function useOrdersModals() {
     selectedOrder.value = null
     console.log('❌ Order details modal closed')
   }
+function openDeliveryProofModal(order) {
+  selectedOrder.value = order
+  showDeliveryProofModal.value = true
+  console.log('📦 Opening delivery proof modal for:', order.order_number)
+}
 
+function closeDeliveryProofModal() {
+  showDeliveryProofModal.value = false
+  selectedOrder.value = null
+  console.log('❌ Delivery proof modal closed')
+}
   /**
    * Open update status modal
    */
@@ -335,6 +346,9 @@ function closeBulkAssignModal() {
     selectedOrder,
     newOrder,
     isCreatingOrder,
+    showDeliveryProofModal,
+  openDeliveryProofModal,
+  closeDeliveryProofModal,
     
     // Methods
     openOrderDetailsModal,

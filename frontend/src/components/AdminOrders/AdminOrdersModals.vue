@@ -787,7 +787,13 @@
         </div>
       </div>
     </Modal>
+    <DeliveryProofModal
+  v-model="showDeliveryProof"
+  :order="selectedOrder"
+  @submit="handleDeliverySubmit"
+/>
   </div>
+  
 </template>
 
 <script setup>
@@ -798,6 +804,7 @@ import UpdateOrderStatus from '../UpdateOrderStatus.vue'
 import { useRouter } from 'vue-router'
 import { useToast } from 'vue-toastification';
 import { apiService } from '../../services/api'
+import DeliveryProofModal from './DeliveryProofModal.vue'
 
 // ==================== PROPS ====================
 const props = defineProps({
@@ -808,6 +815,7 @@ const props = defineProps({
   showBulkUpload: Boolean,
   showAssign: Boolean,
   showBulkAssign: Boolean,
+  showDeliveryProof: Boolean,
   
   // Data
   selectedOrder: Object,
@@ -856,7 +864,9 @@ const emit = defineEmits([
   'confirm-bulk-assignment',
   'update:bulkUploadCompanyId',
   'update:selectedDriverId',
-  'update:bulkSelectedDriverId'
+  'update:bulkSelectedDriverId',
+  'close-delivery-proof',
+  'confirm-delivery'
 ])
 const router = useRouter()
 const toast = useToast()
@@ -878,7 +888,10 @@ const isFormValid = computed(() => {
          props.newOrder.shipping_commune &&
          props.newOrder.total_amount > 0
 })
-
+// Función para manejar el envío de la prueba
+const handleDeliverySubmit = (proofData) => {
+  emit('confirm-delivery', proofData)
+}
 // ==================== METHODS ====================
 // ==================== MÉTODOS (Agregar estos) ====================
 async function handleCompanyChange() {

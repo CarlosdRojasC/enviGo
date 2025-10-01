@@ -63,6 +63,7 @@
       @view-details="openOrderDetailsModal"
       @update-status="openUpdateStatusModal"
       @assign-driver="handleOpenAssignModal"
+      @mark-delivered="openDeliveryProofModal"
       @page-change="goToPage"
       @page-size-change="changePageSize"
     />
@@ -75,6 +76,7 @@
       :show-bulk-upload="showBulkUploadModal"
       :show-assign="showAssignModal"
       :show-bulk-assign="showBulkAssignModal"
+      :show-delivery-proof="showDeliveryProofModal"
       :selected-order="selectedOrder"
       :companies="companies"
       :new-order="newOrder"
@@ -108,6 +110,8 @@
       @confirm-assignment="confirmAssignment"
       @close-bulk-assign="handleCloseBulkAssignModal"
       @confirm-bulk-assignment="confirmBulkAssignment"
+      @close-delivery-proof="closeDeliveryProofModal"
+  @confirm-delivery="handleConfirmDelivery"
     />
 
     <!-- Notificaciones Toast (si no están globales) -->
@@ -229,7 +233,10 @@ const {
   closeAllModals,
   validateNewOrder,
   openBulkAssignModal,
-  resetNewOrderForm
+  resetNewOrderForm,
+  showDeliveryProofModal,
+  openDeliveryProofModal,
+  closeDeliveryProofModal
 } = useOrdersModals({ mode: 'admin' })
 
 // Asignación de conductores
@@ -574,6 +581,40 @@ function getChannelIcon(channelType) {
     'jumpseller': '🛒'
   }
   return icons[channelType] || '📦'
+}
+// Función para manejar la confirmación de entrega
+async function handleConfirmDelivery(proofData) {
+  try {
+    logger.process('[AdminOrders] 📦 Confirmando entrega con prueba fotográfica...')
+    
+    const response = await apiService.orders.markAsDelivered(
+      selectedOrder.value._id,
+      proofData
+    )
+    
+    logger.success('[AdminOrders] ✅ Pedido marcado como entregado:', response.data)
+    
+    // Actualizar orden localmente
+    const updatedOrder = orders.value.find(o => o._id === selectedOrder.value._id)
+    if (updatedOrder) {
+      updatedOrder.status = 'delivered'
+      updatedOrder.delivery_date = new Date().toISOString()
+      updatedOrder.proof_of_delivery = response.data.order.proof_of_delivery
+    }
+    
+    // Cerrar modal
+    closeDeliveryProofModal()
+    
+    // Mostrar notificación
+    toast.success(`Pedido #${selectedOrder.value.order_number} entregado exitosamente`)
+    
+    // Refrescar datos
+    await refreshOrders()
+    
+  } catch (error) {
+    logger.error('[AdminOrders] ❌ Error confirmando entrega:', error)
+    toast.error('Error al confirmar la entrega. Intenta de nuevo.')
+  }
 }
 
 function getChannelTypeName(channelType) {

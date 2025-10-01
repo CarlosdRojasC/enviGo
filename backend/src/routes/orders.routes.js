@@ -14,6 +14,8 @@ const Company = require('../models/Company');
 const circuitController = require('../controllers/circuit.controller');
 const circuitService = require('../services/circuit.service');
 const MercadoLibreService = require('../services/mercadolibre.service');
+const CloudinaryService = require('../services/cloudinary.service');
+
 
 // ==================== PEDIDOS ====================
 
@@ -1059,72 +1061,119 @@ router.get('/:orderId/tracking', authenticateToken, async (req, res) => {
   }
 });
 
-router.patch('/:id/deliver', authenticateToken, validateMongoId('id'), async (req, res) => {
+router.patch('/:id/deliver', authenticateToken, async (req, res) => {
   try {
-    const { id } = req.params;
-    const { 
-      notes, 
-      photo_url, 
-      signature_url, 
-      delivery_location 
-    } = req.body;
+    const { photo, signature, notes, recipient_name } = req.body;
+    
+    console.log('📦 Marcando pedido como entregado:', {
+      orderId: req.params.id,
+      hasPhoto: !!photo,
+      hasSignature: !!signature,
+      hasNotes: !!notes,
+      recipientName: recipient_name
+    });
 
-    const order = await Order.findById(id);
-    if (!order) return res.status(404).json({ error: 'Pedido no encontrado' });
-
-    // Verificar permisos
-    if (req.user.role !== 'admin' && req.user.company_id.toString() !== order.company_id.toString()) {
-      return res.status(403).json({ error: 'No tienes permiso para esta acción' });
+    // Validar que existe la orden
+    const order = await Order.findById(req.params.id);
+    if (!order) {
+      return res.status(404).json({ error: 'Pedido no encontrado' });
     }
 
-    // Verificar que el pedido se puede marcar como entregado
-    if (!['processing', 'shipped', 'ready_for_pickup'].includes(order.status)) {
+    // Validar que hay al menos una foto
+    if (!photo) {
       return res.status(400).json({ 
-        error: `No se puede marcar como entregado un pedido con estado "${order.status}"` 
+        error: 'Se requiere una foto como prueba de entrega' 
       });
     }
 
-    // Actualizar estado y agregar prueba de entrega
-    order.status = 'delivered';
-    order.delivery_date = new Date();
-    order.updated_at = new Date();
-
-    // Crear prueba de entrega
-    order.proof_of_delivery = {
-      photo_url: photo_url || null,
-      signature_url: signature_url || null,
-      notes: notes || 'Entrega confirmada manualmente',
-      delivery_location: delivery_location || null,
-      delivered_by: req.user.name || req.user.email || 'Sistema',
-      delivery_timestamp: new Date()
+    // Preparar objeto de prueba de entrega
+    const proofData = {
+      timestamp: new Date(),
+      recipient_name: recipient_name || 'No especificado',
+      notes: notes || ''
     };
 
-    // Campos de compatibilidad
-    if (photo_url) {
-      order.podUrls = [photo_url];
-    }
-    if (signature_url) {
-      order.signatureUrl = signature_url;
+    // 📸 Subir foto a Cloudinary
+    if (photo) {
+      try {
+        console.log('📸 Subiendo foto de prueba de entrega...');
+        const photoResult = await CloudinaryService.uploadProofImage(
+          photo, 
+          order._id, 
+          'photo'
+        );
+        
+        proofData.photo_url = photoResult.url;
+        proofData.photo_public_id = photoResult.public_id;
+        proofData.photo_uploaded_at = new Date();
+        
+        console.log('✅ Foto subida exitosamente:', {
+          url: photoResult.url,
+          size: `${Math.round(photoResult.bytes / 1024)}KB`
+        });
+      } catch (error) {
+        console.error('❌ Error subiendo foto:', error);
+        return res.status(500).json({ 
+          error: 'Error al subir la foto de entrega',
+          details: error.message 
+        });
+      }
     }
 
+    // ✍️ Subir firma si existe (opcional)
+    if (signature) {
+      try {
+        console.log('✍️ Subiendo firma...');
+        const signatureResult = await CloudinaryService.uploadProofImage(
+          signature, 
+          order._id, 
+          'signature'
+        );
+        
+        proofData.signature_url = signatureResult.url;
+        proofData.signature_public_id = signatureResult.public_id;
+        proofData.signature_uploaded_at = new Date();
+        
+        console.log('✅ Firma subida exitosamente:', signatureResult.url);
+      } catch (error) {
+        console.error('❌ Error subiendo firma:', error);
+        // No fallar si solo falla la firma, continuar
+        console.warn('⚠️ Continuando sin firma');
+      }
+    }
+
+    // Actualizar orden usando el método del modelo
+    order.markAsDelivered(proofData);
     await order.save();
 
-    console.log(`✅ Pedido marcado como entregado manualmente:`, {
-      order_number: order.order_number,
-      delivered_by: order.proof_of_delivery.delivered_by,
-      has_photo: !!photo_url,
-      has_signature: !!signature_url
+    console.log('✅ Pedido marcado como entregado:', {
+      orderId: order._id,
+      orderNumber: order.order_number,
+      status: order.status,
+      hasPhoto: !!proofData.photo_url,
+      hasSignature: !!proofData.signature_url,
+      deliveryDate: order.delivery_date
     });
 
+    // Respuesta exitosa
     res.json({
+      success: true,
       message: 'Pedido marcado como entregado exitosamente',
-      order,
-      proof_of_delivery: order.proof_of_delivery
+      order: {
+        _id: order._id,
+        order_number: order.order_number,
+        status: order.status,
+        delivery_date: order.delivery_date,
+        proof_of_delivery: order.proof_of_delivery
+      }
     });
 
   } catch (error) {
-    console.error('Error marcando pedido como entregado:', error);
-    res.status(500).json({ error: 'Error interno del servidor' });
+    console.error('❌ Error marcando pedido como entregado:', error);
+    res.status(500).json({ 
+      error: 'Error interno del servidor al marcar como entregado',
+      details: error.message 
+    });
   }
 });
 router.patch('/:id/warehouse-received', authenticateToken, async (req, res) => {
