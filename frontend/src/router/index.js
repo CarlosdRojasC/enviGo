@@ -150,12 +150,7 @@ const routes = [
         component: () => import('../views/Drivers.vue'),
         meta: { roles: ['admin'] }
       },
-      {
-  path: '/driver-scanner',
-  name: 'DriverMLScanner', 
-  component: () => import('../views/DriverMLScanner.vue'),
-  meta: { requiresAuth: false, layout: 'empty' }
-},
+
       {
         path: 'admin/driver-payments',
         name: 'AdminDriverPayments',
@@ -192,6 +187,21 @@ const routes = [
     roles: ['admin'] 
   }
 },
+    ]
+  },
+  {
+    path: '/scanner',
+    component: EmptyLayout,
+    children: [
+      {
+        path: '',
+        name: 'MLScanner',
+        component: () => import('../views/DriverMLScanner.vue'),
+        meta: { 
+          requiresAuth: false,
+          layout: 'empty'
+        }
+      }
     ]
   },
 
