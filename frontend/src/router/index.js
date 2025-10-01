@@ -4,7 +4,7 @@ import { useAuthStore } from '../store/auth'
 // Layouts
 import DashboardLayout from '../layouts/DashboardLayout.vue'
 import PublicLayout from '../layouts/PublicLayout.vue'
-
+import EmptyLayout from '../layouts/EmptyLayout.vue'
 // Vistas públicas
 import LandingPage from '../views/LandingPage.vue'
 import Login from '../views/login.vue'
