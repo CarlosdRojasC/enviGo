@@ -1,44 +1,31 @@
 <script setup>
-import { computed } from 'vue'
-import { useRoute } from 'vue-router'
-
-// Importar layouts
-import MainLayout from './layouts/PublicLayout.vue'
-import EmptyLayout from './layouts/EmptyLayout.vue'
-
-const route = useRoute()
-
-// Detectar layout según la meta de la ruta
-const currentLayout = computed(() => {
-  const layoutName = route.meta.layout
-  
-  if (layoutName === 'empty') {
-    return EmptyLayout
-  }
-  
-  return MainLayout
-})
 </script>
 
 <template>
-  <component :is="currentLayout">
-    <router-view />
-  </component>
+  <router-view />
 </template>
 
-<style>
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
+<style scoped>
+body{
+  overflow-y: hidden;
 }
-
-body {
-  overflow-x: hidden;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+.logo {
+  height: 6em;
+  padding: 1.5em;
+  will-change: filter;
+  transition: filter 300ms;
 }
-
+.logo:hover {
+  filter: drop-shadow(0 0 2em #646cffaa);
+}
+.logo.vue:hover {
+  filter: drop-shadow(0 0 2em #42b883aa);
+}
 #app {
   min-height: 100vh;
 }
+body {
+  overflow-x: hidden;
+}
+
 </style>
