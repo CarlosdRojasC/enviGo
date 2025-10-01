@@ -90,7 +90,7 @@ static async generateOrdersExport(orders) {
       
       // Estado y tracking
       'Estado': order.status,
-      'Conductor': order.driver_info?.name || '',
+      'Conductor': order.driver_info?.email || '',
       'URL Tracking': order.shipday_tracking_url || '',
       
       // Notas

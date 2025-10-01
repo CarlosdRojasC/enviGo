@@ -4,6 +4,7 @@ const mongoose = require('mongoose');
 const orderController = require('../controllers/order.controller');
 const { authenticateToken, isAdmin } = require('../middlewares/auth.middleware');
 const { validateOrderCreation, validateStatusUpdate } = require('../middlewares/validators/order.validator');
+const { orderSearchLimiter, statusUpdateLimiter } = require('../middleware/rateLimit');
 const { validateMongoId } = require('../middlewares/validators/generic.validator');
 const multer = require('multer');
 const upload = multer({ storage: multer.memoryStorage() });
@@ -16,7 +17,7 @@ const MercadoLibreService = require('../services/mercadolibre.service');
 
 // ==================== PEDIDOS ====================
 
-router.get('/', authenticateToken, orderController.getAll);
+router.get('/', authenticateToken, orderSearchLimiter, orderController.getAll);
 router.get('/stats', authenticateToken, orderController.getStats);
 router.get('/trend', authenticateToken, orderController.getOrdersTrend);
 router.get('/export', authenticateToken, isAdmin, orderController.exportOrders);
@@ -122,7 +123,7 @@ const validateOrderPermissions = (req, res, next) => {
 
 router.post('/', authenticateToken, validateOrderPermissions, validateOrderCreation, orderController.create);
 router.get('/:id', authenticateToken, validateMongoId('id'), orderController.getById);
-router.patch('/:id/status', authenticateToken, validateMongoId('id'), isAdmin, orderController.updateStatus);
+router.patch('/:id/status', authenticateToken, statusUpdateLimiter, validateMongoId('id'), isAdmin, orderController.updateStatus);
 
 router.patch('/:id/ready', authenticateToken, validateMongoId('id'), async (req, res) => {
   try {
