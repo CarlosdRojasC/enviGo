@@ -20,6 +20,7 @@ const ENVIGO_COMMUNES = [
   'Recoleta',
   'Independencia',
   'Conchalí',
+  'Colina',
   
   // Zona Centro
   'Santiago',
@@ -69,7 +70,8 @@ const COMMUNES_BY_ZONE = {
     'Quilicura', 
     'Recoleta', 
     'Independencia', 
-    'Conchalí'
+    'Conchalí',
+    'Colina'
   ],
   'Zona Centro': [
     'Santiago', 
