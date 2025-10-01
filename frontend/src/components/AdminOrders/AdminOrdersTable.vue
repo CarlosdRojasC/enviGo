@@ -228,11 +228,10 @@
                   <span class="action-text">Asignar</span>
                 </button>
                 <button 
-  v-if="order.status === 'out_for_delivery' || order.status === 'assigned'"
+  v-if="shouldShowDeliverButton(order)"
   @click="$emit('mark-delivered', order)" 
   class="btn-action deliver"
-  :disabled="false"
-  :title="'Marcar como entregado con prueba fotográfica'"
+  title="Marcar como entregado con prueba fotográfica"
 >
   <span class="action-icon">📦</span>
   <span class="action-text">Entregar</span>
@@ -403,6 +402,7 @@ const emit = defineEmits([
   'update-status',
   'assign-driver',
   'page-change',
+  'mark-delivered',
   'page-size-change'
 ])
 
@@ -471,6 +471,18 @@ function getCompanyName(companyId) {
   
   const company = props.companies.find(c => c._id === companyId)
   return company?.name || 'Empresa no encontrada'
+}
+function shouldShowDeliverButton(order) {
+  // Estados que permiten marcar como entregado
+  const deliverableStatuses = [
+    'out_for_delivery',
+    'assigned',
+    'shipped',           // Enviado
+    'processing',        // Procesando
+    'ready_for_pickup'   // Listo para recoger
+  ]
+  
+  return deliverableStatuses.includes(order.status)
 }
 
 /**
