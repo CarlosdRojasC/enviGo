@@ -79,79 +79,162 @@ router.post('/process-ml-label', upload.single('image'), async (req, res) => {
       });
     }
 
-    // Procesar imagen con Tesseract OCR
+    // OCR
     console.log('🔍 Ejecutando OCR...');
     const { data: { text } } = await Tesseract.recognize(
       req.file.buffer,
       'spa+eng',
       {
-        logger: m => {
-          if (m.status === 'recognizing text') {
-            console.log(`OCR: ${m.status} ${(m.progress * 100).toFixed(1)}%`);
-          }
-        }
+        logger: m => console.log('OCR:', m.status, m.progress)
       }
     );
 
-    console.log('📝 Texto extraído del OCR');
+    console.log('📝 Texto extraído');
 
-    // Extraer datos estructurados
+    // Extraer datos
     const extractedData = extractMLLabelData(text);
     console.log('📊 Datos extraídos:', extractedData);
 
-    // Validar datos
+    // Validar
     const validation = validateExtractedData(extractedData);
-    
     if (!validation.isValid) {
       return res.json({
         success: true,
         data: {
           status: 'invalid',
           message: validation.message,
-          raw_text: text,
           extracted_data: extractedData
         }
       });
     }
 
-    // Verificar si ya existe (simulado por ahora - ajusta según tu modelo Order)
-    // const existingOrder = await Order.findOne({ shipping_number: extractedData.shipping_number });
-    // if (existingOrder) { ... }
+    // Importar modelo
+    const Order = require('../models/Order');
 
-    // Por ahora retornar datos extraídos
+    // Verificar duplicado por shipping_number
+    const existingOrder = await Order.findOne({
+      'ml_info.barcode': extractedData.shipping_number
+    });
+
+    if (existingOrder) {
+      console.log('⚠️ Pedido duplicado');
+      return res.json({
+        success: true,
+        data: {
+          status: 'duplicate',
+          shipping_number: extractedData.shipping_number,
+          order_id: existingOrder._id,
+          ...extractedData
+        }
+      });
+    }
+
+    // Obtener o crear canal ML para esta empresa
+    const Channel = require('../models/Channel');
+    let mlChannel = await Channel.findOne({
+      company_id: req.body.client_id,
+      platform: 'mercadolibre'
+    });
+
+    if (!mlChannel) {
+      mlChannel = new Channel({
+        company_id: req.body.client_id,
+        platform: 'mercadolibre',
+        name: 'MercadoLibre Scanner',
+        is_active: true,
+        created_at: new Date()
+      });
+      await mlChannel.save();
+      console.log('✅ Canal ML creado');
+    }
+
+    // Crear número de orden único
+    const orderNumber = `ML${Date.now().toString().slice(-8)}`;
+
+    // CREAR PEDIDO
+    const newOrder = new Order({
+      // Relaciones requeridas
+      company_id: req.body.client_id,
+      channel_id: mlChannel._id,
+      
+      // IDs requeridos
+      external_order_id: extractedData.sale_id || extractedData.shipping_number,
+      order_number: orderNumber,
+      
+      // Cliente (requerido)
+      customer_name: extractedData.customer_name,
+      customer_phone: extractedData.customer_phone || '',
+      customer_email: '',
+      
+      // Dirección
+      shipping_address: extractedData.address,
+      shipping_commune: extractedData.commune || 'Por definir',
+      shipping_city: 'Santiago',
+      shipping_state: 'Región Metropolitana',
+      
+      // Montos (requerido total_amount)
+      total_amount: 0,
+      shipping_cost: 0,
+      
+      // Info ML
+      ml_info: {
+        barcode: extractedData.shipping_number,
+        ml_id: extractedData.sale_id,
+        tracking_code: extractedData.shipping_number,
+        country: 'CL',
+        parsed_data: extractedData
+      },
+      
+      // Notas
+      notes: extractedData.reference || '',
+      delivery_notes: extractedData.reference || '',
+      
+      // Estado
+      status: 'pending',
+      platform: 'mercadolibre',
+      source: 'ml_scanner',
+      created_via_scanner: true,
+      scanner_timestamp: new Date(),
+      
+      // Fechas (requerido order_date)
+      order_date: new Date(),
+      created_at: new Date(),
+      updated_at: new Date()
+    });
+
+    await newOrder.save();
+
+    console.log('✅ Pedido creado:', orderNumber);
+
     res.json({
       success: true,
       data: {
         status: 'created',
+        order_id: newOrder._id,
+        order_number: orderNumber,
         shipping_number: extractedData.shipping_number,
         customer_name: extractedData.customer_name,
         address: extractedData.address,
-        commune: extractedData.commune,
-        reference: extractedData.reference,
-        sale_id: extractedData.sale_id,
-        product: extractedData.product,
-        delivery_date: extractedData.delivery_date,
-        raw_text: text // Para debugging
+        commune: extractedData.commune
       }
     });
 
   } catch (error) {
-    console.error('❌ Error procesando etiqueta ML:', error);
+    console.error('❌ Error:', error);
     res.status(500).json({
       success: false,
-      message: 'Error procesando etiqueta',
-      error: error.message
+      message: error.message
     });
   }
 });
 
-// ==================== FUNCIONES DE EXTRACCIÓN ====================
-
-function extractMLLabelData(text) {
+// Funciones de extracción (las que ya tienes)
+function extractMLLabelData(text, comunas = []) {
   const data = {
     shipping_number: null,
     sale_id: null,
     customer_name: null,
+    customer_phone: null,
     address: null,
     commune: null,
     reference: null,
@@ -159,69 +242,68 @@ function extractMLLabelData(text) {
     product: null
   };
 
-  // 1. Número de envío
   const envioMatch = text.match(/Env[ií]o[:\s]+(\d{10,15})/i);
-  if (envioMatch) {
-    data.shipping_number = envioMatch[1];
-  }
+  if (envioMatch) data.shipping_number = envioMatch[1];
 
-  // 2. ID de venta
   const ventaMatch = text.match(/Venta[:\s]+(\d{10,20})/i);
-  if (ventaMatch) {
-    data.sale_id = ventaMatch[1];
-  }
+  if (ventaMatch) data.sale_id = ventaMatch[1];
 
-  // 3. Nombre del destinatario
   const destinatarioMatch = text.match(/Destinatario[:\s]+([A-ZÁÉÍÓÚÑ][a-záéíóúñ\s]+(?:[A-ZÁÉÍÓÚÑ][a-záéíóúñ\s]+)*)/i);
-  if (destinatarioMatch) {
-    data.customer_name = destinatarioMatch[1].trim();
-  }
+  if (destinatarioMatch) data.customer_name = destinatarioMatch[1].trim();
 
-  // 4. Dirección
   const direccionMatch = text.match(/Direcci[oó]n[:\s]+([^\n]+)/i);
-  if (direccionMatch) {
-    data.address = direccionMatch[1].trim();
-  }
+  if (direccionMatch) data.address = direccionMatch[1].trim();
 
-  // 5. Referencia
   const referenciaMatch = text.match(/Referencia[:\s]+([^\n]+)/i);
-  if (referenciaMatch) {
-    data.reference = referenciaMatch[1].trim();
-  }
+  if (referenciaMatch) data.reference = referenciaMatch[1].trim();
 
-  // 6. Comuna
-  const comunas = [
-    'CERRO NAVIA', 'LA FLORIDA', 'MAIPÚ', 'PUENTE ALTO', 'LAS CONDES',
-    'PROVIDENCIA', 'SANTIAGO', 'ÑUÑOA', 'LA REINA', 'PEÑALOLÉN',
-    'MACUL', 'SAN MIGUEL', 'LA CISTERNA', 'EL BOSQUE', 'SAN BERNARDO',
-    'QUILICURA', 'RENCA', 'CONCHALÍ', 'INDEPENDENCIA', 'RECOLETA',
-    'VITACURA', 'LO BARNECHEA', 'COLINA', 'LAMPA', 'PUDAHUEL',
-    'ESTACIÓN CENTRAL', 'QUINTA NORMAL', 'LO PRADO', 'PAC', 'SAN JOAQUÍN'
+  // Lista completa de comunas de Santiago
+  const TODAS_LAS_COMUNAS = [
+    // Zona Norte
+    'HUECHURABA', 'QUILICURA', 'RECOLETA', 'INDEPENDENCIA', 'CONCHALÍ', 'COLINA',
+    // Zona Centro
+    'SANTIAGO', 'SANTIAGO CENTRO', 'ESTACIÓN CENTRAL', 'QUINTA NORMAL', 'PROVIDENCIA',
+    // Zona Oriente
+    'LAS CONDES', 'VITACURA', 'ÑUÑOA', 'LA REINA', 'PEÑALOLÉN', 'MACUL', 'LO BARNECHEA',
+    // Zona Sur
+    'SAN MIGUEL', 'SAN JOAQUÍN', 'PEDRO AGUIRRE CERDA', 'LA CISTERNA', 'SAN RAMÓN', 
+    'LA GRANJA', 'EL BOSQUE', 'LO ESPEJO',
+    // Zona Poniente
+    'CERRILLOS', 'RENCA', 'CERRO NAVIA', 'PUDAHUEL', 'MAIPÚ', 'MAIPU',
+    // Zona Sur-Oriente
+    'LA FLORIDA', 'PUENTE ALTO', 'SAN BERNARDO', 'LA PINTANA', 'LO PRADO'
   ];
 
   const textUpper = text.toUpperCase();
-  for (const comuna of comunas) {
+  
+  // Buscar comuna (ordenar por longitud descendente para evitar falsos positivos)
+  const comunasOrdenadas = TODAS_LAS_COMUNAS.sort((a, b) => b.length - a.length);
+  
+  for (const comuna of comunasOrdenadas) {
     if (textUpper.includes(comuna)) {
-      data.commune = comuna.split(' ').map(word => 
-        word.charAt(0) + word.slice(1).toLowerCase()
+      // Formatear nombre: Primera letra mayúscula, resto minúscula
+      data.commune = comuna.split(' ').map(w => 
+        w.charAt(0) + w.slice(1).toLowerCase()
       ).join(' ');
       break;
     }
   }
 
-  // 7. Fecha de entrega
-  const fechaMatch = text.match(/Entrega[:\s]+(\d{1,2}[-/]\w{3})/i);
-  if (fechaMatch) {
-    data.delivery_date = fechaMatch[1];
-  }
-
-  // 8. Producto (buscar después de SKU o nombre del vendedor)
-  const productoMatch = text.match(/(?:SKU|Producto)[:\s]+([^\n]+)/i);
-  if (productoMatch) {
-    data.product = productoMatch[1].trim();
-  }
-
   return data;
+}
+
+function validateExtractedData(data) {
+  const required = ['shipping_number', 'customer_name', 'address'];
+  const missing = required.filter(f => !data[f]);
+
+  if (missing.length > 0) {
+    return {  
+      isValid: false,
+      message: `Faltan: ${missing.join(', ')}`
+    };
+  }
+
+  return { isValid: true };
 }
 
 function validateExtractedData(data) {

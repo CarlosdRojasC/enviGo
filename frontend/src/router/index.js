@@ -154,7 +154,7 @@ const routes = [
   path: '/driver-scanner',
   name: 'DriverMLScanner', 
   component: () => import('../views/DriverMLScanner.vue'),
-  meta: { requiresAuth: false }
+  meta: { requiresAuth: false, layout: 'empty' }
 },
       {
         path: 'admin/driver-payments',

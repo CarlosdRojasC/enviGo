@@ -1,424 +1,222 @@
 <template>
-  
-  <div class="ml-scanner-container">
+  <div class="scanner-app">
     
-    <!-- ==================== HEADER DEL SCANNER ==================== -->
+    <!-- PANTALLA DE ACCESO -->
     <div v-if="!isAccessGranted" class="access-screen">
-      <div class="access-card">
-        <div class="access-header">
-          <h1>📦 Scanner ML - enviGo</h1>
-          <p>Acceso para Repartidores</p>
+      <div class="access-container">
+        <div class="logo">
+          <div class="logo-icon">📦</div>
+          <h1>Scanner ML</h1>
+          <p>enviGo</p>
         </div>
         
         <div class="access-form">
-          <h2>🔐 Ingresa la contraseña</h2>
-          
-          <div class="input-group">
-            <label>Contraseña del Scanner:</label>
-            <input 
-              v-model="accessPassword"
-              type="password" 
-              placeholder="Contraseña del día"
-              class="access-input"
-              @keyup.enter="verifyAccess"
-              autofocus
-            />
-          </div>
+          <input 
+            v-model="accessPassword"
+            type="password" 
+            placeholder="Contraseña de acceso"
+            @keyup.enter="verifyAccess"
+            autofocus
+          />
           
           <button 
             @click="verifyAccess" 
             :disabled="!accessPassword || isVerifyingAccess"
-            class="access-button"
+            class="btn-primary"
           >
-            <span v-if="!isVerifyingAccess">🔓 Acceder al Scanner</span>
-            <span v-else>⏳ Verificando...</span>
+            {{ isVerifyingAccess ? 'Verificando...' : 'Acceder' }}
           </button>
           
-          <div class="access-help">
-            <p>💡 <strong>Contacta a tu supervisor</strong> para obtener la contraseña del día</p>
-          </div>
+          <p class="help-text">Contacta a tu supervisor para obtener la contraseña</p>
         </div>
       </div>
     </div>
 
-    <!-- ==================== SCANNER PRINCIPAL (SOLO SI TIENE ACCESO) ==================== -->
-    <div v-if="isAccessGranted">
+    <!-- APP PRINCIPAL -->
+    <div v-if="isAccessGranted" class="scanner-main">
       
-      <!-- Agregar botón de logout al header existente -->
-      <div class="scanner-header">
-        <div class="header-content">
-          <div class="logo-section">
-            <h1>📦 Scanner ML - enviGo</h1>
-            <p>Escanea etiquetas de MercadoLibre</p>
-          </div>
-          <div class="header-actions">
-            <div class="session-info" v-if="selectedClient">
-              <span class="client-name">{{ selectedClient.name }}</span>
-              <span class="scan-count">{{ scannedOrders.length }} escaneados</span>
-            </div>
-            <button @click="logout" class="logout-button">
-              🚪 Salir
-            </button>
-          </div>
+      <!-- HEADER FIJO -->
+      <header class="app-header">
+        <div class="header-left">
+          <h1>Scanner ML</h1>
+          <span v-if="selectedClient" class="client-badge">{{ selectedClient.name }}</span>
         </div>
-      </div>
+        <button @click="logout" class="btn-logout">Salir</button>
+      </header>
 
-      <!-- ==================== PASO 1: SELECCIÓN DE CLIENTE ==================== -->
-      <div v-if="!selectedClient" class="client-selection">
-        <div class="selection-card">
-          <h2>🏢 Seleccionar Cliente</h2>
-          <p>Elige para qué cliente vas a recolectar paquetes:</p>
-          
-          <!-- Buscador de Clientes -->
-          <div class="search-container">
-            <div class="search-input-wrapper">
-              <span class="search-icon">🔍</span>
-              <input 
-                v-model="clientSearch" 
-                @input="filterClients"
-                type="text" 
-                placeholder="Buscar cliente por nombre o email..." 
-                class="client-search"
-                autofocus
-              />
-              <button 
-                v-if="clientSearch" 
-                @click="clearSearch" 
-                class="clear-search"
-              >
-                ✕
-              </button>
-            </div>
-          </div>
-
-          <!-- Lista de Clientes -->
-          <div class="clients-list">
-            <div 
-              v-for="client in filteredClients" 
-              :key="client.id"
-              @click="selectClient(client)"
-              class="client-card"
-              :class="{ 'client-hover': true }"
-            >
-              <div class="client-avatar">
-                {{ client.name.charAt(0).toUpperCase() }}
-              </div>
-              <div class="client-info">
-                <h3>{{ client.name }}</h3>
-                <p>{{ client.email }}</p>
-                <div class="client-meta">
-                  <span class="client-type">{{ client.type || 'Cliente' }}</span>
-                  <span v-if="client.phone" class="client-phone">📞 {{ client.phone }}</span>
-                </div>
-              </div>
-              <div class="client-arrow">
-                <span>➜</span>
-              </div>
-            </div>
-
-            <!-- Estado vacío -->
-            <div v-if="filteredClients.length === 0" class="empty-clients">
-              <div class="empty-icon">🔍</div>
-              <h3>No se encontraron clientes</h3>
-              <p v-if="clientSearch">
-                No hay clientes que coincidan con "{{ clientSearch }}"
-              </p>
-              <p v-else>
-                No tienes clientes registrados aún.
-              </p>
-            </div>
-          </div>
-
-          <!-- Loading clientes -->
-          <div v-if="loadingClients" class="loading-clients">
-            <div class="spinner-small"></div>
-            <span>Cargando clientes...</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- ==================== PASO 2: INTERFACE DE SCANNER ==================== -->
-      <div v-if="selectedClient && !showResults" class="scanner-interface">
+      <!-- SELECCIÓN DE CLIENTE -->
+      <div v-if="!selectedClient" class="client-select">
+        <h2>Selecciona Cliente</h2>
         
-        <!-- Barra de Acciones -->
-        <div class="action-bar">
-          <button @click="changeClient" class="btn-secondary">
-            ⬅️ Cambiar Cliente
+        <input 
+          v-model="clientSearch"
+          type="text"
+          placeholder="Buscar cliente..."
+          class="search-input"
+        />
+        
+        <div class="clients-grid">
+          <div 
+            v-for="client in filteredClients" 
+            :key="client.id"
+            @click="selectClient(client)"
+            class="client-card"
+          >
+            <div class="client-avatar">{{ client.name.charAt(0) }}</div>
+            <div class="client-info">
+              <h3>{{ client.name }}</h3>
+              <p>{{ client.email }}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- SCANNER ACTIVO -->
+      <div v-if="selectedClient && !showResults" class="scanner-active">
+        
+        <!-- Stats header -->
+        <div class="stats-bar">
+          <div class="stat">
+            <span class="stat-number">{{ scannedOrders.length }}</span>
+            <span class="stat-label">Total</span>
+          </div>
+          <div class="stat success">
+            <span class="stat-number">{{ getStatusCount('created') }}</span>
+            <span class="stat-label">Creados</span>
+          </div>
+          <div class="stat warning">
+            <span class="stat-number">{{ getStatusCount('duplicate') }}</span>
+            <span class="stat-label">Duplicados</span>
+          </div>
+        </div>
+
+        <!-- Área de captura -->
+        <div class="capture-zone">
+          
+          <!-- Video preview -->
+          <div v-if="isScanning" class="video-container">
+            <video 
+              ref="videoElement" 
+              autoplay 
+              playsinline
+              muted
+            ></video>
+            <div class="scan-frame">
+              <div class="corner tl"></div>
+              <div class="corner tr"></div>
+              <div class="corner bl"></div>
+              <div class="corner br"></div>
+              <p class="scan-instruction">Coloca la etiqueta aquí</p>
+            </div>
+          </div>
+
+          <!-- Imagen capturada -->
+          <div v-if="capturedImage" class="preview-container">
+            <img :src="capturedImage" alt="Etiqueta" />
+          </div>
+
+          <!-- Estado inicial -->
+          <div v-if="!isScanning && !capturedImage" class="idle-state">
+            <div class="camera-icon">📷</div>
+            <p>Presiona para iniciar</p>
+          </div>
+        </div>
+
+        <!-- Botones de acción -->
+        <div class="action-buttons">
+          <button 
+            v-if="!isScanning && !capturedImage"
+            @click="startCamera"
+            class="btn-primary btn-large"
+          >
+            📷 Iniciar Cámara
           </button>
-          <div class="action-center">
-            <span class="current-client">
-              <strong>Cliente:</strong> {{ selectedClient.name }}
+
+          <template v-if="isScanning">
+            <button @click="capturePhoto" class="btn-primary btn-large">
+              📸 Capturar
+            </button>
+            <button @click="stopCamera" class="btn-secondary">
+              Cancelar
+            </button>
+          </template>
+
+          <template v-if="capturedImage">
+            <button 
+              @click="processCapturedImage" 
+              :disabled="isProcessing"
+              class="btn-primary btn-large"
+            >
+              {{ isProcessing ? '⏳ Procesando...' : '✨ Procesar' }}
+            </button>
+            <button @click="retakePhoto" class="btn-secondary">
+              🔄 Tomar otra
+            </button>
+          </template>
+        </div>
+
+        <!-- Último escaneado -->
+        <div v-if="lastScanned" class="last-scan">
+          <h3>Último escaneado</h3>
+          <div class="scan-details">
+            <code>{{ lastScanned.shipping_number }}</code>
+            <span :class="['status', lastScanned.status]">
+              {{ getStatusText(lastScanned.status) }}
             </span>
           </div>
-          <button 
-            @click="showResultsList" 
-            class="btn-info"
-            :disabled="scannedOrders.length === 0"
-          >
-            📋 Ver Resultados ({{ scannedOrders.length }})
-          </button>
         </div>
 
-        <!-- Área Principal del Scanner -->
-        <div class="scanner-main-area">
-          
-          <!-- Card del Scanner -->
-          <div class="scanner-card">
-            <div class="scanner-header-card">
-              <h3>📸 Capturar Etiqueta Completa</h3>
-              <p>Toma una foto de toda la etiqueta de MercadoLibre</p>
-            </div>
-            
-            <!-- Área de captura tipo CamScanner -->
-            <div class="capture-container">
-              <div class="capture-area">
-                
-                <!-- Video para vista previa -->
-                <video 
-                  ref="videoElement" 
-                  class="capture-video" 
-                  autoplay 
-                  playsinline
-                  muted
-                  v-show="isScanning"
-                ></video>
-                
-                <!-- Overlay para guiar la captura -->
-                <div class="capture-overlay" v-show="isScanning">
-                  <div class="capture-frame">
-                    <div class="frame-corners">
-                      <div class="corner top-left"></div>
-                      <div class="corner top-right"></div>
-                      <div class="corner bottom-left"></div>
-                      <div class="corner bottom-right"></div>
-                    </div>
-                    <div class="capture-instructions">
-                      <p>📦 Coloca la etiqueta dentro del marco</p>
-                      <p>Asegúrate que se vea completa y legible</p>
-                    </div>
-                  </div>
-                </div>
-
-                <!-- Imagen capturada para revisión -->
-                <div v-if="capturedImage" class="captured-preview">
-                  <img :src="capturedImage" alt="Etiqueta capturada" class="preview-image" />
-                  <div class="preview-actions">
-                    <button @click="retakePhoto" class="btn-secondary">
-                      🔄 Tomar otra
-                    </button>
-                    <button @click="processCapturedImage" class="btn-primary" :disabled="isProcessing">
-                      <span v-if="!isProcessing">✨ Procesar Etiqueta</span>
-                      <span v-else>⏳ Extrayendo datos...</span>
-                    </button>
-                  </div>
-                </div>
-
-                <!-- Mensaje cuando no hay cámara -->
-                <div v-if="!isScanning && !capturedImage" class="no-camera-message">
-                  <div class="camera-icon">📷</div>
-                  <p>Presiona "Iniciar Cámara" para comenzar</p>
-                </div>
-              </div>
-            </div>
-
-            <!-- Controles de captura -->
-            <div class="capture-controls">
-              <button 
-                @click="startCamera" 
-                v-if="!isScanning && !capturedImage"
-                class="btn-primary capture-btn"
-              >
-                📷 Iniciar Cámara
-              </button>
-              
-              <div v-if="isScanning" class="camera-actions">
-                <button @click="capturePhoto" class="btn-capture">
-                  📸 Capturar
-                </button>
-                <button @click="stopCamera" class="btn-secondary">
-                  🛑 Cancelar
-                </button>
-              </div>
-            </div>
-          </div>
-          <!-- FIN scanner-card -->
-
-          <!-- Sidebar con información -->
-          <div class="scanner-sidebar">
-            
-            <!-- Último Código Escaneado -->
-            <div v-if="lastScanned" class="last-scanned-card">
-              <h3>✅ Último Escaneado</h3>
-              <div class="scanned-details">
-                <div class="barcode-display">
-                  <span class="barcode-label">Código:</span>
-                  <code class="barcode-value">{{ lastScanned.barcode }}</code>
-                </div>
-                <div class="status-display">
-                  <span class="status-badge" :class="lastScanned.status">
-                    {{ getStatusText(lastScanned.status) }}
-                  </span>
-                </div>
-                <div class="timestamp-display">
-                  {{ formatTime(lastScanned.timestamp) }}
-                </div>
-              </div>
-            </div>
-
-            <!-- Estadísticas de la Sesión -->
-            <div class="session-stats-card">
-              <h3>📊 Sesión Actual</h3>
-              <div class="stats-grid">
-                <div class="stat-item">
-                  <span class="stat-number">{{ scannedOrders.length }}</span>
-                  <span class="stat-label">Total</span>
-                </div>
-                <div class="stat-item success">
-                  <span class="stat-number">{{ getStatusCount('created') }}</span>
-                  <span class="stat-label">Creados</span>
-                </div>
-                <div class="stat-item warning">
-                  <span class="stat-number">{{ getStatusCount('duplicate') }}</span>
-                  <span class="stat-label">Duplicados</span>
-                </div>
-                <div class="stat-item error">
-                  <span class="stat-number">{{ getStatusCount('invalid') }}</span>
-                  <span class="stat-label">Inválidos</span>
-                </div>
-              </div>
-            </div>
-
-            <!-- Tips de Uso -->
-            <div class="tips-card">
-              <h3>💡 Tips</h3>
-              <ul class="tips-list">
-                <li>Mantén el código bien iluminado</li>
-                <li>Asegúrate que esté enfocado</li>
-                <li>Evita reflejos en la etiqueta</li>
-                <li>Mantén el teléfono estable</li>
-              </ul>
-            </div>
-          </div>
-          <!-- FIN scanner-sidebar -->
-        </div>
-        <!-- FIN scanner-main-area -->
+        <!-- Botón ver resultados -->
+        <button 
+          v-if="scannedOrders.length > 0"
+          @click="showResultsList"
+          class="btn-results"
+        >
+          Ver {{ scannedOrders.length }} resultados
+        </button>
       </div>
-      <!-- FIN scanner-interface -->
 
-      <!-- ==================== PASO 3: VISTA DE RESULTADOS ==================== -->
-      <div v-if="showResults" class="results-view">
-        
-        <!-- Header de Resultados -->
+      <!-- RESULTADOS -->
+      <div v-if="showResults" class="results-screen">
         <div class="results-header">
-          <button @click="backToScanner" class="btn-secondary">
-            ⬅️ Seguir Escaneando
-          </button>
-          <div class="results-title-section">
-            <h2>📋 Pedidos Escaneados</h2>
-            <span class="results-count">{{ scannedOrders.length }} códigos procesados</span>
-          </div>
+          <button @click="backToScanner" class="btn-back">← Volver</button>
+          <h2>Resultados</h2>
           <button 
-            @click="finalizeSession" 
-            class="btn-success"
+            @click="finalizeSession"
             :disabled="getStatusCount('created') === 0"
+            class="btn-finalize"
           >
-            ✅ Finalizar Sesión
+            Finalizar
           </button>
         </div>
 
-        <!-- Resumen de la Sesión -->
-        <div class="session-summary">
-          <div class="summary-card">
-            <h3>📈 Resumen de la Sesión</h3>
-            <div class="summary-stats">
-              <div class="summary-item total">
-                <span class="number">{{ scannedOrders.length }}</span>
-                <span class="label">Códigos Escaneados</span>
-              </div>
-              <div class="summary-item success">
-                <span class="number">{{ getStatusCount('created') }}</span>
-                <span class="label">Pedidos Creados</span>
-              </div>
-              <div class="summary-item warning">
-                <span class="number">{{ getStatusCount('duplicate') }}</span>
-                <span class="label">Duplicados</span>
-              </div>
-              <div class="summary-item error">
-                <span class="number">{{ getStatusCount('invalid') }}</span>
-                <span class="label">Inválidos</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Lista de Resultados -->
         <div class="results-list">
           <div 
             v-for="(order, index) in scannedOrders" 
-            :key="order.barcode"
-            class="result-card"
+            :key="order.shipping_number"
+            class="result-item"
             :class="order.status"
           >
-            <div class="result-index">
-              {{ scannedOrders.length - index }}
-            </div>
+            <div class="result-number">{{ scannedOrders.length - index }}</div>
             <div class="result-content">
-              <div class="result-main">
-                <div class="barcode-info">
-                  <code class="result-barcode">{{ order.barcode }}</code>
-                  <span class="result-timestamp">{{ formatTime(order.timestamp) }}</span>
-                </div>
-                <div class="result-status">
-                  <span class="status-badge" :class="order.status">
-                    {{ getStatusText(order.status) }}
-                  </span>
-                </div>
-              </div>
-              <div v-if="order.order_id && order.status === 'created'" class="result-actions">
-                <button 
-                  @click="viewOrder(order.order_id)" 
-                  class="btn-view-order"
-                >
-                  👁️ Ver Pedido
-                </button>
-              </div>
+              <code>{{ order.shipping_number }}</code>
+              <span class="result-status">{{ getStatusText(order.status) }}</span>
             </div>
           </div>
-
-          <!-- Estado vacío -->
-          <div v-if="scannedOrders.length === 0" class="empty-results">
-            <div class="empty-icon">📦</div>
-            <h3>No hay códigos escaneados</h3>
-            <p>Los códigos que escanees aparecerán aquí</p>
-          </div>
         </div>
       </div>
-      <!-- FIN results-view -->
     </div>
-    <!-- FIN isAccessGranted -->
 
-    <!-- ==================== OVERLAY DE LOADING ==================== -->
+    <!-- Loading overlay -->
     <div v-if="isProcessing" class="loading-overlay">
-      <div class="loading-card">
-        <div class="loading-content">
-          <div class="spinner"></div>
-          <h3>Procesando código...</h3>
-          <p>Analizando imagen y creando pedido</p>
-          <div class="loading-progress">
-            <div class="progress-bar"></div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- ==================== NOTIFICACIONES TOAST ==================== -->
-    <div class="toast-container">
-      <!-- Los toasts se manejan por el servicio de toast -->
+      <div class="spinner"></div>
+      <p>Procesando etiqueta...</p>
     </div>
   </div>
 </template>
+
 <script setup>
-import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { scannerService } from '../services/scanner.service'
 import { useToast } from 'vue-toastification'
@@ -426,208 +224,89 @@ import { useToast } from 'vue-toastification'
 const router = useRouter()
 const toast = useToast()
 
-// ==================== NUEVAS VARIABLES DE ACCESO ====================
-
+// Estados
 const isAccessGranted = ref(false)
 const accessPassword = ref('')
 const isVerifyingAccess = ref(false)
-
-// ==================== REFS REACTIVOS ====================
-
-// Estado general
-const isInitialized = ref(false)
 const isProcessing = ref(false)
-const loadingClients = ref(false)
+const isScanning = ref(false)
+const showResults = ref(false)
 
-// Imagen capturada
-const capturedImage = ref(null)
-
-// Clientes
+// Datos
 const clients = ref([])
 const filteredClients = ref([])
 const clientSearch = ref('')
 const selectedClient = ref(null)
-
-// Scanner
-const isScanning = ref(false)
-const videoElement = ref(null)
-const fileInput = ref(null)
-let scannerInterval = null
-let mediaStream = null
-
-// Pedidos escaneados
 const scannedOrders = ref([])
 const lastScanned = ref(null)
-const showResults = ref(false)
+const capturedImage = ref(null)
 
-// ==================== COMPUTED PROPERTIES ====================
+// Refs
+const videoElement = ref(null)
+let mediaStream = null
 
+// Computed
 const sessionStats = computed(() => ({
   total: scannedOrders.value.length,
   created: scannedOrders.value.filter(o => o.status === 'created').length,
-  duplicates: scannedOrders.value.filter(o => o.status === 'duplicate').length,
-  invalid: scannedOrders.value.filter(o => o.status === 'invalid').length
+  duplicates: scannedOrders.value.filter(o => o.status === 'duplicate').length
 }))
 
-const canFinalize = computed(() => 
-  sessionStats.value.created > 0
-)
-
-// ==================== MÉTODOS PRINCIPALES ====================
-
-async function initializeScanner() {
-  try {
-    console.log('🚀 Inicializando ML Scanner...')
-    isInitialized.value = false
-    await loadClients()
-    isInitialized.value = true
-    toast.success('Scanner ML iniciado correctamente')
-  } catch (error) {
-    console.error('❌ Error inicializando scanner:', error)
-    toast.error('Error inicializando el scanner')
-  }
-}
-
-async function loadClients() {
-  try {
-    loadingClients.value = true
-    console.log('📋 Cargando clientes...')
-
-    const response = await scannerService.getCompanyClients()
-    
-    if (response.data.success) {
-      clients.value = response.data.data || []
-      filteredClients.value = clients.value
-      
-      console.log(`✅ ${clients.value.length} clientes cargados`)
-      
-      if (clients.value.length === 0) {
-        toast.warning('No hay clientes registrados')
-      }
-    } else {
-      throw new Error(response.data.message || 'Error cargando clientes')
-    }
-  } catch (error) {
-    console.error('❌ Error cargando clientes:', error)
-    toast.error('Error cargando lista de clientes')
-    clients.value = []
-    filteredClients.value = []
-  } finally {
-    loadingClients.value = false
-  }
-}
-
-// ==================== GESTIÓN DE CLIENTES ====================
-
-function filterClients() {
-  const search = clientSearch.value.toLowerCase().trim()
-  
-  if (!search) {
-    filteredClients.value = clients.value
-    return
-  }
-
-  filteredClients.value = clients.value.filter(client => 
-    client.name.toLowerCase().includes(search) ||
-    client.email.toLowerCase().includes(search) ||
-    (client.phone && client.phone.includes(search))
-  )
-
-  console.log(`🔍 Filtro "${search}": ${filteredClients.value.length} resultados`)
-}
-
-function clearSearch() {
-  clientSearch.value = ''
-  filteredClients.value = clients.value
-}
-
-function selectClient(client) {
-  selectedClient.value = client
-  console.log('👤 Cliente seleccionado:', client.name)
-  toast.success(`Cliente seleccionado: ${client.name}`)
-  
-  scannedOrders.value = []
-  lastScanned.value = null
-  showResults.value = false
-}
-
-function changeClient() {
-  if (scannedOrders.value.length > 0) {
-    const confirm = window.confirm(
-      `¿Estás seguro? Tienes ${scannedOrders.value.length} códigos escaneados que se perderán.`
-    )
-    if (!confirm) return
-  }
-
-  selectedClient.value = null
-  scannedOrders.value = []
-  lastScanned.value = null
-  showResults.value = false
-  stopCamera()
-  
-  toast.info('Selecciona un nuevo cliente')
-}
-
-// ==================== MÉTODOS DE ACCESO ====================
-
+// Métodos de acceso
 async function verifyAccess() {
-  try {
-    isVerifyingAccess.value = true
-    
-    const correctPassword = 'envigo2025'
-    
-    if (accessPassword.value === correctPassword) {
-      isAccessGranted.value = true
-      localStorage.setItem('scanner_access', 'granted')
-      toast.success('¡Acceso concedido! Bienvenido al scanner')
-      await initializeScanner()
-    } else {
-      toast.error('Contraseña incorrecta')
-      accessPassword.value = ''
-    }
-  } catch (error) {
-    console.error('❌ Error verificando acceso:', error)
-    toast.error('Error verificando acceso')
-  } finally {
-    isVerifyingAccess.value = false
-  }
-}
-
-function checkExistingAccess() {
-  const savedAccess = localStorage.getItem('scanner_access')
-  if (savedAccess === 'granted') {
+  isVerifyingAccess.value = true
+  
+  if (accessPassword.value === 'envigo2025') {
     isAccessGranted.value = true
-    console.log('✅ Acceso previamente concedido')
-    return true
+    localStorage.setItem('scanner_access', 'granted')
+    toast.success('Acceso concedido')
+    await loadClients()
+  } else {
+    toast.error('Contraseña incorrecta')
+    accessPassword.value = ''
   }
-  return false
+  
+  isVerifyingAccess.value = false
 }
 
 function logout() {
   isAccessGranted.value = false
-  accessPassword.value = ''
   localStorage.removeItem('scanner_access')
-  
   selectedClient.value = null
   scannedOrders.value = []
-  lastScanned.value = null
-  showResults.value = false
   stopCamera()
-  
-  toast.info('Has salido del scanner')
+  toast.info('Sesión cerrada')
 }
 
-// ==================== FUNCIONALIDAD DEL SCANNER ====================
+// Cargar clientes
+async function loadClients() {
+  try {
+    const response = await scannerService.getCompanyClients()
+    if (response.data.success) {
+      clients.value = response.data.data
+      filteredClients.value = clients.value
+    }
+  } catch (error) {
+    toast.error('Error cargando clientes')
+  }
+}
 
+// Selección de cliente
+function selectClient(client) {
+  selectedClient.value = client
+  scannedOrders.value = []
+  lastScanned.value = null
+  toast.success(`Cliente: ${client.name}`)
+}
+
+// Cámara
 async function startCamera() {
   try {
-    console.log('📷 Iniciando cámara para captura...')
-    
     const stream = await navigator.mediaDevices.getUserMedia({ 
       video: { 
         facingMode: 'environment',
-        width: { ideal: 1920, min: 640 },
-        height: { ideal: 1440, min: 480 }
+        width: { ideal: 1920 },
+        height: { ideal: 1440 }
       } 
     })
     
@@ -635,38 +314,25 @@ async function startCamera() {
       videoElement.value.srcObject = stream
       mediaStream = stream
       isScanning.value = true
-      toast.success('📷 Cámara lista - Coloca la etiqueta en el marco')
+      toast.success('Cámara lista')
     }
   } catch (error) {
-    console.error('❌ Error accediendo a la cámara:', error)
     toast.error('No se pudo acceder a la cámara')
   }
 }
 
 function capturePhoto() {
-  try {
-    if (!videoElement.value || !isScanning.value) return
-
-    const canvas = document.createElement('canvas')
-    const context = canvas.getContext('2d')
-    
-    const videoWidth = videoElement.value.videoWidth
-    const videoHeight = videoElement.value.videoHeight
-    
-    canvas.width = videoWidth
-    canvas.height = videoHeight
-    
-    context.drawImage(videoElement.value, 0, 0, videoWidth, videoHeight)
-    
-    capturedImage.value = canvas.toDataURL('image/jpeg', 0.9)
-    
-    stopCamera()
-    
-    toast.success('📸 Etiqueta capturada - Revisa y procesa')
-  } catch (error) {
-    console.error('❌ Error capturando foto:', error)
-    toast.error('Error capturando la foto')
-  }
+  const canvas = document.createElement('canvas')
+  const context = canvas.getContext('2d')
+  
+  canvas.width = videoElement.value.videoWidth
+  canvas.height = videoElement.value.videoHeight
+  
+  context.drawImage(videoElement.value, 0, 0, canvas.width, canvas.height)
+  capturedImage.value = canvas.toDataURL('image/jpeg', 0.95)
+  
+  stopCamera()
+  toast.success('Foto capturada')
 }
 
 function stopCamera() {
@@ -674,17 +340,11 @@ function stopCamera() {
     mediaStream.getTracks().forEach(track => track.stop())
     mediaStream = null
   }
-  
-  if (videoElement.value) {
-    videoElement.value.srcObject = null
-  }
-  
   isScanning.value = false
 }
 
 function retakePhoto() {
   capturedImage.value = null
-  toast.info('Toma una nueva foto de la etiqueta')
 }
 
 async function processCapturedImage() {
@@ -692,7 +352,6 @@ async function processCapturedImage() {
 
   try {
     isProcessing.value = true
-    console.log('🔄 Procesando etiqueta con OCR...')
 
     const response = await fetch(capturedImage.value)
     const blob = await response.blob()
@@ -704,1865 +363,597 @@ async function processCapturedImage() {
     const result = await scannerService.processMLLabel(formData)
     
     if (result.data.success) {
-      const extractedData = result.data.data
+      const data = result.data.data
       
-      const scannedOrder = {
-        shipping_number: extractedData.shipping_number,
-        status: extractedData.status,
-        order_id: extractedData.order_id || null,
+      scannedOrders.value.unshift({
+        shipping_number: data.shipping_number,
+        status: data.status,
         timestamp: new Date(),
-        client_name: selectedClient.value.name,
-        client_id: selectedClient.value.id,
-        extracted_data: extractedData
-      }
+        ...data
+      })
       
-      scannedOrders.value.unshift(scannedOrder)
-      lastScanned.value = scannedOrder
+      lastScanned.value = scannedOrders.value[0]
       
-      if (extractedData.status === 'created') {
-        toast.success(`✅ Pedido creado: ${extractedData.customer_name} - ${extractedData.commune}`)
-      } else if (extractedData.status === 'duplicate') {
-        toast.warning(`⚠️ Envío ya existe: ${extractedData.shipping_number}`)
-      } else if (extractedData.status === 'invalid') {
-        toast.error(`❌ No se pudo extraer información válida`)
+      if (data.status === 'created') {
+        toast.success(`Pedido creado: ${data.customer_name}`)
+      } else if (data.status === 'duplicate') {
+        toast.warning('Envío duplicado')
+      } else {
+        toast.error('Datos incompletos')
       }
       
       capturedImage.value = null
     } else {
-      toast.error(result.data.message || 'Error procesando etiqueta')
+      toast.error('Error procesando etiqueta')
     }
   } catch (error) {
-    console.error('❌ Error procesando etiqueta:', error)
-    toast.error('Error procesando la etiqueta')
+    toast.error('Error de conexión')
   } finally {
     isProcessing.value = false
   }
 }
 
-async function processImageUpload(event) {
-  const file = event.target.files[0]
-  
-  if (!file) return
-  
-  console.log('📁 Procesando imagen subida:', file.name)
-  
-  if (!file.type.startsWith('image/')) {
-    toast.error('Por favor selecciona una imagen válida')
-    return
-  }
-  
-  if (file.size > 5 * 1024 * 1024) {
-    toast.error('La imagen es muy grande (máximo 5MB)')
-    return
-  }
-  
-  if (fileInput.value) {
-    fileInput.value.value = ''
-  }
-}
-
-// ==================== GESTIÓN DE RESULTADOS ====================
-
+// Resultados
 function showResultsList() {
-  if (scannedOrders.value.length === 0) {
-    toast.warning('No hay códigos escaneados para mostrar')
-    return
-  }
-  
   showResults.value = true
   stopCamera()
-  console.log('📋 Mostrando resultados:', scannedOrders.value.length)
 }
 
 function backToScanner() {
   showResults.value = false
-  console.log('📱 Volviendo al scanner')
 }
 
 async function finalizeSession() {
-  try {
-    if (!canFinalize.value) {
-      toast.error('No hay pedidos creados para finalizar')
-      return
-    }
-
-    const confirm = window.confirm(
-      `¿Finalizar sesión?\n\n` +
-      `• ${sessionStats.value.created} pedidos creados\n` +
-      `• ${sessionStats.value.duplicates} duplicados\n` +
-      `• ${sessionStats.value.invalid} inválidos\n\n` +
-      `Los pedidos creados se guardarán en el sistema.`
-    )
-    
-    if (!confirm) return
-
-    console.log('✅ Finalizando sesión...')
-    isProcessing.value = true
-
-    const sessionData = {
-      client_id: selectedClient.value.id,
-      client_name: selectedClient.value.name,
-      scanned_orders: scannedOrders.value,
-      session_summary: {
-        total_scanned: sessionStats.value.total,
-        created: sessionStats.value.created,
-        duplicates: sessionStats.value.duplicates,
-        invalid: sessionStats.value.invalid,
-        started_at: scannedOrders.value[scannedOrders.value.length - 1]?.timestamp,
-        finished_at: new Date()
-      }
-    }
-
-    const response = await scannerService.finalizeSession(sessionData)
-    
-    if (response.data.success) {
-      toast.success(
-        `✅ Sesión finalizada correctamente\n` +
-        `${sessionStats.value.created} pedidos creados`
-      )
-      
-      router.push('/orders?filter=ml_scanner')
-    } else {
-      throw new Error(response.data.message || 'Error finalizando sesión')
-    }
-  } catch (error) {
-    console.error('❌ Error finalizando sesión:', error)
-    toast.error('Error finalizando la sesión')
-  } finally {
-    isProcessing.value = false
+  if (getStatusCount('created') === 0) {
+    toast.error('No hay pedidos para finalizar')
+    return
   }
+
+  const confirm = window.confirm(`¿Finalizar con ${getStatusCount('created')} pedidos?`)
+  if (!confirm) return
+
+  toast.success('Sesión finalizada')
+  router.push('/orders')
 }
 
-function viewOrder(orderId) {
-  if (!orderId) return
-  
-  console.log('👁️ Viendo pedido:', orderId)
-  router.push(`/orders/${orderId}`)
-}
-
-// ==================== UTILIDADES ====================
-
+// Utilidades
 function getStatusText(status) {
-  const statusMap = {
+  const map = {
     'created': '✅ Creado',
     'duplicate': '⚠️ Duplicado',
-    'invalid': '❌ Inválido',
-    'processing': '⏳ Procesando'
+    'invalid': '❌ Inválido'
   }
-  return statusMap[status] || status
+  return map[status] || status
 }
 
 function getStatusCount(status) {
-  return scannedOrders.value.filter(order => order.status === status).length
+  return scannedOrders.value.filter(o => o.status === status).length
 }
 
-function formatTime(timestamp) {
-  return new Date(timestamp).toLocaleTimeString('es-CL', {
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit'
-  })
-}
-
-function formatDateTime(timestamp) {
-  return new Date(timestamp).toLocaleString('es-CL', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit'
-  })
-}
-
-// ==================== LIFECYCLE HOOKS ====================
-
-onMounted(async () => {
-  console.log('🚀 MLScanner montado')
-  if (checkExistingAccess()) {
-    await initializeScanner()
+// Lifecycle
+onMounted(() => {
+  if (localStorage.getItem('scanner_access') === 'granted') {
+    isAccessGranted.value = true
+    loadClients()
   }
 })
 
 onUnmounted(() => {
-  console.log('🔴 MLScanner desmontado')
-  
   stopCamera()
-  
-  if (scannerInterval) {
-    clearInterval(scannerInterval)
-  }
-  
-  console.log('🧹 Cleanup completado')
+})
+
+// Filtro de clientes
+computed(() => {
+  const search = clientSearch.value.toLowerCase()
+  filteredClients.value = search
+    ? clients.value.filter(c => c.name.toLowerCase().includes(search))
+    : clients.value
 })
 </script>
+
 <style scoped>
-/* ==================== VARIABLES CSS ==================== */
-:root {
-  --envigo-primary: #8BC53F;
-  --envigo-primary-dark: #7BA82F;
-  --envigo-primary-light: #A4D65E;
-  --envigo-gradient: linear-gradient(135deg, #8BC53F 0%, #A4D65E 100%);
-  
-  --color-success: #10b981;
-  --color-success-bg: #dcfce7;
-  --color-success-text: #166534;
-  
-  --color-warning: #f59e0b;
-  --color-warning-bg: #fef3c7;
-  --color-warning-text: #92400e;
-  
-  --color-error: #ef4444;
-  --color-error-bg: #fecaca;
-  --color-error-text: #991b1b;
-  
-  --color-info: #3b82f6;
-  --color-info-bg: #dbeafe;
-  --color-info-text: #1e40af;
-  
-  --bg-primary: #ffffff;
-  --bg-secondary: #f8fafc;
-  --bg-tertiary: #f1f5f9;
-  
-  --text-primary: #1a202c;
-  --text-secondary: #64748b;
-  --text-tertiary: #94a3b8;
-  
-  --border-light: #e2e8f0;
-  --border-medium: #cbd5e0;
-  
-  --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.05);
-  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.1);
-  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.15);
-  --shadow-envigo: 0 4px 12px rgba(139, 197, 63, 0.3);
-  
-  --radius-sm: 6px;
-  --radius-md: 12px;
-  --radius-lg: 16px;
-  --radius-xl: 24px;
-  
-  --transition-fast: 0.15s ease;
-  --transition-normal: 0.2s ease;
-  --transition-slow: 0.3s ease;
-}
-
-/* ==================== BASE STYLES ==================== */
-.ml-scanner-container {
-  min-height: 100vh;
-  background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  color: var(--text-primary);
-  line-height: 1.5;
-}
-
 * {
   box-sizing: border-box;
+  margin: 0;
+  padding: 0;
 }
 
-/* ==================== HEADER DEL SCANNER ==================== */
-.scanner-header {
-  background: var(--envigo-gradient);
+.scanner-app {
+  min-height: 100vh;
+  background: #f5f5f5;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+/* === ACCESS SCREEN === */
+.access-screen {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  padding: 20px;
+}
+
+.access-container {
+  background: white;
+  border-radius: 20px;
+  padding: 40px 30px;
+  width: 100%;
+  max-width: 400px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+}
+
+.logo {
+  text-align: center;
+  margin-bottom: 30px;
+}
+
+.logo-icon {
+  font-size: 60px;
+  margin-bottom: 10px;
+}
+
+.logo h1 {
+  font-size: 28px;
+  color: #333;
+  margin-bottom: 5px;
+}
+
+.logo p {
+  color: #666;
+  font-size: 16px;
+}
+
+.access-form input {
+  width: 100%;
+  padding: 15px;
+  border: 2px solid #e0e0e0;
+  border-radius: 10px;
+  font-size: 16px;
+  margin-bottom: 15px;
+  transition: border-color 0.3s;
+}
+
+.access-form input:focus {
+  outline: none;
+  border-color: #667eea;
+}
+
+.btn-primary {
+  width: 100%;
+  padding: 15px;
+  background: #667eea;
   color: white;
-  padding: 1.5rem 1rem;
-  box-shadow: var(--shadow-envigo);
+  border: none;
+  border-radius: 10px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.3s;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: #5568d3;
+}
+
+.btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.help-text {
+  text-align: center;
+  color: #999;
+  font-size: 14px;
+  margin-top: 15px;
+}
+
+/* === APP HEADER === */
+.app-header {
+  background: white;
+  padding: 15px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
   position: sticky;
   top: 0;
   z-index: 100;
 }
 
-.header-content {
-  max-width: 1200px;
-  margin: 0 auto;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 1rem;
+.header-left h1 {
+  font-size: 20px;
+  color: #333;
+  margin-bottom: 5px;
 }
 
-.logo-section h1 {
-  font-size: clamp(20px, 4vw, 28px);
-  font-weight: 700;
-  margin: 0;
-  letter-spacing: -0.025em;
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-}
-
-.logo-section p {
-  opacity: 0.9;
-  margin: 0;
-  font-size: 14px;
-  font-weight: 400;
-}
-
-.session-info {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 6px;
-}
-
-.client-name {
-  font-weight: 600;
-  font-size: 16px;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
-}
-
-.scan-count {
-  background: rgba(255, 255, 255, 0.2);
+.client-badge {
+  background: #667eea;
+  color: white;
   padding: 4px 12px;
   border-radius: 20px;
   font-size: 12px;
   font-weight: 500;
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-/* ==================== SELECCIÓN DE CLIENTE ==================== */
-.client-selection {
-  max-width: 700px;
-  margin: 2rem auto;
-  padding: 0 1rem;
-}
-
-.selection-card {
-  background: var(--bg-primary);
-  border-radius: var(--radius-lg);
-  padding: 2.5rem;
-  box-shadow: var(--shadow-lg);
-  border: 1px solid var(--border-light);
-}
-
-.selection-card h2 {
-  color: var(--text-primary);
-  margin: 0 0 0.5rem 0;
-  font-weight: 700;
-  font-size: 24px;
-}
-
-.selection-card > p {
-  color: var(--text-secondary);
-  margin: 0 0 2rem 0;
-  font-size: 16px;
-}
-
-/* Buscador */
-.search-container {
-  margin: 1.5rem 0 2rem 0;
-}
-
-.search-input-wrapper {
-  position: relative;
-  display: flex;
-  align-items: center;
-}
-
-.search-icon {
-  position: absolute;
-  left: 16px;
-  z-index: 2;
-  color: var(--text-secondary);
-  font-size: 16px;
-}
-
-.client-search {
-  width: 100%;
-  padding: 14px 16px 14px 48px;
-  border: 2px solid var(--border-light);
-  border-radius: var(--radius-md);
-  font-size: 16px;
-  background: var(--bg-primary);
-  color: var(--text-primary);
-  transition: all var(--transition-normal);
-  outline: none;
-}
-
-.client-search::placeholder {
-  color: var(--text-tertiary);
-}
-
-.client-search:focus {
-  border-color: var(--envigo-primary);
-  box-shadow: 0 0 0 3px rgba(139, 197, 63, 0.1);
-}
-
-.clear-search {
-  position: absolute;
-  right: 12px;
-  background: var(--text-tertiary);
-  color: white;
+.btn-logout {
+  padding: 8px 16px;
+  background: #f5f5f5;
   border: none;
-  border-radius: 50%;
-  width: 24px;
-  height: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 12px;
+  border-radius: 8px;
   cursor: pointer;
-  transition: all var(--transition-fast);
+  font-size: 14px;
+  color: #666;
 }
 
-.clear-search:hover {
-  background: var(--text-secondary);
-  transform: scale(1.1);
+/* === CLIENT SELECT === */
+.client-select {
+  padding: 20px;
 }
 
-/* Lista de Clientes */
-.clients-list {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  max-height: 400px;
-  overflow-y: auto;
-  padding-right: 8px;
+.client-select h2 {
+  font-size: 24px;
+  margin-bottom: 20px;
+  color: #333;
 }
 
-/* Scrollbar personalizado */
-.clients-list::-webkit-scrollbar {
-  width: 6px;
+.search-input {
+  width: 100%;
+  padding: 12px;
+  border: 2px solid #e0e0e0;
+  border-radius: 10px;
+  font-size: 16px;
+  margin-bottom: 20px;
 }
 
-.clients-list::-webkit-scrollbar-track {
-  background: var(--bg-tertiary);
-  border-radius: 3px;
-}
-
-.clients-list::-webkit-scrollbar-thumb {
-  background: var(--border-medium);
-  border-radius: 3px;
-}
-
-.clients-list::-webkit-scrollbar-thumb:hover {
-  background: var(--envigo-primary);
+.clients-grid {
+  display: grid;
+  gap: 15px;
 }
 
 .client-card {
+  background: white;
+  padding: 15px;
+  border-radius: 12px;
   display: flex;
   align-items: center;
-  padding: 16px;
-  background: var(--bg-secondary);
-  border: 2px solid var(--border-light);
-  border-radius: var(--radius-md);
+  gap: 15px;
   cursor: pointer;
-  transition: all var(--transition-normal);
-  position: relative;
-  overflow: hidden;
+  transition: transform 0.2s, box-shadow 0.2s;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
 }
 
-.client-card::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: -100%;
-  width: 100%;
-  height: 100%;
-  background: linear-gradient(90deg, transparent, rgba(139, 197, 63, 0.1), transparent);
-  transition: left 0.5s ease;
-}
-
-.client-card:hover {
-  border-color: var(--envigo-primary);
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-envigo);
-  background: white;
-}
-
-.client-card:hover::before {
-  left: 100%;
+.client-card:active {
+  transform: scale(0.98);
 }
 
 .client-avatar {
-  width: 48px;
-  height: 48px;
-  background: var(--envigo-gradient);
-  color: white;
+  width: 50px;
+  height: 50px;
   border-radius: 50%;
+  background: #667eea;
+  color: white;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-weight: 700;
-  font-size: 18px;
-  margin-right: 16px;
-  flex-shrink: 0;
-  box-shadow: var(--shadow-sm);
-}
-
-.client-info {
-  flex: 1;
-  min-width: 0;
+  font-size: 24px;
+  font-weight: 600;
 }
 
 .client-info h3 {
-  margin: 0 0 4px 0;
-  color: var(--text-primary);
-  font-weight: 600;
   font-size: 16px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  color: #333;
+  margin-bottom: 4px;
 }
 
 .client-info p {
-  margin: 0 0 8px 0;
-  color: var(--text-secondary);
   font-size: 14px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  color: #999;
 }
 
-.client-meta {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  flex-wrap: wrap;
+/* === SCANNER ACTIVE === */
+.scanner-active {
+  padding: 20px;
 }
 
-.client-type {
-  background: var(--envigo-primary);
-  color: white;
-  padding: 2px 8px;
-  border-radius: 12px;
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.025em;
-}
-
-.client-phone {
-  color: var(--text-tertiary);
-  font-size: 12px;
-}
-
-.client-arrow {
-  color: var(--envigo-primary);
-  font-size: 20px;
-  font-weight: bold;
-  margin-left: 12px;
-  flex-shrink: 0;
-  transition: transform var(--transition-normal);
-}
-
-.client-card:hover .client-arrow {
-  transform: translateX(4px);
-}
-
-/* Estado vacío de clientes */
-.empty-clients {
-  text-align: center;
-  padding: 3rem 1rem;
-  color: var(--text-secondary);
-}
-
-.empty-icon {
-  font-size: 48px;
-  margin-bottom: 1rem;
-}
-
-.empty-clients h3 {
-  margin: 0 0 0.5rem 0;
-  color: var(--text-primary);
-  font-size: 18px;
-}
-
-.empty-clients p {
-  margin: 0;
-  font-size: 14px;
-}
-
-/* Loading clientes */
-.loading-clients {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  padding: 2rem;
-  color: var(--text-secondary);
-}
-
-.spinner-small {
-  width: 20px;
-  height: 20px;
-  border: 2px solid var(--border-light);
-  border-top: 2px solid var(--envigo-primary);
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-}
-
-/* ==================== INTERFACE DEL SCANNER ==================== */
-.scanner-interface {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 1rem;
-}
-
-/* Barra de acciones */
-.action-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  margin-bottom: 2rem;
-  padding: 1rem;
-  background: var(--bg-primary);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-sm);
-  border: 1px solid var(--border-light);
-}
-
-.action-center {
-  flex: 1;
-  text-align: center;
-}
-
-.current-client {
-  color: var(--text-secondary);
-  font-size: 14px;
-}
-
-.current-client strong {
-  color: var(--text-primary);
-}
-
-/* Área principal del scanner */
-.scanner-main-area {
+.stats-bar {
   display: grid;
-  gap: 2rem;
-  grid-template-columns: 2fr 1fr;
-  align-items: start;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-bottom: 20px;
 }
 
-/* Card del scanner */
-.scanner-card {
-  background: var(--bg-primary);
-  border-radius: var(--radius-lg);
-  padding: 2rem;
-  box-shadow: var(--shadow-md);
-  border: 1px solid var(--border-light);
-}
-
-.scanner-header-card {
+.stat {
+  background: white;
+  padding: 15px;
+  border-radius: 12px;
   text-align: center;
-  margin-bottom: 2rem;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
 }
 
-.scanner-header-card h3 {
-  margin: 0 0 0.5rem 0;
-  color: var(--text-primary);
-  font-size: 20px;
-  font-weight: 600;
-}
-
-.scanner-header-card p {
-  margin: 0;
-  color: var(--text-secondary);
-  font-size: 14px;
-}
-
-/* Contenedor del video */
-.video-container {
-  position: relative;
-  width: 100%;
-  max-width: 400px;
-  margin: 0 auto 2rem auto;
-  border-radius: var(--radius-md);
-  overflow: hidden;
-  background: #000;
-  box-shadow: var(--shadow-md);
-}
-
-.scanner-video {
-  width: 100%;
-  height: 300px;
-  object-fit: cover;
+.stat-number {
   display: block;
+  font-size: 28px;
+  font-weight: 700;
+  color: #333;
 }
 
-/* Overlay del scanner */
-.scanner-overlay {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
+.stat-label {
+  display: block;
+  font-size: 12px;
+  color: #999;
+  margin-top: 5px;
+}
+
+.stat.success .stat-number { color: #4caf50; }
+.stat.warning .stat-number { color: #ff9800; }
+
+/* === CAPTURE ZONE === */
+.capture-zone {
+  background: white;
+  border-radius: 12px;
+  overflow: hidden;
+  margin-bottom: 20px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  aspect-ratio: 4/3;
+  position: relative;
+}
+
+.video-container,
+.preview-container,
+.idle-state {
+  width: 100%;
+  height: 100%;
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  pointer-events: none;
-  background: rgba(0, 0, 0, 0.2);
+}
+
+.video-container video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .scan-frame {
-  position: relative;
-  width: 80%;
-  height: 60%;
-  border: 2px solid rgba(139, 197, 63, 0.8);
-  border-radius: 8px;
-}
-
-.scan-corners {
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  inset: 20px;
+  border: 2px dashed white;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .corner {
   position: absolute;
   width: 20px;
   height: 20px;
-  border: 3px solid var(--envigo-primary);
+  border: 3px solid white;
 }
 
-.corner.top-left {
-  top: -3px;
-  left: -3px;
-  border-right: none;
-  border-bottom: none;
-}
+.corner.tl { top: 0; left: 0; border-right: none; border-bottom: none; }
+.corner.tr { top: 0; right: 0; border-left: none; border-bottom: none; }
+.corner.bl { bottom: 0; left: 0; border-right: none; border-top: none; }
+.corner.br { bottom: 0; right: 0; border-left: none; border-top: none; }
 
-.corner.top-right {
-  top: -3px;
-  right: -3px;
-  border-left: none;
-  border-bottom: none;
-}
-
-.corner.bottom-left {
-  bottom: -3px;
-  left: -3px;
-  border-right: none;
-  border-top: none;
-}
-
-.corner.bottom-right {
-  bottom: -3px;
-  right: -3px;
-  border-left: none;
-  border-top: none;
-}
-
-.scan-line {
-  position: absolute;
-  top: 50%;
-  left: 10%;
-  right: 10%;
-  height: 2px;
-  background: var(--envigo-primary);
-  transform: translateY(-50%);
-  opacity: 0;
-  box-shadow: 0 0 10px var(--envigo-primary);
-}
-
-.scan-line.active {
-  animation: scanAnimation 2s linear infinite;
-}
-
-@keyframes scanAnimation {
-  0% {
-    transform: translateY(-100px);
-    opacity: 0;
-  }
-  50% {
-    opacity: 1;
-  }
-  100% {
-    transform: translateY(100px);
-    opacity: 0;
-  }
-}
-
-.scan-instructions {
-  margin-top: 1rem;
-  text-align: center;
+.scan-instruction {
+  background: rgba(0,0,0,0.7);
   color: white;
-  font-size: 12px;
-  background: rgba(0, 0, 0, 0.6);
-  padding: 8px 16px;
+  padding: 10px 20px;
   border-radius: 20px;
-  backdrop-filter: blur(5px);
+  font-size: 14px;
 }
 
-/* Mensaje sin video */
-.no-video-message {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  display: flex;
+.preview-container img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.idle-state {
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  background: var(--bg-tertiary);
-  color: var(--text-secondary);
+  color: #ccc;
 }
 
 .camera-icon {
-  font-size: 48px;
-  margin-bottom: 12px;
-  opacity: 0.6;
+  font-size: 60px;
+  margin-bottom: 15px;
 }
 
-/* Controles del scanner */
-.scanner-controls {
+/* === ACTION BUTTONS === */
+.action-buttons {
   display: flex;
-  gap: 12px;
-  justify-content: center;
-  margin-bottom: 2rem;
+  gap: 10px;
+  margin-bottom: 20px;
 }
 
-.scanner-btn {
-  min-width: 140px;
-}
-
-/* Divisor */
-.scanner-divider {
-  position: relative;
-  text-align: center;
-  margin: 2rem 0;
-  color: var(--text-tertiary);
-}
-
-.scanner-divider::before {
-  content: '';
-  position: absolute;
-  top: 50%;
-  left: 0;
-  right: 0;
-  height: 1px;
-  background: var(--border-light);
-  z-index: 1;
-}
-
-.scanner-divider span {
-  background: var(--bg-primary);
-  padding: 0 1rem;
-  position: relative;
-  z-index: 2;
-  font-weight: 500;
-}
-
-/* Sección de upload */
-.upload-section {
-  text-align: center;
-}
-
-.upload-section h4 {
-  margin: 0 0 1rem 0;
-  color: var(--text-primary);
-  font-size: 16px;
+.btn-large {
+  flex: 1;
+  padding: 18px;
+  font-size: 18px;
   font-weight: 600;
+  border-radius: 12px;
 }
 
-.upload-area {
-  border: 2px dashed var(--envigo-primary);
-  border-radius: var(--radius-md);
-  padding: 2rem 1rem;
-  background: rgba(139, 197, 63, 0.05);
-  transition: all var(--transition-normal);
-  cursor: pointer;
-}
-
-.upload-area:hover {
-  background: rgba(139, 197, 63, 0.1);
-  border-color: var(--envigo-primary-dark);
-}
-
-.file-input-hidden {
-  display: none;
-}
-
-.upload-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 12px 24px;
-  background: var(--envigo-primary);
-  color: white;
-  border-radius: var(--radius-sm);
-  font-weight: 600;
-  cursor: pointer;
-  transition: all var(--transition-normal);
+.btn-secondary {
+  padding: 15px 20px;
+  background: #f5f5f5;
   border: none;
-}
-
-.upload-button:hover {
-  background: var(--envigo-primary-dark);
-  transform: translateY(-1px);
-  box-shadow: var(--shadow-envigo);
-}
-
-.upload-icon {
+  border-radius: 10px;
+  cursor: pointer;
   font-size: 16px;
 }
 
-.upload-hint {
-  margin: 0.5rem 0 0 0;
-  color: var(--text-tertiary);
-  font-size: 12px;
+/* === LAST SCAN === */
+.last-scan {
+  background: white;
+  padding: 20px;
+  border-radius: 12px;
+  margin-bottom: 20px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
 }
 
-/* ==================== SIDEBAR DEL SCANNER ==================== */
-.scanner-sidebar {
+.last-scan h3 {
+  font-size: 14px;
+  color: #999;
+  margin-bottom: 10px;
+}
+
+.scan-details {
   display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
+  justify-content: space-between;
+  align-items: center;
 }
 
-/* Último código escaneado */
-.last-scanned-card {
-  background: var(--bg-primary);
-  border-radius: var(--radius-md);
-  padding: 1.5rem;
-  box-shadow: var(--shadow-sm);
-  border: 1px solid var(--border-light);
-  border-left: 4px solid var(--envigo-primary);
-}
-
-.last-scanned-card h3 {
-  margin: 0 0 1rem 0;
-  color: var(--text-primary);
+.scan-details code {
   font-size: 16px;
   font-weight: 600;
 }
 
-.scanned-details {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.barcode-display {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.barcode-label {
+.status {
+  padding: 6px 12px;
+  border-radius: 20px;
   font-size: 12px;
-  color: var(--text-secondary);
-  font-weight: 500;
-}
-
-.barcode-value {
-  font-family: 'Courier New', monospace;
-  background: var(--bg-tertiary);
-  padding: 6px 8px;
-  border-radius: var(--radius-sm);
-  font-size: 13px;
-  border: 1px solid var(--border-light);
-  color: var(--text-primary);
-  word-break: break-all;
-}
-
-.status-display {
-  display: flex;
-  justify-content: center;
-}
-
-.timestamp-display {
-  text-align: center;
-  color: var(--text-tertiary);
-  font-size: 12px;
-}
-
-/* Estadísticas de sesión */
-.session-stats-card {
-  background: var(--bg-primary);
-  border-radius: var(--radius-md);
-  padding: 1.5rem;
-  box-shadow: var(--shadow-sm);
-  border: 1px solid var(--border-light);
-}
-
-.session-stats-card h3 {
-  margin: 0 0 1rem 0;
-  color: var(--text-primary);
-  font-size: 16px;
   font-weight: 600;
 }
 
-.stats-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-}
+.status.created { background: #e8f5e9; color: #4caf50; }
+.status.duplicate { background: #fff3e0; color: #ff9800; }
+.status.invalid { background: #ffebee; color: #f44336; }
 
-.stat-item {
-  text-align: center;
-  padding: 12px 8px;
-  background: var(--bg-secondary);
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border-light);
-}
-
-.stat-item.success {
-  background: var(--color-success-bg);
-  border-color: var(--color-success);
-}
-
-.stat-item.warning {
-  background: var(--color-warning-bg);
-  border-color: var(--color-warning);
-}
-
-.stat-item.error {
-  background: var(--color-error-bg);
-  border-color: var(--color-error);
-}
-
-.stat-number {
-  display: block;
-  font-size: 20px;
-  font-weight: 700;
-  color: var(--text-primary);
-}
-
-.stat-item.success .stat-number {
-  color: var(--color-success-text);
-}
-
-.stat-item.warning .stat-number {
-  color: var(--color-warning-text);
-}
-
-.stat-item.error .stat-number {
-  color: var(--color-error-text);
-}
-
-.stat-label {
-  display: block;
-  font-size: 11px;
-  color: var(--text-secondary);
-  font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.025em;
-  margin-top: 4px;
-}
-
-/* Tips card */
-.tips-card {
-  background: linear-gradient(135deg, rgba(139, 197, 63, 0.1) 0%, rgba(164, 214, 94, 0.1) 100%);
-  border-radius: var(--radius-md);
-  padding: 1.5rem;
-  border: 1px solid rgba(139, 197, 63, 0.2);
-}
-
-.tips-card h3 {
-  margin: 0 0 1rem 0;
-  color: var(--text-primary);
+/* === RESULTS === */
+.btn-results {
+  width: 100%;
+  padding: 18px;
+  background: #667eea;
+  color: white;
+  border: none;
+  border-radius: 12px;
   font-size: 16px;
   font-weight: 600;
+  cursor: pointer;
 }
 
-.tips-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+.results-screen {
+  padding: 20px;
 }
 
-.tips-list li {
-  position: relative;
-  padding-left: 20px;
-  color: var(--text-secondary);
-  font-size: 13px;
-  line-height: 1.4;
-}
-
-.tips-list li::before {
-  content: '💡';
-  position: absolute;
-  left: 0;
-  top: 0;
-  font-size: 12px;
-}
-
-/* ==================== VISTA DE RESULTADOS ==================== */
-.results-view {
-  max-width: 1000px;
-  margin: 0 auto;
-  padding: 1rem;
-}
-
-/* Header de resultados */
 .results-header {
   display: flex;
-  align-items: center;
   justify-content: space-between;
-  margin-bottom: 2rem;
-  padding: 1.5rem;
-  background: var(--bg-primary);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-md);
-  border: 1px solid var(--border-light);
-  gap: 1rem;
+  align-items: center;
+  margin-bottom: 20px;
 }
 
-.results-title-section {
-  flex: 1;
-  text-align: center;
-}
-
-.results-title-section h2 {
-  margin: 0 0 0.25rem 0;
-  color: var(--text-primary);
-  font-size: 24px;
-  font-weight: 700;
-}
-
-.results-count {
-  color: var(--text-secondary);
+.btn-back,
+.btn-finalize {
+  padding: 10px 16px;
+  border: none;
+  border-radius: 8px;
   font-size: 14px;
+  cursor: pointer;
 }
 
-/* Resumen de sesión */
-.session-summary {
-  margin-bottom: 2rem;
+.btn-back {
+  background: #f5f5f5;
 }
 
-.summary-card {
-  background: var(--envigo-gradient);
+.btn-finalize {
+  background: #4caf50;
   color: white;
-  border-radius: var(--radius-lg);
-  padding: 2rem;
-  box-shadow: var(--shadow-envigo);
 }
 
-.summary-card h3 {
-  margin: 0 0 1.5rem 0;
-  font-size: 20px;
-  font-weight: 600;
-  text-align: center;
+.btn-finalize:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
-.summary-stats {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-  gap: 1rem;
-}
-
-.summary-item {
-  text-align: center;
-  padding: 1rem;
-  background: rgba(255, 255, 255, 0.15);
-  border-radius: var(--radius-md);
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-}
-
-.summary-item.total {
-  background: rgba(255, 255, 255, 0.25);
-}
-
-.summary-item .number {
-  display: block;
-  font-size: 28px;
-  font-weight: 700;
-  margin-bottom: 4px;
-}
-
-.summary-item .label {
-  font-size: 12px;
-  opacity: 0.9;
-  font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.025em;
-}
-
-/* Lista de resultados */
 .results-list {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
 }
 
-.result-card {
+.result-item {
+  background: white;
+  padding: 15px;
+  border-radius: 12px;
   display: flex;
+  gap: 15px;
   align-items: center;
-  padding: 1rem;
-  background: var(--bg-primary);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-sm);
-  border: 1px solid var(--border-light);
-  transition: all var(--transition-normal);
-  position: relative;
-  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
 }
 
-.result-card::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 4px;
-  background: var(--text-tertiary);
-}
-
-.result-card.created::before {
-  background: var(--color-success);
-}
-
-.result-card.duplicate::before {
-  background: var(--color-warning);
-}
-
-.result-card.invalid::before {
-  background: var(--color-error);
-}
-
-.result-card:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-md);
-}
-
-.result-index {
+.result-number {
   width: 40px;
   height: 40px;
-  background: var(--bg-tertiary);
   border-radius: 50%;
+  background: #f5f5f5;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-weight: 600;
-  color: var(--text-secondary);
-  margin-right: 16px;
-  flex-shrink: 0;
-  font-size: 14px;
+  font-weight: 700;
+  color: #666;
 }
 
 .result-content {
   flex: 1;
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 1rem;
+  flex-direction: column;
+  gap: 5px;
 }
 
-.result-main {
-  flex: 1;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 1rem;
-}
-
-.barcode-info {
-  flex: 1;
-}
-
-.result-barcode {
-  font-family: 'Courier New', monospace;
-  background: var(--bg-tertiary);
-  padding: 4px 8px;
-  border-radius: var(--radius-sm);
-  font-size: 13px;
-  border: 1px solid var(--border-light);
-  color: var(--text-primary);
+.result-content code {
+  font-size: 14px;
   font-weight: 600;
-  display: block;
-  margin-bottom: 4px;
-}
-
-.result-timestamp {
-  color: var(--text-tertiary);
-  font-size: 11px;
-  font-weight: 500;
 }
 
 .result-status {
-  flex-shrink: 0;
-}
-
-.result-actions {
-  flex-shrink: 0;
-}
-
-.btn-view-order {
-  padding: 6px 12px;
-  background: var(--color-info);
-  color: white;
-  border: none;
-  border-radius: var(--radius-sm);
   font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all var(--transition-normal);
 }
 
-.btn-view-order:hover {
-  background: var(--color-info-text);
-  transform: translateY(-1px);
-}
-
-/* Estado vacío de resultados */
-.empty-results {
-  text-align: center;
-  padding: 4rem 1rem;
-  color: var(--text-secondary);
-}
-
-.empty-results .empty-icon {
-  font-size: 64px;
-  margin-bottom: 1rem;
-  opacity: 0.6;
-}
-
-.empty-results h3 {
-  margin: 0 0 0.5rem 0;
-  color: var(--text-primary);
-  font-size: 20px;
-}
-
-.empty-results p {
-  margin: 0;
-  font-size: 14px;
-}
-
-/* ==================== BADGES Y ESTADOS ==================== */
-.status-badge {
-  padding: 4px 12px;
-  border-radius: 20px;
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.025em;
-  white-space: nowrap;
-}
-
-.status-badge.created {
-  background: var(--color-success-bg);
-  color: var(--color-success-text);
-}
-
-.status-badge.duplicate {
-  background: var(--color-warning-bg);
-  color: var(--color-warning-text);
-}
-
-.status-badge.invalid {
-  background: var(--color-error-bg);
-  color: var(--color-error-text);
-}
-
-.status-badge.processing {
-  background: var(--color-info-bg);
-  color: var(--color-info-text);
-  animation: pulse 2s infinite;
-}
-
-/* ==================== BOTONES ==================== */
-.btn-primary,
-.btn-secondary,
-.btn-success,
-.btn-info,
-.btn-warning {
-  padding: 12px 24px;
-  border: none;
-  border-radius: var(--radius-sm);
-  font-weight: 600;
-  cursor: pointer;
-  transition: all var(--transition-normal);
-  font-size: 14px;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  text-decoration: none;
-  line-height: 1;
-  white-space: nowrap;
-}
-
-.btn-primary {
-  background: var(--envigo-primary);
-  color: white;
-}
-
-.btn-primary:hover:not(:disabled) {
-  background: var(--envigo-primary-dark);
-  transform: translateY(-1px);
-  box-shadow: var(--shadow-envigo);
-}
-
-.btn-primary:disabled {
-  background: var(--border-medium);
-  color: var(--text-tertiary);
-  cursor: not-allowed;
-  transform: none;
-  box-shadow: none;
-}
-
-.btn-secondary {
-  background: var(--bg-primary);
-  color: var(--text-secondary);
-  border: 2px solid var(--border-light);
-}
-
-.btn-secondary:hover:not(:disabled) {
-  background: var(--bg-secondary);
-  border-color: var(--border-medium);
-  color: var(--text-primary);
-}
-
-.btn-secondary:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.btn-success {
-  background: var(--color-success);
-  color: white;
-}
-
-.btn-success:hover:not(:disabled) {
-  background: #059669;
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
-}
-
-.btn-success:disabled {
-  background: var(--border-medium);
-  color: var(--text-tertiary);
-  cursor: not-allowed;
-  transform: none;
-}
-
-.btn-info {
-  background: var(--color-info);
-  color: white;
-}
-
-.btn-info:hover:not(:disabled) {
-  background: var(--color-info-text);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
-}
-
-.btn-info:disabled {
-  background: var(--border-medium);
-  color: var(--text-tertiary);
-  cursor: not-allowed;
-  transform: none;
-}
-
-.btn-warning {
-  background: var(--color-warning);
-  color: white;
-}
-
-.btn-warning:hover:not(:disabled) {
-  background: #d97706;
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);
-}
-
-/* ==================== OVERLAY DE LOADING ==================== */
+/* === LOADING === */
 .loading-overlay {
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.6);
+  inset: 0;
+  background: rgba(0,0,0,0.8);
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   z-index: 1000;
-  backdrop-filter: blur(4px);
-}
-
-.loading-card {
-  background: var(--bg-primary);
-  padding: 3rem;
-  border-radius: var(--radius-lg);
-  text-align: center;
-  box-shadow: var(--shadow-lg);
-  border: 1px solid var(--border-light);
-  max-width: 400px;
-  margin: 1rem;
-}
-
-.loading-content h3 {
-  margin: 0 0 0.5rem 0;
-  color: var(--text-primary);
-  font-size: 20px;
-  font-weight: 600;
-}
-
-.loading-content p {
-  margin: 0 0 2rem 0;
-  color: var(--text-secondary);
-  font-size: 14px;
+  color: white;
 }
 
 .spinner {
-  width: 48px;
-  height: 48px;
-  border: 4px solid var(--border-light);
-  border-top: 4px solid var(--envigo-primary);
+  width: 50px;
+  height: 50px;
+  border: 4px solid rgba(255,255,255,0.3);
+  border-top-color: white;
   border-radius: 50%;
   animation: spin 1s linear infinite;
-  margin: 0 auto 2rem;
+  margin-bottom: 20px;
 }
 
-.loading-progress {
-  width: 100%;
-  height: 4px;
-  background: var(--border-light);
-  border-radius: 2px;
-  overflow: hidden;
-}
-
-.progress-bar {
-  height: 100%;
-  background: var(--envigo-gradient);
-  border-radius: 2px;
-  animation: progressAnimation 2s ease-in-out infinite;
-}
-
-@keyframes progressAnimation {
-  0% {
-    width: 0%;
-    transform: translateX(-100%);
-  }
-  50% {
-    width: 100%;
-    transform: translateX(0%);
-  }
-  100% {
-    width: 0%;
-    transform: translateX(100%);
-  }
-}
-
-/* ==================== ANIMACIONES ==================== */
 @keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+  to { transform: rotate(360deg); }
 }
 
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.6; }
-}
-
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.scanner-card,
-.last-scanned-card,
-.session-stats-card,
-.tips-card,
-.result-card {
-  animation: fadeIn 0.3s ease-out;
-}
-
-/* ==================== RESPONSIVE DESIGN ==================== */
-
-/* Tablets */
-@media (max-width: 968px) {
-  .scanner-main-area {
-    grid-template-columns: 1fr;
-    gap: 1.5rem;
-  }
-  
-  .scanner-sidebar {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 1rem;
-  }
-  
-  .tips-card {
-    grid-column: 1 / -1;
-  }
-}
-
-/* Móviles */
+/* === RESPONSIVE === */
 @media (max-width: 768px) {
-  .header-content {
-    flex-direction: column;
-    text-align: center;
-    gap: 1rem;
+  .app-header {
+    padding: 12px 15px;
   }
   
-  .session-info {
-    align-items: center;
+  .header-left h1 {
+    font-size: 18px;
   }
   
-  .action-bar {
-    flex-direction: column;
-    gap: 1rem;
+  .scanner-active,
+  .client-select,
+  .results-screen {
+    padding: 15px;
   }
-  
-  .action-center {
-    order: -1;
-  }
-  
-  .scanner-sidebar {
-    grid-template-columns: 1fr;
-  }
-  
-  .scanner-card {
-    padding: 1.5rem;
-  }
-  
-  .results-header {
-    flex-direction: column;
-    gap: 1rem;
-  }
-  
-  .summary-stats {
-    grid-template-columns: 1fr 1fr;
-    gap: 0.75rem;
-  }
-  
-  .result-card {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 12px;
-    padding: 1rem;
-  }
-  
-  .result-index {
-    align-self: center;
-    margin-right: 0;
-    margin-bottom: 8px;
-  }
-  
-  .result-content {
-    width: 100%;
-    flex-direction: column;
-    gap: 12px;
-  }
-  
-  .result-main {
-    width: 100%;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 8px;
-  }
-  
-  .clients-list {
-    max-height: 300px;
-  }
-  
-  .client-card {
-    padding: 12px;
-  }
-  
-  .client-info h3 {
-    font-size: 15px;
-  }
-  
-  .client-info p {
-    font-size: 13px;
-  }
-  
-  .video-container {
-    max-width: 100%;
-  }
-  
-  .scanner-video {
-    height: 250px;
-  }
-}
-
-/* Móviles pequeños */
-@media (max-width: 480px) {
-  .ml-scanner-container {
-    font-size: 14px;
-  }
-  
-  .scanner-header {
-    padding: 1rem;
-  }
-  
-  .logo-section h1 {
-    font-size: 20px;
-  }
-  
-  .selection-card,
-  .scanner-card {
-    padding: 1rem;
-  }
-  
-  .scanner-controls {
-    flex-direction: column;
-    gap: 8px;
-  }
-  
-  .scanner-btn {
-    min-width: auto;
-    width: 100%;
-  }
-  
-  .upload-area {
-    padding: 1.5rem 1rem;
-  }
-  
-  .summary-stats {
-    grid-template-columns: 1fr;
-  }
-  
-  .summary-item .number {
-    font-size: 24px;
-  }
-  
-  .btn-primary,
-  .btn-secondary,
-  .btn-success,
-  .btn-info {
-    padding: 10px 16px;
-    font-size: 13px;
-  }
-}
-
-/* ==================== MODO OSCURO (OPCIONAL) ==================== */
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg-primary: #1a202c;
-    --bg-secondary: #2d3748;
-    --bg-tertiary: #4a5568;
-    
-    --text-primary: #f7fafc;
-    --text-secondary: #e2e8f0;
-    --text-tertiary: #a0aec0;
-    
-    --border-light: #4a5568;
-    --border-medium: #718096;
-  }
-  
-  .ml-scanner-container {
-    background: linear-gradient(135deg, #1a202c 0%, #2d3748 100%);
-  }
-  
-  .scanner-video {
-    border: 1px solid var(--border-light);
-  }
-  
-  .no-video-message {
-    background: var(--bg-tertiary);
-  }
-}
-
-/* ==================== IMPRESIÓN ==================== */
-@media print {
-  .scanner-header,
-  .action-bar,
-  .scanner-controls,
-  .upload-section,
-  .loading-overlay {
-    display: none !important;
-  }
-  
-  .ml-scanner-container {
-    background: white !important;
-    color: black !important;
-  }
-  
-  .results-view {
-    margin: 0;
-    padding: 1rem;
-  }
-  
-  .result-card {
-    break-inside: avoid;
-    box-shadow: none !important;
-    border: 1px solid #ddd !important;
-  }
-}
-
-/* ==================== ACCESIBILIDAD ==================== */
-@media (prefers-reduced-motion: reduce) {
-  * {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-    scroll-behavior: auto !important;
-  }
-  
-  .scan-line {
-    animation: none !important;
-  }
-  
-  .spinner {
-    animation: none !important;
-    border-top-color: var(--envigo-primary) !important;
-  }
-}
-
-/* Focus para navegación por teclado */
-.btn-primary:focus,
-.btn-secondary:focus,
-.btn-success:focus,
-.btn-info:focus,
-.client-search:focus,
-.client-card:focus,
-.upload-button:focus {
-  outline: 2px solid var(--envigo-primary);
-  outline-offset: 2px;
-}
-
-/* Estados de hover solo en dispositivos que lo soportan */
-@media (hover: hover) {
-  .client-card:hover,
-  .result-card:hover,
-  .upload-area:hover {
-    /* Los estilos hover ya están definidos arriba */
-  }
-}
-
-/* ==================== UTILIDADES ==================== */
-.sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
-}
-
-.text-center {
-  text-align: center;
-}
-
-.text-left {
-  text-align: left;
-}
-
-.text-right {
-  text-align: right;
-}
-
-.hidden {
-  display: none !important;
-}
-
-.invisible {
-  visibility: hidden;
-}
-
-.opacity-50 {
-  opacity: 0.5;
-}
-
-.pointer-events-none {
-  pointer-events: none;
 }
 </style>
