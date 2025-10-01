@@ -205,6 +205,9 @@ const routes = [
     ]
   },
 
+
+  
+
   // ==================== RUTAS ESPECIALES ====================
   {
     path: '/integrations/mercadolibre/callback',
