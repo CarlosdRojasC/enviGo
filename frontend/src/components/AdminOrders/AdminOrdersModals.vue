@@ -788,7 +788,8 @@
       </div>
     </Modal>
     <DeliveryProofModal
-  v-model="showDeliveryProof"
+  :model-value="showDeliveryProof"
+  @update:model-value="(value) => !value && $emit('close-delivery-proof')"
   :order="selectedOrder"
   @submit="handleDeliverySubmit"
 />
