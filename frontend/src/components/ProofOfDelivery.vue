@@ -153,30 +153,36 @@ const hasPhotos = computed(() => {
 })
 
 const deliveryPhotos = computed(() => {
-  // Usamos un Set para que nunca haya URLs duplicadas.
   const photoUrls = new Set();
   const proof = props.order?.proof_of_delivery;
 
   if (proof) {
-    // 1. Buscamos en la nueva ubicación: el array 'podUrls' DENTRO de 'proof_of_delivery'
+    // ✅ BUSCAR EN photo_urls (donde Cloudinary las guarda)
+    if (Array.isArray(proof.photo_urls) && proof.photo_urls.length > 0) {
+      proof.photo_urls.forEach(url => {
+        if (url) photoUrls.add(url);
+      });
+    }
+
+    // Fallback para datos antiguos de Shipday
     if (Array.isArray(proof.podUrls) && proof.podUrls.length > 0) {
       proof.podUrls.forEach(url => {
         if (url) photoUrls.add(url);
       });
     }
 
-    // 2. Por si acaso, también buscamos en 'photo_url' para datos antiguos
+    // Fallback para formato antiguo singular
     if (proof.photo_url) {
       photoUrls.add(proof.photo_url);
     }
   }
 
-  // 3. Convertimos el Set a un array con el formato que el template espera.
   return Array.from(photoUrls).map((url, index) => ({
     url,
     loading: imageLoadStates.value[index] !== 'loaded'
   }));
 });
+
 
 const hasSignature = computed(() => {
   if (!hasProofOfDelivery.value) return false
