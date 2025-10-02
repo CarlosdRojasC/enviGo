@@ -181,29 +181,26 @@ function extractMLLabelData(text) {
     reference: null
   };
 
-  // 1. Extraer datos clave usando el texto completo
-  const cleanText = text.replace(/\n+/g, ' ').replace(/\s{2,}/g, ' ').trim();
+  // 1. EXTRAER DATOS PRINCIPALES
+  // Se usa el texto con saltos de línea para algunas búsquedas y texto limpio para otras.
+  const cleanText = text.replace(/\n/g, ' ').replace(/\s{2,}/g, ' ').trim();
 
-  // Número de envío (busca "Envío" o "Pack ID")
-  let envioMatch = cleanText.match(/Env[ií]o\s*[:\s]\s*(\d{10,15})/i) || cleanText.match(/Pack\s*ID\s*[:\s]\s*(\d{10,20})/i);
-  if (envioMatch) data.shipping_number = envioMatch[1];
+  // Número de envío y Venta (más robusto)
+  data.shipping_number = (cleanText.match(/Env[ií]o\s*[:\s]\s*(\d{10,15})/i) || cleanText.match(/Pack\s*ID\s*[:\s]\s*(\d{10,20})/i) || [])[1] || null;
+  data.sale_id = (cleanText.match(/Venta\s*[:\s]\s*(\d{10,20})/i) || cleanText.match(/Pack\s*ID\s*[:\s]\s*(\d{10,20})/i) || [])[1] || null;
 
-  // ID de Venta
-  const saleMatch = cleanText.match(/Venta\s*[:\s]\s*(\d{10,20})/i) || cleanText.match(/Pack\s*ID\s*[:\s]\s*(\d{10,20})/i);
-  if (saleMatch) data.sale_id = saleMatch[1];
-  
-  // Nombre, Dirección y Referencia (con expresiones "no codiciosas" para evitar capturar texto de más)
+  // Destinatario, Dirección y Referencia (con límites para no capturar de más)
   const destinatarioMatch = cleanText.match(/Destinatario\s*[:\s](.+?)(?=\s*\(|Direcci[oó]n:|Venta:|$)/i);
   if (destinatarioMatch) data.customer_name = destinatarioMatch[1].trim();
 
-  const direccionMatch = cleanText.match(/Direcci[oó]n\s*[:\s](.+?)(?=\s*Referencia:|Comuna:|Pack ID:|Destinatario:|$)/i);
+  const direccionMatch = text.match(/Direcci[oó]n\s*[:\s]([^\n]+)/i);
   if (direccionMatch) data.address = direccionMatch[1].trim();
 
-  const referenciaMatch = cleanText.match(/Referencia\s*[:\s](.+?)(?=\s*Destinatario:|Pedido:|CLP|$)/i);
+  const referenciaMatch = text.match(/Referencia\s*[:\s]([^\n]+)/i);
   if (referenciaMatch) data.reference = referenciaMatch[1].trim();
 
 
-  // 2. Lógica inteligente para encontrar la COMUNA CORRECTA
+  // 2. LÓGICA INTELIGENTE PARA ENCONTRAR LA COMUNA CORRECTA
   const comunas = [
     'HUECHURABA', 'QUILICURA', 'RECOLETA', 'INDEPENDENCIA', 'CONCHALÍ', 'COLINA',
     'SANTIAGO', 'SANTIAGO CENTRO', 'ESTACIÓN CENTRAL', 'QUINTA NORMAL', 'PROVIDENCIA',
@@ -214,32 +211,37 @@ function extractMLLabelData(text) {
     'LA PINTANA', 'LO PRADO'
   ];
 
-  // Definimos un "bloque de búsqueda" alrededor de la dirección del destinatario
+  // Se busca la comuna en el bloque de texto del destinatario para evitar confusiones.
   const lines = text.toUpperCase().split('\n');
-  const addressLineIndex = lines.findIndex(line => line.includes('DIRECCION'));
   const recipientLineIndex = lines.findIndex(line => line.includes('DESTINATARIO'));
+  
+  let searchBlock = text.toUpperCase(); // Fallback por si no encuentra "DESTINATARIO"
+  if (recipientLineIndex !== -1) {
+    // Definimos el área de búsqueda como las 6 líneas ANTERIORES a la del destinatario.
+    const startIndex = Math.max(0, recipientLineIndex - 6);
+    searchBlock = lines.slice(startIndex, recipientLineIndex + 1).join(' ');
+  }
 
-  // Buscamos la comuna en las líneas que rodean la dirección y el destinatario
-  const searchStartIndex = (addressLineIndex > 2) ? addressLineIndex - 2 : 0;
-  const searchEndIndex = (recipientLineIndex > -1) ? recipientLineIndex + 1 : lines.length;
-  const searchBlock = lines.slice(searchStartIndex, searchEndIndex).join(' ');
-
+  // Se ordenan las comunas de más larga a más corta para evitar falsos positivos (ej: "Lo Prado" antes que "Prado").
   const comunasOrdenadas = comunas.sort((a, b) => b.length - a.length);
   for (const comuna of comunasOrdenadas) {
     if (searchBlock.includes(comuna)) {
-      // Capitalizamos el nombre de la comuna correctamente (ej: "Ñuñoa")
       data.commune = comuna.charAt(0) + comuna.slice(1).toLowerCase();
+      // Si la comuna tiene varias palabras (ej: Puente Alto), se capitalizan ambas.
+      if (data.commune.includes(' ')) {
+        data.commune = data.commune.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+      }
       break; 
     }
   }
 
-  // 3. Limpieza final de los datos
-  const capitalize = (str) => str ? str.toLowerCase().replace(/(^|\s)\S/g, char => char.toUpperCase()) : null;
+  // 3. LIMPIEZA FINAL
+  const capitalize = (str) => str ? str.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ') : null;
   data.customer_name = capitalize(data.customer_name);
-  data.address = capitalize(data.address);
   if (data.address && data.commune) {
-    data.address = data.address.replace(new RegExp(data.commune, 'i'), '').replace(/,/g, '').trim();
+    data.address = data.address.replace(new RegExp(data.commune, 'i'), '').replace(/,|\|/g, '').trim();
   }
+  if (data.reference) data.reference = data.reference.replace(/\|/g, '').trim();
 
   return data;
 }
