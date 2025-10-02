@@ -414,7 +414,7 @@ async sendDeliveryConfirmationEmail(order) {
     };
 
     // Cargar template
-    const template = await this.loadTemplate('delivery-confirmed');
+    const template = await this.getTemplate('order-delivered.hbs');
     const html = template(templateData);
 
     // Enviar email
