@@ -213,8 +213,7 @@ import axios from 'axios'
 import { useToast } from 'vue-toastification'
 
 const toast = useToast()
-const API_URL = import.meta.env.VITE_API_BASE_URL
-
+const API_URL = import.meta.env.VITE_PROD_API_URL
 const password = ref('')
 const accessGranted = ref(false)
 const loggingIn = ref(false)
