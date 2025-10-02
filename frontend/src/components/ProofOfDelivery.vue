@@ -147,9 +147,13 @@ const hasPhotos = computed(() => {
   if (!hasProofOfDelivery.value) return false
   
   const proof = props.order.proof_of_delivery
-  return !!(proof.photo_url || 
-           (Array.isArray(proof.photos) && proof.photos.length > 0) ||
-           (Array.isArray(proof.podUrls) && proof.podUrls.length > 0))
+  
+  // ✅ Buscar en TODAS las ubicaciones posibles
+  return !!(
+    (Array.isArray(proof.photo_urls) && proof.photo_urls.length > 0) || // Cloudinary
+    (Array.isArray(proof.podUrls) && proof.podUrls.length > 0) ||       // Shipday
+    proof.photo_url                                                       // Formato antiguo
+  )
 })
 
 const deliveryPhotos = computed(() => {
