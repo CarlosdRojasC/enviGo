@@ -345,7 +345,7 @@ async function process() {
     formData.append('client_id', selectedClient.value.id)
     
     const res = await axios.post(
-      `${API_URL}/driver-scanner/process-ml-label`,
+      `${API_URL}/api/driver-scanner/process-ml-label`,
       formData
     )
     
