@@ -16,7 +16,6 @@ class ScannerController {
       // Puedes cambiar esta lógica según tus necesidades
       const clients = await Company.find({
         _id: { $ne: currentCompanyId },
-        status: 'active'
       }).select('name email phone address type')
 
       res.json({
