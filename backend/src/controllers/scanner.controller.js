@@ -10,35 +10,15 @@ class ScannerController {
    */
 static async getClients(req, res) {
   try {
-    // --- CONSOLE LOGS PARA DEBUG ---
-    console.log('1. Iniciando getClients...');
-    console.log('2. Objeto req.user:', req.user); // ¿Llega el usuario desde el middleware?
+    console.log('Iniciando getClients para repartidores...');
 
-    // Si req.user no existe, el middleware de autenticación podría estar fallando.
-    if (!req.user) {
-      console.error('Error: req.user no está definido. Revisa el middleware de autenticación.');
-      return res.status(401).json({
-        success: false,
-        message: 'Usuario no autenticado.'
-      });
-    }
-
-    const currentCompanyId = req.user.company_id;
-    console.log('3. ID de la empresa actual (currentCompanyId):', currentCompanyId);
-
-    // --- Verifiquemos qué hay en la base de datos ANTES de filtrar ---
-    const allCompanies = await Company.find({});
-    console.log(`4. Total de empresas en la BD (sin filtro): ${allCompanies.length}`);
-    // Opcional: Descomenta la siguiente línea para ver los datos de todas las empresas
-    // console.log('Datos de todas las empresas:', allCompanies);
-
-    // --- Tu consulta original ---
+    // La consulta correcta: Simplemente trae todas las empresas activas.
+    // No se necesita req.user ni currentCompanyId.
     const clients = await Company.find({
-      _id: { $ne: currentCompanyId },
       status: 'active'
-    });
-    
-    console.log(`5. Empresas encontradas después del filtro: ${clients.length}`);
+    }).select('name email'); // Solo seleccionamos los campos necesarios
+
+    console.log(`Se encontraron ${clients.length} clientes activos.`);
 
     res.json({
       success: true,
