@@ -1,123 +1,120 @@
 const express = require('express')
 const router = express.Router()
+const Order = require('../models/Order')
 const Company = require('../models/Company')
-const Tesseract = require('tesseract.js');
-const multer = require('multer');
+const Channel = require('../models/Channel')
+const Tesseract = require('tesseract.js')
+const multer = require('multer')
 
-
+// Configurar multer para recibir imágenes
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: {
-    fileSize: 5 * 1024 * 1024 // 5MB
-  },
+  limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     if (file.mimetype.startsWith('image/')) {
-      cb(null, true);
+      cb(null, true)
     } else {
-      cb(new Error('Solo se permiten imágenes'));
+      cb(new Error('Solo se permiten imágenes'))
     }
   }
-});
+})
 
-// ==================== RUTA PARA OBTENER CLIENTES (SIN AUTENTICACIÓN) ====================
+// Middleware de autenticación simple (opcional - puedes quitarlo si no lo necesitas)
+const authenticateDriver = (req, res, next) => {
+  // Por ahora sin autenticación, pero puedes agregar token si quieres
+  next()
+}
 
-/**
- * GET /api/scanner/clients
- * Obtener clientes disponibles para escaneo (SIN autenticación de enviGo)
- */
+// ==================== OBTENER CLIENTES ====================
 router.get('/clients', async (req, res) => {
   try {
-    console.log('📋 Scanner: Obteniendo clientes...')
+    console.log('📋 Obteniendo clientes para scanner...')
 
-    // Obtener todas las empresas activas
-    const clients = await Company.find({
-      // is_active: true  // Si tienes este campo, úsalo
-      status: 'active'  // O si usas 'status'
-    })
-    .select('_id name email phone address type')
-    .sort({ name: 1 })
-    .limit(50)
+    const clients = await Company.find({ status: 'active' })
+      .select('_id name email phone')
+      .sort({ name: 1 })
+      .limit(50)
 
-    console.log(`✅ Scanner: ${clients.length} clientes encontrados`)
+    console.log(`✅ ${clients.length} clientes encontrados`)
 
     res.json({
       success: true,
-      data: clients.map(client => ({
-        id: client._id,
-        name: client.name,
-        email: client.email || '',
-        phone: client.phone || '',
-        address: client.address || '',
-        type: client.type || 'Cliente'
+      data: clients.map(c => ({
+        id: c._id,
+        name: c.name,
+        email: c.email || '',
+        phone: c.phone || ''
       }))
     })
-
   } catch (error) {
-    console.error('❌ Scanner: Error obteniendo clientes:', error)
+    console.error('❌ Error obteniendo clientes:', error)
     res.status(500).json({
       success: false,
-      message: 'Error obteniendo lista de clientes'
+      message: 'Error obteniendo clientes'
     })
   }
 })
 
+// ==================== PROCESAR ETIQUETA ML CON OCR ====================
 router.post('/process-ml-label', upload.single('image'), async (req, res) => {
   try {
-    console.log('📸 Scanner: Procesando etiqueta ML con OCR...');
+    console.log('📸 Procesando etiqueta ML con OCR...')
 
     if (!req.file) {
       return res.status(400).json({
         success: false,
         message: 'No se recibió imagen'
-      });
+      })
     }
 
     if (!req.body.client_id) {
       return res.status(400).json({
         success: false,
-        message: 'ID de cliente requerido'
-      });
+        message: 'client_id es requerido'
+      })
     }
 
-    // OCR
-    console.log('🔍 Ejecutando OCR...');
+    // Ejecutar OCR
+    console.log('🔍 Ejecutando OCR sobre la imagen...')
     const { data: { text } } = await Tesseract.recognize(
       req.file.buffer,
       'spa+eng',
       {
-        logger: m => console.log('OCR:', m.status, m.progress)
+        logger: m => {
+          if (m.status === 'recognizing text') {
+            console.log(`OCR: ${(m.progress * 100).toFixed(1)}%`)
+          }
+        }
       }
-    );
+    )
 
-    console.log('📝 Texto extraído');
+    console.log('📝 Texto extraído del OCR')
+    console.log('Primeros 200 caracteres:', text.substring(0, 200))
 
-    // Extraer datos
-    const extractedData = extractMLLabelData(text);
-    console.log('📊 Datos extraídos:', extractedData);
+    // Extraer datos estructurados
+    const extractedData = extractMLLabelData(text)
+    console.log('📊 Datos extraídos:', extractedData)
 
-    // Validar
-    const validation = validateExtractedData(extractedData);
-    if (!validation.isValid) {
+    // Validar datos mínimos
+    if (!extractedData.shipping_number || !extractedData.customer_name || !extractedData.address) {
       return res.json({
         success: true,
         data: {
           status: 'invalid',
-          message: validation.message,
-          extracted_data: extractedData
+          message: 'Datos incompletos en la etiqueta',
+          extracted_data: extractedData,
+          raw_text: text.substring(0, 500)
         }
-      });
+      })
     }
 
-    // Importar modelo
-    const Order = require('../models/Order');
-
-    // Verificar duplicado por shipping_number
+    // Verificar duplicado
     const existingOrder = await Order.findOne({
       'ml_info.barcode': extractedData.shipping_number
-    });
+    })
 
     if (existingOrder) {
-      console.log('⚠️ Pedido duplicado');
+      console.log('⚠️ Pedido duplicado')
       return res.json({
         success: true,
         data: {
@@ -126,15 +123,14 @@ router.post('/process-ml-label', upload.single('image'), async (req, res) => {
           order_id: existingOrder._id,
           ...extractedData
         }
-      });
+      })
     }
 
-    // Obtener o crear canal ML para esta empresa
-    const Channel = require('../models/Channel');
+    // Buscar o crear canal ML para esta empresa
     let mlChannel = await Channel.findOne({
       company_id: req.body.client_id,
       platform: 'mercadolibre'
-    });
+    })
 
     if (!mlChannel) {
       mlChannel = new Channel({
@@ -143,27 +139,23 @@ router.post('/process-ml-label', upload.single('image'), async (req, res) => {
         name: 'MercadoLibre Scanner',
         is_active: true,
         created_at: new Date()
-      });
-      await mlChannel.save();
-      console.log('✅ Canal ML creado');
+      })
+      await mlChannel.save()
+      console.log('✅ Canal ML creado')
     }
 
-    // Crear número de orden único
-    const orderNumber = `ML${Date.now().toString().slice(-8)}`;
-
-    // CREAR PEDIDO
+    // Crear pedido
+    const orderNumber = `ML${Date.now().toString().slice(-8)}`
+    
     const newOrder = new Order({
-      // Relaciones requeridas
       company_id: req.body.client_id,
       channel_id: mlChannel._id,
-      
-      // IDs requeridos
       external_order_id: extractedData.sale_id || extractedData.shipping_number,
       order_number: orderNumber,
       
-      // Cliente (requerido)
+      // Cliente
       customer_name: extractedData.customer_name,
-      customer_phone: extractedData.customer_phone || '',
+      customer_phone: '',
       customer_email: '',
       
       // Dirección
@@ -172,7 +164,7 @@ router.post('/process-ml-label', upload.single('image'), async (req, res) => {
       shipping_city: 'Santiago',
       shipping_state: 'Región Metropolitana',
       
-      // Montos (requerido total_amount)
+      // Montos
       total_amount: 0,
       shipping_cost: 0,
       
@@ -196,15 +188,15 @@ router.post('/process-ml-label', upload.single('image'), async (req, res) => {
       created_via_scanner: true,
       scanner_timestamp: new Date(),
       
-      // Fechas (requerido order_date)
+      // Fechas
       order_date: new Date(),
       created_at: new Date(),
       updated_at: new Date()
-    });
+    })
 
-    await newOrder.save();
+    await newOrder.save()
 
-    console.log('✅ Pedido creado:', orderNumber);
+    console.log('✅ Pedido creado:', orderNumber)
 
     res.json({
       success: true,
@@ -215,178 +207,77 @@ router.post('/process-ml-label', upload.single('image'), async (req, res) => {
         shipping_number: extractedData.shipping_number,
         customer_name: extractedData.customer_name,
         address: extractedData.address,
-        commune: extractedData.commune
+        commune: extractedData.commune,
+        reference: extractedData.reference
       }
-    });
+    })
 
   } catch (error) {
-    console.error('❌ Error:', error);
+    console.error('❌ Error procesando etiqueta:', error)
     res.status(500).json({
       success: false,
-      message: error.message
-    });
+      message: 'Error procesando etiqueta',
+      error: error.message
+    })
   }
-});
+})
 
-// Funciones de extracción (las que ya tienes)
-function extractMLLabelData(text, comunas = []) {
+// ==================== FUNCIONES DE EXTRACCIÓN ====================
+
+function extractMLLabelData(text) {
   const data = {
     shipping_number: null,
     sale_id: null,
     customer_name: null,
-    customer_phone: null,
     address: null,
     commune: null,
-    reference: null,
-    delivery_date: null,
-    product: null
-  };
+    reference: null
+  }
 
-  const envioMatch = text.match(/Env[ií]o[:\s]+(\d{10,15})/i);
-  if (envioMatch) data.shipping_number = envioMatch[1];
+  // 1. Número de envío
+  const envioMatch = text.match(/Env[ií]o[:\s]+(\d{10,15})/i)
+  if (envioMatch) data.shipping_number = envioMatch[1]
 
-  const ventaMatch = text.match(/Venta[:\s]+(\d{10,20})/i);
-  if (ventaMatch) data.sale_id = ventaMatch[1];
+  // 2. ID de venta
+  const ventaMatch = text.match(/Venta[:\s]+(\d{10,20})/i)
+  if (ventaMatch) data.sale_id = ventaMatch[1]
 
-  const destinatarioMatch = text.match(/Destinatario[:\s]+([A-ZÁÉÍÓÚÑ][a-záéíóúñ\s]+(?:[A-ZÁÉÍÓÚÑ][a-záéíóúñ\s]+)*)/i);
-  if (destinatarioMatch) data.customer_name = destinatarioMatch[1].trim();
+  // 3. Nombre del destinatario
+  const destinatarioMatch = text.match(/Destinatario[:\s]+([A-ZÁÉÍÓÚÑ][a-záéíóúñ\s]+(?:[A-ZÁÉÍÓÚÑ][a-záéíóúñ\s]+)*)/i)
+  if (destinatarioMatch) data.customer_name = destinatarioMatch[1].trim()
 
-  const direccionMatch = text.match(/Direcci[oó]n[:\s]+([^\n]+)/i);
-  if (direccionMatch) data.address = direccionMatch[1].trim();
+  // 4. Dirección
+  const direccionMatch = text.match(/Direcci[oó]n[:\s]+([^\n]+)/i)
+  if (direccionMatch) data.address = direccionMatch[1].trim()
 
-  const referenciaMatch = text.match(/Referencia[:\s]+([^\n]+)/i);
-  if (referenciaMatch) data.reference = referenciaMatch[1].trim();
+  // 5. Referencia
+  const referenciaMatch = text.match(/Referencia[:\s]+([^\n]+)/i)
+  if (referenciaMatch) data.reference = referenciaMatch[1].trim()
 
-  // Lista completa de comunas de Santiago
-  const TODAS_LAS_COMUNAS = [
-    // Zona Norte
+  // 6. Comuna - Lista completa
+  const comunas = [
     'HUECHURABA', 'QUILICURA', 'RECOLETA', 'INDEPENDENCIA', 'CONCHALÍ', 'COLINA',
-    // Zona Centro
     'SANTIAGO', 'SANTIAGO CENTRO', 'ESTACIÓN CENTRAL', 'QUINTA NORMAL', 'PROVIDENCIA',
-    // Zona Oriente
     'LAS CONDES', 'VITACURA', 'ÑUÑOA', 'LA REINA', 'PEÑALOLÉN', 'MACUL', 'LO BARNECHEA',
-    // Zona Sur
-    'SAN MIGUEL', 'SAN JOAQUÍN', 'PEDRO AGUIRRE CERDA', 'LA CISTERNA', 'SAN RAMÓN', 
+    'SAN MIGUEL', 'SAN JOAQUÍN', 'PEDRO AGUIRRE CERDA', 'LA CISTERNA', 'SAN RAMÓN',
     'LA GRANJA', 'EL BOSQUE', 'LO ESPEJO',
-    // Zona Poniente
     'CERRILLOS', 'RENCA', 'CERRO NAVIA', 'PUDAHUEL', 'MAIPÚ', 'MAIPU',
-    // Zona Sur-Oriente
     'LA FLORIDA', 'PUENTE ALTO', 'SAN BERNARDO', 'LA PINTANA', 'LO PRADO'
-  ];
+  ]
 
-  const textUpper = text.toUpperCase();
-  
-  // Buscar comuna (ordenar por longitud descendente para evitar falsos positivos)
-  const comunasOrdenadas = TODAS_LAS_COMUNAS.sort((a, b) => b.length - a.length);
+  const textUpper = text.toUpperCase()
+  const comunasOrdenadas = comunas.sort((a, b) => b.length - a.length)
   
   for (const comuna of comunasOrdenadas) {
     if (textUpper.includes(comuna)) {
-      // Formatear nombre: Primera letra mayúscula, resto minúscula
       data.commune = comuna.split(' ').map(w => 
         w.charAt(0) + w.slice(1).toLowerCase()
-      ).join(' ');
-      break;
+      ).join(' ')
+      break
     }
   }
 
-  return data;
+  return data
 }
-
-function validateExtractedData(data) {
-  const required = ['shipping_number', 'customer_name', 'address'];
-  const missing = required.filter(f => !data[f]);
-
-  if (missing.length > 0) {
-    return {  
-      isValid: false,
-      message: `Faltan: ${missing.join(', ')}`
-    };
-  }
-
-  return { isValid: true };
-}
-
-function validateExtractedData(data) {
-  const requiredFields = ['shipping_number', 'customer_name', 'address'];
-  const missingFields = requiredFields.filter(field => !data[field]);
-
-  if (missingFields.length > 0) {
-    return {
-      isValid: false,
-      message: `Faltan campos: ${missingFields.join(', ')}`
-    };
-  }
-
-  return {
-    isValid: true,
-    message: 'Datos válidos'
-  };
-}
-/**
- * GET /api/driver-scanner/public-clients
- * Obtener clientes SIN autenticación (para el scanner web)
- */
-router.get('/public-clients', async (req, res) => {
-  try {
-    console.log('📋 Scanner Público: Obteniendo clientes...');
-
-    const clients = await Company.find({
-      // Ajusta según tu modelo de Company:
-      // status: 'active'     // Si usas campo 'status'
-      // is_active: true      // Si usas campo 'is_active'
-    })
-    .select('_id name email phone address')
-    .sort({ name: 1 })
-    .limit(50);
-
-    console.log(`✅ Scanner Público: ${clients.length} clientes encontrados`);
-
-    res.json({
-      success: true,
-      data: clients.map(client => ({
-        id: client._id,
-        name: client.name,
-        email: client.email || '',
-        phone: client.phone || '',
-        address: client.address || '',
-        type: 'Cliente'
-      }))
-    });
-
-  } catch (error) {
-    console.error('❌ Scanner Público: Error obteniendo clientes:', error);
-    res.status(500).json({ 
-      success: false,
-      message: 'Error obteniendo lista de clientes' 
-    });
-  }
-});
-
-/**
- * GET /api/driver-scanner/public-test
- * Ruta de test pública
- */
-router.get('/public-test', (req, res) => {
-  console.log('🧪 Scanner Público: Test accedido');
-  res.json({
-    success: true,
-    message: 'Scanner público funcionando correctamente',
-    timestamp: new Date().toISOString()
-  });
-});
-
-// ==================== RUTA TEMPORAL PARA TESTING ====================
-
-/**
- * GET /api/scanner/test
- * Ruta de prueba para verificar que el scanner funciona
- */
-router.get('/test', (req, res) => {
-  res.json({
-    success: true,
-    message: 'Scanner backend funcionando correctamente',
-    timestamp: new Date().toISOString()
-  })
-})
 
 module.exports = router

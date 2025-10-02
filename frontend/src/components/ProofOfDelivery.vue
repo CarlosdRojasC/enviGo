@@ -156,31 +156,39 @@ const deliveryPhotos = computed(() => {
   const photoUrls = new Set();
   const proof = props.order?.proof_of_delivery;
 
+  // 🔍 DEBUG TEMPORAL
+  console.log('🔍 DEBUG - proof_of_delivery completo:', proof);
+  console.log('🔍 photo_urls (Cloudinary):', proof?.photo_urls);
+  console.log('🔍 podUrls (Shipday):', proof?.podUrls);
+  console.log('🔍 photo_url (antiguo):', proof?.photo_url);
+
   if (proof) {
-    // ✅ BUSCAR EN photo_urls (donde Cloudinary las guarda)
     if (Array.isArray(proof.photo_urls) && proof.photo_urls.length > 0) {
       proof.photo_urls.forEach(url => {
         if (url) photoUrls.add(url);
       });
     }
 
-    // Fallback para datos antiguos de Shipday
     if (Array.isArray(proof.podUrls) && proof.podUrls.length > 0) {
       proof.podUrls.forEach(url => {
         if (url) photoUrls.add(url);
       });
     }
 
-    // Fallback para formato antiguo singular
     if (proof.photo_url) {
       photoUrls.add(proof.photo_url);
     }
   }
 
-  return Array.from(photoUrls).map((url, index) => ({
+  const result = Array.from(photoUrls).map((url, index) => ({
     url,
     loading: imageLoadStates.value[index] !== 'loaded'
   }));
+
+  // 🔍 DEBUG TEMPORAL
+  console.log('🔍 RESULTADO deliveryPhotos:', result);
+
+  return result;
 });
 
 

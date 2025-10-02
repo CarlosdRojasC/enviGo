@@ -402,7 +402,10 @@ async sendDeliveryConfirmationEmail(order) {
       
       // Pruebas de entrega
       has_proofs: !!(order.proof_of_delivery?.photo_url || order.proof_of_delivery?.signature_url),
-      delivery_photos: order.proof_of_delivery?.photo_url ? [order.proof_of_delivery.photo_url] : [],
+      delivery_photos: [
+  ...(order.proof_of_delivery?.photo_urls || []),  // Cloudinary (array)
+  ...(order.proof_of_delivery?.podUrls || [])      // Shipday (array)
+],
       signature_url: order.proof_of_delivery?.signature_url || null,
       
       // URL de tracking
