@@ -2,20 +2,17 @@
 const mongoose = require('mongoose');
 
 const evidenceSchema = new mongoose.Schema({
-  photo_url: { type: String },
+  photo_urls: [{ type: String }], // ← CAMBIAR a array
+  photo_public_ids: [{ type: String }], // ← AGREGAR para Cloudinary
   signature_url: { type: String },
+  signature_public_id: { type: String }, // ← AGREGAR para Cloudinary
+  recipient_name: { type: String }, // ← AGREGAR
   notes: { type: String },
-  podUrls: [{ type: String }], // Array de URLs de fotos de entrega
+  timestamp: { type: Date }, // ← AGREGAR
   location: {
-    type: {
-      type: String,
-      enum: ['Point'],
-      default: 'Point'
-    },
-    coordinates: {
-      type: [Number], // [longitude, latitude]
-      index: '2dsphere'
-    }
+    lat: { type: Number },
+    lng: { type: Number },
+    formatted_address: { type: String }
   }
 }, { _id: false });
 
@@ -248,13 +245,22 @@ orderSchema.methods.markAsDelivered = function(proofData = {}) {
   this.delivery_date = new Date();
   this.billing_status.is_billable = true;
   
-  if (proofData.photo_url || proofData.signature_url || proofData.notes) {
-    this.proof_of_delivery = proofData;
+  // Crear objeto de prueba de entrega
+  if (proofData.photo_urls || proofData.signature_url || proofData.notes) {
+    this.proof_of_delivery = {
+      photo_urls: proofData.photo_urls || [],
+      photo_public_ids: proofData.photo_public_ids || [],
+      signature_url: proofData.signature_url || null,
+      signature_public_id: proofData.signature_public_id || null,
+      recipient_name: proofData.recipient_name || 'No especificado',
+      notes: proofData.notes || '',
+      timestamp: proofData.timestamp || new Date(),
+      location: proofData.location || null
+    };
   }
   
   return this;
 };
-
 // ✅ MÉTODO PARA MARCAR COMO FACTURADO
 orderSchema.methods.markAsInvoiced = function(invoiceId, billingAmount = null) {
   this.status = 'invoiced';
@@ -350,7 +356,8 @@ orderSchema.index({ delivery_date: -1 });
 orderSchema.index({ shipday_tracking_url: 1 });
 orderSchema.index({ shipday_order_id: 1 });
 orderSchema.index({ 'driver_info.name': 1 });
-orderSchema.index({ podUrls: 1 });
-orderSchema.index({ signatureUrl: 1 });
+orderSchema.index({ 'proof_of_delivery.photo_urls': 1 });
+orderSchema.index({ 'proof_of_delivery.signature_url': 1 });
+orderSchema.index({ 'proof_of_delivery.timestamp': -1 });
 
 module.exports = mongoose.model('Order', orderSchema);

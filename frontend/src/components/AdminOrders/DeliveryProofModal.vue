@@ -60,13 +60,14 @@
             Subir Foto
           </button>
           
-          <input
-            ref="fileInput"
-            type="file"
-            accept="image/*"
-            @change="handleFileUpload"
-            style="display: none;"
-          />
+            <input
+    ref="fileInput"
+    type="file"
+    accept="image/*"
+    multiple
+    @change="handleFileUpload"
+    style="display: none;"
+  />
         </div>
 
         <!-- Vista de cámara -->
@@ -96,18 +97,26 @@
           </div>
         </div>
 
-        <!-- Preview de la foto -->
-        <div v-if="photoPreview" class="photo-preview">
-          <img :src="photoPreview" alt="Prueba de entrega" />
-          <button 
-            @click="removePhoto" 
-            class="btn-remove-photo"
-            type="button"
-          >
-            🗑️ Eliminar
-          </button>
-        </div>
-
+        <!-- Preview de múltiples fotos -->
+  <div v-if="photoPreviews.length > 0" class="photos-grid">
+    <div 
+      v-for="(preview, index) in photoPreviews" 
+      :key="index"
+      class="photo-preview-item"
+    >
+      <img :src="preview" alt="Foto de entrega" />
+      <button 
+        @click="removePhoto(index)" 
+        class="btn-remove-photo"
+        type="button"
+      >
+        ✕
+      </button>
+    </div>
+  </div>
+ <p class="photo-count" v-if="photos.length > 0">
+    {{ photos.length }} foto(s) seleccionada(s)
+  </p>
         <canvas ref="canvasElement" style="display: none;"></canvas>
       </div>
 
@@ -141,7 +150,7 @@
           @click="handleSubmit" 
           class="btn-modal confirm"
           type="button"
-          :disabled="!photoPreview || loading"
+          :disabled="photos.length === 0 || loading"
         >
           <span class="btn-icon">{{ loading ? '⏳' : '✅' }}</span>
           <span class="btn-text">
@@ -166,8 +175,8 @@ const emit = defineEmits(['update:modelValue', 'submit'])
 
 // Estados
 const recipientName = ref('')
-const photoPreview = ref(null)
-const photo = ref(null)
+const photos = ref([])
+const photoPreviews = ref([])
 const notes = ref('')
 const loading = ref(false)
 const useCamera = ref(false)
@@ -190,28 +199,26 @@ const fileToBase64 = (file) => {
 
 // Manejar subida de archivo
 const handleFileUpload = async (event) => {
-  const file = event.target.files[0]
-  if (!file) return
-
-  // Validar tipo
-  if (!file.type.startsWith('image/')) {
-    alert('Por favor selecciona una imagen válida')
-    return
-  }
-
-  // Validar tamaño (max 5MB)
-  if (file.size > 5 * 1024 * 1024) {
-    alert('La imagen es demasiado grande. Máximo 5MB')
-    return
-  }
-
-  try {
-    const base64 = await fileToBase64(file)
-    photo.value = base64
-    photoPreview.value = base64
-  } catch (error) {
-    console.error('Error al procesar imagen:', error)
-    alert('Error al procesar la imagen')
+  const files = Array.from(event.target.files) // Aceptar múltiples archivos
+  
+  for (const file of files) {
+    if (!file.type.startsWith('image/')) {
+      alert('Solo se permiten imágenes')
+      continue
+    }
+    
+    if (file.size > 5 * 1024 * 1024) {
+      alert(`${file.name} es muy grande (máx 5MB)`)
+      continue
+    }
+    
+    try {
+      const base64 = await fileToBase64(file)
+      photos.value.push(base64)
+      photoPreviews.value.push(base64)
+    } catch (error) {
+      console.error('Error procesando imagen:', error)
+    }
   }
 }
 
@@ -256,24 +263,23 @@ const capturePhoto = () => {
   context.drawImage(video, 0, 0)
   
   const base64 = canvas.toDataURL('image/jpeg', 0.8)
-  photo.value = base64
-  photoPreview.value = base64
+  photos.value.push(base64)
+  photoPreviews.value.push(base64)
   
   stopCamera()
 }
 
 // Eliminar foto
-const removePhoto = () => {
-  photo.value = null
-  photoPreview.value = null
-  stopCamera()
+const removePhoto = (index) => {
+  photos.value.splice(index, 1)
+  photoPreviews.value.splice(index, 1)
 }
 
 // Resetear formulario
 const resetForm = () => {
   recipientName.value = ''
-  photo.value = null
-  photoPreview.value = null
+  photos.value = []
+  photoPreviews.value = []
   notes.value = ''
   loading.value = false
   stopCamera()
@@ -281,8 +287,8 @@ const resetForm = () => {
 
 // Enviar
 const handleSubmit = async () => {
-  if (!photo.value) {
-    alert('Por favor toma o sube una foto como prueba de entrega')
+  if (photos.value.length === 0) {
+    alert('Toma al menos una foto')
     return
   }
 
@@ -290,7 +296,7 @@ const handleSubmit = async () => {
 
   try {
     await emit('submit', {
-      photo: photo.value,
+      photos: photos.value, // Array de fotos
       recipient_name: recipientName.value || 'No especificado',
       notes: notes.value
     })
@@ -535,5 +541,48 @@ watch(() => props.modelValue, (newVal) => {
 .btn-modal:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+.photos-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.photo-preview-item {
+  position: relative;
+  border: 2px solid #10b981;
+  border-radius: 8px;
+  overflow: hidden;
+  aspect-ratio: 1;
+}
+
+.photo-preview-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.btn-remove-photo {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  background: rgba(239, 68, 68, 0.9);
+  color: white;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.photo-count {
+  color: #059669;
+  font-weight: 600;
+  margin-top: 8px;
 }
 </style>

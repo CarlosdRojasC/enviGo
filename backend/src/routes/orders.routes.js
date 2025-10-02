@@ -1064,115 +1064,89 @@ router.get('/:orderId/tracking', authenticateToken, async (req, res) => {
 
 router.patch('/:id/deliver', authenticateToken, async (req, res) => {
   try {
-    const { photo, signature, notes, recipient_name } = req.body;
+    const { photos, signature, notes, recipient_name } = req.body; // photos en plural
     
     console.log('📦 Marcando pedido como entregado:', {
       orderId: req.params.id,
-      hasPhoto: !!photo,
+      photoCount: photos?.length || 0,
       hasSignature: !!signature,
-      hasNotes: !!notes,
       recipientName: recipient_name
     });
 
-    // Validar que existe la orden
     const order = await Order.findById(req.params.id)
-      .populate('company_id')  // ← AGREGAR para datos de la empresa
-      .populate('channel_id'); // ← AGREGAR para datos del canal
+      .populate('company_id')
+      .populate('channel_id');
       
     if (!order) {
       return res.status(404).json({ error: 'Pedido no encontrado' });
     }
 
-    // Validar que hay al menos una foto
-    if (!photo) {
+    if (!photos || photos.length === 0) {
       return res.status(400).json({ 
-        error: 'Se requiere una foto como prueba de entrega' 
+        error: 'Se requiere al menos una foto como prueba de entrega' 
       });
     }
 
-    // Preparar objeto de prueba de entrega
     const proofData = {
       timestamp: new Date(),
       recipient_name: recipient_name || 'No especificado',
-      notes: notes || ''
+      notes: notes || '',
+      photo_urls: [], // Array de URLs
+      photo_public_ids: [] // Array de IDs
     };
 
-    // 📸 Subir foto a Cloudinary
-    if (photo) {
+    // 📸 Subir múltiples fotos a Cloudinary
+    for (let i = 0; i < photos.length; i++) {
       try {
-        console.log('📸 Subiendo foto de prueba de entrega...');
+        console.log(`📸 Subiendo foto ${i + 1}/${photos.length}...`);
+        
         const photoResult = await CloudinaryService.uploadProofImage(
-          photo, 
+          photos[i], 
           order._id, 
-          'photo'
+          `photo_${i + 1}`
         );
         
-        proofData.photo_url = photoResult.url;
-        proofData.photo_public_id = photoResult.public_id;
-        proofData.photo_uploaded_at = new Date();
+        proofData.photo_urls.push(photoResult.url);
+        proofData.photo_public_ids.push(photoResult.public_id);
         
-        console.log('✅ Foto subida exitosamente:', {
-          url: photoResult.url,
-          size: `${Math.round(photoResult.bytes / 1024)}KB`
-        });
+        console.log(`✅ Foto ${i + 1} subida: ${photoResult.url}`);
       } catch (error) {
-        console.error('❌ Error subiendo foto:', error);
+        console.error(`❌ Error subiendo foto ${i + 1}:`, error);
         return res.status(500).json({ 
-          error: 'Error al subir la foto de entrega',
+          error: `Error al subir la foto ${i + 1}`,
           details: error.message 
         });
       }
     }
 
-    // ✍️ Subir firma si existe (opcional)
+    // ✍️ Subir firma si existe
     if (signature) {
       try {
-        console.log('✍️ Subiendo firma...');
         const signatureResult = await CloudinaryService.uploadProofImage(
           signature, 
           order._id, 
           'signature'
         );
-        
         proofData.signature_url = signatureResult.url;
         proofData.signature_public_id = signatureResult.public_id;
-        proofData.signature_uploaded_at = new Date();
-        
-        console.log('✅ Firma subida exitosamente:', signatureResult.url);
       } catch (error) {
-        console.error('❌ Error subiendo firma:', error);
-        console.warn('⚠️ Continuando sin firma');
+        console.warn('⚠️ Error subiendo firma, continuando sin ella');
       }
     }
 
-    // Actualizar orden usando el método del modelo
     order.markAsDelivered(proofData);
     await order.save();
 
-    console.log('✅ Pedido marcado como entregado:', {
-      orderId: order._id,
-      orderNumber: order.order_number,
-      status: order.status,
-      hasPhoto: !!proofData.photo_url,
-      hasSignature: !!proofData.signature_url,
-      deliveryDate: order.delivery_date
-    });
+    console.log('✅ Pedido entregado con', proofData.photo_urls.length, 'fotos');
 
-    // 📧 ENVIAR EMAIL DE CONFIRMACIÓN
+    // 📧 Enviar email
     try {
-      console.log('📧 Enviando email de confirmación de entrega...');
-      
       const notificationService = new NotificationService();
       await notificationService.sendDeliveryConfirmationEmail(order);
-      
-      console.log('✅ Email de confirmación enviado exitosamente');
     } catch (emailError) {
-      console.error('❌ Error enviando email de confirmación:', emailError);
-      // No fallar el endpoint si el email falla
-      console.warn('⚠️ El pedido se marcó como entregado pero el email no se pudo enviar');
+      console.error('❌ Error enviando email:', emailError);
     }
 
-    // Respuesta exitosa
     res.json({
       success: true,
       message: 'Pedido marcado como entregado exitosamente',
@@ -1186,9 +1160,9 @@ router.patch('/:id/deliver', authenticateToken, async (req, res) => {
     });
 
   } catch (error) {
-    console.error('❌ Error marcando pedido como entregado:', error);
+    console.error('❌ Error:', error);
     res.status(500).json({ 
-      error: 'Error interno del servidor al marcar como entregado',
+      error: 'Error interno del servidor',
       details: error.message 
     });
   }
