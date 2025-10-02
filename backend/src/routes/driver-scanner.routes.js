@@ -182,52 +182,55 @@ function extractMLLabelData(text) {
   };
 
   // 1. EXTRAER DATOS PRINCIPALES
-  // Se usa el texto con saltos de línea para algunas búsquedas y texto limpio para otras.
   const cleanText = text.replace(/\n/g, ' ').replace(/\s{2,}/g, ' ').trim();
 
-  // Número de envío y Venta (más robusto)
   data.shipping_number = (cleanText.match(/Env[ií]o\s*[:\s]\s*(\d{10,15})/i) || cleanText.match(/Pack\s*ID\s*[:\s]\s*(\d{10,20})/i) || [])[1] || null;
   data.sale_id = (cleanText.match(/Venta\s*[:\s]\s*(\d{10,20})/i) || cleanText.match(/Pack\s*ID\s*[:\s]\s*(\d{10,20})/i) || [])[1] || null;
-
-  // Destinatario, Dirección y Referencia (con límites para no capturar de más)
+  
   const destinatarioMatch = cleanText.match(/Destinatario\s*[:\s](.+?)(?=\s*\(|Direcci[oó]n:|Venta:|$)/i);
   if (destinatarioMatch) data.customer_name = destinatarioMatch[1].trim();
 
   const direccionMatch = text.match(/Direcci[oó]n\s*[:\s]([^\n]+)/i);
   if (direccionMatch) data.address = direccionMatch[1].trim();
-
+  
   const referenciaMatch = text.match(/Referencia\s*[:\s]([^\n]+)/i);
   if (referenciaMatch) data.reference = referenciaMatch[1].trim();
-
 
   // 2. LÓGICA INTELIGENTE PARA ENCONTRAR LA COMUNA CORRECTA
   const comunas = [
     'HUECHURABA', 'QUILICURA', 'RECOLETA', 'INDEPENDENCIA', 'CONCHALÍ', 'COLINA',
     'SANTIAGO', 'SANTIAGO CENTRO', 'ESTACIÓN CENTRAL', 'QUINTA NORMAL', 'PROVIDENCIA',
-    'LAS CONDES', 'VITACURA', 'ÑUÑOA', 'LA REINA', 'PEÑALOLÉN', 'MACUL', 'LO BARNECHEA',
-    'SAN MIGUEL', 'SAN JOAQUÍN', 'PEDRO AGUIRRE CERDA', 'LA CISTERNA', 'SAN RAMÓN',
-    'LA GRANJA', 'EL BOSQUE', 'LO ESPEJO', 'CERRILLOS', 'RENCA', 'CERRO NAVIA', 
-    'PUDAHUEL', 'MAIPÚ', 'MAIPU', 'LA FLORIDA', 'PUENTE ALTO', 'SAN BERNARDO', 
-    'LA PINTANA', 'LO PRADO'
+    'LAS CONDES', 'VITACURA', 
+    'ÑUÑOA', 'NUNOA', // ✨ SE AÑADE VARIANTE PARA ÑUÑOA
+    'LA REINA', 
+    'PEÑALOLÉN', 'PENALOLEN', // Se añade variante para Peñalolén
+    'MACUL', 'LO BARNECHEA', 'SAN MIGUEL', 'SAN JOAQUÍN', 'PEDRO AGUIRRE CERDA', 
+    'LA CISTERNA', 'SAN RAMÓN', 'LA GRANJA', 'EL BOSQUE', 'LO ESPEJO', 'CERRILLOS', 
+    'RENCA', 'CERRO NAVIA', 'PUDAHUEL', 'MAIPÚ', 'MAIPU', 'LA FLORIDA', 'PUENTE ALTO', 
+    'SAN BERNARDO', 'LA PINTANA', 'LO PRADO'
   ];
 
-  // Se busca la comuna en el bloque de texto del destinatario para evitar confusiones.
   const lines = text.toUpperCase().split('\n');
   const recipientLineIndex = lines.findIndex(line => line.includes('DESTINATARIO'));
   
-  let searchBlock = text.toUpperCase(); // Fallback por si no encuentra "DESTINATARIO"
+  let searchBlock = text.toUpperCase();
   if (recipientLineIndex !== -1) {
-    // Definimos el área de búsqueda como las 6 líneas ANTERIORES a la del destinatario.
     const startIndex = Math.max(0, recipientLineIndex - 6);
     searchBlock = lines.slice(startIndex, recipientLineIndex + 1).join(' ');
   }
 
-  // Se ordenan las comunas de más larga a más corta para evitar falsos positivos (ej: "Lo Prado" antes que "Prado").
+  // ✨ CONSOLE LOG PARA DEPURACIÓN: Muestra el texto donde se busca la comuna
+  console.log('🔍 Buscando comuna en el siguiente bloque de texto:', searchBlock);
+
   const comunasOrdenadas = comunas.sort((a, b) => b.length - a.length);
   for (const comuna of comunasOrdenadas) {
     if (searchBlock.includes(comuna)) {
-      data.commune = comuna.charAt(0) + comuna.slice(1).toLowerCase();
-      // Si la comuna tiene varias palabras (ej: Puente Alto), se capitalizan ambas.
+      let finalCommuneName = comuna;
+      // Normalizar el nombre si se encontró la variante (ej. NUNOA -> Ñuñoa)
+      if (comuna === 'NUNOA') finalCommuneName = 'ÑUÑOA';
+      if (comuna === 'PENALOLEN') finalCommuneName = 'PEÑALOLÉN';
+
+      data.commune = finalCommuneName.charAt(0) + finalCommuneName.slice(1).toLowerCase();
       if (data.commune.includes(' ')) {
         data.commune = data.commune.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
       }
