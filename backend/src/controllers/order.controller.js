@@ -177,60 +177,57 @@ async getById(req, res) {
 
     if (!order) return res.status(404).json({ error: 'Pedido no encontrado' });
 
-    // 🔧 CORRECCIÓN: Obtener datos actualizados de Shipday si existe la orden
+    // Obtener datos actualizados de Shipday si existe
     if (order.shipday_order_id) {
       try {
-        console.log(`📍 Obteniendo datos actualizados de Shipday para orden: ${order.shipday_order_id}`);
+        console.log(`📍 Obteniendo datos de Shipday: ${order.shipday_order_id}`);
         
         const shipdayOrderDetails = await ShipdayService.getOrder(order.shipday_order_id);
         
-        // 🆕 MAPEAR CORRECTAMENTE LOS DATOS DE SHIPDAY
-if (shipdayOrderDetails) {
-    // Primero, nos aseguramos de que las fotos (podUrls) y la firma se extraigan
-    // de la respuesta "cruda" de la API, que es la fuente más confiable.
-    order.podUrls = shipdayOrderDetails._raw?.podUrls || [];
-    order.signatureUrl = shipdayOrderDetails._raw?.signatures?.[0]?.url || null;
+        if (shipdayOrderDetails) {
+          // ✅ MAPEAR FOTOS DE SHIPDAY A LA ESTRUCTURA CORRECTA
+          if (!order.proof_of_delivery) {
+            order.proof_of_delivery = {};
+          }
 
-    // Ahora, continuamos con el resto de la lógica que ya tenías...
+          // Agregar fotos de Shipday al array podUrls
+          const shipdayPhotos = shipdayOrderDetails._raw?.podUrls || [];
+          if (shipdayPhotos.length > 0) {
+            order.proof_of_delivery.podUrls = shipdayPhotos;
+          }
 
-    // Actualizar URL de tracking
-    if (shipdayOrderDetails.trackingUrl && shipdayOrderDetails.trackingUrl !== order.shipday_tracking_url) {
-        console.log('🔄 Actualizando tracking URL desde Shipday:', shipdayOrderDetails.trackingUrl);
-        await Order.findByIdAndUpdate(id, { shipday_tracking_url: shipdayOrderDetails.trackingUrl });
-        order.shipday_tracking_url = shipdayOrderDetails.trackingUrl;
-    }
+          // Agregar firma de Shipday
+          const shipdaySignature = shipdayOrderDetails._raw?.signatures?.[0]?.url;
+          if (shipdaySignature) {
+            order.proof_of_delivery.signature_url = shipdaySignature;
+          }
 
-    // Agregar datos completos para debugging
-    order.shipday_details = shipdayOrderDetails._raw || shipdayOrderDetails;
+          // Actualizar tracking URL
+          if (shipdayOrderDetails.trackingUrl) {
+            order.shipday_tracking_url = shipdayOrderDetails.trackingUrl;
+          }
 
-    // Información del conductor
-    if (shipdayOrderDetails.carrierName || shipdayOrderDetails._raw?.assignedCarrier) {
-        order.driver_info = {
-            name: shipdayOrderDetails.carrierName || shipdayOrderDetails._raw?.assignedCarrier?.name,
-            phone: shipdayOrderDetails.carrierPhone || shipdayOrderDetails._raw?.assignedCarrier?.phone,
-            email: shipdayOrderDetails.carrierEmail || shipdayOrderDetails._raw?.assignedCarrier?.email,
-            status: shipdayOrderDetails.carrierStatus || shipdayOrderDetails._raw?.assignedCarrier?.status
-        };
-    }
+          // Información del conductor
+          if (shipdayOrderDetails.carrierName || shipdayOrderDetails._raw?.assignedCarrier) {
+            order.driver_info = {
+              name: shipdayOrderDetails.carrierName || shipdayOrderDetails._raw?.assignedCarrier?.name,
+              phone: shipdayOrderDetails.carrierPhone || shipdayOrderDetails._raw?.assignedCarrier?.phone,
+              email: shipdayOrderDetails.carrierEmail || shipdayOrderDetails._raw?.assignedCarrier?.email
+            };
+          }
 
-    // Tiempos de Shipday
-    if (shipdayOrderDetails._raw?.activityLog) {
-        order.shipday_times = shipdayOrderDetails._raw.activityLog;
-    }
-
-    // Ubicación de entrega
-    if (shipdayOrderDetails._raw?.proofOfDelivery?.location) {
-        order.delivery_location = {
-            lat: shipdayOrderDetails._raw.proofOfDelivery.location.latitude,
-            lng: shipdayOrderDetails._raw.proofOfDelivery.location.longitude,
-            formatted_address: shipdayOrderDetails._raw.proofOfDelivery.location.address
-        };
-    }
-}
+          // Ubicación de entrega
+          if (shipdayOrderDetails._raw?.proofOfDelivery?.location) {
+            order.proof_of_delivery.location = {
+              lat: shipdayOrderDetails._raw.proofOfDelivery.location.latitude,
+              lng: shipdayOrderDetails._raw.proofOfDelivery.location.longitude,
+              formatted_address: shipdayOrderDetails._raw.proofOfDelivery.location.address
+            };
+          }
+        }
         
       } catch (shipdayError) {
         console.error('❌ Error obteniendo datos de Shipday:', shipdayError);
-        order.shipday_error = "No se pudieron obtener los detalles de Shipday.";
       }
     }
 
@@ -243,9 +240,10 @@ if (shipdayOrderDetails) {
       order_id: order._id,
       order_number: order.order_number,
       status: order.status,
-      shipday_tracking_url: order.shipday_tracking_url,
-      has_shipday_order: !!order.shipday_order_id,
-      photo_url: order.proof_of_delivery?.photo_url,
+      has_cloudinary_photos: !!order.proof_of_delivery?.photo_urls?.length,
+      has_shipday_photos: !!order.proof_of_delivery?.podUrls?.length,
+      total_photos: (order.proof_of_delivery?.photo_urls?.length || 0) + 
+                    (order.proof_of_delivery?.podUrls?.length || 0)
     });
 
     res.json(order);
