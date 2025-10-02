@@ -232,6 +232,7 @@ const video = ref(null)
 let stream = null
 
 const filteredClients = computed(() => {
+  if (!clients.value) return []  // Protección contra undefined
   if (!search.value) return clients.value
   const s = search.value.toLowerCase()
   return clients.value.filter(c => 
