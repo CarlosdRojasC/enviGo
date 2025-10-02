@@ -260,14 +260,23 @@ async function loadClients() {
   loadingClients.value = true
   try {
     const res = await axios.get(`${API_URL}/driver-scanner/clients`)
-    clients.value = res.data.data
+    // Asegúrate de que res.data.data es un array antes de asignarlo
+    if (Array.isArray(res.data.data)) {
+      clients.value = res.data.data
+    } else {
+      // Si no es un array, asigna un array vacío para evitar errores
+      clients.value = []
+      console.error('La respuesta de la API para los clientes no es un array:', res.data)
+      toast.error('Error: formato de datos de clientes incorrecto')
+    }
   } catch (error) {
+    clients.value = [] // También asigna un array vacío en caso de error
     toast.error('Error cargando clientes')
+    console.error('Error en la llamada a la API de clientes:', error)
   } finally {
     loadingClients.value = false
   }
 }
-
 function selectClient(client) {
   selectedClient.value = client
   results.value = []
