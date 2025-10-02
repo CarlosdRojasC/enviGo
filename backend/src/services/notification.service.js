@@ -20,7 +20,7 @@ class NotificationService {
 /**
  * Extraer ID de Shipday de la URL de tracking y construir URL personalizada
  */
-extractShipdayIdAndBuildUrl(webhookData, order) {
+async extractShipdayIdAndBuildUrl(webhookData, order) {
   let shipdayTrackingId = null;
   
   // Intentar extraer de trackingUrl del webhook
