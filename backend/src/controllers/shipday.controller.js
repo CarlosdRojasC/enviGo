@@ -502,7 +502,7 @@ async handleWebhook(req, res) {
     }
     
       if (newTrackingUrl) {
-        order.custom_tracking_url = NotificationService.extractShipdayIdAndBuildUrl(webhookData, order);
+        order.custom_tracking_url = await notificationService.extractShipdayIdAndBuildUrl(webhookData, order);
         orderUpdated = true;
         console.log(`🔗 URL personalizada guardada: ${order.custom_tracking_url}`);
       }
