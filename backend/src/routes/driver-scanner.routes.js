@@ -60,168 +60,113 @@ router.get('/clients', async (req, res) => {
 // ==================== PROCESAR ETIQUETA ML CON OCR ====================
 // (El resto del archivo no necesita cambios, se mantiene igual)
 router.post('/process-ml-label', upload.single('image'), async (req, res) => {
-  // ... (toda tu lógica de procesamiento de etiquetas va aquí sin cambios)
   try {
-    console.log('📸 Procesando etiqueta ML con OCR...')
+    console.log('📸 Procesando etiqueta ML con OCR...');
 
-    if (!req.file) {
-      return res.status(400).json({
-        success: false,
-        message: 'No se recibió imagen'
-      })
-    }
+    if (!req.file || !req.body.client_id) {
+      return res.status(400).json({ success: false, message: 'Faltan datos (imagen o client_id)' });
+    }
 
-    if (!req.body.client_id) {
-      return res.status(400).json({
-        success: false,
-        message: 'client_id es requerido'
-      })
-    }
+    // 1. Ejecutar OCR y extraer datos (sin cambios)
+    console.log('🔍 Ejecutando OCR...');
+    const { data: { text } } = await Tesseract.recognize(req.file.buffer, 'spa+eng');
+    const extractedData = extractMLLabelData(text);
+    console.log('📊 Datos extraídos:', extractedData);
 
-    // Ejecutar OCR
-    console.log('🔍 Ejecutando OCR sobre la imagen...')
-    const { data: { text } } = await Tesseract.recognize(
-      req.file.buffer,
-      'spa+eng',
-      {
-        logger: m => {
-          if (m.status === 'recognizing text') {
-            console.log(`OCR: ${(m.progress * 100).toFixed(1)}%`)
-          }
-        }
-      }
-    )
+    if (!extractedData.shipping_number || !extractedData.customer_name) {
+      return res.json({
+        success: true,
+        data: { status: 'invalid', message: 'Datos incompletos en la etiqueta', ...extractedData }
+      });
+    }
 
-    console.log('📝 Texto extraído del OCR')
-    console.log('Primeros 200 caracteres:', text.substring(0, 200))
+    // 2. Buscar el canal activo de la empresa
+    const mlChannel = await Channel.findOne({
+      company_id: req.body.client_id,
+      is_active: true
+    });
 
-    // Extraer datos estructurados
-    const extractedData = extractMLLabelData(text)
-    console.log('📊 Datos extraídos:', extractedData)
+    if (!mlChannel) {
+      return res.status(404).json({ success: false, message: 'La empresa no tiene un canal activo' });
+    }
+    console.log('✅ Usando canal:', mlChannel.name);
 
-    // Validar datos mínimos
-    if (!extractedData.shipping_number || !extractedData.customer_name || !extractedData.address) {
-      return res.json({
-        success: true,
-        data: {
-          status: 'invalid',
-          message: 'Datos incompletos en la etiqueta',
-          extracted_data: extractedData,
-          raw_text: text.substring(0, 500)
-        }
-      })
-    }
+    // 3. ✨ VERIFICACIÓN DE DUPLICADOS MEJORADA ✨
+    //    Buscamos usando la misma combinación de la regla de la base de datos.
+    const uniqueExternalId = extractedData.shipping_number || extractedData.sale_id;
+    
+    const existingOrder = await Order.findOne({
+      channel_id: mlChannel._id,
+      external_order_id: uniqueExternalId
+    });
 
-    // Verificar duplicado
-    const existingOrder = await Order.findOne({
-      'ml_info.barcode': extractedData.shipping_number
-    })
+    if (existingOrder) {
+      console.log('⚠️ Pedido duplicado encontrado por channel_id y external_order_id.');
+      return res.json({
+        success: true,
+        data: {
+          status: 'duplicate',
+          message: 'Este pedido ya fue ingresado al sistema.',
+          order_id: existingOrder._id,
+          ...extractedData
+        }
+      });
+    }
 
-    if (existingOrder) {
-      console.log('⚠️ Pedido duplicado')
-      return res.json({
-        success: true,
-        data: {
-          status: 'duplicate',
-          shipping_number: extractedData.shipping_number,
-          order_id: existingOrder._id,
-          ...extractedData
-        }
-      })
-    }
+    // 4. Crear el nuevo pedido (si no se encontró un duplicado)
+    const newOrder = new Order({
+      company_id: req.body.client_id,
+      channel_id: mlChannel._id,
+      external_order_id: uniqueExternalId, // Usamos el ID único
+      order_number: extractedData.shipping_number, // El número de envío como número de orden
+      customer_name: extractedData.customer_name,
+      shipping_address: extractedData.address,
+      shipping_commune: extractedData.commune || 'Por definir',
+      shipping_city: 'Santiago',
+      notes: extractedData.reference || '',
+      delivery_notes: extractedData.reference || '',
+      ml_info: {
+        barcode: extractedData.shipping_number,
+        ml_id: extractedData.sale_id,
+        tracking_code: extractedData.shipping_number,
+        parsed_data: extractedData
+      },
+      status: 'pending',
+      source: 'ml_scanner',
+      created_via_scanner: true,
+      scanner_timestamp: new Date(),
+      order_date: new Date()
+      // ... otros campos de tu modelo Order
+    });
 
-    // Buscar o crear canal ML para esta empresa
-   // Buscar cualquier canal activo de la empresa
-let mlChannel = await Channel.findOne({
-  company_id: req.body.client_id,
-  is_active: true
-})
+    await newOrder.save();
+    console.log('✅ Pedido creado exitosamente:', newOrder.order_number);
 
-if (!mlChannel) {
-  return res.status(400).json({
-    success: false,
-    message: 'La empresa no tiene canales activos configurados'
-  })
-}
+    res.json({
+      success: true,
+      data: {
+        status: 'created',
+        order_id: newOrder._id,
+        ...extractedData
+      }
+    });
 
-console.log('✅ Usando canal:', mlChannel.channel_name)
-
-    // Crear pedido
-    const orderNumber = extractedData.shipping_number
-
-    const newOrder = new Order({
-      company_id: req.body.client_id,
-      channel_id: mlChannel._id,
-      external_order_id: extractedData.shipping_number || extractedData.sale_id,
-      order_number: orderNumber,
-      
-      // Cliente
-      customer_name: extractedData.customer_name,
-      customer_phone: '',
-      customer_email: '',
-      
-      // Dirección
-      shipping_address: extractedData.address,
-      shipping_commune: extractedData.commune || 'Por definir',
-      shipping_city: 'Santiago',
-      shipping_state: 'Región Metropolitana',
-      
-      // Montos
-      total_amount: 0,
-      shipping_cost: 0,
-      
-      // Info ML
-      ml_info: {
-        barcode: extractedData.shipping_number,
-        ml_id: extractedData.sale_id,
-        tracking_code: extractedData.shipping_number,
-        country: 'CL',
-        parsed_data: extractedData
-      },
-      
-      // Notas
-      notes: extractedData.reference || '',
-      delivery_notes: extractedData.reference || '',
-      
-      // Estado
-      status: 'pending',
-      platform: 'mercadolibre',
-      source: 'ml_scanner',
-      created_via_scanner: true,
-      scanner_timestamp: new Date(),
-      
-      // Fechas
-      order_date: new Date(),
-      created_at: new Date(),
-      updated_at: new Date()
-    })
-
-    await newOrder.save()
-
-    console.log('✅ Pedido creado:', orderNumber)
-
-    res.json({
-      success: true,
-      data: {
-        status: 'created',
-        order_id: newOrder._id,
-        order_number: orderNumber,
-        shipping_number: extractedData.shipping_number,
-        customer_name: extractedData.customer_name,
-        address: extractedData.address,
-        commune: extractedData.commune,
-        reference: extractedData.reference
-      }
-    })
-
-  } catch (error) {
-    console.error('❌ Error procesando etiqueta:', error)
-    res.status(500).json({
-      success: false,
-      message: 'Error procesando etiqueta',
-      error: error.message
-    })
-  }
+  } catch (error) {
+    // Si AÚN ocurre un error de duplicado (ej. dos personas escanean al mismo tiempo),
+    // lo manejamos elegantemente en lugar de crashear.
+    if (error.code === 11000) {
+      console.log('⚠️ Error de duplicado durante la creación (carrera de condiciones).');
+      return res.json({
+        success: true,
+        data: {
+          status: 'duplicate',
+          message: 'Pedido duplicado (detectado en creación).'
+        }
+      });
+    }
+    console.error('❌ Error grave procesando etiqueta:', error);
+    res.status(500).json({ success: false, message: 'Error interno del servidor' });
+  }
 });
 
 // ==================== FUNCIONES DE EXTRACCIÓN ====================
