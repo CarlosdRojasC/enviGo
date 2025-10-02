@@ -126,14 +126,24 @@
           Cancelar
         </button>
 
-        <button 
-          v-if="capturedImage" 
-          @click="process"
-          class="btn-success btn-large"
-          :disabled="processing"
-        >
-          {{ processing ? '⏳ Procesando...' : '✨ Procesar' }}
-        </button>
+        <!-- Cola de imágenes capturadas -->
+<div v-if="capturedImages.length > 0" class="image-queue">
+  <h3>Etiquetas capturadas: {{ capturedImages.length }}</h3>
+  <div class="queue-grid">
+    <div v-for="img in capturedImages" :key="img.id" class="queue-item">
+      <img :src="img.data" alt="Etiqueta" />
+      <button @click="removeImage(img.id)" class="btn-remove">✕</button>
+    </div>
+  </div>
+  
+  <button 
+    @click="processAllImages" 
+    class="btn-process-all"
+    :disabled="processing"
+  >
+    {{ processing ? 'Procesando...' : `Procesar ${capturedImages.length} etiquetas` }}
+  </button>
+</div>
 
         <button 
           v-if="capturedImage" 
@@ -224,11 +234,13 @@ const search = ref('')
 const selectedClient = ref(null)
 const scanning = ref(false)
 const capturedImage = ref(null)
+const capturedImages = ref([])
 const processing = ref(false)
 const results = ref([])
 const lastResult = ref(null)
 const showResults = ref(false)
 const video = ref(null)
+const batchMode = ref(true) // Modo batch activado
 let stream = null
 
 const filteredClients = computed(() => {
@@ -320,10 +332,58 @@ function capture() {
   canvas.width = video.value.videoWidth
   canvas.height = video.value.videoHeight
   canvas.getContext('2d').drawImage(video.value, 0, 0)
-  capturedImage.value = canvas.toDataURL('image/jpeg', 0.95)
+  const imageData = canvas.toDataURL('image/jpeg', 0.95)
   
+  capturedImages.value.push({
+    id: Date.now(),
+    data: imageData,
+    status: 'pending'
+  })
+  
+  toast.success(`${capturedImages.value.length} etiquetas capturadas`)
+  // La cámara sigue activa para seguir escaneando
+}
+
+async function processAllImages() {
+  if (capturedImages.value.length === 0) {
+    toast.error('No hay imágenes para procesar')
+    return
+  }
+
+  processing.value = true
   stopCamera()
-  toast.success('Foto capturada')
+  
+  let processedCount = 0
+  
+  for (let i = 0; i < capturedImages.value.length; i++) {
+    const img = capturedImages.value[i]
+    
+    try {
+      const blob = await fetch(img.data).then(r => r.blob())
+      const formData = new FormData()
+      formData.append('image', blob, 'etiqueta.jpg')
+      formData.append('client_id', selectedClient.value.id)
+      
+      const res = await axios.post(`${API_URL}/driver-scanner/process-ml-label`, formData)
+      
+      if (res.data.success) {
+        results.value.unshift(res.data.data)
+        img.status = res.data.data.status
+        processedCount++
+      }
+    } catch (error) {
+      console.error('Error procesando imagen:', error)
+      img.status = 'error'
+    }
+  }
+  
+  processing.value = false
+  capturedImages.value = []
+  toast.success(`${processedCount} etiquetas procesadas correctamente`)
+}
+function removeImage(id) {
+  capturedImages.value = capturedImages.value.filter(img => img.id !== id)
+  toast.info('Imagen eliminada')
 }
 
 function stopCamera() {
@@ -842,5 +902,61 @@ onMounted(() => {
   text-align: center;
   padding: 40px 20px;
   color: #999;
+}
+.image-queue {
+  background: white;
+  padding: 20px;
+  border-radius: 12px;
+  margin-bottom: 20px;
+}
+
+.image-queue h3 {
+  margin: 0 0 15px 0;
+  font-size: 16px;
+}
+
+.queue-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  gap: 10px;
+  margin-bottom: 15px;
+}
+
+.queue-item {
+  position: relative;
+  aspect-ratio: 1;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.queue-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.btn-remove {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(239, 68, 68, 0.9);
+  color: white;
+  cursor: pointer;
+}
+
+.btn-process-all {
+  width: 100%;
+  padding: 15px;
+  background: #4caf50;
+  color: white;
+  border: none;
+  border-radius: 10px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
 }
 </style>
