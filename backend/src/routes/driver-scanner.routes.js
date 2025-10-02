@@ -227,60 +227,86 @@ console.log('✅ Usando canal:', mlChannel.channel_name)
 // ==================== FUNCIONES DE EXTRACCIÓN ====================
 // (Sin cambios)
 function extractMLLabelData(text) {
-  // ... (toda tu lógica de extracción va aquí sin cambios)
-    const data = {
-    shipping_number: null,
-    sale_id: null,
-    customer_name: null,
-    address: null,
-    commune: null,
-    reference: null
-  }
+  const data = {
+    shipping_number: null,
+    sale_id: null,
+    customer_name: null,
+    address: null,
+    commune: null,
+    reference: null
+  }
 
-  // 1. Número de envío
-  const envioMatch = text.match(/Env[ií]o[:\s]+(\d{10,15})/i)
-  if (envioMatch) data.shipping_number = envioMatch[1]
+  // Limpiar texto
+  const cleanText = text.replace(/\n+/g, ' ').replace(/\s+/g, ' ')
 
-  // 2. ID de venta
-  const ventaMatch = text.match(/Venta[:\s]+(\d{10,20})/i)
-  if (ventaMatch) data.sale_id = ventaMatch[1]
+  // 1. Buscar PRIMERO "Envío" o "Envio"
+  let envioMatch = cleanText.match(/Env[ií]o\s*[:\s]+(\d{10,15})/i)
+  
+  // Si no encuentra "Envío", buscar "Pack ID"
+  if (!envioMatch) {
+    envioMatch = cleanText.match(/Pack\s*ID\s*[:\s]+(\d{10,20})/i)
+  }
+  
+  if (envioMatch) {
+    data.shipping_number = envioMatch[1]
+  }
 
-  // 3. Nombre del destinatario
-  const destinatarioMatch = text.match(/Destinatario[:\s]+([A-ZÁÉÍÓÚÑ][a-záéíóúñ\s]+(?:[A-ZÁÉÍÓÚÑ][a-záéíóúñ\s]+)*)/i)
-  if (destinatarioMatch) data.customer_name = destinatarioMatch[1].trim()
+  // 2. Pack ID o Venta como sale_id
+  const packMatch = cleanText.match(/Pack\s*ID\s*[:\s]+(\d{10,20})/i)
+  if (packMatch) {
+    data.sale_id = packMatch[1]
+  } else {
+    const ventaMatch = cleanText.match(/Venta\s*[:\s]+(\d{10,20})/i)
+    if (ventaMatch) {
+      data.sale_id = ventaMatch[1]
+    }
+  }
 
-  // 4. Dirección
-  const direccionMatch = text.match(/Direcci[oó]n[:\s]+([^\n]+)/i)
-  if (direccionMatch) data.address = direccionMatch[1].trim()
+  // 3. Destinatario
+  const destinatarioMatch = cleanText.match(/Destinatario\s*[:\s]+([A-ZÁÉÍÓÚÑ][a-záéíóúñ\s]+)/i)
+  if (destinatarioMatch) {
+    let name = destinatarioMatch[1].trim()
+    name = name.replace(/\([^)]*\)/g, '').trim()
+    data.customer_name = name
+  }
 
-  // 5. Referencia
-  const referenciaMatch = text.match(/Referencia[:\s]+([^\n]+)/i)
-  if (referenciaMatch) data.reference = referenciaMatch[1].trim()
+  // 4. Dirección
+  const direccionMatch = cleanText.match(/Direcci[oó]n\s*[:\s]+([^\n]+)/i)
+  if (direccionMatch) {
+    data.address = direccionMatch[1].trim()
+  }
 
-  // 6. Comuna - Lista completa
-  const comunas = [
-    'HUECHURABA', 'QUILICURA', 'RECOLETA', 'INDEPENDENCIA', 'CONCHALÍ', 'COLINA',
-    'SANTIAGO', 'SANTIAGO CENTRO', 'ESTACIÓN CENTRAL', 'QUINTA NORMAL', 'PROVIDENCIA',
-    'LAS CONDES', 'VITACURA', 'ÑUÑOA', 'LA REINA', 'PEÑALOLÉN', 'MACUL', 'LO BARNECHEA',
-    'SAN MIGUEL', 'SAN JOAQUÍN', 'PEDRO AGUIRRE CERDA', 'LA CISTERNA', 'SAN RAMÓN',
-    'LA GRANJA', 'EL BOSQUE', 'LO ESPEJO',
-    'CERRILLOS', 'RENCA', 'CERRO NAVIA', 'PUDAHUEL', 'MAIPÚ', 'MAIPU',
-    'LA FLORIDA', 'PUENTE ALTO', 'SAN BERNARDO', 'LA PINTANA', 'LO PRADO'
-  ]
+  // 5. Referencia
+  const referenciaMatch = cleanText.match(/Referencia\s*[:\s]+([^\n]+)/i)
+  if (referenciaMatch) {
+    data.reference = referenciaMatch[1].trim()
+  }
 
-  const textUpper = text.toUpperCase()
-  const comunasOrdenadas = comunas.sort((a, b) => b.length - a.length)
-  
-  for (const comuna of comunasOrdenadas) {
-    if (textUpper.includes(comuna)) {
-      data.commune = comuna.split(' ').map(w => 
-        w.charAt(0) + w.slice(1).toLowerCase()
-      ).join(' ')
-      break
-    }
-  }
+  // 6. Comuna
+  const comunas = [
+    'HUECHURABA', 'QUILICURA', 'RECOLETA', 'INDEPENDENCIA', 'CONCHALÍ', 'COLINA',
+    'SANTIAGO', 'SANTIAGO CENTRO', 'ESTACIÓN CENTRAL', 'QUINTA NORMAL', 'PROVIDENCIA',
+    'LAS CONDES', 'VITACURA', 'ÑUÑOA', 'LA REINA', 'PEÑALOLÉN', 'MACUL', 'LO BARNECHEA',
+    'SAN MIGUEL', 'SAN JOAQUÍN', 'PEDRO AGUIRRE CERDA', 'LA CISTERNA', 'SAN RAMÓN',
+    'LA GRANJA', 'EL BOSQUE', 'LO ESPEJO',
+    'CERRILLOS', 'RENCA', 'CERRO NAVIA', 'PUDAHUEL', 'MAIPÚ', 'MAIPU',
+    'LA FLORIDA', 'PUENTE ALTO', 'SAN BERNARDO', 'LA PINTANA', 'LO PRADO'
+  ]
 
-  return data
+  const textUpper = text.toUpperCase()
+  const comunasOrdenadas = comunas.sort((a, b) => b.length - a.length)
+  
+  for (const comuna of comunasOrdenadas) {
+    if (textUpper.includes(comuna)) {
+      data.commune = comuna.split(' ').map(w => 
+        w.charAt(0) + w.slice(1).toLowerCase()
+      ).join(' ')
+      break
+    }
+  }
+
+  return data
 }
+
 
 module.exports = router;
