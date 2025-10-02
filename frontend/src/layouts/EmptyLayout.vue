@@ -4,6 +4,10 @@
   </div>
 </template>
 
+<script setup>
+// Layout vacío
+</script>
+
 <style scoped>
 .empty-layout {
   width: 100%;
