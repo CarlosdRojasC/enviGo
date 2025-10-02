@@ -208,7 +208,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, nextTick } from 'vue'
 import axios from 'axios'
 import { useToast } from 'vue-toastification'
 
@@ -296,12 +296,22 @@ async function startCamera() {
         height: { ideal: 1440 }
       }
     })
-    video.value.srcObject = stream
+    
     scanning.value = true
-    toast.success('Cámara lista')
+    
+    // Esperar a que Vue actualice el DOM antes de asignar el stream
+    await nextTick()
+    
+    if (video.value) {
+      video.value.srcObject = stream
+      toast.success('Cámara lista')
+    } else {
+      throw new Error('Elemento de video no disponible')
+    }
   } catch (error) {
     console.error('Error cámara:', error)
     toast.error('No se pudo acceder a la cámara. Verifica los permisos.')
+    scanning.value = false
   }
 }
 
