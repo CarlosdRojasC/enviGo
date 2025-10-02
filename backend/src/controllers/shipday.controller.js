@@ -5,6 +5,7 @@ const Order = require('../models/Order'); // ¡CORRECCIÓN: Modelo Order importa
 const DriverHistoryService = require('../services/driverHistory.service');
 const NotificationService = require('../services/notification.service');
 const circuitController = require('./circuit.controller');
+const notificationService = new NotificationService();
 /**
  * Función auxiliar para generar un timeline de eventos basado en los datos de la orden de Shipday.
  * @param {object} orderData - El objeto de la orden de Shipday.
