@@ -234,55 +234,47 @@ function extractMLLabelData(text) {
     address: null,
     commune: null,
     reference: null
-  }
+  };
 
-  // Limpiar texto
-  const cleanText = text.replace(/\n+/g, ' ').replace(/\s+/g, ' ')
+  // Limpiar el texto de saltos de línea y múltiples espacios, es un buen primer paso.
+  const cleanText = text.replace(/\n+/g, ' ').replace(/\s{2,}/g, ' ').trim();
 
-  // 1. Buscar PRIMERO "Envío" o "Envio"
-  let envioMatch = cleanText.match(/Env[ií]o\s*[:\s]+(\d{10,15})/i)
-  
-  // Si no encuentra "Envío", buscar "Pack ID"
-  if (!envioMatch) {
-    envioMatch = cleanText.match(/Pack\s*ID\s*[:\s]+(\d{10,20})/i)
-  }
-  
+  // --- EXPRESIONES REGULARES MEJORADAS ---
+
+  // 1. Número de envío: Busca "Envío" o "Pack ID" seguido de un número largo.
+  let envioMatch = cleanText.match(/Env[ií]o\s*[:\s]\s*(\d{10,15})/i) || cleanText.match(/Pack\s*ID\s*[:\s]\s*(\d{10,20})/i);
   if (envioMatch) {
-    data.shipping_number = envioMatch[1]
+    data.shipping_number = envioMatch[1];
   }
 
-  // 2. Pack ID o Venta como sale_id
-  const packMatch = cleanText.match(/Pack\s*ID\s*[:\s]+(\d{10,20})/i)
-  if (packMatch) {
-    data.sale_id = packMatch[1]
-  } else {
-    const ventaMatch = cleanText.match(/Venta\s*[:\s]+(\d{10,20})/i)
-    if (ventaMatch) {
-      data.sale_id = ventaMatch[1]
-    }
+  // 2. ID de venta: Busca "Venta" o "Pack ID".
+  const saleMatch = cleanText.match(/Venta\s*[:\s]\s*(\d{10,20})/i) || cleanText.match(/Pack\s*ID\s*[:\s]\s*(\d{10,20})/i);
+  if (saleMatch) {
+    data.sale_id = saleMatch[1];
   }
 
-  // 3. Destinatario
-  const destinatarioMatch = cleanText.match(/Destinatario\s*[:\s]+([A-ZÁÉÍÓÚÑ][a-záéíóúñ\s]+)/i)
+  // 3. Destinatario: Captura el texto después de "Destinatario:" pero se detiene
+  //    antes de encontrar "Dirección:", "Referencia:" o un paréntesis.
+  const destinatarioMatch = cleanText.match(/Destinatario\s*[:\s]\s*(.+?)(?=\s*\(|Direcci[oó]n:|Referencia:|$)/i);
   if (destinatarioMatch) {
-    let name = destinatarioMatch[1].trim()
-    name = name.replace(/\([^)]*\)/g, '').trim()
-    data.customer_name = name
+    data.customer_name = destinatarioMatch[1].trim();
   }
 
-  // 4. Dirección
-  const direccionMatch = cleanText.match(/Direcci[oó]n\s*[:\s]+([^\n]+)/i)
+  // 4. Dirección: Captura el texto después de "Dirección:" pero se detiene
+  //    antes de encontrar "Referencia:", "Comuna:" o el final de la línea.
+  const direccionMatch = cleanText.match(/Direcci[oó]n\s*[:\s]\s*(.+?)(?=\s*Referencia:|Comuna:|$)/i);
   if (direccionMatch) {
-    data.address = direccionMatch[1].trim()
+    data.address = direccionMatch[1].trim();
   }
 
-  // 5. Referencia
-  const referenciaMatch = cleanText.match(/Referencia\s*[:\s]+([^\n]+)/i)
+  // 5. Referencia: Captura el texto después de "Referencia:" pero se detiene
+  //    antes de encontrar "Destinatario:" u otra palabra clave.
+  const referenciaMatch = cleanText.match(/Referencia\s*[:\s]\s*(.+?)(?=\s*Destinatario:|Pedido:|CLP|$)/i);
   if (referenciaMatch) {
-    data.reference = referenciaMatch[1].trim()
+    data.reference = referenciaMatch[1].trim();
   }
-
-  // 6. Comuna
+  
+  // 6. Comuna (lógica sin cambios, es robusta)
   const comunas = [
     'HUECHURABA', 'QUILICURA', 'RECOLETA', 'INDEPENDENCIA', 'CONCHALÍ', 'COLINA',
     'SANTIAGO', 'SANTIAGO CENTRO', 'ESTACIÓN CENTRAL', 'QUINTA NORMAL', 'PROVIDENCIA',
@@ -291,21 +283,22 @@ function extractMLLabelData(text) {
     'LA GRANJA', 'EL BOSQUE', 'LO ESPEJO',
     'CERRILLOS', 'RENCA', 'CERRO NAVIA', 'PUDAHUEL', 'MAIPÚ', 'MAIPU',
     'LA FLORIDA', 'PUENTE ALTO', 'SAN BERNARDO', 'LA PINTANA', 'LO PRADO'
-  ]
-
-  const textUpper = text.toUpperCase()
-  const comunasOrdenadas = comunas.sort((a, b) => b.length - a.length)
-  
+  ];
+  const textUpper = text.toUpperCase();
+  const comunasOrdenadas = comunas.sort((a, b) => b.length - a.length);
   for (const comuna of comunasOrdenadas) {
     if (textUpper.includes(comuna)) {
-      data.commune = comuna.split(' ').map(w => 
-        w.charAt(0) + w.slice(1).toLowerCase()
-      ).join(' ')
-      break
+      data.commune = comuna.split(' ').map(w => w.charAt(0) + w.slice(1).toLowerCase()).join(' ');
+      break;
     }
   }
 
-  return data
+  // Limpieza final: si la dirección capturó la comuna, la eliminamos de la dirección.
+  if (data.address && data.commune) {
+    data.address = data.address.replace(new RegExp(data.commune, 'i'), '').replace(/,/g, '').trim();
+  }
+  
+  return data;
 }
 
 
