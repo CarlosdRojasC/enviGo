@@ -152,7 +152,7 @@ console.log('✅ Usando canal:', mlChannel.channel_name)
     const newOrder = new Order({
       company_id: req.body.client_id,
       channel_id: mlChannel._id,
-      external_order_id: extractedData.sale_id || extractedData.shipping_number,
+      external_order_id: extractedData.shipping_number || extractedData.sale_id,
       order_number: orderNumber,
       
       // Cliente
