@@ -8,29 +8,51 @@ class ScannerController {
   /**
    * Obtener clientes disponibles (en tu caso, otras empresas)
    */
-  static async getClients(req, res) {
-    try {
-      const currentCompanyId = req.user.company_id
-      
-      // Por ahora, obtienes todas las empresas activas excepto la actual
-      // Puedes cambiar esta lógica según tus necesidades
-      const clients = await Company.find({
-        _id: { $ne: currentCompanyId },
-      }).select('name email phone address type')
+static async getClients(req, res) {
+  try {
+    // --- CONSOLE LOGS PARA DEBUG ---
+    console.log('1. Iniciando getClients...');
+    console.log('2. Objeto req.user:', req.user); // ¿Llega el usuario desde el middleware?
 
-      res.json({
-        success: true,
-        data: clients
-      })
-
-    } catch (error) {
-      console.error('Error obteniendo clientes para scanner:', error)
-      res.status(500).json({
+    // Si req.user no existe, el middleware de autenticación podría estar fallando.
+    if (!req.user) {
+      console.error('Error: req.user no está definido. Revisa el middleware de autenticación.');
+      return res.status(401).json({
         success: false,
-        message: 'Error obteniendo clientes'
-      })
+        message: 'Usuario no autenticado.'
+      });
     }
+
+    const currentCompanyId = req.user.company_id;
+    console.log('3. ID de la empresa actual (currentCompanyId):', currentCompanyId);
+
+    // --- Verifiquemos qué hay en la base de datos ANTES de filtrar ---
+    const allCompanies = await Company.find({});
+    console.log(`4. Total de empresas en la BD (sin filtro): ${allCompanies.length}`);
+    // Opcional: Descomenta la siguiente línea para ver los datos de todas las empresas
+    // console.log('Datos de todas las empresas:', allCompanies);
+
+    // --- Tu consulta original ---
+    const clients = await Company.find({
+      _id: { $ne: currentCompanyId },
+      status: 'active'
+    });
+    
+    console.log(`5. Empresas encontradas después del filtro: ${clients.length}`);
+
+    res.json({
+      success: true,
+      data: clients
+    });
+
+  } catch (error) {
+    console.error('Error CATCH en getClients:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error obteniendo clientes'
+    });
   }
+}
 
   /**
    * Procesar código de barras ML
