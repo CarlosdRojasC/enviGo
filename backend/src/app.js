@@ -33,6 +33,7 @@ const allowedOrigins = [
   'https://envigo.cl',
   'https://www.envigo.cl',
   'https://demosistema.up.railway.app',
+  '*',
     process.env.FRONTEND_URL
 ];
 
