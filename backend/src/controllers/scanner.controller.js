@@ -10,19 +10,25 @@ class ScannerController {
    */
 static async getClients(req, res) {
   try {
-    console.log('Iniciando getClients para repartidores...');
+    console.log('--- DIAGNÓSTICO DEFINITIVO ---');
+    console.log('Buscando TODAS las empresas sin ningún filtro...');
 
-    // La consulta correcta: Simplemente trae todas las empresas activas.
-    // No se necesita req.user ni currentCompanyId.
-    const clients = await Company.find({
-      status: 'active'
-    }).select('name email'); // Solo seleccionamos los campos necesarios
+    // Quitamos CUALQUIER filtro para ver qué hay realmente en la BD
+    const allClients = await Company.find({}).select('name email status');
 
-    console.log(`Se encontraron ${clients.length} clientes activos.`);
+    console.log(`Se encontraron ${allClients.length} empresas en total.`);
+    
+    // Mostramos en el log lo que se encontró para poder revisarlo
+    console.log('Datos de las empresas encontradas:', allClients);
+
+    // Filtramos en el código en lugar de la BD, solo para este diagnóstico
+    const activeClients = allClients.filter(client => client.status === 'active');
+    console.log(`De esas, ${activeClients.length} tienen status: 'active'`);
 
     res.json({
       success: true,
-      data: clients
+      // Devolvemos las empresas activas como antes
+      data: activeClients.map(c => ({ name: c.name, email: c.email, _id: c._id }))
     });
 
   } catch (error) {
