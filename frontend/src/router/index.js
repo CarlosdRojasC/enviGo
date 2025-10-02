@@ -189,21 +189,14 @@ const routes = [
 },
     ]
   },
-  {
-    path: '/scanner',
-    component: EmptyLayout,
-    children: [
-      {
-        path: '',
-        name: 'MLScanner',
-        component: () => import('../views/DriverMLScanner.vue'),
-        meta: { 
-          requiresAuth: false,
-          layout: 'empty'
-        }
-      }
-    ]
-  },
+{
+  path: '/scanner',
+  name: 'MLScanner',
+  component: () => import('../views/DriverMLScanner.vue'),
+  meta: { 
+    requiresAuth: false
+  }
+},
 
 
   
