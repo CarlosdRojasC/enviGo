@@ -147,8 +147,8 @@ if (!mlChannel) {
 console.log('✅ Usando canal:', mlChannel.channel_name)
 
     // Crear pedido
-    const orderNumber = `ML${Date.now().toString().slice(-8)}`
-    
+    const orderNumber = extractedData.shipping_number
+
     const newOrder = new Order({
       company_id: req.body.client_id,
       channel_id: mlChannel._id,
