@@ -160,11 +160,6 @@ const deliveryPhotos = computed(() => {
   const photoUrls = new Set();
   const proof = props.order?.proof_of_delivery;
 
-  // 🔍 DEBUG TEMPORAL
-  console.log('🔍 DEBUG - proof_of_delivery completo:', proof);
-  console.log('🔍 photo_urls (Cloudinary):', proof?.photo_urls);
-  console.log('🔍 podUrls (Shipday):', proof?.podUrls);
-  console.log('🔍 photo_url (antiguo):', proof?.photo_url);
 
   if (proof) {
     if (Array.isArray(proof.photo_urls) && proof.photo_urls.length > 0) {
