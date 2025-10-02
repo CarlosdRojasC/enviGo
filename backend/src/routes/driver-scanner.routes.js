@@ -131,22 +131,20 @@ router.post('/process-ml-label', upload.single('image'), async (req, res) => {
     }
 
     // Buscar o crear canal ML para esta empresa
-    let mlChannel = await Channel.findOne({
-      company_id: req.body.client_id,
-      platform: 'mercadolibre'
-    })
+   // Buscar cualquier canal activo de la empresa
+let mlChannel = await Channel.findOne({
+  company_id: req.body.client_id,
+  is_active: true
+})
 
-    if (!mlChannel) {
-      mlChannel = new Channel({
-        company_id: req.body.client_id,
-        platform: 'mercadolibre',
-        name: 'MercadoLibre Scanner',
-        is_active: true,
-        created_at: new Date()
-      })
-      await mlChannel.save()
-      console.log('✅ Canal ML creado')
-    }
+if (!mlChannel) {
+  return res.status(400).json({
+    success: false,
+    message: 'La empresa no tiene canales activos configurados'
+  })
+}
+
+console.log('✅ Usando canal:', mlChannel.channel_name)
 
     // Crear pedido
     const orderNumber = `ML${Date.now().toString().slice(-8)}`
