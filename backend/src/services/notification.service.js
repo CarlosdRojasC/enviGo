@@ -434,4 +434,4 @@ async sendDeliveryConfirmationEmail(order) {
 }
 }
 
-module.exports = new NotificationService();
+module.exports = NotificationService;
