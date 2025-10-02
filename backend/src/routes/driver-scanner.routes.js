@@ -196,45 +196,48 @@ function extractMLLabelData(text) {
   const referenciaMatch = text.match(/Referencia\s*[:\s]([^\n]+)/i);
   if (referenciaMatch) data.reference = referenciaMatch[1].trim();
 
-  // 2. LÓGICA INTELIGENTE PARA ENCONTRAR LA COMUNA CORRECTA
+  // 2. ✨ NUEVA LÓGICA PARA ENCONTRAR LA COMUNA CORRECTA ✨
   const comunas = [
     'HUECHURABA', 'QUILICURA', 'RECOLETA', 'INDEPENDENCIA', 'CONCHALÍ', 'COLINA',
     'SANTIAGO', 'SANTIAGO CENTRO', 'ESTACIÓN CENTRAL', 'QUINTA NORMAL', 'PROVIDENCIA',
-    'LAS CONDES', 'VITACURA', 
-    'ÑUÑOA', 'NUNOA', // ✨ SE AÑADE VARIANTE PARA ÑUÑOA
-    'LA REINA', 
-    'PEÑALOLÉN', 'PENALOLEN', // Se añade variante para Peñalolén
+    'LAS CONDES', 'VITACURA', 'ÑUÑOA', 'NUNOA', 'LA REINA', 'PEÑALOLÉN', 'PENALOLEN', 
     'MACUL', 'LO BARNECHEA', 'SAN MIGUEL', 'SAN JOAQUÍN', 'PEDRO AGUIRRE CERDA', 
     'LA CISTERNA', 'SAN RAMÓN', 'LA GRANJA', 'EL BOSQUE', 'LO ESPEJO', 'CERRILLOS', 
     'RENCA', 'CERRO NAVIA', 'PUDAHUEL', 'MAIPÚ', 'MAIPU', 'LA FLORIDA', 'PUENTE ALTO', 
     'SAN BERNARDO', 'LA PINTANA', 'LO PRADO'
   ];
 
-  const lines = text.toUpperCase().split('\n');
-  const recipientLineIndex = lines.findIndex(line => line.includes('DESTINATARIO'));
-  
-  let searchBlock = text.toUpperCase();
-  if (recipientLineIndex !== -1) {
-    const startIndex = Math.max(0, recipientLineIndex - 6);
-    searchBlock = lines.slice(startIndex, recipientLineIndex + 1).join(' ');
-  }
+  const textUpper = text.toUpperCase();
+  let foundCommunes = [];
 
-  // ✨ CONSOLE LOG PARA DEPURACIÓN: Muestra el texto donde se busca la comuna
-  console.log('🔍 Buscando comuna en el siguiente bloque de texto:', searchBlock);
+  // Buscar todas las comunas presentes en el texto y guardar su posición
+  comunas.forEach(comuna => {
+    let lastIndex = -1;
+    let searchIndex = textUpper.indexOf(comuna, 0);
+    while (searchIndex > -1) {
+      lastIndex = searchIndex;
+      searchIndex = textUpper.indexOf(comuna, lastIndex + 1);
+    }
+    if (lastIndex > -1) {
+      foundCommunes.push({ name: comuna, index: lastIndex });
+    }
+  });
 
-  const comunasOrdenadas = comunas.sort((a, b) => b.length - a.length);
-  for (const comuna of comunasOrdenadas) {
-    if (searchBlock.includes(comuna)) {
-      let finalCommuneName = comuna;
-      // Normalizar el nombre si se encontró la variante (ej. NUNOA -> Ñuñoa)
-      if (comuna === 'NUNOA') finalCommuneName = 'ÑUÑOA';
-      if (comuna === 'PENALOLEN') finalCommuneName = 'PEÑALOLÉN';
+  console.log('🔍 Comunas encontradas en el texto:', foundCommunes);
 
-      data.commune = finalCommuneName.charAt(0) + finalCommuneName.slice(1).toLowerCase();
-      if (data.commune.includes(' ')) {
-        data.commune = data.commune.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
-      }
-      break; 
+  // Si se encontraron comunas, elegir la que aparece más tarde en el texto
+  if (foundCommunes.length > 0) {
+    const lastCommune = foundCommunes.sort((a, b) => b.index - a.index)[0];
+    
+    let finalCommuneName = lastCommune.name;
+    // Normalizar el nombre si es una variante
+    if (finalCommuneName === 'NUNOA') finalCommuneName = 'ÑUÑOA';
+    if (finalCommuneName === 'PENALOLEN') finalCommuneName = 'PEÑALOLÉN';
+    if (finalCommuneName === 'MAIPU') finalCommuneName = 'MAIPÚ';
+
+    data.commune = finalCommuneName.charAt(0) + finalCommuneName.slice(1).toLowerCase();
+    if (data.commune.includes(' ')) {
+      data.commune = data.commune.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
     }
   }
 
@@ -242,7 +245,7 @@ function extractMLLabelData(text) {
   const capitalize = (str) => str ? str.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ') : null;
   data.customer_name = capitalize(data.customer_name);
   if (data.address && data.commune) {
-    data.address = data.address.replace(new RegExp(data.commune, 'i'), '').replace(/,|\|/g, '').trim();
+    data.address = data.address.replace(new RegExp(data.commune.toUpperCase(), 'i'), '').replace(/,|\|/g, '').trim();
   }
   if (data.reference) data.reference = data.reference.replace(/\|/g, '').trim();
 
