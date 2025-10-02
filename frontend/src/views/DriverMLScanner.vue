@@ -259,7 +259,7 @@ async function login() {
 async function loadClients() {
   loadingClients.value = true
   try {
-    const res = await axios.get(`${API_URL}/driver-scanner/clients`)
+    const res = await axios.get(`${API_URL}/api/driver-scanner/clients`)
     // Asegúrate de que res.data.data es un array antes de asignarlo
     if (Array.isArray(res.data.data)) {
       clients.value = res.data.data
