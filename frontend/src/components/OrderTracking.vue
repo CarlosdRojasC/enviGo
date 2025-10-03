@@ -341,8 +341,8 @@ const getTrackingUrl = computed(() => {
   if (!tracking.value) return '';
   
   // Si ya tenemos custom_tracking_url guardada, usarla
-  if (tracking.value.custom_tracking_url) {
-    return tracking.value.custom_tracking_url;
+  if (tracking.value.shipday_tracking_url) {
+    return tracking.value.shipday_tracking_url;
   }
   
   // 🎯 USAR LA MISMA LÓGICA QUE notification.service.js
