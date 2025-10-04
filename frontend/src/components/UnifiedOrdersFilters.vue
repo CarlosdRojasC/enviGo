@@ -150,13 +150,12 @@
           search
         </span>
         <input
-          :value="filters.search"
-          @input="updateFilter('search', $event.target.value)"
-          type="text"
-          placeholder="Buscar por número de pedido, cliente, email, teléfono..."
-          :disabled="loading"
-          class="w-full pl-10 pr-10 py-3 bg-white dark:bg-gray-800 border-2 border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:text-white disabled:opacity-50"
-        />
+  :value="filters.search"
+  @input="onSearchInput" type="text"
+  placeholder="Buscar por número de pedido, cliente, email, teléfono..."
+  :disabled="loading"
+  class="..."
+/>
         <button
           v-if="filters.search"
           @click="updateFilter('search', '')"
@@ -307,6 +306,7 @@ const emit = defineEmits([
 const showCommuneDropdown = ref(false)
 const communeSearch = ref('')
 const communeDropdownRef = ref(null)
+const searchTimeout = null
 
 // ==================== COMPUTED ====================
 
@@ -386,6 +386,19 @@ const selectedCommunesText = computed(() => {
  */
 function updateFilter(key, value) {
   emit('filter-change', key, value)
+}
+/**
+ * Maneja el input de búsqueda con un debounce de 500ms
+ */
+function onSearchInput(event) {
+  // Limpia el temporizador anterior cada vez que se presiona una tecla
+  clearTimeout(searchTimeout)
+
+  // Establece un nuevo temporizador
+  searchTimeout = setTimeout(() => {
+    // Esta función solo se ejecutará 500ms después de que el usuario deje de escribir
+    updateFilter('search', event.target.value)
+  }, 500) // Puedes ajustar el tiempo (en ms) como prefieras
 }
 
 /**
