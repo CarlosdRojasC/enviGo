@@ -42,8 +42,8 @@
     </div>
 
     <!-- Tabla -->
-    <div class="overflow-x-auto">
-      <table class="w-full text-sm">
+    <div class="overflow-x-auto scrollbar-thin">
+      <table class="w-full text-sm min-w-[1400px]">
         <thead class="bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
           <tr class="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
             <th class="p-4 text-left">
