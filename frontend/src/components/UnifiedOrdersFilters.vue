@@ -154,7 +154,8 @@
   @input="onSearchInput" type="text"
   placeholder="Buscar por número de pedido, cliente, email, teléfono..."
   :disabled="loading"
-  class="..."
+            class="w-full pl-10 pr-10 py-3 bg-white dark:bg-gray-800 border-2 border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:text-white disabled:opacity-50"
+
 />
         <button
           v-if="filters.search"
@@ -398,7 +399,7 @@ function onSearchInput(event) {
   searchTimeout = setTimeout(() => {
     // Esta función solo se ejecutará 500ms después de que el usuario deje de escribir
     updateFilter('search', event.target.value)
-  }, 500) // Puedes ajustar el tiempo (en ms) como prefieras
+  }, 1000) // Puedes ajustar el tiempo (en ms) como prefieras
 }
 
 /**
