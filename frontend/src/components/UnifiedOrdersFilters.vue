@@ -84,7 +84,7 @@
           <!-- Dropdown -->
           <div
             v-if="showCommuneDropdown"
-            class="absolute z-20 mt-1 w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg max-h-64 overflow-hidden"
+            class="absolute z-[100] mt-1 w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-2xl max-h-80 overflow-hidden"
           >
             <div class="p-2 border-b border-gray-200 dark:border-gray-700">
               <div class="relative">
@@ -100,13 +100,13 @@
                 />
               </div>
             </div>
-            <div class="max-h-48 overflow-y-auto">
+            <div class="max-h-60 overflow-y-auto">
               <button
                 v-for="commune in filteredCommunesNormalized"
                 :key="commune"
                 @click="addCommune(commune)"
                 :disabled="filters.shipping_commune.includes(commune)"
-                class="w-full px-3 py-2 text-sm text-left hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed text-gray-900 dark:text-white"
+                class="w-full px-4 py-3 text-sm text-left hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed text-gray-900 dark:text-white transition-colors"
               >
                 {{ commune }}
               </button>
