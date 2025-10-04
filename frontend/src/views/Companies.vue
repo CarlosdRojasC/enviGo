@@ -50,7 +50,7 @@
         <div class="flex items-center justify-between">
           <div>
             <p class="text-sm text-gray-500">Pedidos del Mes</p>
-            <p class="text-3xl font-bold text-blue-600">{{ totalMonthlyOrders }}</p>
+            <p class="text-3xl font-bold text-blue-600">{{ formatNumber(totalOrders) }}</p>
           </div>
           <div class="bg-blue-100 p-3 rounded-full">
             <span class="material-icons text-blue-600">local_shipping</span>
@@ -770,6 +770,11 @@ export default {
       
       return result
     })
+
+    const calculateMonthlyRevenue = (company) => {
+  const base = (company.price_per_order || 0) * (company.orders_this_month || 0)
+  return Math.round(base * 1.19) // Incluye IVA
+}
 
     const sortedCompanies = computed(() => {
       const sorted = [...filteredCompanies.value]
