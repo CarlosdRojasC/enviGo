@@ -40,7 +40,7 @@
         <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
           <div class="flex items-center justify-between">
             <div>
-              <p class="text-3xl font-bold text-gray-900">{{ stats.totalCompanies || 0 }}</p>
+              <p class="text-3xl font-bold text-gray-900">{{ stats.companies || 0 }}</p>
               <p class="text-sm text-gray-500 mt-1">Empresas Activas</p>
             </div>
             <div class="bg-indigo-100 p-3 rounded-full">
@@ -70,7 +70,7 @@
         <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
           <div class="flex items-center justify-between">
             <div>
-              <p class="text-3xl font-bold text-gray-900">{{ stats.deliveredOrders || 0 }}</p>
+              <p class="text-3xl font-bold text-gray-900">{{ stats.deliveredTotal || 0 }}</p>
               <p class="text-sm text-gray-500 mt-1">Pedidos Entregados</p>
             </div>
             <div class="bg-indigo-100 p-3 rounded-full">
@@ -87,7 +87,7 @@
         <div class="bg-orange-400 p-6 rounded-lg shadow-sm text-white">
           <div class="flex items-center justify-between">
             <div>
-              <p class="text-3xl font-bold">{{ formatCurrency(stats.totalRevenue) }}</p>
+              <p class="text-3xl font-bold">{{ formatCurrency(stats.estimatedMonthlyCost || stats.monthlyRevenue) }}</p>
               <p class="text-sm text-orange-100 mt-1">Ingresos del Mes</p>
             </div>
           </div>
@@ -130,11 +130,11 @@
         <div class="mt-4 grid grid-cols-4 gap-4 text-center">
           <div>
             <p class="text-sm text-gray-500">Total</p>
-            <p class="text-lg font-bold text-gray-900">{{ stats.totalOrders || 0 }}</p>
+            <p class="text-lg font-bold text-gray-900">{{ stats.orders || 0 }}</p>
           </div>
           <div>
             <p class="text-sm text-gray-500">Promedio</p>
-            <p class="text-lg font-bold text-gray-900">{{ Math.round((stats.totalOrders || 0) / 30) }}</p>
+            <p class="text-lg font-bold text-gray-900">{{ Math.round((stats.orders || 0) / 30) }}</p>
           </div>
           <div>
             <p class="text-sm text-gray-500">Tendencia</p>
