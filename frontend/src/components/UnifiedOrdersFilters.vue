@@ -314,21 +314,38 @@ const communeDropdownRef = ref(null)
  * Normalize communes to Title Case and remove duplicates
  */
 const normalizedCommunes = computed(() => {
-  const communes = [...props.availableCommunes]
-  
-  // Normalizar a Title Case
-  const normalized = communes.map(commune => {
-    if (!commune) return ''
-    
-    return commune
-      .toLowerCase()
-      .split(' ')
-      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-      .join(' ')
+  if (!props.availableCommunes || props.availableCommunes.length === 0) {
+    return []
+  }
+
+  // Paso 1: Crear un mapa para eliminar duplicados ignorando mayúsculas/minúsculas.
+  // La clave será la comuna en minúscula y el valor será la comuna con el formato deseado.
+  const uniqueCommunesMap = new Map()
+
+  props.availableCommunes.forEach(commune => {
+    if (!commune || typeof commune !== 'string') return
+
+    // Clave de normalización (todo en minúsculas y sin espacios extra)
+    const normalizedKey = commune.toLowerCase().trim()
+
+    // Si la comuna aún no está en nuestro mapa, la agregamos
+    if (!uniqueCommunesMap.has(normalizedKey)) {
+      // Valor formateado (convertir a Title Case)
+      const formattedValue = commune
+        .trim()
+        .toLowerCase()
+        .split(' ')
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(' ')
+      
+      uniqueCommunesMap.set(normalizedKey, formattedValue)
+    }
   })
-  
-  // Eliminar duplicados y ordenar
-  return [...new Set(normalized)].filter(c => c).sort()
+
+  // Paso 2: Obtener los valores del mapa, filtrarlos y ordenarlos.
+  return Array.from(uniqueCommunesMap.values())
+    .filter(c => c) // Asegurarse de que no haya cadenas vacías
+    .sort() // Ordenar alfabéticamente
 })
 
 /**
