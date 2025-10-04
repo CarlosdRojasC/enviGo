@@ -318,15 +318,17 @@ const normalizedCommunes = computed(() => {
     return []
   }
 
-  // Paso 1: Crear un mapa para eliminar duplicados ignorando mayúsculas/minúsculas.
-  // La clave será la comuna en minúscula y el valor será la comuna con el formato deseado.
   const uniqueCommunesMap = new Map()
 
   props.availableCommunes.forEach(commune => {
     if (!commune || typeof commune !== 'string') return
 
-    // Clave de normalización (todo en minúsculas y sin espacios extra)
-    const normalizedKey = commune.toLowerCase().trim()
+    // Clave de normalización (minúsculas, sin espacios Y SIN ACENTOS)
+    const normalizedKey = commune
+      .toLowerCase()
+      .trim()
+      .normalize('NFD') // <-- AÑADE ESTA LÍNEA
+      .replace(/[\u0300-\u036f]/g, '') // <-- Y ESTA LÍNEA
 
     // Si la comuna aún no está en nuestro mapa, la agregamos
     if (!uniqueCommunesMap.has(normalizedKey)) {
@@ -342,10 +344,10 @@ const normalizedCommunes = computed(() => {
     }
   })
 
-  // Paso 2: Obtener los valores del mapa, filtrarlos y ordenarlos.
+  // Obtener los valores del mapa, filtrarlos y ordenarlos.
   return Array.from(uniqueCommunesMap.values())
-    .filter(c => c) // Asegurarse de que no haya cadenas vacías
-    .sort() // Ordenar alfabéticamente
+    .filter(c => c) 
+    .sort() 
 })
 
 /**
