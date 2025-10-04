@@ -281,7 +281,7 @@
 
 <script setup>
 import { ref, onMounted, onUnmounted, computed } from 'vue'
-import apiService from '../services/api'
+import { apiService } from '../services/api'
 import OrdersTrendChart from '../components/dashboard/OrdersTrendChart.vue'
 
 // Estado
