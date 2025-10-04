@@ -360,7 +360,7 @@ async function fetchAllData() {
   loading.value = true
   try {
     const [statsRes, companiesRes, channelsRes] = await Promise.all([
-      apiService.stats.getAdminStats(),
+      apiService.dashboard.getAdminStats(),
       apiService.companies.getAll(),
       apiService.channels.getAll()
     ])
