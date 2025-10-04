@@ -1,7 +1,6 @@
-<!-- frontend/src/views/Companies.vue - COMPLETO CON TAILWIND -->
 <template>
   <div class="min-h-screen bg-gray-50">
-    <!-- ==================== PARTE 1: HEADER Y FILTROS ==================== -->
+    <!-- Header Principal -->
     <header class="mb-8">
       <div class="bg-gradient-to-r from-indigo-600 to-purple-600 rounded-lg p-6 flex justify-between items-center shadow-lg">
         <div>
@@ -137,7 +136,7 @@
       </div>
     </div>
 
-    <!-- ==================== PARTE 2: VISTA GRID ==================== -->
+    <!-- VISTA GRID -->
     <div v-if="viewMode === 'grid'" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
       <div 
         v-for="company in filteredCompanies" 
@@ -145,38 +144,23 @@
         class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-lg hover:-translate-y-1 transition-all duration-300 cursor-pointer"
         @click="selectCompany(company)"
       >
-        <!-- Header: Avatar y Estado -->
         <div class="flex items-center justify-between mb-4">
           <div class="w-16 h-16 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold text-xl shadow-md">
             {{ getCompanyInitials(company.name) }}
           </div>
-          <span 
-            :class="[
-              'px-3 py-1 rounded-full text-xs font-semibold flex items-center gap-1',
-              company.is_active 
-                ? 'bg-green-100 text-green-700' 
-                : 'bg-red-100 text-red-700'
-            ]"
-          >
+          <span :class="['px-3 py-1 rounded-full text-xs font-semibold flex items-center gap-1', company.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700']">
             <span class="material-icons text-sm">{{ company.is_active ? 'check_circle' : 'cancel' }}</span>
             {{ company.is_active ? 'Activa' : 'Inactiva' }}
           </span>
         </div>
 
-        <!-- Nombre y Email -->
         <h3 class="text-lg font-bold text-gray-900 mb-1 truncate">{{ company.name }}</h3>
         <p class="text-sm text-gray-500 mb-4 truncate">{{ getCompanyEmail(company) }}</p>
 
-        <!-- Métricas -->
         <div class="grid grid-cols-2 gap-3 mb-4">
           <div class="bg-gray-50 p-3 rounded-lg">
             <p class="text-xs text-gray-500 mb-1">Plan</p>
-            <span 
-              :class="[
-                'inline-block px-2 py-1 rounded text-xs font-semibold',
-                getPlanColor(company.plan_type)
-              ]"
-            >
+            <span :class="['inline-block px-2 py-1 rounded text-xs font-semibold', getPlanColor(company.plan_type)]">
               {{ getPlanName(company.plan_type) }}
             </span>
           </div>
@@ -197,42 +181,22 @@
           </div>
         </div>
 
-        <!-- Botones de Acción -->
         <div class="grid grid-cols-4 gap-2">
-          <button 
-            @click.stop="openPricingModal(company)"
-            class="p-2 bg-gray-100 hover:bg-indigo-100 rounded-lg transition-colors group"
-            title="Pricing"
-          >
+          <button @click.stop="openPricingModal(company)" class="p-2 bg-gray-100 hover:bg-indigo-100 rounded-lg transition-colors group" title="Pricing">
             <span class="material-icons text-gray-600 group-hover:text-indigo-600">payments</span>
           </button>
-          <button 
-            @click.stop="openStatsModal(company)"
-            class="p-2 bg-gray-100 hover:bg-blue-100 rounded-lg transition-colors group"
-            title="Estadísticas"
-          >
+          <button @click.stop="openStatsModal(company)" class="p-2 bg-gray-100 hover:bg-blue-100 rounded-lg transition-colors group" title="Estadísticas">
             <span class="material-icons text-gray-600 group-hover:text-blue-600">bar_chart</span>
           </button>
-          <button 
-            @click.stop="openUsersModal(company)"
-            class="p-2 bg-gray-100 hover:bg-green-100 rounded-lg transition-colors group"
-            title="Usuarios"
-          >
+          <button @click.stop="openUsersModal(company)" class="p-2 bg-gray-100 hover:bg-green-100 rounded-lg transition-colors group" title="Usuarios">
             <span class="material-icons text-gray-600 group-hover:text-green-600">group</span>
           </button>
-          <button 
-            @click.stop="toggleCompanyStatus(company)"
-            class="p-2 bg-gray-100 hover:bg-purple-100 rounded-lg transition-colors group"
-            :title="company.is_active ? 'Desactivar' : 'Activar'"
-          >
-            <span class="material-icons text-gray-600 group-hover:text-purple-600">
-              {{ company.is_active ? 'pause' : 'play_arrow' }}
-            </span>
+          <button @click.stop="toggleCompanyStatus(company)" class="p-2 bg-gray-100 hover:bg-purple-100 rounded-lg transition-colors group" :title="company.is_active ? 'Desactivar' : 'Activar'">
+            <span class="material-icons text-gray-600 group-hover:text-purple-600">{{ company.is_active ? 'pause' : 'play_arrow' }}</span>
           </button>
         </div>
       </div>
 
-      <!-- Empty state -->
       <div v-if="filteredCompanies.length === 0" class="col-span-full text-center py-12">
         <span class="material-icons text-6xl text-gray-300 mb-4">business</span>
         <p class="text-gray-500 text-lg mb-2">No se encontraron empresas</p>
@@ -240,83 +204,48 @@
       </div>
     </div>
 
-    <!-- ==================== PARTE 3: VISTA TABLA ==================== -->
+    <!-- VISTA TABLA -->
     <div v-if="viewMode === 'table'" class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
       <div class="overflow-x-auto">
         <table class="w-full">
           <thead class="bg-gray-50 border-b border-gray-200">
             <tr>
-              <th 
-                @click="sortBy('name')"
-                class="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
-              >
+              <th @click="sortBy('name')" class="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors">
                 <div class="flex items-center gap-2">
                   Empresa
-                  <span v-if="sortField === 'name'" class="material-icons text-sm text-indigo-600">
-                    {{ sortDirection === 'asc' ? 'arrow_upward' : 'arrow_downward' }}
-                  </span>
+                  <span v-if="sortField === 'name'" class="material-icons text-sm text-indigo-600">{{ sortDirection === 'asc' ? 'arrow_upward' : 'arrow_downward' }}</span>
                 </div>
               </th>
-              <th 
-                @click="sortBy('plan_type')"
-                class="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
-              >
+              <th @click="sortBy('plan_type')" class="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors">
                 <div class="flex items-center gap-2">
                   Plan
-                  <span v-if="sortField === 'plan_type'" class="material-icons text-sm text-indigo-600">
-                    {{ sortDirection === 'asc' ? 'arrow_upward' : 'arrow_downward' }}
-                  </span>
+                  <span v-if="sortField === 'plan_type'" class="material-icons text-sm text-indigo-600">{{ sortDirection === 'asc' ? 'arrow_upward' : 'arrow_downward' }}</span>
                 </div>
               </th>
-              <th 
-                @click="sortBy('price_per_order')"
-                class="px-6 py-4 text-right text-xs font-semibold text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
-              >
+              <th @click="sortBy('price_per_order')" class="px-6 py-4 text-right text-xs font-semibold text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors">
                 <div class="flex items-center justify-end gap-2">
                   Precio/Pedido
-                  <span v-if="sortField === 'price_per_order'" class="material-icons text-sm text-indigo-600">
-                    {{ sortDirection === 'asc' ? 'arrow_upward' : 'arrow_downward' }}
-                  </span>
+                  <span v-if="sortField === 'price_per_order'" class="material-icons text-sm text-indigo-600">{{ sortDirection === 'asc' ? 'arrow_upward' : 'arrow_downward' }}</span>
                 </div>
               </th>
-              <th 
-                @click="sortBy('orders_this_month')"
-                class="px-6 py-4 text-right text-xs font-semibold text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
-              >
+              <th @click="sortBy('orders_this_month')" class="px-6 py-4 text-right text-xs font-semibold text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors">
                 <div class="flex items-center justify-end gap-2">
                   Pedidos Mes
-                  <span v-if="sortField === 'orders_this_month'" class="material-icons text-sm text-indigo-600">
-                    {{ sortDirection === 'asc' ? 'arrow_upward' : 'arrow_downward' }}
-                  </span>
+                  <span v-if="sortField === 'orders_this_month'" class="material-icons text-sm text-indigo-600">{{ sortDirection === 'asc' ? 'arrow_upward' : 'arrow_downward' }}</span>
                 </div>
               </th>
-              <th 
-                @click="sortBy('revenue')"
-                class="px-6 py-4 text-right text-xs font-semibold text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
-              >
+              <th @click="sortBy('revenue')" class="px-6 py-4 text-right text-xs font-semibold text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors">
                 <div class="flex items-center justify-end gap-2">
                   Revenue
-                  <span v-if="sortField === 'revenue'" class="material-icons text-sm text-indigo-600">
-                    {{ sortDirection === 'asc' ? 'arrow_upward' : 'arrow_downward' }}
-                  </span>
+                  <span v-if="sortField === 'revenue'" class="material-icons text-sm text-indigo-600">{{ sortDirection === 'asc' ? 'arrow_upward' : 'arrow_downward' }}</span>
                 </div>
               </th>
-              <th class="px-6 py-4 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                Estado
-              </th>
-              <th class="px-6 py-4 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                Acciones
-              </th>
+              <th class="px-6 py-4 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">Estado</th>
+              <th class="px-6 py-4 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">Acciones</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-200">
-            <tr 
-              v-for="company in sortedCompanies" 
-              :key="company._id"
-              class="hover:bg-gray-50 transition-colors cursor-pointer"
-              @click="selectCompany(company)"
-            >
-              <!-- Empresa -->
+            <tr v-for="company in sortedCompanies" :key="company._id" class="hover:bg-gray-50 transition-colors cursor-pointer" @click="selectCompany(company)">
               <td class="px-6 py-4">
                 <div class="flex items-center gap-3">
                   <div class="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-semibold text-sm flex-shrink-0">
@@ -328,89 +257,44 @@
                   </div>
                 </div>
               </td>
-
-              <!-- Plan -->
               <td class="px-6 py-4">
-                <span 
-                  :class="[
-                    'inline-block px-2 py-1 rounded text-xs font-semibold',
-                    getPlanColor(company.plan_type)
-                  ]"
-                >
-                  {{ getPlanName(company.plan_type) }}
-                </span>
+                <span :class="['inline-block px-2 py-1 rounded text-xs font-semibold', getPlanColor(company.plan_type)]">{{ getPlanName(company.plan_type) }}</span>
               </td>
-
-              <!-- Precio -->
               <td class="px-6 py-4 text-right">
                 <p class="font-bold text-gray-900">${{ formatNumber(company.price_per_order || 0) }}</p>
                 <p class="text-xs text-gray-500">${{ formatNumber(getTotalPriceWithIVA(company.price_per_order || 0)) }} c/IVA</p>
               </td>
-
-              <!-- Pedidos -->
               <td class="px-6 py-4 text-right">
                 <p class="font-bold text-blue-600">{{ company.orders_this_month || 0 }}</p>
               </td>
-
-              <!-- Revenue -->
               <td class="px-6 py-4 text-right">
                 <p class="font-bold text-orange-600">${{ formatNumber(calculateMonthlyRevenue(company)) }}</p>
                 <p class="text-xs text-gray-500">Base: ${{ formatNumber(getBaseRevenue(company)) }}</p>
               </td>
-
-              <!-- Estado -->
               <td class="px-6 py-4 text-center">
-                <span 
-                  :class="[
-                    'inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold',
-                    company.is_active 
-                      ? 'bg-green-100 text-green-700' 
-                      : 'bg-red-100 text-red-700'
-                  ]"
-                >
+                <span :class="['inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold', company.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700']">
                   <span class="material-icons text-sm">{{ company.is_active ? 'check_circle' : 'cancel' }}</span>
                   {{ company.is_active ? 'Activa' : 'Inactiva' }}
                 </span>
               </td>
-
-              <!-- Acciones -->
               <td class="px-6 py-4">
                 <div class="flex items-center justify-center gap-1">
-                  <button 
-                    @click.stop="openPricingModal(company)"
-                    class="p-2 hover:bg-indigo-100 rounded-lg transition-colors group"
-                    title="Pricing"
-                  >
+                  <button @click.stop="openPricingModal(company)" class="p-2 hover:bg-indigo-100 rounded-lg transition-colors group" title="Pricing">
                     <span class="material-icons text-sm text-gray-600 group-hover:text-indigo-600">payments</span>
                   </button>
-                  <button 
-                    @click.stop="openStatsModal(company)"
-                    class="p-2 hover:bg-blue-100 rounded-lg transition-colors group"
-                    title="Estadísticas"
-                  >
+                  <button @click.stop="openStatsModal(company)" class="p-2 hover:bg-blue-100 rounded-lg transition-colors group" title="Estadísticas">
                     <span class="material-icons text-sm text-gray-600 group-hover:text-blue-600">bar_chart</span>
                   </button>
-                  <button 
-                    @click.stop="openUsersModal(company)"
-                    class="p-2 hover:bg-green-100 rounded-lg transition-colors group"
-                    title="Usuarios"
-                  >
+                  <button @click.stop="openUsersModal(company)" class="p-2 hover:bg-green-100 rounded-lg transition-colors group" title="Usuarios">
                     <span class="material-icons text-sm text-gray-600 group-hover:text-green-600">group</span>
                   </button>
-                  <button 
-                    @click.stop="toggleCompanyStatus(company)"
-                    class="p-2 hover:bg-purple-100 rounded-lg transition-colors group"
-                    :title="company.is_active ? 'Desactivar' : 'Activar'"
-                  >
-                    <span class="material-icons text-sm text-gray-600 group-hover:text-purple-600">
-                      {{ company.is_active ? 'pause' : 'play_arrow' }}
-                    </span>
+                  <button @click.stop="toggleCompanyStatus(company)" class="p-2 hover:bg-purple-100 rounded-lg transition-colors group" :title="company.is_active ? 'Desactivar' : 'Activar'">
+                    <span class="material-icons text-sm text-gray-600 group-hover:text-purple-600">{{ company.is_active ? 'pause' : 'play_arrow' }}</span>
                   </button>
                 </div>
               </td>
             </tr>
 
-            <!-- Empty state -->
             <tr v-if="sortedCompanies.length === 0">
               <td colspan="7" class="px-6 py-12 text-center">
                 <span class="material-icons text-6xl text-gray-300 mb-4">table_rows</span>
@@ -423,12 +307,9 @@
       </div>
     </div>
 
-    <!-- ==================== PARTES 4-7: MODALES ==================== -->
-    
-    <!-- PARTE 4: Modal Crear/Editar Empresa -->
+    <!-- MODAL CREAR EMPRESA -->
     <div v-if="showAddCompanyModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div class="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-        <!-- Header del Modal -->
         <div class="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
           <div>
             <h2 class="text-2xl font-bold text-gray-900 flex items-center gap-2">
@@ -442,10 +323,8 @@
           </button>
         </div>
 
-        <!-- Contenido del Modal -->
         <div class="p-6">
           <form @submit.prevent="createCompany">
-            <!-- Sección: Información de la Empresa -->
             <div class="mb-6">
               <div class="bg-indigo-50 border-l-4 border-indigo-500 px-4 py-3 mb-4">
                 <h3 class="font-semibold text-indigo-900 flex items-center gap-2">
@@ -456,70 +335,32 @@
               
               <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label class="block text-sm font-medium text-gray-700 mb-2">
-                    Nombre de la Empresa *
-                  </label>
-                  <input
-                    v-model="newCompanyForm.name"
-                    type="text"
-                    required
-                    class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                    placeholder="Ej: Mi Empresa SpA"
-                  />
+                  <label class="block text-sm font-medium text-gray-700 mb-2">Nombre de la Empresa *</label>
+                  <input v-model="newCompanyForm.name" type="text" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" placeholder="Ej: Mi Empresa SpA" />
                 </div>
 
                 <div>
-                  <label class="block text-sm font-medium text-gray-700 mb-2">
-                    Email de Contacto *
-                  </label>
-                  <input
-                    v-model="newCompanyForm.contact_email"
-                    type="email"
-                    required
-                    class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                    placeholder="contacto@empresa.cl"
-                  />
+                  <label class="block text-sm font-medium text-gray-700 mb-2">Email de Contacto *</label>
+                  <input v-model="newCompanyForm.contact_email" type="email" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" placeholder="contacto@empresa.cl" />
                 </div>
 
                 <div>
-                  <label class="block text-sm font-medium text-gray-700 mb-2">
-                    Teléfono
-                  </label>
-                  <input
-                    v-model="newCompanyForm.phone"
-                    type="tel"
-                    class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                    placeholder="+56 9 1234 5678"
-                  />
+                  <label class="block text-sm font-medium text-gray-700 mb-2">Teléfono</label>
+                  <input v-model="newCompanyForm.phone" type="tel" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" placeholder="+56 9 1234 5678" />
                 </div>
 
                 <div>
-                  <label class="block text-sm font-medium text-gray-700 mb-2">
-                    RUT/NIT
-                  </label>
-                  <input
-                    v-model="newCompanyForm.rut"
-                    type="text"
-                    class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                    placeholder="12.345.678-9"
-                  />
+                  <label class="block text-sm font-medium text-gray-700 mb-2">RUT/NIT</label>
+                  <input v-model="newCompanyForm.rut" type="text" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" placeholder="12.345.678-9" />
                 </div>
 
                 <div class="md:col-span-2">
-                  <label class="block text-sm font-medium text-gray-700 mb-2">
-                    Dirección
-                  </label>
-                  <textarea
-                    v-model="newCompanyForm.address"
-                    rows="2"
-                    class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                    placeholder="Dirección completa de la empresa"
-                  ></textarea>
+                  <label class="block text-sm font-medium text-gray-700 mb-2">Dirección</label>
+                  <textarea v-model="newCompanyForm.address" rows="2" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" placeholder="Dirección completa de la empresa"></textarea>
                 </div>
               </div>
             </div>
 
-            <!-- Sección: Configuración de Pricing -->
             <div class="mb-6">
               <div class="bg-green-50 border-l-4 border-green-500 px-4 py-3 mb-4">
                 <h3 class="font-semibold text-green-900 flex items-center gap-2">
@@ -530,13 +371,8 @@
 
               <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
-                  <label class="block text-sm font-medium text-gray-700 mb-2">
-                    Plan *
-                  </label>
-                  <select
-                    v-model="newCompanyForm.plan_type"
-                    class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                  >
+                  <label class="block text-sm font-medium text-gray-700 mb-2">Plan *</label>
+                  <select v-model="newCompanyForm.plan_type" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
                     <option value="basic">Basic</option>
                     <option value="pro">Pro</option>
                     <option value="enterprise">Enterprise</option>
@@ -544,27 +380,13 @@
                 </div>
 
                 <div>
-                  <label class="block text-sm font-medium text-gray-700 mb-2">
-                    Precio por Pedido ($) *
-                  </label>
-                  <input
-                    v-model.number="newCompanyForm.price_per_order"
-                    type="number"
-                    required
-                    min="0"
-                    class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                    placeholder="1500"
-                  />
+                  <label class="block text-sm font-medium text-gray-700 mb-2">Precio por Pedido ($) *</label>
+                  <input v-model.number="newCompanyForm.price_per_order" type="number" required min="0" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" placeholder="1500" />
                 </div>
 
                 <div>
-                  <label class="block text-sm font-medium text-gray-700 mb-2">
-                    Ciclo de Facturación
-                  </label>
-                  <select
-                    v-model="newCompanyForm.billing_cycle"
-                    class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                  >
+                  <label class="block text-sm font-medium text-gray-700 mb-2">Ciclo de Facturación</label>
+                  <select v-model="newCompanyForm.billing_cycle" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
                     <option value="monthly">Mensual</option>
                     <option value="quarterly">Trimestral</option>
                     <option value="annual">Anual</option>
@@ -573,7 +395,6 @@
               </div>
             </div>
 
-            <!-- Sección: Propietario de la Empresa -->
             <div class="mb-6">
               <div class="bg-purple-50 border-l-4 border-purple-500 px-4 py-3 mb-4">
                 <h3 class="font-semibold text-purple-900 flex items-center gap-2">
@@ -584,43 +405,18 @@
 
               <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label class="block text-sm font-medium text-gray-700 mb-2">
-                    Nombre Completo *
-                  </label>
-                  <input
-                    v-model="newCompanyForm.owner_name"
-                    type="text"
-                    required
-                    class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                    placeholder="Juan Pérez"
-                  />
+                  <label class="block text-sm font-medium text-gray-700 mb-2">Nombre Completo *</label>
+                  <input v-model="newCompanyForm.owner_name" type="text" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" placeholder="Juan Pérez" />
                 </div>
 
                 <div>
-                  <label class="block text-sm font-medium text-gray-700 mb-2">
-                    Email del Propietario *
-                  </label>
-                  <input
-                    v-model="newCompanyForm.owner_email"
-                    type="email"
-                    required
-                    class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                    placeholder="propietario@empresa.cl"
-                  />
+                  <label class="block text-sm font-medium text-gray-700 mb-2">Email del Propietario *</label>
+                  <input v-model="newCompanyForm.owner_email" type="email" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" placeholder="propietario@empresa.cl" />
                 </div>
 
                 <div class="md:col-span-2">
-                  <label class="block text-sm font-medium text-gray-700 mb-2">
-                    Contraseña *
-                  </label>
-                  <input
-                    v-model="newCompanyForm.owner_password"
-                    type="password"
-                    required
-                    minlength="6"
-                    class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                    placeholder="Mínimo 6 caracteres"
-                  />
+                  <label class="block text-sm font-medium text-gray-700 mb-2">Contraseña *</label>
+                  <input v-model="newCompanyForm.owner_password" type="password" required minlength="6" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" placeholder="Mínimo 6 caracteres" />
                   <p class="text-xs text-gray-500 mt-1">Esta contraseña será usada para el primer acceso del propietario</p>
                 </div>
               </div>
@@ -628,20 +424,9 @@
           </form>
         </div>
 
-        <!-- Footer del Modal -->
         <div class="sticky bottom-0 bg-gray-50 border-t border-gray-200 px-6 py-4 flex justify-end gap-3">
-          <button
-            @click="closeCreateCompanyModal"
-            type="button"
-            class="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 transition-colors font-medium"
-          >
-            Cancelar
-          </button>
-          <button
-            @click="createCompany"
-            :disabled="isCreatingCompany"
-            class="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-          >
+          <button @click="closeCreateCompanyModal" type="button" class="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 transition-colors font-medium">Cancelar</button>
+          <button @click="createCompany" :disabled="isCreatingCompany" class="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
             <span v-if="isCreatingCompany" class="material-icons animate-spin">refresh</span>
             {{ isCreatingCompany ? 'Creando...' : 'Crear Empresa' }}
           </button>
@@ -649,7 +434,7 @@
       </div>
     </div>
 
-    <!-- PARTE 5: Modal Pricing -->
+    <!-- MODAL PRICING -->
     <div v-if="showPricingModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div class="bg-white rounded-lg shadow-xl max-w-2xl w-full">
         <div class="bg-gradient-to-r from-green-600 to-emerald-600 px-6 py-4 flex items-center justify-between rounded-t-lg">
@@ -709,7 +494,7 @@
       </div>
     </div>
 
-    <!-- PARTE 6: Modal Estadísticas -->
+    <!-- MODAL ESTADÍSTICAS -->
     <div v-if="showStatsModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div class="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
         <div class="bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-4 flex items-center justify-between rounded-t-lg sticky top-0">
@@ -757,7 +542,7 @@
       </div>
     </div>
 
-    <!-- PARTE 7: Modal Usuarios -->
+    <!-- MODAL USUARIOS -->
     <div v-if="showUsersModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div class="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
         <div class="bg-gradient-to-r from-purple-600 to-pink-600 px-6 py-4 flex items-center justify-between rounded-t-lg sticky top-0">
@@ -816,7 +601,7 @@
       </div>
     </div>
 
-    <!-- Modal Agregar Usuario -->
+    <!-- MODAL AGREGAR USUARIO -->
     <div v-if="showAddUserModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4">
       <div class="bg-white rounded-lg shadow-xl max-w-md w-full">
         <div class="bg-purple-600 px-6 py-4 flex items-center justify-between rounded-t-lg">
@@ -861,352 +646,490 @@
     </div>
   </div>
 </template>
-
-<script setup>
+<script>
 import { ref, computed, onMounted } from 'vue'
-import { apiService } from '../services/api'
-import { useToast } from 'vue-toastification'
+import { useAuthStore } from '@/stores/auth'
+import { apiService } from '@/services/api'
 
-const toast = useToast()
+export default {
+  name: 'Company',
+  setup() {
+    const auth = useAuthStore()
 
-// Estado reactivo
-const companies = ref([])
-const loading = ref(false)
-const searchQuery = ref('')
-const viewMode = ref('grid')
-const filters = ref({
-  status: '',
-  plan: '',
-  revenue: ''
-})
-
-// Estado de ordenamiento
-const sortField = ref('name')
-const sortDirection = ref('asc')
-
-// Estados de modales
-const showAddCompanyModal = ref(false)
-const showPricingModal = ref(false)
-const showStatsModal = ref(false)
-const showUsersModal = ref(false)
-const showAddUserModal = ref(false)
-
-const isCreatingCompany = ref(false)
-const isSavingPricing = ref(false)
-const isLoadingUsers = ref(false)
-const isCreatingUser = ref(false)
-
-const selectedCompany = ref(null)
-const companyUsers = ref([])
-const companyStats = ref({})
-
-// Formulario de nueva empresa
-const newCompanyForm = ref({
-  name: '',
-  contact_email: '',
-  phone: '',
-  address: '',
-  rut: '',
-  price_per_order: 1500,
-  plan_type: 'basic',
-  billing_cycle: 'monthly',
-  owner_name: '',
-  owner_email: '',
-  owner_password: '',
-  logo_url: ''
-})
-
-const pricingForm = ref({
-  plan_type: 'basic',
-  price_per_order: 0,
-  billing_cycle: 'monthly',
-  pricing_notes: ''
-})
-
-const newUserForm = ref({
-  full_name: '',
-  email: '',
-  password: '',
-  role: 'company_employee',
-  phone: ''
-})
-
-// Computed properties para métricas
-const activeCompaniesCount = computed(() => {
-  return companies.value.filter(c => c.is_active).length
-})
-
-const totalMonthlyOrders = computed(() => {
-  return companies.value.reduce((sum, c) => sum + (c.orders_this_month || 0), 0)
-})
-
-const totalRevenue = computed(() => {
-  return companies.value.reduce((sum, c) => {
-    const revenue = (c.orders_this_month || 0) * (c.price_per_order || 0)
-    return sum + revenue
-  }, 0)
-})
-
-const activeFilters = computed(() => {
-  const active = []
-  if (filters.value.status) {
-    const label = filters.value.status === 'active' ? '✅ Activas' : '❌ Inactivas'
-    active.push({ key: 'status', label })
-  }
-  if (filters.value.plan) {
-    const planLabels = { basic: '📦 Basic', pro: '⭐ Pro', enterprise: '💎 Enterprise' }
-    active.push({ key: 'plan', label: planLabels[filters.value.plan] })
-  }
-  if (filters.value.revenue) {
-    const revenueLabels = { high: '💰 Alto', medium: '💵 Medio', low: '💸 Bajo' }
-    active.push({ key: 'revenue', label: revenueLabels[filters.value.revenue] })
-  }
-  return active
-})
-
-const filteredCompanies = computed(() => {
-  let result = [...companies.value]
-
-  // Filtro de búsqueda
-  if (searchQuery.value) {
-    const query = searchQuery.value.toLowerCase()
-    result = result.filter(c => 
-      c.name?.toLowerCase().includes(query) ||
-      c.email?.toLowerCase().includes(query) ||
-      c.contact_email?.toLowerCase().includes(query) ||
-      c.rut?.toLowerCase().includes(query)
-    )
-  }
-
-  // Filtro de estado
-  if (filters.value.status) {
-    result = result.filter(c => 
-      filters.value.status === 'active' ? c.is_active : !c.is_active
-    )
-  }
-
-  // Filtro de plan
-  if (filters.value.plan) {
-    result = result.filter(c => c.plan_type === filters.value.plan)
-  }
-
-  // Filtro de revenue
-  if (filters.value.revenue) {
-    result = result.filter(c => {
-      const revenue = calculateMonthlyRevenue(c)
-      if (filters.value.revenue === 'high') return revenue > 500000
-      if (filters.value.revenue === 'medium') return revenue >= 100000 && revenue <= 500000
-      if (filters.value.revenue === 'low') return revenue < 100000
-      return true
+    // Estados principales
+    const companies = ref([])
+    const selectedCompany = ref(null)
+    const companyUsers = ref([])
+    const companyStats = ref({})
+    
+    // Estados de modales
+    const showAddCompanyModal = ref(false)
+    const showPricingModal = ref(false)
+    const showStatsModal = ref(false)
+    const showUsersModal = ref(false)
+    const showAddUserModal = ref(false)
+    
+    // Estados de carga
+    const isLoading = ref(false)
+    const isLoadingUsers = ref(false)
+    const isCreatingCompany = ref(false)
+    const isCreatingUser = ref(false)
+    const isSavingPricing = ref(false)
+    
+    // Búsqueda y filtros
+    const searchQuery = ref('')
+    const filters = ref({
+      status: '',
+      plan: '',
+      revenue: ''
     })
-  }
-
-  return result
-})
-
-const sortedCompanies = computed(() => {
-  const companies = [...filteredCompanies.value]
-  
-  if (!sortField.value) return companies
-  
-  return companies.sort((a, b) => {
-    let aVal = a[sortField.value]
-    let bVal = b[sortField.value]
+    const viewMode = ref('grid') // 'grid' o 'table'
+    const sortField = ref('name')
+    const sortDirection = ref('asc')
     
-    // Manejo especial para revenue
-    if (sortField.value === 'revenue') {
-      aVal = calculateMonthlyRevenue(a)
-      bVal = calculateMonthlyRevenue(b)
+    // Formularios
+    const newCompanyForm = ref({
+      name: '',
+      contact_email: '',
+      phone: '',
+      rut: '',
+      address: '',
+      plan_type: 'basic',
+      price_per_order: 0,
+      billing_cycle: 'monthly',
+      owner_name: '',
+      owner_email: '',
+      owner_password: ''
+    })
+    
+    const pricingForm = ref({
+      plan_type: 'basic',
+      price_per_order: 0,
+      billing_cycle: 'monthly',
+      pricing_notes: ''
+    })
+    
+    const newUserForm = ref({
+      full_name: '',
+      email: '',
+      password: '',
+      role: 'company_employee'
+    })
+
+    // Computed properties
+    const activeCompaniesCount = computed(() => {
+      return companies.value.filter(c => c.is_active).length
+    })
+
+    const totalMonthlyOrders = computed(() => {
+      return companies.value.reduce((sum, c) => sum + (c.orders_this_month || 0), 0)
+    })
+
+    const totalRevenue = computed(() => {
+      return companies.value.reduce((sum, c) => {
+        const monthlyRevenue = (c.orders_this_month || 0) * (c.price_per_order || 0)
+        return sum + monthlyRevenue
+      }, 0)
+    })
+
+    const filteredCompanies = computed(() => {
+      let result = [...companies.value]
+      
+      // Filtro de búsqueda
+      if (searchQuery.value) {
+        const query = searchQuery.value.toLowerCase()
+        result = result.filter(c => 
+          c.name?.toLowerCase().includes(query) ||
+          c.contact_email?.toLowerCase().includes(query) ||
+          c.rut?.toLowerCase().includes(query)
+        )
+      }
+      
+      // Filtro de estado
+      if (filters.value.status) {
+        result = result.filter(c => 
+          filters.value.status === 'active' ? c.is_active : !c.is_active
+        )
+      }
+      
+      // Filtro de plan
+      if (filters.value.plan) {
+        result = result.filter(c => c.plan_type === filters.value.plan)
+      }
+      
+      // Filtro de revenue
+      if (filters.value.revenue) {
+        result = result.filter(c => {
+          const revenue = calculateMonthlyRevenue(c)
+          if (filters.value.revenue === 'high') return revenue > 500000
+          if (filters.value.revenue === 'medium') return revenue >= 100000 && revenue <= 500000
+          if (filters.value.revenue === 'low') return revenue < 100000
+          return true
+        })
+      }
+      
+      return result
+    })
+
+    const sortedCompanies = computed(() => {
+      const sorted = [...filteredCompanies.value]
+      
+      sorted.sort((a, b) => {
+        let aValue = a[sortField.value]
+        let bValue = b[sortField.value]
+        
+        // Para revenue necesitamos calcularlo
+        if (sortField.value === 'revenue') {
+          aValue = calculateMonthlyRevenue(a)
+          bValue = calculateMonthlyRevenue(b)
+        }
+        
+        if (typeof aValue === 'string') {
+          aValue = aValue.toLowerCase()
+          bValue = bValue.toLowerCase()
+        }
+        
+        if (sortDirection.value === 'asc') {
+          return aValue > bValue ? 1 : -1
+        } else {
+          return aValue < bValue ? 1 : -1
+        }
+      })
+      
+      return sorted
+    })
+
+    const activeFilters = computed(() => {
+      const active = []
+      if (filters.value.status) {
+        active.push({
+          key: 'status',
+          label: filters.value.status === 'active' ? 'Activas' : 'Inactivas'
+        })
+      }
+      if (filters.value.plan) {
+        active.push({
+          key: 'plan',
+          label: getPlanName(filters.value.plan)
+        })
+      }
+      if (filters.value.revenue) {
+        active.push({
+          key: 'revenue',
+          label: filters.value.revenue === 'high' ? 'Revenue Alto' : 
+                 filters.value.revenue === 'medium' ? 'Revenue Medio' : 'Revenue Bajo'
+        })
+      }
+      return active
+    })
+
+    // Métodos
+    const loadCompanies = async () => {
+      try {
+        isLoading.value = true
+        const response = await apiService.companies.getAll()
+        companies.value = response.data || []
+      } catch (error) {
+        console.error('Error cargando empresas:', error)
+      } finally {
+        isLoading.value = false
+      }
     }
-    
-    // Manejo de valores nulos
-    if (aVal === null || aVal === undefined) aVal = ''
-    if (bVal === null || bVal === undefined) bVal = ''
-    
-    // Comparación numérica
-    if (typeof aVal === 'number' && typeof bVal === 'number') {
-      return sortDirection.value === 'asc' ? aVal - bVal : bVal - aVal
+
+    const openCreateCompanyModal = () => {
+      newCompanyForm.value = {
+        name: '',
+        contact_email: '',
+        phone: '',
+        rut: '',
+        address: '',
+        plan_type: 'basic',
+        price_per_order: 0,
+        billing_cycle: 'monthly',
+        owner_name: '',
+        owner_email: '',
+        owner_password: ''
+      }
+      showAddCompanyModal.value = true
     }
-    
-    // Comparación de strings
-    const comparison = String(aVal).localeCompare(String(bVal))
-    return sortDirection.value === 'asc' ? comparison : -comparison
-  })
-})
 
-// Funciones
-async function fetchCompanies() {
-  loading.value = true
-  try {
-    const response = await apiService.companies.getAll()
-    companies.value = response.data.companies || response.data || []
-  } catch (error) {
-    console.error('Error cargando empresas:', error)
-    toast.error('Error al cargar empresas')
-  } finally {
-    loading.value = false
+    const closeCreateCompanyModal = () => {
+      showAddCompanyModal.value = false
+    }
+
+    const createCompany = async () => {
+      try {
+        isCreatingCompany.value = true
+        await apiService.companies.create(newCompanyForm.value)
+        await loadCompanies()
+        closeCreateCompanyModal()
+      } catch (error) {
+        console.error('Error creando empresa:', error)
+        alert('Error al crear la empresa')
+      } finally {
+        isCreatingCompany.value = false
+      }
+    }
+
+    const selectCompany = (company) => {
+      selectedCompany.value = company
+    }
+
+    const openPricingModal = (company) => {
+      selectedCompany.value = company
+      pricingForm.value = {
+        plan_type: company.plan_type || 'basic',
+        price_per_order: company.price_per_order || 0,
+        billing_cycle: company.billing_cycle || 'monthly',
+        pricing_notes: company.pricing_notes || ''
+      }
+      showPricingModal.value = true
+    }
+
+    const closePricingModal = () => {
+      showPricingModal.value = false
+      selectedCompany.value = null
+    }
+
+    const savePricing = async () => {
+      try {
+        isSavingPricing.value = true
+        await apiService.companies.update(selectedCompany.value._id, pricingForm.value)
+        await loadCompanies()
+        closePricingModal()
+      } catch (error) {
+        console.error('Error guardando pricing:', error)
+        alert('Error al guardar pricing')
+      } finally {
+        isSavingPricing.value = false
+      }
+    }
+
+    const openStatsModal = async (company) => {
+      selectedCompany.value = company
+      showStatsModal.value = true
+      
+      try {
+        const response = await apiService.companies.getStats(company._id)
+        companyStats.value = response.data || {}
+      } catch (error) {
+        console.error('Error cargando estadísticas:', error)
+      }
+    }
+
+    const closeStatsModal = () => {
+      showStatsModal.value = false
+      selectedCompany.value = null
+      companyStats.value = {}
+    }
+
+    const openUsersModal = async (company) => {
+      selectedCompany.value = company
+      showUsersModal.value = true
+      
+      try {
+        isLoadingUsers.value = true
+        const response = await apiService.companies.getUsers(company._id)
+        companyUsers.value = response.data || []
+      } catch (error) {
+        console.error('Error cargando usuarios:', error)
+      } finally {
+        isLoadingUsers.value = false
+      }
+    }
+
+    const closeUsersModal = () => {
+      showUsersModal.value = false
+      selectedCompany.value = null
+      companyUsers.value = []
+    }
+
+    const createUser = async () => {
+      try {
+        isCreatingUser.value = true
+        const userData = {
+          ...newUserForm.value,
+          company_id: selectedCompany.value._id
+        }
+        await apiService.users.create(userData)
+        
+        // Recargar usuarios
+        const response = await apiService.companies.getUsers(selectedCompany.value._id)
+        companyUsers.value = response.data || []
+        
+        showAddUserModal.value = false
+        newUserForm.value = {
+          full_name: '',
+          email: '',
+          password: '',
+          role: 'company_employee'
+        }
+      } catch (error) {
+        console.error('Error creando usuario:', error)
+        alert('Error al crear usuario')
+      } finally {
+        isCreatingUser.value = false
+      }
+    }
+
+    const toggleCompanyStatus = async (company) => {
+      try {
+        await apiService.companies.update(company._id, {
+          is_active: !company.is_active
+        })
+        await loadCompanies()
+      } catch (error) {
+        console.error('Error cambiando estado:', error)
+      }
+    }
+
+    const applyFilters = () => {
+      // Los filtros se aplican automáticamente a través del computed
+    }
+
+    const removeFilter = (key) => {
+      filters.value[key] = ''
+    }
+
+    const clearAllFilters = () => {
+      filters.value = {
+        status: '',
+        plan: '',
+        revenue: ''
+      }
+      searchQuery.value = ''
+    }
+
+    const sortBy = (field) => {
+      if (sortField.value === field) {
+        sortDirection.value = sortDirection.value === 'asc' ? 'desc' : 'asc'
+      } else {
+        sortField.value = field
+        sortDirection.value = 'asc'
+      }
+    }
+
+    // Funciones auxiliares
+    const getCompanyInitials = (name) => {
+      if (!name) return '??'
+      const words = name.split(' ')
+      if (words.length >= 2) {
+        return (words[0][0] + words[1][0]).toUpperCase()
+      }
+      return name.substring(0, 2).toUpperCase()
+    }
+
+    const getCompanyEmail = (company) => {
+      return company.contact_email || 'Sin email'
+    }
+
+    const getPlanName = (plan) => {
+      const plans = {
+        basic: 'Basic',
+        pro: 'Pro',
+        enterprise: 'Enterprise'
+      }
+      return plans[plan] || 'N/A'
+    }
+
+    const getPlanColor = (plan) => {
+      const colors = {
+        basic: 'bg-gray-100 text-gray-700',
+        pro: 'bg-blue-100 text-blue-700',
+        enterprise: 'bg-purple-100 text-purple-700'
+      }
+      return colors[plan] || 'bg-gray-100 text-gray-700'
+    }
+
+    const formatNumber = (num) => {
+      return new Intl.NumberFormat('es-CL').format(num || 0)
+    }
+
+    const calculateMonthlyRevenue = (company) => {
+      return (company.orders_this_month || 0) * (company.price_per_order || 0)
+    }
+
+    const getBaseRevenue = (company) => {
+      return (company.orders_this_month || 0) * (company.price_per_order || 0)
+    }
+
+    const getTotalPriceWithIVA = (price) => {
+      return price * 1.19 // 19% IVA en Chile
+    }
+
+    // Lifecycle
+    onMounted(() => {
+      loadCompanies()
+    })
+
+    return {
+      // Estados
+      companies,
+      selectedCompany,
+      companyUsers,
+      companyStats,
+      showAddCompanyModal,
+      showPricingModal,
+      showStatsModal,
+      showUsersModal,
+      showAddUserModal,
+      isLoading,
+      isLoadingUsers,
+      isCreatingCompany,
+      isCreatingUser,
+      isSavingPricing,
+      searchQuery,
+      filters,
+      viewMode,
+      sortField,
+      sortDirection,
+      newCompanyForm,
+      pricingForm,
+      newUserForm,
+      
+      // Computed
+      activeCompaniesCount,
+      totalMonthlyOrders,
+      totalRevenue,
+      filteredCompanies,
+      sortedCompanies,
+      activeFilters,
+      
+      // Métodos
+      loadCompanies,
+      openCreateCompanyModal,
+      closeCreateCompanyModal,
+      createCompany,
+      selectCompany,
+      openPricingModal,
+      closePricingModal,
+      savePricing,
+      openStatsModal,
+      closeStatsModal,
+      openUsersModal,
+      closeUsersModal,
+      createUser,
+      toggleCompanyStatus,
+      applyFilters,
+      removeFilter,
+      clearAllFilters,
+      sortBy,
+      getCompanyInitials,
+      getCompanyEmail,
+      getPlanName,
+      getPlanColor,
+      formatNumber,
+      calculateMonthlyRevenue,
+      getBaseRevenue,
+      getTotalPriceWithIVA
+    }
   }
 }
-
-function openCreateCompanyModal() {
-  console.log('Abrir modal crear empresa - Implementar en Parte 4')
-}
-
-function applyFilters() {
-  console.log('Aplicando filtros:', filters.value)
-}
-
-function removeFilter(key) {
-  filters.value[key] = ''
-  applyFilters()
-}
-
-function clearAllFilters() {
-  filters.value = { status: '', plan: '', revenue: '' }
-  applyFilters()
-}
-
-function formatNumber(num) {
-  return new Intl.NumberFormat('es-CL').format(num || 0)
-}
-
-// Funciones helper para la vista Grid
-function getCompanyInitials(name) {
-  if (!name) return '??'
-  const words = name.split(' ')
-  if (words.length >= 2) {
-    return (words[0][0] + words[1][0]).toUpperCase()
-  }
-  return name.substring(0, 2).toUpperCase()
-}
-
-function getCompanyEmail(company) {
-  return company.email || company.contact_email || 'Sin email'
-}
-
-function getPlanName(planType) {
-  const plans = {
-    basic: 'Basic',
-    pro: 'Pro',
-    enterprise: 'Enterprise'
-  }
-  return plans[planType] || 'Basic'
-}
-
-function getPlanColor(planType) {
-  const colors = {
-    basic: 'bg-blue-100 text-blue-700',
-    pro: 'bg-yellow-100 text-yellow-700',
-    enterprise: 'bg-green-100 text-green-700'
-  }
-  return colors[planType] || colors.basic
-}
-
-function calculateMonthlyRevenue(company) {
-  return (company.orders_this_month || 0) * (company.price_per_order || 0)
-}
-
-function selectCompany(company) {
-  console.log('Empresa seleccionada:', company)
-  // Implementar detalles de empresa si es necesario
-}
-
-function openPricingModal(company) {
-  console.log('Abrir modal pricing para:', company.name)
-  // Implementar en Parte 5
-}
-
-function openStatsModal(company) {
-  console.log('Abrir modal stats para:', company.name)
-  // Implementar en Parte 6
-}
-
-function openUsersModal(company) {
-  console.log('Abrir modal usuarios para:', company.name)
-  // Implementar en Parte 7
-}
-
-async function toggleCompanyStatus(company) {
-  try {
-    const newStatus = !company.is_active
-    await apiService.companies.update(company._id, { is_active: newStatus })
-    company.is_active = newStatus
-    toast.success(`Empresa ${newStatus ? 'activada' : 'desactivada'} correctamente`)
-  } catch (error) {
-    console.error('Error al cambiar estado:', error)
-    toast.error('Error al cambiar el estado de la empresa')
-  }
-}
-
-// Funciones para la tabla
-function sortBy(field) {
-  if (sortField.value === field) {
-    // Si ya estaba ordenando por este campo, cambiar dirección
-    sortDirection.value = sortDirection.value === 'asc' ? 'desc' : 'asc'
-  } else {
-    // Si es un campo nuevo, ordenar ascendente
-    sortField.value = field
-    sortDirection.value = 'asc'
-  }
-}
-
-function getTotalPriceWithIVA(price) {
-  return Math.round(price * 1.19) // 19% IVA en Chile
-}
-
-function getBaseRevenue(company) {
-  return (company.orders_this_month || 0) * (company.price_per_order || 0)
-}
-
-// Funciones del modal Crear Empresa
-function openCreateCompanyModal() {
-  showAddCompanyModal.value = true
-  resetCompanyForm()
-}
-
-function closeCreateCompanyModal() {
-  showAddCompanyModal.value = false
-  resetCompanyForm()
-}
-
-function resetCompanyForm() {
-  newCompanyForm.value = {
-    name: '',
-    contact_email: '',
-    phone: '',
-    address: '',
-    rut: '',
-    price_per_order: 1500,
-    plan_type: 'basic',
-    billing_cycle: 'monthly',
-    owner_name: '',
-    owner_email: '',
-    owner_password: '',
-    logo_url: ''
-  }
-}
-
-async function createCompany() {
-  isCreatingCompany.value = true
-  try {
-    const response = await apiService.companies.create(newCompanyForm.value)
-    toast.success('Empresa creada exitosamente')
-    companies.value.push(response.data)
-    closeCreateCompanyModal()
-    fetchCompanies() // Recargar lista
-  } catch (error) {
-    console.error('Error creando empresa:', error)
-    toast.error(error.response?.data?.error || 'Error al crear la empresa')
-  } finally {
-    isCreatingCompany.value = false
-  }
-}
-
-onMounted(() => {
-  fetchCompanies()
-})
 </script>
 
 <style scoped>
-/* Tailwind maneja todo el styling */
+.material-icons {
+  font-family: 'Material Icons';
+  font-size: 24px;
+}
 </style>
