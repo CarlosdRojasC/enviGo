@@ -771,11 +771,7 @@ export default {
       return result
     })
 
-    const calculateMonthlyRevenue = (company) => {
-  const base = (company.price_per_order || 0) * (company.orders_this_month || 0)
-  return Math.round(base * 1.19) // Incluye IVA
-}
-
+    
     const sortedCompanies = computed(() => {
       const sorted = [...filteredCompanies.value]
       
