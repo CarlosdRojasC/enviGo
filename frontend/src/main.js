@@ -9,7 +9,7 @@ import 'vue-toastification/dist/index.css'
 import wsManager from './services/websocket.service'
 import './assets/css/variables.css'
 import './assets/css/toast-styles.css'
-
+import './assets/styles/tailwind.css'
 // ==================== CREAR APP ====================
 const app = createApp(App)
 
