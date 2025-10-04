@@ -648,8 +648,8 @@
 </template>
 <script>
 import { ref, computed, onMounted } from 'vue'
-import { useAuthStore } from '../store/auth'
-import { apiService } from '../services/api'
+import { useAuthStore } from '@/stores/auth'
+import { apiService } from '@/services/api'
 
 export default {
   name: 'Company',
@@ -726,10 +726,8 @@ export default {
     })
 
     const totalRevenue = computed(() => {
-      return companies.value.reduce((sum, c) => {
-        const monthlyRevenue = (c.orders_this_month || 0) * (c.price_per_order || 0)
-        return sum + monthlyRevenue
-      }, 0)
+      // Usar monthly_revenue del backend
+      return companies.value.reduce((sum, c) => sum + (c.monthly_revenue || 0), 0)
     })
 
     const filteredCompanies = computed(() => {
@@ -760,7 +758,7 @@ export default {
       // Filtro de revenue
       if (filters.value.revenue) {
         result = result.filter(c => {
-          const revenue = calculateMonthlyRevenue(c)
+          const revenue = c.monthly_revenue || 0
           if (filters.value.revenue === 'high') return revenue > 500000
           if (filters.value.revenue === 'medium') return revenue >= 100000 && revenue <= 500000
           if (filters.value.revenue === 'low') return revenue < 100000
@@ -771,7 +769,6 @@ export default {
       return result
     })
 
-    
     const sortedCompanies = computed(() => {
       const sorted = [...filteredCompanies.value]
       
@@ -779,10 +776,10 @@ export default {
         let aValue = a[sortField.value]
         let bValue = b[sortField.value]
         
-        // Para revenue necesitamos calcularlo
+        // Para revenue usar monthly_revenue del backend
         if (sortField.value === 'revenue') {
-          aValue = calculateMonthlyRevenue(a)
-          bValue = calculateMonthlyRevenue(b)
+          aValue = a.monthly_revenue || 0
+          bValue = b.monthly_revenue || 0
         }
         
         if (typeof aValue === 'string') {
@@ -828,10 +825,18 @@ export default {
     const loadCompanies = async () => {
       try {
         isLoading.value = true
+        console.log('📊 Cargando empresas...')
         const response = await apiService.companies.getAll()
         companies.value = response.data || []
+        console.log(`✅ ${companies.value.length} empresas cargadas`)
+        
+        // Log para debug
+        if (companies.value.length > 0) {
+          console.log('Ejemplo de empresa:', companies.value[0])
+        }
       } catch (error) {
         console.error('Error cargando empresas:', error)
+        alert('Error al cargar empresas')
       } finally {
         isLoading.value = false
       }
@@ -866,7 +871,7 @@ export default {
         closeCreateCompanyModal()
       } catch (error) {
         console.error('Error creando empresa:', error)
-        alert('Error al crear la empresa')
+        alert('Error al crear la empresa: ' + (error.response?.data?.error || error.message))
       } finally {
         isCreatingCompany.value = false
       }
@@ -915,6 +920,12 @@ export default {
         companyStats.value = response.data || {}
       } catch (error) {
         console.error('Error cargando estadísticas:', error)
+        companyStats.value = {
+          totalOrders: company.orders_count || 0,
+          ordersThisMonth: company.orders_this_month || 0,
+          totalRevenue: company.total_revenue || 0,
+          monthlyRevenue: company.monthly_revenue || 0
+        }
       }
     }
 
@@ -967,7 +978,7 @@ export default {
         }
       } catch (error) {
         console.error('Error creando usuario:', error)
-        alert('Error al crear usuario')
+        alert('Error al crear usuario: ' + (error.response?.data?.error || error.message))
       } finally {
         isCreatingUser.value = false
       }
@@ -1047,11 +1058,12 @@ export default {
     }
 
     const calculateMonthlyRevenue = (company) => {
-      return (company.orders_this_month || 0) * (company.price_per_order || 0)
+      // Usar monthly_revenue del backend si existe, si no calcular
+      return company.monthly_revenue || ((company.orders_this_month || 0) * (company.price_per_order || 0))
     }
 
     const getBaseRevenue = (company) => {
-      return (company.orders_this_month || 0) * (company.price_per_order || 0)
+      return company.monthly_revenue || 0
     }
 
     const getTotalPriceWithIVA = (price) => {
