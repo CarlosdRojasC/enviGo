@@ -117,13 +117,13 @@
         </div>
 
         <!-- Gráfico Real -->
-        <div v-if="loadingChart" class="h-64 flex items-center justify-center">
+        <div v-if="loadingChart" class="h-80 flex items-center justify-center">
           <div class="flex flex-col items-center gap-3">
             <span class="material-icons text-4xl text-gray-400 animate-spin">refresh</span>
             <p class="text-gray-500">Cargando gráfico...</p>
           </div>
         </div>
-        <div v-else-if="chartData.length === 0" class="h-64 flex items-center justify-center">
+        <div v-else-if="chartData.length === 0" class="h-80 flex items-center justify-center">
           <div class="text-center">
             <span class="material-icons text-6xl text-gray-300 mb-2">show_chart</span>
             <p class="text-gray-500">No hay datos suficientes para mostrar el gráfico</p>
@@ -133,30 +133,10 @@
           v-else
           :data="chartData" 
           :loading="loadingChart" 
-          :height="280"
+          :height="320"
           :show-header="false"
           @period-change="handlePeriodChange"
         />
-
-        <!-- Estadísticas del Gráfico -->
-        <div class="mt-4 grid grid-cols-4 gap-4 text-center">
-          <div>
-            <p class="text-sm text-gray-500">Total</p>
-            <p class="text-lg font-bold text-gray-900">{{ stats.orders || 0 }}</p>
-          </div>
-          <div>
-            <p class="text-sm text-gray-500">Promedio</p>
-            <p class="text-lg font-bold text-gray-900">{{ Math.round((stats.monthlyOrders || 0) / 30) }}</p>
-          </div>
-          <div>
-            <p class="text-sm text-gray-500">Este Mes</p>
-            <p class="text-lg font-bold text-indigo-600">{{ stats.monthlyOrders || 0 }}</p>
-          </div>
-          <div>
-            <p class="text-sm text-gray-500">Hoy</p>
-            <p class="text-lg font-bold text-gray-900">{{ stats.ordersToday || 0 }}</p>
-          </div>
-        </div>
       </div>
 
       <!-- Gestión de Empresas -->
