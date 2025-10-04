@@ -1,5 +1,5 @@
 <template>
-  <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm overflow-hidden mb-6">
+  <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm mb-6">
     <!-- Filtros Principales -->
     <div class="p-4 border-b border-gray-200 dark:border-gray-700">
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -52,7 +52,6 @@
             Comuna
           </label>
           <button
-            ref="communeButtonRef"
             @click="toggleCommuneDropdown"
             :disabled="loading"
             class="w-full px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm text-left focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white disabled:opacity-50 flex items-center justify-between"
@@ -82,14 +81,11 @@
             </span>
           </div>
 
-          <!-- Dropdown con posición fixed -->
-          <Teleport to="body">
-            <div
-              v-if="showCommuneDropdown"
-              :style="dropdownStyle"
-              class="fixed z-[9999] bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-2xl max-h-80 overflow-hidden"
-              style="min-width: 300px;"
-            >
+          <!-- Dropdown -->
+          <div
+            v-if="showCommuneDropdown"
+            class="absolute z-[100] mt-1 w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-2xl max-h-80 overflow-hidden"
+          >
             <div class="p-2 border-b border-gray-200 dark:border-gray-700">
               <div class="relative">
                 <span class="material-icons absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 text-sm">
@@ -119,7 +115,6 @@
               </div>
             </div>
           </div>
-          </Teleport>
         </div>
 
         <!-- Fechas -->
