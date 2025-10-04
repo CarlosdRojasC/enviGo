@@ -271,7 +271,7 @@
 
 <script setup>
 import { ref, onMounted, onUnmounted, computed } from 'vue'
-import apiService from '../services/api'
+import { apiService } from '../services/api'
 
 // Estado
 const loading = ref(false)
