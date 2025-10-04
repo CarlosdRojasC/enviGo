@@ -1,377 +1,259 @@
-<!-- frontend/src/components/UnifiedOrdersFilters.vue - COMPONENTE UNIFICADO ESTILO ADMIN -->
 <template>
-  <div class="filters-container">
-    <!-- MAIN FILTERS ROW -->
-    <div class="filters-main">
-      <div class="filters-row">
-        <!-- Company Filter (Solo para Admin) -->
-        <div v-if="isAdmin" class="filter-group">
-          <label class="filter-label">Empresa</label>
-          <select 
-            :value="filters.company_id" 
+  <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm overflow-hidden mb-6">
+    <!-- Filtros Principales -->
+    <div class="p-4 border-b border-gray-200 dark:border-gray-700">
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <!-- Empresa (solo admin) -->
+        <div v-if="isAdmin">
+          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            Empresa
+          </label>
+          <select
+            :value="filters.company_id"
             @change="updateFilter('company_id', $event.target.value)"
-            class="filter-select"
             :disabled="loading"
+            class="w-full px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white disabled:opacity-50"
           >
             <option value="">Todas las empresas</option>
-            <option 
-              v-for="company in companies" 
-              :key="company._id" 
-              :value="company._id"
-            >
+            <option v-for="company in companies" :key="company._id" :value="company._id">
               {{ company.name }}
             </option>
           </select>
         </div>
 
-        <!-- Status Filter -->
-        <div class="filter-group">
-          <label class="filter-label">Estado</label>
-          <select 
-            :value="filters.status" 
+        <!-- Estado -->
+        <div>
+          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            Estado
+          </label>
+          <select
+            :value="filters.status"
             @change="updateFilter('status', $event.target.value)"
-            class="filter-select"
             :disabled="loading"
+            class="w-full px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white disabled:opacity-50"
           >
             <option value="">Todos los estados</option>
-            <option value="pending">⏳ Pendiente</option>
-            <option value="processing">⚙️ Procesando</option>
-            <option value="ready_for_pickup">📦 Listo para recoger</option>
-            <option value="warehouse_received">🏬 Recibido en bodega</option>
-            <option value="assigned">🚚 Asignado</option>
-            <option value="shipped">🚛 Enviado</option>
-            <option value="delivered">✅ Entregado</option>
-            <option value="cancelled">❌ Cancelado</option>
+            <option value="pending">Pendiente</option>
+            <option value="processing">Procesando</option>
+            <option value="ready_for_pickup">Listo para recoger</option>
+            <option value="warehouse_received">Recibido en bodega</option>
+            <option value="assigned">Asignado</option>
+            <option value="shipped">Enviado</option>
+            <option value="out_for_delivery">En entrega</option>
+            <option value="delivered">Entregado</option>
+            <option value="invoiced">Facturado</option>
+            <option value="cancelled">Cancelado</option>
           </select>
         </div>
 
-        <!-- Commune Filter with Multiselect -->
-        <div class="filter-group">
-          <label class="filter-label">Comunas</label>
-          <div class="multiselect-container" ref="communeContainer">
-            <div class="multiselect-input" @click="toggleCommuneDropdown">
-              <div v-if="filters.shipping_commune.length === 0" class="placeholder">
-                Seleccionar comunas...
-              </div>
-              <div v-else class="selected-communes">
-                <span 
-                  v-for="commune in filters.shipping_commune.slice(0, 2)" 
-                  :key="commune"
-                  class="commune-tag"
-                >
-                  {{ commune }}
-                  <button @click.stop="removeCommune(commune)" class="tag-remove">×</button>
+        <!-- Comuna (Multi-select) -->
+        <div class="relative" ref="communeDropdownRef">
+          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            Comuna
+          </label>
+          <button
+            @click="toggleCommuneDropdown"
+            :disabled="loading"
+            class="w-full px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm text-left focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white disabled:opacity-50 flex items-center justify-between"
+          >
+            <span class="truncate">
+              {{ selectedCommunesText }}
+            </span>
+            <span class="material-icons text-base">
+              {{ showCommuneDropdown ? 'expand_less' : 'expand_more' }}
+            </span>
+          </button>
+
+          <!-- Selected communes chips -->
+          <div v-if="filters.shipping_commune.length > 0" class="flex flex-wrap gap-1 mt-2">
+            <span
+              v-for="commune in filters.shipping_commune"
+              :key="commune"
+              class="inline-flex items-center gap-1 px-2 py-1 bg-indigo-100 dark:bg-indigo-900 text-indigo-800 dark:text-indigo-200 rounded text-xs font-medium"
+            >
+              {{ commune }}
+              <button
+                @click="removeCommune(commune)"
+                class="hover:text-indigo-900 dark:hover:text-indigo-100"
+              >
+                <span class="material-icons text-xs">close</span>
+              </button>
+            </span>
+          </div>
+
+          <!-- Dropdown -->
+          <div
+            v-if="showCommuneDropdown"
+            class="absolute z-20 mt-1 w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg max-h-64 overflow-hidden"
+          >
+            <div class="p-2 border-b border-gray-200 dark:border-gray-700">
+              <div class="relative">
+                <span class="material-icons absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 text-sm">
+                  search
                 </span>
-                <span v-if="filters.shipping_commune.length > 2" class="more-count">
-                  +{{ filters.shipping_commune.length - 2 }} más
-                </span>
-              </div>
-              <span class="dropdown-arrow">{{ showCommuneDropdown ? '▲' : '▼' }}</span>
-            </div>
-            
-            <div v-if="showCommuneDropdown" class="multiselect-dropdown">
-              <div class="dropdown-search">
-                <input 
+                <input
                   v-model="communeSearch"
                   type="text"
                   placeholder="Buscar comuna..."
-                  class="search-input-small"
+                  class="w-full pl-8 pr-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white"
                   @click.stop
                 />
               </div>
-              <div class="dropdown-options">
-                <div 
-                  v-for="commune in filteredCommunes" 
-                  :key="commune"
-                  @click="addCommune(commune)"
-                  class="dropdown-option"
-                >
-                  {{ commune }}
-                </div>
-                <div v-if="filteredCommunes.length === 0" class="dropdown-empty">
-                  No hay comunas disponibles
-                </div>
+            </div>
+            <div class="max-h-48 overflow-y-auto">
+              <button
+                v-for="commune in filteredCommunesNormalized"
+                :key="commune"
+                @click="addCommune(commune)"
+                :disabled="filters.shipping_commune.includes(commune)"
+                class="w-full px-3 py-2 text-sm text-left hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed text-gray-900 dark:text-white"
+              >
+                {{ commune }}
+              </button>
+              <div v-if="filteredCommunesNormalized.length === 0" class="px-3 py-4 text-center text-sm text-gray-500 dark:text-gray-400">
+                No hay comunas disponibles
               </div>
             </div>
           </div>
         </div>
 
-        <!-- Date Range Filter -->
-        <div class="filter-group date-range">
-          <label class="filter-label">Rango de Fechas</label>
-          <div class="date-inputs">
-            <input 
-              type="date" 
-              :value="filters.date_from" 
+        <!-- Fechas -->
+        <div>
+          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            Rango de Fechas
+          </label>
+          <div class="flex items-center gap-2">
+            <input
+              type="date"
+              :value="filters.date_from"
               @change="updateFilter('date_from', $event.target.value)"
-              class="filter-input date-input"
               :disabled="loading"
+              class="flex-1 px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white disabled:opacity-50"
             />
-            <span class="date-separator">hasta</span>
-            <input 
-              type="date" 
-              :value="filters.date_to" 
+            <span class="text-gray-500 dark:text-gray-400">-</span>
+            <input
+              type="date"
+              :value="filters.date_to"
               @change="updateFilter('date_to', $event.target.value)"
-              class="filter-input date-input"
               :disabled="loading"
+              class="flex-1 px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white disabled:opacity-50"
             />
           </div>
         </div>
-
-        <!-- Channel Filter (Solo para Admin) -->
-        <div v-if="isAdmin" class="filter-group">
-          <label class="filter-label">Canal</label>
-          <select 
-            :value="filters.channel_id" 
-            @change="updateFilter('channel_id', $event.target.value)"
-            class="filter-select"
-            :disabled="loading"
-          >
-            <option value="">Todos los canales</option>
-            <option 
-              v-for="channel in channels" 
-              :key="channel._id" 
-              :value="channel._id"
-            >
-              {{ getChannelIcon(channel.channel_type) }} {{ channel.channel_name }}
-            </option>
-          </select>
-        </div>
       </div>
     </div>
 
-    <!-- SEARCH ROW -->
-    <div class="search-row">
-      <div class="search-container">
-        <div class="search-input-wrapper">
-          <span class="search-icon">🔍</span>
-          <input 
-            :value="filters.search"
-            @input="updateFilter('search', $event.target.value)"
-            type="text"
-            placeholder="Buscar por número de pedido, cliente, email..."
-            class="search-input"
-            :disabled="loading"
-          />
-          <button 
-            v-if="filters.search" 
-            @click="updateFilter('search', '')"
-            class="clear-search-btn"
-            title="Limpiar búsqueda"
-          >
-            ×
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <!-- ACTIVE FILTERS & ACTIONS -->
-    <div v-if="activeFiltersCount > 0" class="filter-actions-row">
-      <div class="active-filters-summary">
-        <span class="active-count">
-          {{ activeFiltersCount }} filtro{{ activeFiltersCount !== 1 ? 's' : '' }} activo{{ activeFiltersCount !== 1 ? 's' : '' }}:
+    <!-- Barra de Búsqueda -->
+    <div class="p-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
+      <div class="relative max-w-2xl mx-auto">
+        <span class="material-icons absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+          search
         </span>
-        
-        <div class="filter-tags">
-          <span v-if="filters.company_id && isAdmin" class="filter-tag">
-            <span class="tag-label">Empresa:</span>
-            <span class="tag-value">{{ getCompanyName(filters.company_id) }}</span>
-            <button @click="updateFilter('company_id', '')" class="tag-remove">✕</button>
-          </span>
-          
-          <span v-if="filters.status" class="filter-tag">
-            <span class="tag-label">Estado:</span>
-            <span class="tag-value">{{ getStatusDisplayName(filters.status) }}</span>
-            <button @click="updateFilter('status', '')" class="tag-remove">✕</button>
-          </span>
-          
-          <span v-if="filters.shipping_commune.length" class="filter-tag">
-            <span class="tag-label">Comuna(s):</span>
-            <span class="tag-value">{{ filters.shipping_commune.join(', ') }}</span>
-            <button @click="updateFilter('shipping_commune', [])" class="tag-remove">✕</button>
-          </span>
-          
-          <span v-if="filters.date_from" class="filter-tag">
-            <span class="tag-label">Desde:</span>
-            <span class="tag-value">{{ formatDate(filters.date_from) }}</span>
-            <button @click="updateFilter('date_from', '')" class="tag-remove">✕</button>
-          </span>
-          
-          <span v-if="filters.date_to" class="filter-tag">
-            <span class="tag-label">Hasta:</span>
-            <span class="tag-value">{{ formatDate(filters.date_to) }}</span>
-            <button @click="updateFilter('date_to', '')" class="tag-remove">✕</button>
-          </span>
-          
-          <span v-if="filters.search" class="filter-tag">
-            <span class="tag-label">Búsqueda:</span>
-            <span class="tag-value">"{{ filters.search.substring(0, 20) }}{{ filters.search.length > 20 ? '...' : '' }}"</span>
-            <button @click="updateFilter('search', '')" class="tag-remove">✕</button>
-          </span>
-        </div>
-      </div>
-
-      <!-- Filter Actions -->
-      <div class="filter-actions">
-        <button 
-          @click="resetFilters" 
-          class="btn-filter-action reset"
-          :disabled="loading || activeFiltersCount === 0"
-          title="Limpiar todos los filtros"
+        <input
+          :value="filters.search"
+          @input="updateFilter('search', $event.target.value)"
+          type="text"
+          placeholder="Buscar por número de pedido, cliente, email, teléfono..."
+          :disabled="loading"
+          class="w-full pl-10 pr-10 py-3 bg-white dark:bg-gray-800 border-2 border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:text-white disabled:opacity-50"
+        />
+        <button
+          v-if="filters.search"
+          @click="updateFilter('search', '')"
+          class="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors"
         >
-          <span class="action-icon">🗑️</span>
-          <span class="action-text">Limpiar Filtros</span>
-        </button>
-        
-        <button 
-          @click="toggleAdvancedFilters" 
-          class="btn-filter-action toggle"
-          :class="{ active: showAdvancedFilters }"
-          title="Mostrar filtros avanzados"
-        >
-          <span class="action-icon">⚙️</span>
-          <span class="action-text">Avanzado</span>
-          <span class="toggle-icon">{{ showAdvancedFilters ? '▲' : '▼' }}</span>
+          <span class="material-icons text-base text-gray-500 dark:text-gray-400">close</span>
         </button>
       </div>
     </div>
 
-    <!-- ADVANCED FILTERS (COLLAPSIBLE) -->
-    <transition name="slide-down">
-      <div v-if="showAdvancedFilters" class="advanced-filters">
-        <div class="advanced-filters-header">
-          <h4 class="advanced-title">
-            <span class="advanced-icon">⚙️</span>
-            Filtros Avanzados
-          </h4>
+    <!-- Filtros Activos -->
+    <div v-if="activeFiltersCount > 0" class="p-4 bg-indigo-50 dark:bg-indigo-900/20 border-b border-indigo-200 dark:border-indigo-800">
+      <div class="flex items-center justify-between flex-wrap gap-4">
+        <div class="flex items-center gap-3 flex-wrap">
+          <span class="text-sm font-medium text-gray-700 dark:text-gray-300">
+            {{ activeFiltersCount }} filtro(s) activo(s):
+          </span>
+
+          <!-- Chips de filtros -->
+          <span
+            v-if="filters.company_id && isAdmin"
+            class="inline-flex items-center gap-1 px-3 py-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-full text-xs font-medium text-gray-700 dark:text-gray-300"
+          >
+            <span class="font-semibold">Empresa:</span>
+            {{ getCompanyName(filters.company_id) }}
+            <button
+              @click="updateFilter('company_id', '')"
+              class="hover:text-red-600 dark:hover:text-red-400"
+            >
+              <span class="material-icons text-xs">close</span>
+            </button>
+          </span>
+
+          <span
+            v-if="filters.status"
+            class="inline-flex items-center gap-1 px-3 py-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-full text-xs font-medium text-gray-700 dark:text-gray-300"
+          >
+            <span class="font-semibold">Estado:</span>
+            {{ getStatusDisplayName(filters.status) }}
+            <button
+              @click="updateFilter('status', '')"
+              class="hover:text-red-600 dark:hover:text-red-400"
+            >
+              <span class="material-icons text-xs">close</span>
+            </button>
+          </span>
+
+          <span
+            v-if="filters.date_from"
+            class="inline-flex items-center gap-1 px-3 py-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-full text-xs font-medium text-gray-700 dark:text-gray-300"
+          >
+            <span class="font-semibold">Desde:</span>
+            {{ formatDate(filters.date_from) }}
+            <button
+              @click="updateFilter('date_from', '')"
+              class="hover:text-red-600 dark:hover:text-red-400"
+            >
+              <span class="material-icons text-xs">close</span>
+            </button>
+          </span>
+
+          <span
+            v-if="filters.date_to"
+            class="inline-flex items-center gap-1 px-3 py-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-full text-xs font-medium text-gray-700 dark:text-gray-300"
+          >
+            <span class="font-semibold">Hasta:</span>
+            {{ formatDate(filters.date_to) }}
+            <button
+              @click="updateFilter('date_to', '')"
+              class="hover:text-red-600 dark:hover:text-red-400"
+            >
+              <span class="material-icons text-xs">close</span>
+            </button>
+          </span>
+
+          <span
+            v-if="filters.search"
+            class="inline-flex items-center gap-1 px-3 py-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-full text-xs font-medium text-gray-700 dark:text-gray-300"
+          >
+            <span class="font-semibold">Búsqueda:</span>
+            "{{ filters.search.substring(0, 20) }}{{ filters.search.length > 20 ? '...' : '' }}"
+            <button
+              @click="updateFilter('search', '')"
+              class="hover:text-red-600 dark:hover:text-red-400"
+            >
+              <span class="material-icons text-xs">close</span>
+            </button>
+          </span>
         </div>
-        
-        <div class="advanced-filters-grid">
-          <!-- Order Amount Range -->
-          <div class="advanced-filter-group">
-            <label class="filter-label">Monto del Pedido</label>
-            <div class="range-inputs">
-              <input 
-                type="number" 
-                :value="filters.amount_min" 
-                @input="updateFilter('amount_min', $event.target.value)"
-                placeholder="Mínimo"
-                class="filter-input range-input"
-                min="0"
-                step="1000"
-                :disabled="loading"
-              />
-              <span class="range-separator">a</span>
-              <input 
-                type="number" 
-                :value="filters.amount_max" 
-                @input="updateFilter('amount_max', $event.target.value)"
-                placeholder="Máximo"
-                class="filter-input range-input"
-                min="0"
-                step="1000"
-                :disabled="loading"
-              />
-            </div>
-          </div>
 
-          <!-- Priority Filter -->
-          <div class="advanced-filter-group">
-            <label class="filter-label">Prioridad</label>
-            <select 
-              :value="advancedFilters.priority" 
-              @change="updateAdvancedFilter('priority', $event.target.value)"
-              class="filter-select"
-              :disabled="loading"
-            >
-              <option value="">Todas las prioridades</option>
-              <option value="Baja">🟢 Baja</option>
-              <option value="Normal">🟡 Normal</option>
-              <option value="Alta">🔴 Alta</option>
-            </select>
-          </div>
-
-          <!-- Shipday Status Filter (Solo Admin) -->
-          <div v-if="isAdmin" class="advanced-filter-group">
-            <label class="filter-label">Estado en Shipday</label>
-            <select 
-              :value="advancedFilters.shipday_status" 
-              @change="updateAdvancedFilter('shipday_status', $event.target.value)"
-              class="filter-select"
-              :disabled="loading"
-            >
-              <option value="">Todos</option>
-              <option value="assigned">✅ Asignados a Shipday</option>
-              <option value="not_assigned">❌ No asignados</option>
-              <option value="with_driver">🚚 Con conductor asignado</option>
-              <option value="without_driver">🚫 Sin conductor</option>
-            </select>
-          </div>
-
-          <!-- Customer Email Filter -->
-          <div class="advanced-filter-group">
-            <label class="filter-label">Email del Cliente</label>
-            <input 
-              type="email" 
-              :value="advancedFilters.customer_email" 
-              @input="updateAdvancedFilter('customer_email', $event.target.value)"
-              placeholder="Buscar por email..."
-              class="filter-input"
-              :disabled="loading"
-            />
-          </div>
-
-          <!-- Order Number Filter -->
-          <div class="advanced-filter-group">
-            <label class="filter-label">Número de Pedido</label>
-            <input 
-              type="text" 
-              :value="advancedFilters.order_number" 
-              @input="updateAdvancedFilter('order_number', $event.target.value)"
-              placeholder="Ej: ORD-001"
-              class="filter-input"
-              :disabled="loading"
-            />
-          </div>
-
-          <!-- Has Tracking Filter -->
-          <div class="advanced-filter-group">
-            <label class="filter-label">Con Seguimiento</label>
-            <select 
-              :value="advancedFilters.has_tracking" 
-              @change="updateAdvancedFilter('has_tracking', $event.target.value)"
-              class="filter-select"
-              :disabled="loading"
-            >
-              <option value="">Todos</option>
-              <option value="yes">✅ Con seguimiento</option>
-              <option value="no">❌ Sin seguimiento</option>
-            </select>
-          </div>
-        </div>
-      </div>
-    </transition>
-
-    <!-- FILTER PRESETS -->
-    <div class="filter-presets">
-      <div class="presets-header">
-        <span class="presets-label">
-          <span class="presets-icon">⭐</span>
-          Filtros Rápidos:
-        </span>
-      </div>
-      
-      <div class="presets-buttons">
-        <button 
-          v-for="preset in filterPresets" 
-          :key="preset.id"
-          @click="applyPreset(preset.id)"
-          class="preset-btn"
-          :class="{ active: activePreset === preset.id }"
-          :title="preset.description"
+        <button
+          @click="resetFilters"
+          :disabled="loading"
+          class="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 disabled:bg-gray-300 text-white rounded-lg text-sm font-medium transition-colors"
         >
-          <span class="preset-icon">{{ preset.icon }}</span>
-          <span class="preset-name">{{ preset.name }}</span>
+          <span class="material-icons text-base">clear_all</span>
+          <span>Limpiar Filtros</span>
         </button>
       </div>
     </div>
@@ -379,19 +261,11 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 
 // ==================== PROPS ====================
 const props = defineProps({
   filters: {
-    type: Object,
-    required: true
-  },
-  advancedFilters: {
-    type: Object,
-    required: true
-  },
-  filtersUI: {
     type: Object,
     required: true
   },
@@ -407,14 +281,6 @@ const props = defineProps({
     type: Array,
     default: () => []
   },
-  filteredCommunes: {
-    type: Array,
-    default: () => []
-  },
-  filterPresets: {
-    type: Array,
-    default: () => []
-  },
   activeFiltersCount: {
     type: Number,
     default: 0
@@ -426,55 +292,81 @@ const props = defineProps({
   loading: {
     type: Boolean,
     default: false
-  },
-   companyId: {
-    type: String,
-    default: null
   }
 })
 
 // ==================== EMITS ====================
 const emit = defineEmits([
   'filter-change',
-  'advanced-filter-change',
   'reset-filters',
-  'toggle-advanced',
-  'apply-preset',
   'add-commune',
   'remove-commune'
 ])
 
 // ==================== STATE ====================
-const communeContainer = ref(null)
-const communeSearch = ref('')
 const showCommuneDropdown = ref(false)
+const communeSearch = ref('')
+const communeDropdownRef = ref(null)
 
 // ==================== COMPUTED ====================
-const showAdvancedFilters = computed(() => props.filtersUI.showAdvanced)
-const activePreset = computed(() => props.filtersUI.activePreset)
 
-const filteredCommunes = computed(() => {
+/**
+ * Normalize communes to Title Case and remove duplicates
+ */
+const normalizedCommunes = computed(() => {
+  const communes = [...props.availableCommunes]
+  
+  // Normalizar a Title Case
+  const normalized = communes.map(commune => {
+    if (!commune) return ''
+    
+    return commune
+      .toLowerCase()
+      .split(' ')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ')
+  })
+  
+  // Eliminar duplicados y ordenar
+  return [...new Set(normalized)].filter(c => c).sort()
+})
+
+/**
+ * Filter communes based on search
+ */
+const filteredCommunesNormalized = computed(() => {
   if (!communeSearch.value) {
-    return props.availableCommunes
+    return normalizedCommunes.value
   }
-  return props.availableCommunes.filter(commune => 
-    commune.toLowerCase().includes(communeSearch.value.toLowerCase())
+  
+  const search = communeSearch.value.toLowerCase()
+  return normalizedCommunes.value.filter(commune =>
+    commune.toLowerCase().includes(search)
   )
 })
+
+/**
+ * Selected communes display text
+ */
+const selectedCommunesText = computed(() => {
+  if (props.filters.shipping_commune.length === 0) {
+    return 'Todas las comunas'
+  }
+  
+  if (props.filters.shipping_commune.length === 1) {
+    return props.filters.shipping_commune[0]
+  }
+  
+  return `${props.filters.shipping_commune.length} comunas seleccionadas`
+})
+
 // ==================== METHODS ====================
 
 /**
- * Update basic filter
+ * Update filter value
  */
 function updateFilter(key, value) {
   emit('filter-change', key, value)
-}
-
-/**
- * Update advanced filter
- */
-function updateAdvancedFilter(key, value) {
-  emit('advanced-filter-change', key, value)
 }
 
 /**
@@ -485,714 +377,98 @@ function resetFilters() {
 }
 
 /**
- * Toggle advanced filters
+ * Toggle commune dropdown
  */
-function toggleAdvancedFilters() {
-  emit('toggle-advanced')
+function toggleCommuneDropdown() {
+  showCommuneDropdown.value = !showCommuneDropdown.value
+  if (showCommuneDropdown.value) {
+    communeSearch.value = ''
+  }
 }
 
 /**
- * Apply preset
- */
-function applyPreset(presetId) {
-  emit('apply-preset', presetId)
-}
-
-/**
- * Add commune to selection
+ * Add commune to filter
  */
 function addCommune(commune) {
   emit('add-commune', commune)
-  communeSearch.value = ''
-  showCommuneDropdown.value = false
+  // No cerrar el dropdown para permitir múltiples selecciones
 }
 
 /**
- * Remove commune from selection
+ * Remove commune from filter
  */
 function removeCommune(commune) {
   emit('remove-commune', commune)
 }
 
 /**
- * Toggle commune dropdown
- */
-function toggleCommuneDropdown() {
-  showCommuneDropdown.value = !showCommuneDropdown.value
-}
-
-/**
- * Close commune dropdown when clicking outside
- */
-function handleClickOutside(event) {
-  if (communeContainer.value && !communeContainer.value.contains(event.target)) {
-    showCommuneDropdown.value = false
-  }
-}
-
-// ==================== UTILITY FUNCTIONS ====================
-
-/**
  * Get company name by ID
  */
 function getCompanyName(companyId) {
   const company = props.companies.find(c => c._id === companyId)
-  return company?.name || 'Empresa Desconocida'
+  return company?.name || 'N/A'
 }
 
 /**
  * Get status display name
  */
 function getStatusDisplayName(status) {
-  const statusNames = {
-    'pending': 'Pendiente',
-    'processing': 'Procesando',
-    'ready_for_pickup': 'Listo',
-    'assigned': 'Asignado',
-    'out_for_delivery': 'En Entrega',
-    'warehouse_received': 'Recibido en Bodega',
-    'shipped': 'Enviado',
-    'delivered': 'Entregado',
-    'cancelled': 'Cancelado'
+  const statusMap = {
+    pending: 'Pendiente',
+    processing: 'Procesando',
+    shipped: 'Enviado',
+    delivered: 'Entregado',
+    invoiced: 'Facturado',
+    cancelled: 'Cancelado',
+    ready_for_pickup: 'Listo para recoger',
+    out_for_delivery: 'En Entrega',
+    warehouse_received: 'Recibido en bodega',
+    assigned: 'Asignado'
   }
-  return statusNames[status] || status
-}
-
-/**
- * Get channel icon
- */
-function getChannelIcon(channelType) {
-  const icons = {
-    shopify: '🛍️',
-    woocommerce: '🏪',
-    mercadolibre: '🛒',
-    manual: '📝'
-  }
-  return icons[channelType] || '🏬'
+  return statusMap[status] || status
 }
 
 /**
  * Format date for display
  */
-function formatDate(dateString) {
-  if (!dateString) return ''
-  return new Date(dateString).toLocaleDateString('es-CL')
+function formatDate(dateStr) {
+  if (!dateStr) return 'N/A'
+  
+  return new Date(dateStr).toLocaleDateString('es-CL', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric'
+  })
 }
 
-// Observador que reacciona cuando la prop `companyId` se recibe o cambia.
-watch(() => props.companyId, (newId) => {
-  if (newId) {
-    // Si se recibe un ID de compañía, se lo pasamos al filtro interno.
-    // Esto asegura que todas las búsquedas futuras incluyan este ID.
-    updateFilter('company_id', newId);
+/**
+ * Close dropdown when clicking outside
+ */
+function handleClickOutside(event) {
+  if (communeDropdownRef.value && !communeDropdownRef.value.contains(event.target)) {
+    showCommuneDropdown.value = false
   }
-}, { immediate: true }); // `immediate: true` hace que se ejecute al montar el componente.
+}
 
 // ==================== LIFECYCLE ====================
 onMounted(() => {
   document.addEventListener('click', handleClickOutside)
-   if (!props.isAdmin && props.companyId) {
-     updateFilter('company_id', props.companyId);
-  }
 })
 
 onUnmounted(() => {
   document.removeEventListener('click', handleClickOutside)
 })
+
+// Watch for filter changes to close dropdown
+watch(() => props.filters.shipping_commune, () => {
+  // Opcionalmente cerrar el dropdown después de agregar una comuna
+  // showCommuneDropdown.value = false
+})
 </script>
 
 <style scoped>
-/* ==================== CONTAINER ==================== */
-.filters-container {
-  background: white;
-  border-radius: 16px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
-  margin-bottom: 24px;
-  overflow: hidden;
-  border: 1px solid #e2e8f0;
-}
-
-/* ==================== MAIN FILTERS ==================== */
-.filters-main {
-  padding: 24px;
-  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
-  border-bottom: 1px solid #e2e8f0;
-}
-
-.filters-row {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 20px;
-  align-items: end;
-}
-
-.filter-group {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.filter-group.date-range {
-  min-width: 280px;
-}
-
-.filter-label {
-  font-size: 14px;
-  font-weight: 600;
-  color: #374151;
-  margin-bottom: 4px;
-}
-
-.filter-select,
-.filter-input {
-  padding: 12px 16px;
-  border: 2px solid #e2e8f0;
-  border-radius: 12px;
-  font-size: 14px;
-  background: white;
-  transition: all 0.3s ease;
-  outline: none;
-}
-
-.filter-select:focus,
-.filter-input:focus {
-  border-color: #6366f1;
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
-  transform: translateY(-1px);
-}
-
-.filter-select:hover,
-.filter-input:hover {
-  border-color: #cbd5e1;
-}
-
-.filter-select:disabled,
-.filter-input:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-/* ==================== DATE RANGE ==================== */
-.date-inputs {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.date-input {
-  flex: 1;
-  min-width: 0;
-}
-
-.date-separator {
-  color: #6b7280;
-  font-weight: 500;
-  font-size: 12px;
-}
-
-/* ==================== MULTISELECT COMMUNES ==================== */
-.multiselect-container {
-  position: relative;
-}
-
-.multiselect-input {
-  padding: 12px 16px;
-  border: 2px solid #e2e8f0;
-  border-radius: 12px;
-  background: white;
-  cursor: pointer;
-  min-height: 48px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  transition: all 0.3s ease;
-}
-
-.multiselect-input:hover {
-  border-color: #cbd5e1;
-}
-
-.multiselect-input:focus-within {
-  border-color: #6366f1;
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
-}
-
-.placeholder {
-  color: #6b7280;
-  font-size: 14px;
-}
-
-.selected-communes {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  flex: 1;
-}
-
-.commune-tag {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 8px;
-  background: #e0e7ff;
-  color: #3730a3;
-  border-radius: 6px;
-  font-size: 12px;
-  font-weight: 500;
-}
-
-.tag-remove {
-  background: none;
-  border: none;
-  color: #6366f1;
-  cursor: pointer;
-  font-weight: bold;
-  font-size: 14px;
-  line-height: 1;
-  padding: 0;
-  width: 16px;
-  height: 16px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  transition: all 0.2s ease;
-}
-
-.tag-remove:hover {
-  background: #c7d2fe;
-}
-
-.more-count {
-  padding: 4px 8px;
-  background: #f1f5f9;
-  color: #64748b;
-  border-radius: 6px;
-  font-size: 12px;
-  font-weight: 500;
-}
-
-.dropdown-arrow {
-  color: #6b7280;
-  font-size: 12px;
-  margin-left: 8px;
-}
-
-.multiselect-dropdown {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  right: 0;
-  background: white;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-  z-index: 1000;
-  margin-top: 4px;
-  max-height: 200px;
-  overflow: hidden;
-}
-
-.dropdown-search {
-  padding: 8px;
-  border-bottom: 1px solid #f1f5f9;
-}
-
-.search-input-small {
-  width: 100%;
-  padding: 8px 12px;
-  border: 1px solid #e2e8f0;
-  border-radius: 6px;
-  font-size: 13px;
-  outline: none;
-}
-
-.search-input-small:focus {
-  border-color: #6366f1;
-}
-
-.dropdown-options {
-  max-height: 150px;
-  overflow-y: auto;
-}
-
-.dropdown-option {
-  padding: 8px 12px;
-  cursor: pointer;
-  font-size: 13px;
-  transition: background-color 0.2s ease;
-}
-
-.dropdown-option:hover {
-  background: #f8fafc;
-}
-
-.dropdown-empty {
-  padding: 16px 12px;
-  text-align: center;
-  color: #6b7280;
-  font-size: 13px;
-  font-style: italic;
-}
-
-/* ==================== SEARCH ROW ==================== */
-.search-row {
-  padding: 16px 24px;
-  background: white;
-  border-bottom: 1px solid #f1f5f9;
-}
-
-.search-container {
-  max-width: 600px;
-}
-
-.search-input-wrapper {
-  position: relative;
-  display: flex;
-  align-items: center;
-}
-
-.search-icon {
-  position: absolute;
-  left: 16px;
-  font-size: 16px;
-  color: #6b7280;
-  z-index: 1;
-}
-
-.search-input {
-  width: 100%;
-  padding: 16px 16px 16px 48px;
-  border: 2px solid #e2e8f0;
-  border-radius: 12px;
-  font-size: 14px;
-  background: white;
-  transition: all 0.3s ease;
-  outline: none;
-}
-
-.search-input:focus {
-  border-color: #6366f1;
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
-}
-
-.clear-search-btn {
-  position: absolute;
-  right: 12px;
-  background: #f3f4f6;
-  border: none;
-  border-radius: 50%;
-  width: 24px;
-  height: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  font-size: 16px;
-  color: #6b7280;
-  transition: all 0.2s ease;
-}
-
-.clear-search-btn:hover {
-  background: #e5e7eb;
-  color: #374151;
-}
-
-/* ==================== FILTER ACTIONS ROW ==================== */
-.filter-actions-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 16px 24px;
-  background: #f8fafc;
-  border-bottom: 1px solid #e2e8f0;
-  flex-wrap: wrap;
-  gap: 16px;
-}
-
-.active-filters-summary {
-  flex: 1;
-  min-width: 0;
-}
-
-.active-count {
-  font-size: 14px;
-  font-weight: 600;
-  color: #374151;
-  margin-bottom: 8px;
-  display: block;
-}
-
-.filter-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.filter-tag {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 8px;
-  background: white;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
-  font-size: 12px;
-  color: #374151;
-}
-
-.tag-label {
-  font-weight: 500;
-  color: #6b7280;
-}
-
-.tag-value {
-  font-weight: 600;
-  color: #1f2937;
-}
-
-.filter-actions {
-  display: flex;
-  gap: 12px;
-}
-
-.btn-filter-action {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 16px;
-  border: 2px solid #e2e8f0;
-  border-radius: 8px;
-  background: white;
-  color: #374151;
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.3s ease;
-}
-
-.btn-filter-action:hover:not(:disabled) {
-  border-color: #cbd5e1;
-  transform: translateY(-1px);
-}
-
-.btn-filter-action:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.btn-filter-action.reset {
-  border-color: #fca5a5;
-  color: #dc2626;
-}
-
-.btn-filter-action.reset:hover:not(:disabled) {
-  background: #fee2e2;
-  border-color: #f87171;
-}
-
-.btn-filter-action.toggle.active {
-  background: #eff6ff;
-  border-color: #3b82f6;
-  color: #1d4ed8;
-}
-
-.toggle-icon {
-  font-size: 12px;
-  margin-left: 4px;
-}
-
-.action-icon {
-  font-size: 14px;
-}
-
-/* ==================== ADVANCED FILTERS ==================== */
-.advanced-filters {
-  padding: 20px 24px;
-  background: #f8fafc;
-  border-bottom: 1px solid #e2e8f0;
-}
-
-.advanced-filters-header {
-  margin-bottom: 16px;
-}
-
-.advanced-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 0;
-  font-size: 16px;
-  font-weight: 600;
-  color: #374151;
-}
-
-.advanced-icon {
-  font-size: 18px;
-}
-
-.advanced-filters-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-  gap: 16px;
-}
-
-.advanced-filter-group {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.range-inputs {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.range-input {
-  flex: 1;
-  min-width: 0;
-}
-
-.range-separator {
-  color: #6b7280;
-  font-weight: 500;
-  font-size: 12px;
-}
-
-/* ==================== FILTER PRESETS ==================== */
-.filter-presets {
-  padding: 16px 24px;
-  background: #f1f5f9;
-}
-
-.presets-header {
-  margin-bottom: 12px;
-}
-
-.presets-label {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 14px;
-  font-weight: 600;
-  color: #374151;
-}
-
-.presets-icon {
-  font-size: 16px;
-}
-
-.presets-buttons {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.preset-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 12px;
-  border: 1px solid #cbd5e1;
-  border-radius: 6px;
-  background: white;
-  color: #475569;
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.preset-btn:hover {
-  background: #e2e8f0;
-  border-color: #94a3b8;
-  transform: translateY(-1px);
-}
-
-.preset-btn.active {
-  background: #3b82f6;
-  border-color: #3b82f6;
-  color: white;
-  box-shadow: 0 2px 4px rgba(59, 130, 246, 0.2);
-}
-
-.preset-icon {
-  font-size: 14px;
-}
-
-.preset-name {
-  font-weight: 600;
-}
-
-/* ==================== ANIMATIONS ==================== */
-.slide-down-enter-active,
-.slide-down-leave-active {
-  transition: all 0.3s ease;
-  overflow: hidden;
-}
-
-.slide-down-enter-from,
-.slide-down-leave-to {
-  max-height: 0;
-  opacity: 0;
-  transform: translateY(-10px);
-}
-
-.slide-down-enter-to,
-.slide-down-leave-from {
-  max-height: 500px;
-  opacity: 1;
-  transform: translateY(0);
-}
-
-/* ==================== RESPONSIVE DESIGN ==================== */
-@media (max-width: 768px) {
-  .filters-row {
-    grid-template-columns: 1fr;
-    gap: 12px;
-  }
-  
-  .filter-actions-row {
-    flex-direction: column;
-    align-items: stretch;
-  }
-  
-  .filter-tags {
-    justify-content: center;
-  }
-  
-  .filter-actions {
-    justify-content: center;
-  }
-  
-  .advanced-filters-grid {
-    grid-template-columns: 1fr;
-  }
-  
-  .date-inputs {
-    flex-direction: column;
-    gap: 8px;
-  }
-  
-  .date-separator {
-    display: none;
-  }
-}
-
-@media (max-width: 480px) {
-  .filters-main,
-  .search-row,
-  .filter-actions-row,
-  .advanced-filters,
-  .filter-presets {
-    padding: 16px;
-  }
-  
-  .filter-select,
-  .filter-input,
-  .search-input {
-    font-size: 16px; /* Prevent zoom on iOS */
-  }
+.material-icons {
+  font-size: 1.25rem;
+  font-family: 'Material Icons';
 }
 </style>
