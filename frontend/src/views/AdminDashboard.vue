@@ -60,9 +60,9 @@
               <span class="material-icons text-indigo-500">local_shipping</span>
             </div>
           </div>
-          <div class="mt-2 text-sm flex items-center text-green-500">
+          <div v-if="stats.ordersToday > 0" class="mt-2 text-sm flex items-center text-green-500">
             <span class="material-icons text-base mr-1">arrow_upward</span>
-            50% vs ayer
+            Activo hoy
           </div>
         </div>
 
@@ -77,9 +77,9 @@
               <span class="material-icons text-indigo-500">check_circle_outline</span>
             </div>
           </div>
-          <div class="mt-2 text-sm flex items-center text-green-500">
-            <span class="material-icons text-base mr-1">arrow_upward</span>
-            20% vs mes anterior
+          <div class="mt-2 text-sm flex items-center text-gray-500">
+            <span class="material-icons text-base mr-1">inventory</span>
+            Total histórico
           </div>
         </div>
 
@@ -87,11 +87,11 @@
         <div class="bg-orange-400 p-6 rounded-lg shadow-sm text-white">
           <div class="flex items-center justify-between">
             <div>
-              <p class="text-3xl font-bold">{{ formatCurrency(stats.estimatedMonthlyCost || stats.monthlyRevenue) }}</p>
+              <p class="text-3xl font-bold">{{ formatCurrency(stats.estimatedMonthlyCost || stats.monthlyRevenue || 0) }}</p>
               <p class="text-sm text-orange-100 mt-1">Ingresos del Mes</p>
             </div>
           </div>
-          <p class="text-xs mt-2 text-orange-100">Costos de envío totales</p>
+          <p class="text-xs mt-2 text-orange-100">{{ stats.monthlyOrders || 0 }} pedidos este mes</p>
         </div>
       </div>
     </section>
@@ -105,26 +105,38 @@
             <h3 class="text-xl font-semibold text-gray-900">Tendencia Global de Pedidos</h3>
             <p class="text-sm text-gray-500">Actividad de todas las empresas</p>
           </div>
-          <select class="px-3 py-2 bg-gray-50 border border-gray-300 rounded-md text-sm text-gray-700 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
-            <option>30 días</option>
-            <option>60 días</option>
-            <option>90 días</option>
+          <select 
+            v-model="chartPeriod" 
+            @change="fetchChartData"
+            class="px-3 py-2 bg-gray-50 border border-gray-300 rounded-md text-sm text-gray-700 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+          >
+            <option value="7d">7 días</option>
+            <option value="30d">30 días</option>
+            <option value="90d">90 días</option>
           </select>
         </div>
 
-        <!-- Gráfico Placeholder -->
-        <div v-if="loading" class="h-64 flex items-center justify-center">
+        <!-- Gráfico Real -->
+        <div v-if="loadingChart" class="h-64 flex items-center justify-center">
           <div class="flex flex-col items-center gap-3">
             <span class="material-icons text-4xl text-gray-400 animate-spin">refresh</span>
             <p class="text-gray-500">Cargando gráfico...</p>
           </div>
         </div>
-        <div v-else class="h-64 bg-gray-50 rounded-lg flex items-center justify-center">
+        <div v-else-if="chartData.length === 0" class="h-64 flex items-center justify-center">
           <div class="text-center">
             <span class="material-icons text-6xl text-gray-300 mb-2">show_chart</span>
-            <p class="text-gray-500">Gráfico de tendencias</p>
+            <p class="text-gray-500">No hay datos suficientes para mostrar el gráfico</p>
           </div>
         </div>
+        <OrdersTrendChart 
+          v-else
+          :data="chartData" 
+          :loading="loadingChart" 
+          :height="280"
+          :show-header="false"
+          @period-change="handlePeriodChange"
+        />
 
         <!-- Estadísticas del Gráfico -->
         <div class="mt-4 grid grid-cols-4 gap-4 text-center">
@@ -134,16 +146,14 @@
           </div>
           <div>
             <p class="text-sm text-gray-500">Promedio</p>
-            <p class="text-lg font-bold text-gray-900">{{ Math.round((stats.orders || 0) / 30) }}</p>
+            <p class="text-lg font-bold text-gray-900">{{ Math.round((stats.monthlyOrders || 0) / 30) }}</p>
           </div>
           <div>
-            <p class="text-sm text-gray-500">Tendencia</p>
-            <p class="text-lg font-bold text-green-500 flex items-center justify-center">
-              <span class="material-icons text-base">arrow_upward</span>51%
-            </p>
+            <p class="text-sm text-gray-500">Este Mes</p>
+            <p class="text-lg font-bold text-indigo-600">{{ stats.monthlyOrders || 0 }}</p>
           </div>
           <div>
-            <p class="text-sm text-gray-500">Máximo</p>
+            <p class="text-sm text-gray-500">Hoy</p>
             <p class="text-lg font-bold text-gray-900">{{ stats.ordersToday || 0 }}</p>
           </div>
         </div>
@@ -175,13 +185,13 @@
                 <span class="material-icons text-gray-600">apartment</span>
               </div>
               <div class="min-w-0 flex-1">
-                <p class="font-semibold text-sm text-gray-900 truncate">{{ company.name }}</p>
-                <p class="text-xs text-gray-500 truncate">{{ company.email }}</p>
+                <p class="font-semibold text-sm text-gray-900 truncate">{{ company.name || company.company_name || 'Sin nombre' }}</p>
+                <p class="text-xs text-gray-500 truncate">{{ company.email || 'Sin email' }}</p>
               </div>
             </div>
             
             <div class="flex items-center gap-4">
-              <div class="text-right">
+              <div v-if="company.orderCount !== undefined" class="text-right">
                 <p class="font-bold text-sm text-gray-900">{{ company.orderCount || 0 }}</p>
                 <p class="text-xs text-gray-500">Pedidos</p>
               </div>
@@ -245,7 +255,7 @@
           <span class="text-3xl">🟢</span>
           <div>
             <p class="font-semibold text-gray-900">Base de Datos</p>
-            <p class="text-sm text-gray-500">{{ stats.totalOrders || 0 }} pedidos registrados</p>
+            <p class="text-sm text-gray-500">{{ stats.orders || 0 }} pedidos registrados</p>
           </div>
         </div>
 
@@ -271,19 +281,24 @@
 
 <script setup>
 import { ref, onMounted, onUnmounted, computed } from 'vue'
-import { apiService } from '../services/api'
+import apiService from '../services/api'
+import OrdersTrendChart from '../components/dashboard/OrdersTrendChart.vue'
 
 // Estado
 const loading = ref(false)
+const loadingChart = ref(false)
 const stats = ref({})
 const companies = ref([])
 const channels = ref(0)
+const chartData = ref([])
+const chartPeriod = ref('30d')
 const currentTime = ref('')
 const currentDate = ref('')
 const timeInterval = ref(null)
 
 // Datos computados
 const topCompanies = computed(() => {
+  if (!companies.value || !Array.isArray(companies.value)) return []
   return companies.value.slice(0, 5)
 })
 
@@ -359,20 +374,97 @@ function formatCurrency(value) {
 async function fetchAllData() {
   loading.value = true
   try {
-    const [statsRes, companiesRes, channelsRes] = await Promise.all([
-      apiService.dashboard.getAdminStats(),
-      apiService.companies.getAll(),
-      apiService.channels.getAll()
+    console.log('🔄 Iniciando carga de datos del dashboard admin...')
+    
+    await Promise.all([
+      fetchStats(),
+      fetchChartData(),
+      fetchCompanies()
     ])
 
-    stats.value = statsRes.data
-    companies.value = companiesRes.data.companies || []
-    channels.value = channelsRes.data.channels?.length || 0
+    console.log('✅ Todos los datos cargados')
   } catch (error) {
-    console.error('Error fetching data:', error)
+    console.error('❌ Error fetching data:', error)
   } finally {
     loading.value = false
   }
+}
+
+async function fetchStats() {
+  try {
+    const statsRes = await apiService.dashboard.getAdminStats()
+    console.log('✅ Stats recibidas:', statsRes.data)
+    stats.value = statsRes.data
+  } catch (error) {
+    console.error('❌ Error fetching stats:', error)
+  }
+}
+
+async function fetchChartData() {
+  loadingChart.value = true
+  try {
+    console.log('📈 Obteniendo datos del gráfico para período:', chartPeriod.value)
+    const response = await apiService.orders.getTrend({ period: chartPeriod.value })
+    const newData = response.data || []
+    
+    console.log('📈 Datos del gráfico recibidos:', newData.length, 'puntos')
+    
+    setTimeout(() => {
+      chartData.value = newData
+      loadingChart.value = false
+    }, 200)
+  } catch (error) {
+    console.error('❌ Error fetching chart data:', error)
+    chartData.value = []
+    loadingChart.value = false
+  }
+}
+
+async function fetchCompanies() {
+  try {
+    const companiesRes = await apiService.companies.getAll()
+    const channelsRes = await apiService.channels.getAll()
+
+    console.log('✅ Companies recibidas:', companiesRes.data)
+    console.log('✅ Channels recibidos:', channelsRes.data)
+
+    // Asignar companies - manejar diferentes formatos de respuesta
+    if (Array.isArray(companiesRes.data)) {
+      companies.value = companiesRes.data
+    } else if (companiesRes.data.companies && Array.isArray(companiesRes.data.companies)) {
+      companies.value = companiesRes.data.companies
+    } else if (companiesRes.data.data && Array.isArray(companiesRes.data.data)) {
+      companies.value = companiesRes.data.data
+    } else {
+      console.warn('⚠️ Formato de companies no reconocido:', companiesRes.data)
+      companies.value = []
+    }
+
+    // Asignar channels
+    if (Array.isArray(channelsRes.data)) {
+      channels.value = channelsRes.data.length
+    } else if (channelsRes.data.channels && Array.isArray(channelsRes.data.channels)) {
+      channels.value = channelsRes.data.channels.length
+    } else if (channelsRes.data.data && Array.isArray(channelsRes.data.data)) {
+      channels.value = channelsRes.data.data.length
+    } else {
+      channels.value = 0
+    }
+
+    console.log('✅ Datos procesados:', {
+      stats: stats.value,
+      companiesCount: companies.value.length,
+      channelsCount: channels.value
+    })
+  } catch (error) {
+    console.error('❌ Error fetching companies/channels:', error)
+  }
+}
+
+function handlePeriodChange(period) {
+  console.log('📊 Cambiando período del gráfico a:', period)
+  chartPeriod.value = period
+  fetchChartData()
 }
 
 onMounted(() => {
