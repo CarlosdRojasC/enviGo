@@ -416,18 +416,35 @@ function formatRole(role) {
 }
 
 function goToProfile() {
-  router.push('/profile')
-  showUserMenu.value = false
+    showUserMenu.value = false
+  
+  if (auth.isAdmin) {
+    router.push({ name: 'AdminProfile' })
+  } else {
+    router.push({ name: 'Profile' })
+  }
 }
 
 function goToSettings() {
-  router.push('/settings')
   showUserMenu.value = false
+  
+  if (auth.isAdmin) {
+    router.push({ name: 'AdminSettings' })
+  } else {
+    router.push({ name: 'Settings' })
+  }
 }
+
 
 async function handleLogout() {
   try {
     await auth.logout()
+    
+    // Limpiar todos los caches
+    notificationsCache.clear()
+    statsCache.clear()
+    searchCache.clear()
+    
     router.push('/login')
     toast.success('Sesión cerrada correctamente')
   } catch (error) {
