@@ -197,7 +197,11 @@ nav::-webkit-scrollbar-thumb:hover {
   }
 
   .nav-link {
-    @apply flex-col min-w-[80px] text-center py-2 px-2 text-xs border-l-0 border-t-3 hover:translate-x-0;
+    @apply flex-col min-w-[80px] text-center py-2 px-2 text-xs border-l-0 border-t-2 hover:translate-x-0;
+  }
+
+  .nav-link.active {
+    @apply border-t-lime-500;
   }
 
   .nav-link span:first-child {
