@@ -1,676 +1,237 @@
 <template>
-  <div class="header-section">
-    <!-- MAIN HEADER -->
-    <div class="header-main">
-      <div class="header-title-area">
-        <h1 class="page-title">
-          <span class="title-icon">📦</span>
-          Pedidos Globales
-        </h1>
-        <p class="page-subtitle">
-          Gestión centralizada de todos los pedidos del sistema
-        </p>
-      </div>
+  <div class="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+    <!-- Header Principal -->
+    <div class="px-6 py-4">
+      <div class="flex items-center justify-between">
+        <div>
+          <h1 class="text-2xl font-bold text-gray-900 dark:text-white">
+            Pedidos Globales
+          </h1>
+          <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
+            Gestión centralizada de todos los pedidos del sistema
+          </p>
+        </div>
+        
+        <div class="flex items-center gap-3">
+          <!-- Botón Crear Pedido -->
+          <button
+            @click="$emit('create-order')"
+            class="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium transition-colors"
+          >
+            <span class="material-icons text-base">add</span>
+            <span>Crear Pedido</span>
+          </button>
 
-      <!-- HEADER ACTIONS -->
-      <div class="header-actions">
-        <button 
-          @click="$emit('create-order')" 
-          class="btn-header create"
-          title="Crear un nuevo pedido manualmente"
-        >
-          <span class="btn-icon">➕</span>
-          <span class="btn-text">Crear Pedido</span>
-        </button>
+          <!-- Botón Subida Masiva -->
+          <button
+            @click="$emit('bulk-upload')"
+            class="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium transition-colors"
+          >
+            <span class="material-icons text-base">file_upload</span>
+            <span>Subida Masiva</span>
+          </button>
 
-        <button 
-          @click="$emit('bulk-upload')" 
-          class="btn-header upload"
-          title="Subir múltiples pedidos desde Excel"
-        >
-          <span class="btn-icon">⬆️</span>
-          <span class="btn-text">Subida Masiva</span>
-        </button>
-
-        <button 
-          @click="$emit('export')" 
-          class="btn-header export"
-          :disabled="isExporting"
-          title="Exportar pedidos para OptiRoute"
-        >
-          <span class="btn-icon">{{ isExporting ? '⏳' : '📤' }}</span>
-          <span class="btn-text">
-            {{ isExporting ? 'Exportando...' : 'Exportar Pedidos' }}
-          </span>
-        </button>
+          <!-- Botón Exportar -->
+          <button
+            @click="$emit('export')"
+            :disabled="isExporting"
+            class="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium transition-colors"
+          >
+            <span v-if="!isExporting" class="material-icons text-base">file_download</span>
+            <span v-else class="material-icons text-base animate-spin">refresh</span>
+            <span>{{ isExporting ? 'Exportando...' : 'Exportar' }}</span>
+          </button>
+        </div>
       </div>
     </div>
 
-    <!-- STATISTICS ROW -->
-    <div class="header-stats" v-if="stats">
-      <div class="stats-grid">
-        <div class="stat-card total">
-          <div class="stat-icon">📊</div>
-          <div class="stat-content">
-            <div class="stat-number">{{ stats.total || 0 }}</div>
-            <div class="stat-label">Total Pedidos</div>
+    <!-- Cards de Estadísticas -->
+    <div class="px-6 pb-4">
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+        <!-- Total Pedidos -->
+        <div class="bg-gray-50 dark:bg-gray-900 rounded-xl p-4 hover:shadow-md transition-shadow">
+          <div class="flex items-center gap-3">
+            <div class="p-3 bg-blue-100 dark:bg-blue-900/30 rounded-xl">
+              <span class="material-icons text-blue-600 dark:text-blue-400 text-2xl">
+                inventory_2
+              </span>
+            </div>
+            <div>
+              <p class="text-2xl font-bold text-gray-900 dark:text-white">
+                {{ stats.total || 0 }}
+              </p>
+              <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                Total Pedidos
+              </p>
+            </div>
           </div>
         </div>
 
-        <div class="stat-card pending">
-          <div class="stat-icon">⏳</div>
-          <div class="stat-content">
-            <div class="stat-number">{{ stats.pending || 0 }}</div>
-            <div class="stat-label">Pendientes</div>
+        <!-- Pendientes -->
+        <div class="bg-gray-50 dark:bg-gray-900 rounded-xl p-4 hover:shadow-md transition-shadow">
+          <div class="flex items-center gap-3">
+            <div class="p-3 bg-yellow-100 dark:bg-yellow-900/30 rounded-xl">
+              <span class="material-icons text-yellow-600 dark:text-yellow-400 text-2xl">
+                pending_actions
+              </span>
+            </div>
+            <div>
+              <p class="text-2xl font-bold text-gray-900 dark:text-white">
+                {{ stats.pending || 0 }}
+              </p>
+              <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                Pendientes
+              </p>
+            </div>
           </div>
         </div>
 
-            <div class="stat-card assigned" v-if="stats.assigned > 0">
-      <div class="stat-icon">👨‍💼</div>
-      <div class="stat-content">
-        <div class="stat-number">{{ stats.assigned || 0 }}</div>
-        <div class="stat-label">Asignados</div>
-      </div>
-    </div>
-        <div class="stat-card out-for-delivery" v-if="stats.out_for_delivery > 0">
-      <div class="stat-icon">🚚</div>
-      <div class="stat-content">
-        <div class="stat-number">{{ stats.out_for_delivery || 0 }}</div>
-        <div class="stat-label">En Ruta</div>
-      </div>
-    </div>
-
-
-        <div class="stat-card ready">
-          <div class="stat-icon">📦</div>
-          <div class="stat-content">
-            <div class="stat-number">{{ stats.ready_for_pickup || 0 }}</div>
-            <div class="stat-label">Listos</div>
-          </div>
-        </div>
-        <div class="stat-card warehouse" v-if="stats.warehouse_received > 0">
-      <div class="stat-icon">🏭</div>
-      <div class="stat-content">
-        <div class="stat-number">{{ stats.warehouse_received || 0 }}</div>
-        <div class="stat-label">En Bodega</div>
-      </div>
-    </div>
-
-        <div class="stat-card shipped">
-          <div class="stat-icon">🚚</div>
-          <div class="stat-content">
-            <div class="stat-number">{{ stats.shipped || 0 }}</div>
-            <div class="stat-label">Enviados</div>
+        <!-- Listos -->
+        <div class="bg-gray-50 dark:bg-gray-900 rounded-xl p-4 hover:shadow-md transition-shadow">
+          <div class="flex items-center gap-3">
+            <div class="p-3 bg-purple-100 dark:bg-purple-900/30 rounded-xl">
+              <span class="material-icons text-purple-600 dark:text-purple-400 text-2xl">
+                list_alt
+              </span>
+            </div>
+            <div>
+              <p class="text-2xl font-bold text-gray-900 dark:text-white">
+                {{ stats.ready || 0 }}
+              </p>
+              <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                Listos
+              </p>
+            </div>
           </div>
         </div>
 
-        <div class="stat-card delivered">
-          <div class="stat-icon">✅</div>
-          <div class="stat-content">
-            <div class="stat-number">{{ stats.delivered || 0 }}</div>
-            <div class="stat-label">Entregados</div>
+        <!-- En Tránsito -->
+        <div class="bg-gray-50 dark:bg-gray-900 rounded-xl p-4 hover:shadow-md transition-shadow">
+          <div class="flex items-center gap-3">
+            <div class="p-3 bg-blue-100 dark:bg-blue-900/30 rounded-xl">
+              <span class="material-icons text-blue-600 dark:text-blue-400 text-2xl">
+                local_shipping
+              </span>
+            </div>
+            <div>
+              <p class="text-2xl font-bold text-gray-900 dark:text-white">
+                {{ stats.in_transit || 0 }}
+              </p>
+              <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                En Tránsito
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Entregados -->
+        <div class="bg-gray-50 dark:bg-gray-900 rounded-xl p-4 hover:shadow-md transition-shadow">
+          <div class="flex items-center gap-3">
+            <div class="p-3 bg-green-100 dark:bg-green-900/30 rounded-xl">
+              <span class="material-icons text-green-600 dark:text-green-400 text-2xl">
+                check_circle
+              </span>
+            </div>
+            <div>
+              <p class="text-2xl font-bold text-gray-900 dark:text-white">
+                {{ stats.delivered || 0 }}
+              </p>
+              <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                Entregados
+              </p>
+            </div>
           </div>
         </div>
       </div>
-
-      <!-- ADDITIONAL METRICS -->
-      <div class="additional-metrics" v-if="additionalStats">
-        <div class="metric-item">
-          <span class="metric-icon">💰</span>
-          <span class="metric-label">Valor Total:</span>
-          <span class="metric-value">{{ formatCurrency(additionalStats.totalValue) }}</span>
-        </div>
-
-        <div class="metric-item">
-          <span class="metric-icon">📈</span>
-          <span class="metric-label">Promedio por Pedido:</span>
-          <span class="metric-value">{{ formatCurrency(additionalStats.averageValue) }}</span>
-        </div>
-
-        <div class="metric-item">
-          <span class="metric-icon">🎯</span>
-          <span class="metric-label">Tasa de Entrega:</span>
-          <span class="metric-value">{{ additionalStats.deliveryRate }}%</span>
-        </div>
-
-        <div class="metric-item">
-          <span class="metric-icon">🚛</span>
-          <span class="metric-label">En Shipday:</span>
-          <span class="metric-value">{{ additionalStats.shipdayOrders || 0 }}</span>
-        </div>
-      </div>
     </div>
 
-    <!-- QUICK ACTIONS BAR -->
-    <div class="quick-actions-bar">
-      <div class="quick-actions-label">
-        <span class="actions-icon">⚡</span>
-        <span>Acciones Rápidas:</span>
-      </div>
-
-      <div class="quick-actions-buttons">
-        <button 
-          @click="$emit('quick-action', 'refresh')"
-          class="quick-btn refresh"
-          title="Actualizar datos"
-        >
-          <span class="quick-icon">🔄</span>
-          <span class="quick-text">Actualizar</span>
-        </button>
-
-        <button 
-          @click="$emit('quick-action', 'pending-today')"
-          class="quick-btn filter"
-          title="Ver pedidos pendientes de hoy"
-        >
-          <span class="quick-icon">📅</span>
-          <span class="quick-text">Pendientes Hoy</span>
-        </button>
-
-        <button 
-          @click="$emit('quick-action', 'ready-pickup')"
-          class="quick-btn filter"
-          title="Ver pedidos listos para recoger"
-        >
-          <span class="quick-icon">📦</span>
-          <span class="quick-text">Listos</span>
-        </button>
-
-        <button 
-          @click="$emit('quick-action', 'unassigned')"
-          class="quick-btn filter"
-          title="Ver pedidos sin asignar a Shipday"
-        >
-          <span class="quick-icon">🚚</span>
-          <span class="quick-text">Sin Asignar</span>
-        </button>
-
-        <div class="quick-actions-divider"></div>
-
-        <button 
-          @click="$emit('quick-action', 'bulk-status')"
-          class="quick-btn action"
-          title="Actualizar estado de múltiples pedidos"
-        >
-          <span class="quick-icon">📝</span>
-          <span class="quick-text">Cambio Masivo</span>
-        </button>
-
-        <button 
-          @click="$emit('quick-action', 'reports')"
-          class="quick-btn action"
-          title="Ver reportes y análisis"
-        >
-          <span class="quick-icon">📊</span>
-          <span class="quick-text">Reportes</span>
-        </button>
-      </div>
-    </div>
-
-    <!-- LOADING OVERLAY -->
-    <div v-if="isExporting" class="loading-overlay">
-      <div class="loading-content">
-        <div class="loading-spinner"></div>
-        <span class="loading-text">Exportando pedidos...</span>
+    <!-- Métricas Adicionales -->
+    <div class="px-6 pb-6">
+      <div class="bg-gradient-to-r from-gray-800 to-gray-900 dark:from-gray-900 dark:to-black rounded-xl p-4 shadow-lg">
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+          <div class="flex items-center gap-3 text-white">
+            <span class="material-icons text-green-400">attach_money</span>
+            <div>
+              <p class="text-xs text-gray-300">Valor Total</p>
+              <p class="text-lg font-bold">
+                ${{ formatNumber(additionalStats?.total_value || 0) }}
+              </p>
+            </div>
+          </div>
+          
+          <div class="flex items-center gap-3 text-white">
+            <span class="material-icons text-blue-400">trending_up</span>
+            <div>
+              <p class="text-xs text-gray-300">Promedio por Pedido</p>
+              <p class="text-lg font-bold">
+                ${{ formatNumber(additionalStats?.avg_value || 0) }}
+              </p>
+            </div>
+          </div>
+          
+          <div class="flex items-center gap-3 text-white">
+            <span class="material-icons text-purple-400">schedule</span>
+            <div>
+              <p class="text-xs text-gray-300">Tasa de Entrega</p>
+              <p class="text-lg font-bold">
+                {{ additionalStats?.delivery_rate || 0 }}%
+              </p>
+            </div>
+          </div>
+          
+          <div class="flex items-center gap-3 text-white">
+            <span class="material-icons text-yellow-400">storage</span>
+            <div>
+              <p class="text-xs text-gray-300">En Shipday</p>
+              <p class="text-lg font-bold">
+                {{ additionalStats?.in_shipday || 0 }}
+              </p>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { defineProps, defineEmits } from 'vue'
 
-// ==================== PROPS ====================
 const props = defineProps({
-  isExporting: {
-    type: Boolean,
-    default: false
-  },
   stats: {
     type: Object,
-    default: null
+    default: () => ({
+      total: 0,
+      pending: 0,
+      ready: 0,
+      in_transit: 0,
+      delivered: 0
+    })
   },
   additionalStats: {
     type: Object,
-    default: null
+    default: () => ({
+      total_value: 0,
+      avg_value: 0,
+      delivery_rate: 0,
+      in_shipday: 0
+    })
+  },
+  isExporting: {
+    type: Boolean,
+    default: false
   }
 })
 
-// ==================== EMITS ====================
-const emit = defineEmits([
-  'export',
-  'create-order',
-  'bulk-upload',
-  'quick-action'
-])
+const emit = defineEmits(['create-order', 'bulk-upload', 'export', 'quick-action'])
 
-// ==================== COMPUTED ====================
-
-/**
- * Calculate completion percentage for progress bars
- */
-const completionRate = computed(() => {
-  if (!props.stats || props.stats.total === 0) return 0
-  return Math.round((props.stats.delivered / props.stats.total) * 100)
-})
-
-// ==================== METHODS ====================
-
-/**
- * Format currency for display
- */
-function formatCurrency(amount) {
-  if (amount === undefined || amount === null) return '$0'
-  return new Intl.NumberFormat('es-CL', {
-    style: 'currency',
-    currency: 'CLP',
-    minimumFractionDigits: 0
-  }).format(amount)
+function formatNumber(value) {
+  return new Intl.NumberFormat('es-CL').format(value || 0)
 }
 </script>
 
 <style scoped>
-/* ==================== MAIN LAYOUT ==================== */
-.header-section {
-  position: relative;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  border-radius: 12px;
-  margin-bottom: 24px;
-  overflow: hidden;
-}
-
-.header-main {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  padding: 32px 28px 24px;
-  position: relative;
-  z-index: 2;
-}
-
-/* ==================== TITLE AREA ==================== */
-.header-title-area {
-  flex: 1;
-}
-
-.page-title {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin: 0 0 8px 0;
-  font-size: 32px;
-  font-weight: 700;
-  color: white;
-}
-
-.title-icon {
-  font-size: 36px;
-  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
-}
-
-.page-subtitle {
-  margin: 0;
-  font-size: 16px;
-  color: rgba(255, 255, 255, 0.8);
-  font-weight: 400;
-}
-
-/* ==================== HEADER ACTIONS ==================== */
-.header-actions {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-}
-
-.btn-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 12px 20px;
-  border: 2px solid rgba(255, 255, 255, 0.2);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.1);
-  color: white;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  backdrop-filter: blur(10px);
-}
-
-.btn-header:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.2);
-  border-color: rgba(255, 255, 255, 0.4);
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-}
-
-.btn-header:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-  transform: none;
-}
-
-.btn-header.create:hover:not(:disabled) {
-  background: linear-gradient(135deg, #10b981, #059669);
-  border-color: transparent;
-}
-
-.btn-header.upload:hover:not(:disabled) {
-  background: linear-gradient(135deg, #3b82f6, #1d4ed8);
-  border-color: transparent;
-}
-
-.btn-header.export:hover:not(:disabled) {
-  background: linear-gradient(135deg, #8b5cf6, #7c3aed);
-  border-color: transparent;
-}
-
-.btn-icon {
-  font-size: 18px;
-}
-
-/* ==================== STATISTICS ==================== */
-.header-stats {
-  padding: 0 28px 24px;
-  position: relative;
-  z-index: 2;
-}
-
-.stats-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 16px;
-  margin-bottom: 20px;
-}
-
-.stat-card {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 16px;
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 8px;
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  transition: all 0.3s ease;
-}
-
-.stat-card:hover {
-  background: rgba(255, 255, 255, 0.15);
-  transform: translateY(-2px);
-}
-
-.stat-icon {
-  font-size: 24px;
-  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.2));
-}
-
-.stat-content {
-  flex: 1;
-}
-
-.stat-number {
-  font-size: 20px;
-  font-weight: 700;
-  color: white;
-  line-height: 1;
-  margin-bottom: 4px;
-}
-
-.stat-label {
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.8);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-/* Stat card specific colors */
-.stat-card.total { border-left: 4px solid #10b981; }
-.stat-card.pending { border-left: 4px solid #f59e0b; }
-.stat-card.processing { border-left: 4px solid #3b82f6; }
-.stat-card.ready { border-left: 4px solid #8b5cf6; }
-.stat-card.shipped { border-left: 4px solid #6366f1; }
-.stat-card.delivered { border-left: 4px solid #10b981; }
-
-/* ==================== ADDITIONAL METRICS ==================== */
-.additional-metrics {
-  display: flex;
-  justify-content: space-around;
-  align-items: center;
-  padding: 16px;
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  flex-wrap: wrap;
-  gap: 16px;
-}
-
-.metric-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 14px;
-}
-
-.metric-icon {
-  font-size: 16px;
-}
-
-.metric-label {
-  color: rgba(255, 255, 255, 0.7);
-}
-
-.metric-value {
-  font-weight: 600;
-  color: white;
-}
-
-/* ==================== QUICK ACTIONS ==================== */
-.quick-actions-bar {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 16px 28px;
-  background: rgba(0, 0, 0, 0.1);
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.quick-actions-label {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 14px;
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.9);
-  white-space: nowrap;
-}
-
-.actions-icon {
-  font-size: 16px;
-}
-
-.quick-actions-buttons {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.quick-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 12px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.1);
-  color: rgba(255, 255, 255, 0.9);
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.quick-btn:hover {
-  background: rgba(255, 255, 255, 0.2);
-  color: white;
-  transform: translateY(-1px);
-}
-
-.quick-icon {
-  font-size: 14px;
-}
-
-.quick-actions-divider {
-  width: 1px;
-  height: 24px;
-  background: rgba(255, 255, 255, 0.2);
-  margin: 0 4px;
-}
-
-/* ==================== LOADING OVERLAY ==================== */
-.loading-overlay {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.3);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 10;
-  backdrop-filter: blur(4px);
-}
-
-.loading-content {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  padding: 24px;
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-}
-
-.loading-spinner {
-  width: 32px;
-  height: 32px;
-  border: 3px solid rgba(255, 255, 255, 0.3);
-  border-top: 3px solid white;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
-
-.loading-text {
-  color: white;
-  font-size: 14px;
-  font-weight: 500;
-}
-
-/* ==================== RESPONSIVE DESIGN ==================== */
-@media (max-width: 1024px) {
-  .header-main {
-    flex-direction: column;
-    gap: 20px;
-    align-items: stretch;
-  }
-  
-  .header-actions {
-    justify-content: center;
-  }
-  
-  .stats-grid {
-    grid-template-columns: repeat(3, 1fr);
-  }
-  
-  .additional-metrics {
-    justify-content: center;
-  }
-}
-
-@media (max-width: 768px) {
-  .header-main {
-    padding: 24px 20px 20px;
-  }
-  
-  .page-title {
-    font-size: 28px;
-  }
-  
-  .title-icon {
-    font-size: 32px;
-  }
-  
-  .header-actions {
-    flex-direction: column;
-    width: 100%;
-  }
-  
-  .btn-header {
-    justify-content: center;
-    width: 100%;
-  }
-  
-  .stats-grid {
-    grid-template-columns: repeat(2, 1fr);
-    gap: 12px;
-  }
-  
-  .header-stats {
-    padding: 0 20px 20px;
-  }
-  
-  .quick-actions-bar {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 12px;
-    padding: 16px 20px;
-  }
-  
-  .quick-actions-buttons {
-    justify-content: center;
-  }
-  
-  .additional-metrics {
-    flex-direction: column;
-    gap: 12px;
-  }
-}
-
-@media (max-width: 480px) {
-  .page-title {
-    font-size: 24px;
-    flex-direction: column;
-    text-align: center;
-    gap: 8px;
-  }
-  
-  .stats-grid {
-    grid-template-columns: 1fr;
-  }
-  
-  .btn-text,
-  .quick-text {
-    display: none;
-  }
-  
-  .quick-actions-buttons {
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    padding-bottom: 8px;
-  }
-  
-  .quick-btn {
-    flex-shrink: 0;
-  }
+.material-icons {
+  font-size: 1.25rem;
 }
 </style>
