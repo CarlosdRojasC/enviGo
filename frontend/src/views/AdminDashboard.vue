@@ -70,7 +70,7 @@
         <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
           <div class="flex items-center justify-between">
             <div>
-              <p class="text-3xl font-bold text-gray-900">{{ stats.deliveredTotal || 0 }}</p>
+              <p class="text-3xl font-bold text-gray-900">{{ deliveredOrders || 0 }}</p>
               <p class="text-sm text-gray-500 mt-1">Pedidos Entregados</p>
             </div>
             <div class="bg-indigo-100 p-3 rounded-full">
