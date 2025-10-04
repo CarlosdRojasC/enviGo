@@ -648,8 +648,8 @@
 </template>
 <script>
 import { ref, computed, onMounted } from 'vue'
-import { useAuthStore } from '@/stores/auth'
-import { apiService } from '@/services/api'
+import { useAuthStore } from '../store/auth'
+import { apiService } from '../services/api'
 
 export default {
   name: 'Company',
