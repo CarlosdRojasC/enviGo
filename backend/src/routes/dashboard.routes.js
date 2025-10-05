@@ -57,40 +57,98 @@ router.get('/dashboard', authenticateToken, async (req, res) => {
         Order.countDocuments({ status: 'delivered' })
       ]);
 
-      // Costos estimados para admin
-      const estimatedMonthlyCost = ordersThisMonth * 2500;
+const monthlyRevenueResult = await Order.aggregate([
+  {
+    $match: {
+      order_date: { $gte: thisMonthStart },
+      status: { $in: ['delivered', 'invoiced'] }
+    }
+  },
+  {
+    $group: {
+      _id: null,
+      totalRevenue: { 
+        $sum: { 
+          $ifNull: ['$delivery_cost', 2500] // Usar delivery_cost del pedido, o 2500 por defecto
+        } 
+      },
+      count: { $sum: 1 }
+    }
+  }
+]);
 
-      stats = {
-        // Métricas principales
-        companies,
-        totalOrders,
-        channels,
-        users,
-        
-        // Estructura compatible con frontend
-        orders: totalOrders,
-        ordersToday,
-        monthlyOrders: ordersThisMonth,
-        ordersByStatus: ordersByStatus.reduce((acc, item) => {
-          acc[item._id] = item.count;
-          return acc;
-        }, {}),
-        
-        // Costos
-        estimatedMonthlyCost,
-        pricePerOrder: 2500,
-        
-        // Meta información
-        role: 'admin',
-        calculatedAt: new Date()
-      };
+const monthlyRevenue = monthlyRevenueResult[0]?.totalRevenue || 0;
+const deliveredInvoicedCount = monthlyRevenueResult[0]?.count || 0;
 
-      console.log('✅ BACKEND: Stats admin generadas:', {
-        companies,
-        totalOrders,
-        ordersToday,
-        monthlyOrders: ordersThisMonth
-      });
+// También calcular desglose por estado
+const revenueByStatus = await Order.aggregate([
+  {
+    $match: {
+      order_date: { $gte: thisMonthStart },
+      status: { $in: ['delivered', 'invoiced'] }
+    }
+  },
+  {
+    $group: {
+      _id: '$status',
+      totalRevenue: { $sum: { $ifNull: ['$delivery_cost', 2500] } },
+      count: { $sum: 1 }
+    }
+  }
+]);
+
+console.log('💰 BACKEND: Ingresos del mes calculados:', {
+  monthlyRevenue,
+  deliveredInvoicedCount,
+  breakdown: revenueByStatus
+});
+
+stats = {
+  // Métricas principales
+  companies,
+  totalOrders,
+  channels,
+  users,
+  
+  // Estructura compatible con frontend
+  orders: totalOrders,
+  ordersToday,
+  monthlyOrders: ordersThisMonth,
+  ordersByStatus: ordersByStatus.reduce((acc, item) => {
+    acc[item._id] = item.count;
+    return acc;
+  }, {}),
+  
+  // ⭐ INGRESOS - Solo pedidos entregados y facturados
+  monthlyRevenue,  // Total de ingresos del mes (delivered + invoiced)
+  deliveredInvoicedCount, // Cantidad de pedidos facturables
+  
+  // Desglose de ingresos por estado
+  revenueByStatus: revenueByStatus.reduce((acc, item) => {
+    acc[item._id] = {
+      revenue: item.totalRevenue,
+      count: item.count
+    };
+    return acc;
+  }, {}),
+  
+  // Costos estimados (para referencia, basado en TODOS los pedidos del mes)
+  estimatedMonthlyCost: ordersThisMonth * 2500,
+  pricePerOrder: 2500,
+  
+  // Meta información
+  role: 'admin',
+  calculatedAt: new Date()
+};
+
+console.log('✅ BACKEND: Stats admin generadas:', {
+  companies,
+  totalOrders,
+  ordersToday,
+  monthlyOrders: ordersThisMonth,
+  monthlyRevenue, // ⭐ Solo delivered + invoiced
+  deliveredInvoicedCount
+});
 
     } else {
       // Dashboard para empresa
