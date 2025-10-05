@@ -327,7 +327,68 @@ const adminActions = [
     route: '/app/admin/billing'
   }
 ]
+// ========== COMPUTED PROPERTIES CON FALLBACKS ==========
+const deliveredOrders = computed(() => {
+  // Opción 1: Buscar en ordersByStatus con fallbacks
+  const byStatus = stats.value.ordersByStatus || stats.value.orders_by_status || {}
+  const fromStatus = byStatus.delivered || 0
+  
+  // Opción 2: Buscar como propiedad directa con todos los fallbacks posibles
+  const directValue = stats.value.deliveredOrders || 
+                      stats.value.delivered_orders || 
+                      stats.value.deliveredTotal || 
+                      stats.value.delivered_total || 
+                      0
+  
+  // Retornar el mayor de los dos (el que tenga datos reales)
+  return Math.max(fromStatus, directValue)
+})
 
+const totalOrders = computed(() => 
+  stats.value.totalOrders || 
+  stats.value.total_orders || 
+  stats.value.orders || 
+  0
+)
+
+const ordersToday = computed(() => 
+  stats.value.ordersToday || 
+  stats.value.orders_today || 
+  0
+)
+
+const monthlyRevenue = computed(() => 
+  stats.value.monthlyRevenue || 
+  stats.value.monthly_revenue ||
+  stats.value.estimatedMonthlyCost || 
+  stats.value.estimated_monthly_cost ||
+  0
+)
+
+const deliveryRate = computed(() => {
+  const total = totalOrders.value
+  const delivered = deliveredOrders.value
+  return total > 0 ? Math.round((delivered / total) * 100) : 0
+})
+
+// ========== ACTUALIZA fetchStats con debug mejorado ==========
+async function fetchStats() {
+  try {
+    const statsRes = await apiService.dashboard.getAdminStats()
+    
+    // DEBUG: Ver qué propiedades envía realmente el backend
+    console.log('✅ Stats recibidas:', statsRes.data)
+    console.log('📊 Claves disponibles:', Object.keys(statsRes.data))
+    console.log('📊 ordersToday:', statsRes.data.ordersToday, 'orders_today:', statsRes.data.orders_today)
+    console.log('📊 deliveredOrders:', statsRes.data.deliveredOrders, 'delivered_orders:', statsRes.data.delivered_orders)
+    console.log('📊 ordersByStatus:', statsRes.data.ordersByStatus)
+    console.log('📊 orders_by_status:', statsRes.data.orders_by_status)
+    
+    stats.value = statsRes.data
+  } catch (error) {
+    console.error('❌ Error fetching stats:', error)
+  }
+}
 // Funciones
 function updateTime() {
   const now = new Date()
