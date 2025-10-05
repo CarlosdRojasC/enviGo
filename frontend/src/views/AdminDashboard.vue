@@ -432,16 +432,6 @@ async function fetchAllData() {
   }
 }
 
-async function fetchStats() {
-  try {
-    const statsRes = await apiService.dashboard.getAdminStats()
-    console.log('✅ Stats recibidas:', statsRes.data)
-    stats.value = statsRes.data
-  } catch (error) {
-    console.error('❌ Error fetching stats:', error)
-  }
-}
-
 async function fetchChartData() {
   loadingChart.value = true
   try {
