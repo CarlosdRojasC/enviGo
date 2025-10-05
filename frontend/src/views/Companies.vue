@@ -649,7 +649,7 @@
 <script>
 import { ref, computed, onMounted } from 'vue'
 import { useAuthStore } from '../store/auth'
-import { apiService } from '../services/api'
+import { apiService } from '/services/api'
 
 export default {
   name: 'Company',

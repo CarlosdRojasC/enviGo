@@ -1,198 +1,239 @@
 <template>
-  <div class="bulk-actions-section">
-    <div class="bulk-actions-container">
+  <div class="bg-gradient-to-br from-blue-500 to-blue-700 text-white rounded-lg mb-5 shadow-lg shadow-blue-500/20 animate-slideIn">
+    <div class="flex flex-col lg:flex-row justify-between items-stretch lg:items-center px-6 py-4 gap-6">
       <!-- SELECTION INFO -->
-      <div class="selection-info">
-        <div class="selection-count">
-          <span class="count-icon">☑️</span>
-          <span class="count-text">
+      <div class="flex-1 min-w-[200px] text-center lg:text-left">
+        <div class="flex items-center gap-2 mb-2 justify-center lg:justify-start">
+          <span class="text-lg">☑️</span>
+          <span class="text-base font-semibold">
             <strong>{{ selectedCount }}</strong> 
             pedido{{ selectedCount !== 1 ? 's' : '' }} seleccionado{{ selectedCount !== 1 ? 's' : '' }}
           </span>
         </div>
         
-        <div class="selection-summary" v-if="selectionSummary">
-          <div class="summary-item">
-            <span class="summary-icon">💰</span>
-            <span class="summary-label">Valor total:</span>
-            <span class="summary-value">{{ formatCurrency(selectionSummary.totalValue) }}</span>
+        <div v-if="selectionSummary" class="flex flex-wrap gap-4 text-sm opacity-90 justify-center lg:justify-start">
+          <div class="flex items-center gap-1">
+            <span class="text-sm">💰</span>
+            <span class="text-white/80">Valor total:</span>
+            <span class="font-semibold">{{ formatCurrency(selectionSummary.totalValue) }}</span>
           </div>
           
-          <div class="summary-item" v-if="selectionSummary.companies > 1">
-            <span class="summary-icon">🏢</span>
-            <span class="summary-label">Empresas:</span>
-            <span class="summary-value">{{ selectionSummary.companies }}</span>
+          <div v-if="selectionSummary.companies > 1" class="flex items-center gap-1">
+            <span class="text-sm">🏢</span>
+            <span class="text-white/80">Empresas:</span>
+            <span class="font-semibold">{{ selectionSummary.companies }}</span>
           </div>
           
-          <div class="summary-item" v-if="selectionSummary.communes > 1">
-            <span class="summary-icon">🏘️</span>
-            <span class="summary-label">Comunas:</span>
-            <span class="summary-value">{{ selectionSummary.communes }}</span>
+          <div v-if="selectionSummary.communes > 1" class="flex items-center gap-1">
+            <span class="text-sm">🏘️</span>
+            <span class="text-white/80">Comunas:</span>
+            <span class="font-semibold">{{ selectionSummary.communes }}</span>
           </div>
         </div>
       </div>
 
       <!-- BULK ACTIONS -->
-      <div class="bulk-actions">
+      <div class="flex flex-col md:flex-row items-stretch md:items-center gap-4">
         <!-- Primary Actions -->
-        <div class="primary-actions">
+        <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
           <button 
-  @click="$emit('bulk-assign')"
-  class="bulk-btn primary assign"
-  :disabled="!canAssignDrivers"
-  :title="canAssignDrivers ? 'Asignar conductor a los pedidos aplicables' : 'Ningún pedido seleccionado puede ser asignado'"
->
-            <span class="btn-icon">🚚</span>
-            <span class="btn-text">Asignar Conductor</span>
-            <span class="btn-count">{{ assignableCount }}</span>
+            @click="$emit('bulk-assign')"
+            class="flex items-center justify-center gap-1.5 px-4 py-2.5 border border-white/40 rounded-md bg-white/15 text-white text-sm font-medium transition-all hover:bg-white/20 hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-white/15 disabled:hover:translate-y-0 active:scale-95"
+            :disabled="!canAssignDrivers"
+            :title="canAssignDrivers ? 'Asignar conductor a los pedidos aplicables' : 'Ningún pedido seleccionado puede ser asignado'"
+          >
+            <span class="text-base">🚚</span>
+            <span>Asignar Conductor</span>
+            <span class="bg-white/20 px-1.5 py-0.5 rounded-full text-xs font-semibold ml-1">
+              {{ assignableCount }}
+            </span>
           </button>
 
-          <div class="action-dropdown">
-            <button class="bulk-btn primary dropdown-toggle">
-              <span class="btn-icon">📝</span>
-              <span class="btn-text">Cambiar Estado</span>
-              <span class="dropdown-arrow">▼</span>
+          <div class="relative group">
+            <button class="flex items-center justify-center gap-1.5 px-4 py-2.5 border border-white/40 rounded-md bg-white/15 text-white text-sm font-medium transition-all hover:bg-white/20 w-full sm:w-auto">
+              <span class="text-base">📝</span>
+              <span>Cambiar Estado</span>
+              <span class="text-xs ml-1">▼</span>
             </button>
             
-            <div class="dropdown-menu">
+            <div class="absolute top-full left-0 right-0 sm:left-auto sm:right-auto sm:min-w-[200px] bg-white rounded-lg shadow-xl z-50 mt-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 overflow-hidden">
               <button 
                 @click="$emit('bulk-status-change', 'processing')"
-                class="dropdown-item"
+                class="flex items-center gap-2 w-full px-4 py-3 border-none bg-transparent text-gray-700 text-sm cursor-pointer transition-colors hover:bg-gray-100 text-left"
               >
-                <span class="item-icon">⚙️</span>
-                <span class="item-text">Marcar como Procesando</span>
+                <span class="text-base w-5 text-center">⚙️</span>
+                <span>Marcar como Procesando</span>
               </button>
               
               <button 
                 @click="$emit('bulk-status-change', 'ready_for_pickup')"
-                class="dropdown-item"
+                class="flex items-center gap-2 w-full px-4 py-3 border-none bg-transparent text-gray-700 text-sm cursor-pointer transition-colors hover:bg-gray-100 text-left"
               >
-                <span class="item-icon">📦</span>
-                <span class="item-text">Listo para Recoger</span>
+                <span class="text-base w-5 text-center">📦</span>
+                <span>Listo para Recoger</span>
               </button>
+
               <button 
                 @click="$emit('bulk-status-change', 'warehouse_received')"
-                class="dropdown-item"
+                class="flex items-center gap-2 w-full px-4 py-3 border-none bg-transparent text-gray-700 text-sm cursor-pointer transition-colors hover:bg-gray-100 text-left"
               >
-                <span class="item-icon">🏭</span>
-                <span class="item-text">Marcar como Recibido</span>
+                <span class="text-base w-5 text-center">🏭</span>
+                <span>Marcar como Recibido</span>
               </button>
+
               <button 
                 @click="$emit('bulk-status-change', 'shipped')"
-                class="dropdown-item"
+                class="flex items-center gap-2 w-full px-4 py-3 border-none bg-transparent text-gray-700 text-sm cursor-pointer transition-colors hover:bg-gray-100 text-left"
               >
-                <span class="item-icon">🚚</span>
-                <span class="item-text">Marcar como Enviado</span>
+                <span class="text-base w-5 text-center">🚚</span>
+                <span>Marcar como Enviado</span>
+              </button>
+
+              <button 
+                @click="$emit('bulk-status-change', 'delivered')"
+                class="flex items-center gap-2 w-full px-4 py-3 border-none bg-transparent text-gray-700 text-sm cursor-pointer transition-colors hover:bg-gray-100 text-left"
+              >
+                <span class="text-base w-5 text-center">✅</span>
+                <span>Marcar como Entregado</span>
               </button>
               
-              <div class="dropdown-divider"></div>
+              <div class="h-px bg-gray-200 my-1"></div>
               
               <button 
                 @click="$emit('bulk-status-change', 'cancelled')"
-                class="dropdown-item danger"
+                class="flex items-center gap-2 w-full px-4 py-3 border-none bg-transparent text-red-600 text-sm cursor-pointer transition-colors hover:bg-red-50 text-left"
               >
-                <span class="item-icon">❌</span>
-                <span class="item-text">Cancelar Pedidos</span>
+                <span class="text-base w-5 text-center">❌</span>
+                <span>Cancelar Pedidos</span>
               </button>
             </div>
           </div>
         </div>
 
         <!-- Secondary Actions -->
-        <div class="secondary-actions">
+        <div class="flex items-center gap-2">
           <button 
             @click="$emit('bulk-export')"
-            class="bulk-btn secondary export"
+            class="flex items-center justify-center gap-1.5 px-3 py-2 border border-white/20 rounded-md bg-white/5 text-white text-xs font-medium transition-all hover:bg-white/10 active:scale-95"
             title="Exportar pedidos seleccionados"
           >
-            <span class="btn-icon">📤</span>
-            <span class="btn-text">Exportar</span>
+            <span class="text-base">📤</span>
+            <span class="hidden sm:inline">Exportar</span>
           </button>
 
           <button 
             @click="$emit('bulk-print')"
-            class="bulk-btn secondary print"
+            class="flex items-center justify-center gap-1.5 px-3 py-2 border border-white/20 rounded-md bg-white/5 text-white text-xs font-medium transition-all hover:bg-white/10 active:scale-95"
             title="Imprimir etiquetas de envío"
           >
-            <span class="btn-icon">🖨️</span>
-            <span class="btn-text">Imprimir</span>
+            <span class="text-base">🖨️</span>
+            <span class="hidden sm:inline">Imprimir</span>
           </button>
 
-          <div class="action-separator"></div>
+          <div class="hidden md:block w-px h-6 bg-white/30 mx-2"></div>
 
           <button 
             @click="$emit('clear-selection')"
-            class="bulk-btn secondary clear"
+            class="flex items-center justify-center gap-1.5 px-3 py-2 border border-red-300/30 rounded-md bg-white/5 text-red-200 text-xs font-medium transition-all hover:bg-red-600/20 hover:border-red-400 active:scale-95"
             title="Limpiar selección"
           >
-            <span class="btn-icon">✕</span>
-            <span class="btn-text">Limpiar</span>
+            <span class="text-base">✕</span>
+            <span class="hidden sm:inline">Limpiar</span>
           </button>
         </div>
       </div>
     </div>
 
     <!-- BULK OPERATION STATUS -->
-    <div v-if="bulkOperationStatus" class="bulk-status-bar" :class="bulkOperationStatus.type">
-      <div class="status-content">
-        <span class="status-icon">
+    <div 
+      v-if="bulkOperationStatus" 
+      class="flex justify-between items-center px-6 py-3 border-t border-white/10 transition-colors"
+      :class="{
+        'bg-black/10': !bulkOperationStatus.type || bulkOperationStatus.type === 'info',
+        'bg-blue-500/20': bulkOperationStatus.type === 'loading',
+        'bg-green-500/20': bulkOperationStatus.type === 'success',
+        'bg-red-600/20': bulkOperationStatus.type === 'error'
+      }"
+    >
+      <div class="flex items-center gap-3 flex-1">
+        <span class="text-lg">
           {{ bulkOperationStatus.type === 'loading' ? '⏳' : 
-              bulkOperationStatus.type === 'success' ? '✅' : 
-              bulkOperationStatus.type === 'error' ? '❌' : 'ℹ️' }}
+             bulkOperationStatus.type === 'success' ? '✅' : 
+             bulkOperationStatus.type === 'error' ? '❌' : 'ℹ️' }}
         </span>
         
-        <span class="status-message">{{ bulkOperationStatus.message }}</span>
+        <span class="text-sm font-medium">{{ bulkOperationStatus.message }}</span>
         
-        <div v-if="bulkOperationStatus.progress" class="status-progress">
-          <div class="progress-bar">
+        <div v-if="bulkOperationStatus.progress" class="flex items-center gap-2 ml-4">
+          <div class="w-24 h-1.5 bg-white/20 rounded-full overflow-hidden">
             <div 
-              class="progress-fill" 
+              class="h-full bg-white transition-all duration-300 ease-out" 
               :style="{ width: bulkOperationStatus.progress + '%' }"
             ></div>
           </div>
-          <span class="progress-text">{{ bulkOperationStatus.progress }}%</span>
+          <span class="text-xs font-semibold min-w-[35px]">{{ bulkOperationStatus.progress }}%</span>
         </div>
       </div>
       
       <button 
         v-if="bulkOperationStatus.dismissible"
         @click="dismissStatus"
-        class="status-dismiss"
+        class="bg-white/10 border-none text-white w-6 h-6 rounded-full cursor-pointer flex items-center justify-center text-xs transition-colors hover:bg-white/20 active:scale-95"
       >
         ✕
       </button>
     </div>
 
     <!-- SELECTION BREAKDOWN -->
-    <div v-if="showBreakdown" class="selection-breakdown">
-      <div class="breakdown-header">
-        <h4 class="breakdown-title">
-          <span class="title-icon">📊</span>
+    <div v-if="showBreakdown" class="border-t border-white/10 bg-black/10">
+      <div 
+        class="flex justify-between items-center px-6 py-3 cursor-pointer hover:bg-white/5 transition-colors"
+        @click="toggleBreakdown"
+      >
+        <h4 class="flex items-center gap-2 m-0 text-sm font-semibold">
+          <span class="text-base">📊</span>
           Desglose de Selección
         </h4>
-        <button @click="toggleBreakdown" class="breakdown-toggle">
+        <button class="bg-transparent border-none text-white text-xs cursor-pointer p-1">
           {{ showBreakdown ? '▲' : '▼' }}
         </button>
       </div>
       
-      <div class="breakdown-content">
-        <div class="breakdown-grid">
-          <div class="breakdown-item">
-            <span class="breakdown-label">Por Estado:</span>
-            <div class="breakdown-values">
-              <span v-for="(count, status) in statusBreakdown" :key="status" class="breakdown-value">
-                <span class="status-badge" :class="`status-${status}`">{{ getStatusName(status) }}</span>
-                <span class="status-count">{{ count }}</span>
+      <div class="px-6 pb-4">
+        <div class="grid gap-4">
+          <div class="flex flex-col gap-2">
+            <span class="text-xs font-medium text-white/80">Por Estado:</span>
+            <div class="flex flex-wrap gap-2">
+              <span 
+                v-for="(count, status) in statusBreakdown" 
+                :key="status" 
+                class="flex items-center gap-1 px-2 py-1 bg-white/10 rounded text-xs"
+              >
+                <span 
+                  class="px-1.5 py-0.5 rounded text-[10px] font-medium uppercase"
+                  :class="getStatusClass(status)"
+                >
+                  {{ getStatusName(status) }}
+                </span>
+                <span class="bg-white/20 px-1 py-0.5 rounded-lg font-semibold text-[10px]">
+                  {{ count }}
+                </span>
               </span>
             </div>
           </div>
           
-          <div class="breakdown-item" v-if="companyBreakdown">
-            <span class="breakdown-label">Por Empresa:</span>
-            <div class="breakdown-values">
-              <span v-for="(count, companyId) in companyBreakdown" :key="companyId" class="breakdown-value">
-                <span class="company-name">{{ getCompanyName(companyId) }}</span>
-                <span class="company-count">{{ count }}</span>
+          <div v-if="companyBreakdown" class="flex flex-col gap-2">
+            <span class="text-xs font-medium text-white/80">Por Empresa:</span>
+            <div class="flex flex-wrap gap-2">
+              <span 
+                v-for="(count, companyId) in companyBreakdown" 
+                :key="companyId" 
+                class="flex items-center gap-1 px-2 py-1 bg-white/10 rounded text-xs"
+              >
+                <span class="font-medium">{{ getCompanyName(companyId) }}</span>
+                <span class="bg-white/20 px-1 py-0.5 rounded-lg font-semibold text-[10px]">
+                  {{ count }}
+                </span>
               </span>
             </div>
           </div>
@@ -235,7 +276,8 @@ const emit = defineEmits([
   'bulk-status-change',
   'bulk-export',
   'bulk-print',
-  'clear-selection'
+  'clear-selection',
+  'dismiss-status'
 ])
 
 // ==================== STATE ====================
@@ -247,12 +289,11 @@ const showBreakdown = ref(false)
  * Count of orders that can be assigned to drivers
  */
 const assignableCount = computed(() => {
-  const nonAssignableStatuses = ['delivered', 'cancelled'];
+  const nonAssignableStatuses = ['delivered', 'cancelled']
   return props.selectedOrders.filter(order => 
     !nonAssignableStatuses.includes(order.status)
   ).length
 })
-
 
 /**
  * Check if any orders can be assigned to drivers
@@ -297,7 +338,6 @@ function toggleBreakdown() {
  * Dismiss bulk operation status
  */
 function dismissStatus() {
-  // Emit event to parent to clear status
   emit('dismiss-status')
 }
 
@@ -325,9 +365,28 @@ function getStatusName(status) {
     delivered: 'Entregado',
     invoiced: 'Facturado',
     cancelled: 'Cancelado',
-    ready_for_pickup: 'Listo'
+    ready_for_pickup: 'Listo',
+    warehouse_received: 'Recibido'
   }
   return statusMap[status] || status
+}
+
+/**
+ * Get status CSS class
+ */
+function getStatusClass(status) {
+  const classMap = {
+    pending: 'bg-amber-100 text-amber-800',
+    processing: 'bg-blue-100 text-blue-800',
+    shipped: 'bg-purple-100 text-purple-800',
+    out_for_delivery: 'bg-indigo-100 text-indigo-800',
+    delivered: 'bg-green-100 text-green-800',
+    invoiced: 'bg-teal-100 text-teal-800',
+    cancelled: 'bg-red-100 text-red-800',
+    ready_for_pickup: 'bg-violet-100 text-violet-800',
+    warehouse_received: 'bg-cyan-100 text-cyan-800'
+  }
+  return classMap[status] || 'bg-gray-100 text-gray-800'
 }
 
 /**
@@ -340,16 +399,6 @@ function getCompanyName(companyId) {
 </script>
 
 <style scoped>
-/* ==================== MAIN LAYOUT ==================== */
-.bulk-actions-section {
-  background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
-  color: white;
-  border-radius: 8px;
-  margin-bottom: 20px;
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.2);
-  animation: slideIn 0.3s ease-out;
-}
-
 @keyframes slideIn {
   from {
     opacity: 0;
@@ -361,491 +410,7 @@ function getCompanyName(companyId) {
   }
 }
 
-.bulk-actions-container {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 16px 24px;
-  gap: 24px;
-}
-
-/* ==================== SELECTION INFO ==================== */
-.selection-info {
-  flex: 1;
-  min-width: 200px;
-}
-
-.selection-count {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
-}
-
-.count-icon {
-  font-size: 18px;
-}
-
-.count-text {
-  font-size: 16px;
-  font-weight: 600;
-}
-
-.selection-summary {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 16px;
-  font-size: 13px;
-  opacity: 0.9;
-}
-
-.summary-item {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.summary-icon {
-  font-size: 14px;
-}
-
-.summary-label {
-  color: rgba(255, 255, 255, 0.8);
-}
-
-.summary-value {
-  font-weight: 600;
-}
-
-/* ==================== BULK ACTIONS ==================== */
-.bulk-actions {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-.primary-actions,
-.secondary-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.bulk-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 10px 16px;
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.1);
-  color: white;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  position: relative;
-}
-
-.bulk-btn:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.2);
-  transform: translateY(-1px);
-}
-
-.bulk-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.bulk-btn.primary {
-  background: rgba(255, 255, 255, 0.15);
-  border-color: rgba(255, 255, 255, 0.4);
-}
-
-.bulk-btn.primary.assign:hover:not(:disabled) {
-  background: linear-gradient(135deg, #10b981, #059669);
-  border-color: transparent;
-}
-
-.bulk-btn.secondary {
-  background: rgba(255, 255, 255, 0.05);
-  border-color: rgba(255, 255, 255, 0.2);
-  font-size: 13px;
-  padding: 8px 12px;
-}
-
-.bulk-btn.secondary.clear {
-  color: #fca5a5;
-  border-color: rgba(252, 165, 165, 0.3);
-}
-
-.bulk-btn.secondary.clear:hover {
-  background: rgba(220, 38, 38, 0.2);
-  border-color: #f87171;
-}
-
-.btn-icon {
-  font-size: 16px;
-}
-
-.btn-count {
-  background: rgba(255, 255, 255, 0.2);
-  padding: 2px 6px;
-  border-radius: 10px;
-  font-size: 11px;
-  font-weight: 600;
-  margin-left: 4px;
-}
-
-/* ==================== DROPDOWN ==================== */
-.action-dropdown {
-  position: relative;
-}
-
-.dropdown-toggle {
-  position: relative;
-}
-
-.dropdown-arrow {
-  font-size: 12px;
-  margin-left: 4px;
-}
-
-.dropdown-menu {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  right: 0;
-  background: white;
-  border-radius: 8px;
-  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
-  z-index: 50;
-  min-width: 200px;
-  margin-top: 8px;
-  display: none;
-  animation: dropdownIn 0.2s ease-out;
-}
-
-.action-dropdown:hover .dropdown-menu {
-  display: block;
-  animation: dropdownIn 0.2s ease-out;
-  
-}
-
-@keyframes dropdownIn {
-  from {
-    opacity: 0;
-    transform: translateY(-8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.dropdown-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  padding: 12px 16px;
-  border: none;
-  background: none;
-  color: #374151;
-  font-size: 14px;
-  cursor: pointer;
-  transition: all 0.2s;
-  text-align: left;
-}
-
-.dropdown-item:hover {
-  background: #f3f4f6;
-}
-
-.dropdown-item.danger {
-  color: #dc2626;
-}
-
-.dropdown-item.danger:hover {
-  background: #fee2e2;
-}
-
-.dropdown-divider {
-  height: 1px;
-  background: #e5e7eb;
-  margin: 4px 0;
-}
-
-.item-icon {
-  font-size: 16px;
-  width: 20px;
-  text-align: center;
-}
-
-.action-separator {
-  width: 1px;
-  height: 24px;
-  background: rgba(255, 255, 255, 0.3);
-  margin: 0 8px;
-}
-
-/* ==================== BULK STATUS BAR ==================== */
-.bulk-status-bar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 12px 24px;
-  background: rgba(0, 0, 0, 0.1);
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.bulk-status-bar.loading {
-  background: rgba(59, 130, 246, 0.2);
-}
-
-.bulk-status-bar.success {
-  background: rgba(16, 185, 129, 0.2);
-}
-
-.bulk-status-bar.error {
-  background: rgba(220, 38, 38, 0.2);
-}
-
-.status-content {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex: 1;
-}
-
-.status-icon {
-  font-size: 18px;
-}
-
-.status-message {
-  font-size: 14px;
-  font-weight: 500;
-}
-
-.status-progress {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-left: 16px;
-}
-
-.progress-bar {
-  width: 100px;
-  height: 6px;
-  background: rgba(255, 255, 255, 0.2);
-  border-radius: 3px;
-  overflow: hidden;
-}
-
-.progress-fill {
-  height: 100%;
-  background: white;
-  transition: width 0.3s ease;
-}
-
-.progress-text {
-  font-size: 12px;
-  font-weight: 600;
-  min-width: 35px;
-}
-
-.status-dismiss {
-  background: rgba(255, 255, 255, 0.1);
-  border: none;
-  color: white;
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 12px;
-  transition: background 0.2s;
-}
-
-.status-dismiss:hover {
-  background: rgba(255, 255, 255, 0.2);
-}
-
-/* ==================== SELECTION BREAKDOWN ==================== */
-.selection-breakdown {
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(0, 0, 0, 0.1);
-}
-
-.breakdown-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 12px 24px;
-  cursor: pointer;
-}
-
-.breakdown-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 0;
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.title-icon {
-  font-size: 16px;
-}
-
-.breakdown-toggle {
-  background: none;
-  border: none;
-  color: white;
-  font-size: 12px;
-  cursor: pointer;
-  padding: 4px;
-}
-
-.breakdown-content {
-  padding: 0 24px 16px;
-}
-
-.breakdown-grid {
-  display: grid;
-  gap: 16px;
-}
-
-.breakdown-item {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.breakdown-label {
-  font-size: 13px;
-  font-weight: 500;
-  color: rgba(255, 255, 255, 0.8);
-}
-
-.breakdown-values {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.breakdown-value {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 8px;
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 4px;
-  font-size: 12px;
-}
-
-.status-badge {
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-size: 10px;
-  font-weight: 500;
-  text-transform: uppercase;
-}
-
-.status-pending { background: #fef3c7; color: #92400e; }
-.status-processing { background: #dbeafe; color: #1e40af; }
-.status-shipped { background: #e9d5ff; color: #6b21a8; }
-.status-delivered { background: #d1fae5; color: #065f46; }
-.status-cancelled { background: #fee2e2; color: #991b1b; }
-.status-ready_for_pickup { background: #ddd6fe; color: #5b21b6; }
-
-.status-count,
-.company-count {
-  background: rgba(255, 255, 255, 0.2);
-  padding: 1px 4px;
-  border-radius: 8px;
-  font-weight: 600;
-  font-size: 10px;
-}
-
-.company-name {
-  font-weight: 500;
-}
-
-/* ==================== RESPONSIVE DESIGN ==================== */
-@media (max-width: 1024px) {
-  .bulk-actions-container {
-    flex-direction: column;
-    gap: 16px;
-    align-items: stretch;
-  }
-  
-  .selection-info {
-    text-align: center;
-  }
-  
-  .bulk-actions {
-    justify-content: center;
-    flex-wrap: wrap;
-  }
-  
-  .selection-summary {
-    justify-content: center;
-  }
-}
-
-@media (max-width: 768px) {
-  .bulk-actions-container {
-    padding: 12px 16px;
-  }
-  
-  .bulk-actions {
-    flex-direction: column;
-    gap: 12px;
-    width: 100%;
-  }
-  
-  .primary-actions,
-  .secondary-actions {
-    justify-content: center;
-    width: 100%;
-  }
-  
-  .bulk-btn {
-    flex: 1;
-    justify-content: center;
-  }
-  
-  .action-separator {
-    display: none;
-  }
-  
-  .breakdown-header,
-  .breakdown-content {
-    padding-left: 16px;
-    padding-right: 16px;
-  }
-}
-
-@media (max-width: 480px) {
-  .btn-text {
-    display: none;
-  }
-  
-  .bulk-btn {
-    min-width: 44px;
-    justify-content: center;
-  }
-  
-  .selection-summary {
-    flex-direction: column;
-    gap: 8px;
-  }
-  
-  .breakdown-values {
-    justify-content: center;
-  }
+.animate-slideIn {
+  animation: slideIn 0.3s ease-out;
 }
 </style>
