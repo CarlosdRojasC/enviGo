@@ -12,7 +12,11 @@ const XLSX = require('xlsx'); // <--- Añade esta línea aquí
 const shippingZone = require('../config/ShippingZone');
 const circuitController = require('./circuit.controller');
 const circuitService = require('../services/circuit.service'); // El servicio "traductor"
-
+const { 
+  parseDateRangeForQuery,
+  getChileDateDaysAgo,
+  getChileDateMonthsAgo 
+} = require('../utils/timezone');
 class OrderController {
 async getAll(req, res) {
   try {
@@ -76,24 +80,8 @@ async getAll(req, res) {
 
     // ✅ FILTRO DE FECHAS CON VALIDACIÓN
     if (date_from || date_to) {
-      filters.order_date = {};
-      
-      if (date_from && date_from !== '' && date_from !== 'undefined') {
-        const fromDate = new Date(date_from);
-        if (isNaN(fromDate.getTime())) {
-          return res.status(400).json({ error: 'Fecha de inicio inválida' });
-        }
-        filters.order_date.$gte = fromDate;
-      }
-      
-      if (date_to && date_to !== '' && date_to !== 'undefined') {
-        const toDate = new Date(date_to);
-        if (isNaN(toDate.getTime())) {
-          return res.status(400).json({ error: 'Fecha de fin inválida' });
-        }
-        filters.order_date.$lte = toDate;
-      }
-    }
+  filters.order_date = parseDateRangeForQuery(date_from, date_to);
+}
 
     // ✅ FILTRO DE COMUNA
     if (shipping_commune && shipping_commune !== '' && shipping_commune !== 'undefined') {
@@ -643,25 +631,24 @@ async getOrdersTrend(req, res) {
     }
 
     // ✅ CORRECCIÓN: Se crea una nueva fecha en cada cálculo para evitar modificar la original.
-    const now = new Date();
-    let startDate = new Date(); // Inicializamos con la fecha actual
+    let startDate;
+switch (period) {
+  case '7d':
+    startDate = getChileDateDaysAgo(7);
+    break;
+  case '90d':
+    startDate = getChileDateDaysAgo(90);
+    break;
+  case '1y':
+    startDate = getChileDateDaysAgo(365);
+    break;
+  case '30d':
+  default:
+    startDate = getChileDateDaysAgo(30);
+    break;
+}
 
-    switch (period) {
-      case '7d':
-        startDate.setDate(now.getDate() - 7);
-        break;
-      case '90d':
-        startDate.setMonth(now.getMonth() - 3);
-        break;
-      case '1y':
-        startDate.setFullYear(now.getFullYear() - 1);
-        break;
-      case '30d':
-      default:
-        startDate.setDate(now.getDate() - 30);
-        break;
-    }
-    
+
     // Aseguramos que la hora se vaya al inicio del día para incluir todos los pedidos de ese día
     startDate.setHours(0, 0, 0, 0);
 

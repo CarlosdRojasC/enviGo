@@ -3,6 +3,7 @@ const router = express.Router();
 const driverController = require('../controllers/driver.controller');
 const { authenticateToken, isAdmin } = require('../middlewares/auth.middleware');
 const { validateMongoId } = require('../middlewares/validators/generic.validator');
+const { parseDateRangeForQuery } = require('../utils/timezone');
 
 // ==================== RUTAS DE CONDUCTORES ====================
 

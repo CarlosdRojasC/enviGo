@@ -8,6 +8,12 @@ const Company = require('../models/Company');
 const Order = require('../models/Order');
 const Channel = require('../models/Channel');
 const User = require('../models/User');
+const { 
+  getChileToday, 
+  getChileDateDaysAgo,
+  getChileThisMonthStart,
+  formatChileDate 
+} = require('../utils/timezone');
 
 // ==================== RUTAS DE DASHBOARD Y ESTADÍSTICAS ====================
 
@@ -46,16 +52,22 @@ router.get('/dashboard', authenticateToken, async (req, res) => {
       ]);
 
       // Estadísticas de tiempo para admin
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
+      const today = getChileToday();
+const thisMonthStart = getChileThisMonthStart();
+
+console.log('📅 BACKEND: Fechas de filtro (Chile):', {
+  today: formatChileDate(today),
+  thisMonthStart: formatChileDate(thisMonthStart)
+});
       
-      const thisMonthStart = new Date(today.getFullYear(), today.getMonth(), 1);
-      
-      const [ordersToday, ordersThisMonth, deliveredTotal] = await Promise.all([
-        Order.countDocuments({ order_date: { $gte: today } }),
-        Order.countDocuments({ order_date: { $gte: thisMonthStart } }),
-        Order.countDocuments({ status: 'delivered' })
-      ]);
+      const [ordersToday, ordersThisMonth, deliveredThisMonth] = await Promise.all([
+  Order.countDocuments({ order_date: { $gte: today } }),
+  Order.countDocuments({ order_date: { $gte: thisMonthStart } }),
+  Order.countDocuments({ 
+    order_date: { $gte: thisMonthStart },  // ✅ Solo del mes actual
+    status: 'delivered' 
+  })
+]);
 
 const monthlyRevenueResult = await Order.aggregate([
   {
@@ -182,10 +194,13 @@ console.log('✅ BACKEND: Stats admin generadas:', {
       ]);
 
       // Estadísticas de tiempo para empresa
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      
-      const thisMonthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+      const today = getChileToday();
+const thisMonthStart = getChileThisMonthStart();
+
+console.log('📅 BACKEND: Fechas empresa (Chile):', {
+  today: formatChileDate(today),
+  thisMonthStart: formatChileDate(thisMonthStart)
+});
       
       const [ordersToday, ordersThisMonth, deliveredTotal] = await Promise.all([
         Order.countDocuments({ 
@@ -271,14 +286,23 @@ router.get('/dashboard/trends', authenticateToken, async (req, res) => {
     const baseFilter = isAdmin ? {} : { company_id: new mongoose.Types.ObjectId(companyId) };
     
     // Fechas para comparaciones
-    const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const yesterday = new Date(today);
-    yesterday.setDate(yesterday.getDate() - 1);
-    
-    const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-    const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59);
+    const today = getChileToday();
+const yesterday = getChileDateDaysAgo(1);
+
+const thisMonthStart = getChileThisMonthStart();
+const chileNow = getChileNow(); // También necesitas importar getChileNow
+const lastMonthStart = new Date(Date.UTC(
+  chileNow.getFullYear(),
+  chileNow.getMonth() - 1,
+  1,
+  3, 0, 0, 0
+));
+const lastMonthEnd = new Date(Date.UTC(
+  chileNow.getFullYear(),
+  chileNow.getMonth(),
+  0,
+  26, 59, 59, 999  // 26:59 UTC = 23:59 Chile
+));
     
     console.log('📈 BACKEND: Fechas de comparación:', {
       today: today.toISOString(),
@@ -439,46 +463,54 @@ router.get('/orders-trend', authenticateToken, async (req, res) => {
     let groupBy;
     
     switch (period) {
-      case '24h':
-        startDate = new Date(Date.now() - 24 * 60 * 60 * 1000);
-        groupBy = {
-          year: { $year: '$order_date' },
-          month: { $month: '$order_date' },
-          day: { $dayOfMonth: '$order_date' },
-          hour: { $hour: '$order_date' }
-        };
-        break;
-      case '7d':
-        startDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-        groupBy = {
-          year: { $year: '$order_date' },
-          month: { $month: '$order_date' },
-          day: { $dayOfMonth: '$order_date' }
-        };
-        break;
-      case '30d':
-        startDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-        groupBy = {
-          year: { $year: '$order_date' },
-          month: { $month: '$order_date' },
-          day: { $dayOfMonth: '$order_date' }
-        };
-        break;
-      case '12m':
-        startDate = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000);
-        groupBy = {
-          year: { $year: '$order_date' },
-          month: { $month: '$order_date' }
-        };
-        break;
-      default:
-        startDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-        groupBy = {
-          year: { $year: '$order_date' },
-          month: { $month: '$order_date' },
-          day: { $dayOfMonth: '$order_date' }
-        };
-    }
+  case '24h':
+    startDate = getChileDateDaysAgo(1);
+    groupBy = {
+      year: { $year: '$order_date' },
+      month: { $month: '$order_date' },
+      day: { $dayOfMonth: '$order_date' },
+      hour: { $hour: '$order_date' }
+    };
+    break;
+  case '7d':
+    startDate = getChileDateDaysAgo(7);
+    groupBy = {
+      year: { $year: '$order_date' },
+      month: { $month: '$order_date' },
+      day: { $dayOfMonth: '$order_date' }
+    };
+    break;
+  case '30d':
+    startDate = getChileDateDaysAgo(30);
+    groupBy = {
+      year: { $year: '$order_date' },
+      month: { $month: '$order_date' },
+      day: { $dayOfMonth: '$order_date' }
+    };
+    break;
+  case '90d':
+    startDate = getChileDateDaysAgo(90);
+    groupBy = {
+      year: { $year: '$order_date' },
+      month: { $month: '$order_date' },
+      day: { $dayOfMonth: '$order_date' }
+    };
+    break;
+  case '12m':
+    startDate = getChileDateDaysAgo(365);
+    groupBy = {
+      year: { $year: '$order_date' },
+      month: { $month: '$order_date' }
+    };
+    break;
+  default:
+    startDate = getChileDateDaysAgo(7);
+    groupBy = {
+      year: { $year: '$order_date' },
+      month: { $month: '$order_date' },
+      day: { $dayOfMonth: '$order_date' }
+    };
+}
 
     // Filtros de consulta
     const matchStage = {
@@ -518,19 +550,19 @@ router.get('/revenue-by-company', authenticateToken, isAdmin, async (req, res) =
     const { period = '30d' } = req.query;
     
     let startDate;
-    switch (period) {
-      case '7d':
-        startDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-        break;
-      case '30d':
-        startDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-        break;
-      case '90d':
-        startDate = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
-        break;
-      default:
-        startDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-    }
+switch (period) {
+  case '7d':
+    startDate = getChileDateDaysAgo(7);
+    break;
+  case '30d':
+    startDate = getChileDateDaysAgo(30);
+    break;
+  case '90d':
+    startDate = getChileDateDaysAgo(90);
+    break;
+  default:
+    startDate = getChileDateDaysAgo(30);
+}
 
     const revenueByCompany = await Order.aggregate([
       {

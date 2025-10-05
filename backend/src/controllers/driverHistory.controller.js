@@ -5,7 +5,7 @@ const DriverHistoryService = require('../services/driverHistory.service');
 const DriverHistory = require('../models/DriveryHistory');
 const Order = require('../models/Order');
 const mongoose = require('mongoose');
-
+const { parseDateRangeForQuery } = require('../utils/timezone');
 class DriverHistoryController {
 
   /**
@@ -205,10 +205,8 @@ async getAllDeliveriesForPayments(req, res) {
 
     // Filtros de fecha
     if (date_from || date_to) {
-      orderFilters.delivery_date = {};
-      if (date_from) orderFilters.delivery_date.$gte = new Date(date_from);
-      if (date_to) orderFilters.delivery_date.$lte = new Date(date_to + 'T23:59:59.999Z');
-    }
+  orderFilters.delivery_date = parseDateRangeForQuery(date_from, date_to);
+}
 
     // Filtros adicionales
     if (driver_id) orderFilters.shipday_driver_id = driver_id;
