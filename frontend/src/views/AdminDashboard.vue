@@ -53,7 +53,7 @@
         <div class="bg-white p-6 rounded-lg shadow-sm border-2 border-indigo-500">
           <div class="flex items-center justify-between">
             <div>
-              <p class="text-3xl font-bold text-gray-900">{{ stats.ordersToday || 0 }}</p>
+              <p class="text-3xl font-bold text-gray-900">{{ ordersToday }}</p>
               <p class="text-sm text-gray-500 mt-1">Total Pedidos de Hoy</p>
             </div>
             <div class="bg-indigo-100 p-3 rounded-full">
@@ -70,7 +70,7 @@
         <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
           <div class="flex items-center justify-between">
             <div>
-              <p class="text-3xl font-bold text-gray-900">{{ deliveredOrders || 0 }}</p>
+              <p class="text-3xl font-bold text-gray-900">{{ deliveredOrders }}</p>
               <p class="text-sm text-gray-500 mt-1">Pedidos Entregados</p>
             </div>
             <div class="bg-indigo-100 p-3 rounded-full">
@@ -87,7 +87,8 @@
         <div class="bg-orange-400 p-6 rounded-lg shadow-sm text-white">
           <div class="flex items-center justify-between">
             <div>
-              <p class="text-3xl font-bold">{{ formatCurrency(stats.estimatedMonthlyCost || stats.monthlyRevenue || 0) }}</p>
+              <p class="text-3xl font-bold">{{ formatCurrency(monthlyRevenue) }}</p>
+
               <p class="text-sm text-orange-100 mt-1">Ingresos del Mes</p>
             </div>
           </div>
