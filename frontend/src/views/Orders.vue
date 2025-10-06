@@ -1159,30 +1159,38 @@ async function openLiveTracking(order) {
   }
 }
 function openTrackingModal(order) {
+  if (!order || !order._id) {
+    console.error('❌ Pedido inválido para tracking:', order)
+    toast.error('No se pudo abrir el tracking (pedido inválido)')
+    return
+  }
+
   selectedTrackingOrder.value = order
   showTrackingModal.value = true
   console.log('🚚 Abriendo modal de tracking:', order.order_number)
 }
 
 async function showProofOfDelivery(order) {
-  selectedProofOrder.value = null;      // 1. Limpia el estado anterior
-  loadingOrderDetails.value = true;   // 2. Activa el indicador de carga
-  showProofModal.value = true;          // 3. Muestra el modal (que mostrará el spinner)
+  if (!order || !order._id) {
+    console.error('❌ Pedido inválido para prueba de entrega:', order)
+    toast.error('No se pudo abrir la prueba de entrega (pedido inválido)')
+    return
+  }
+
+  selectedProofOrder.value = null
+  loadingOrderDetails.value = true
+  showProofModal.value = true
 
   try {
-    // 4. Llama a la API para obtener los datos más recientes y completos
-    const { data } = await apiService.orders.getById(order._id);
-    
-    // 5. Asigna los datos frescos para que el componente los muestre
-    selectedProofOrder.value = data;
-    console.log('✅ Prueba de entrega cargada para el modal:', data);
-
+    const { data } = await apiService.orders.getById(order._id)
+    selectedProofOrder.value = data
+    console.log('✅ Prueba de entrega cargada:', data)
   } catch (error) {
-    console.error('❌ Error cargando la prueba de entrega:', error);
-    toast.error('No se pudo cargar la información de la entrega.');
-    showProofModal.value = false; // Cierra el modal si hay un error
+    console.error('❌ Error cargando la prueba de entrega:', error)
+    toast.error('Error al cargar la prueba de entrega')
+    showProofModal.value = false
   } finally {
-    loadingOrderDetails.value = false; // 6. Desactiva el indicador de carga
+    loadingOrderDetails.value = false
   }
 }
 

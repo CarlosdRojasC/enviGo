@@ -86,7 +86,7 @@
 
       <template v-else-if="hasGeneralTracking || order.shipday_order_id">
         <button
-          @click.stop="$emit('view-tracking')"
+          @click.stop="$emit('view-tracking', order)"
           class="px-3 py-1 bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 rounded-full text-xs font-semibold hover:bg-blue-200 dark:hover:bg-blue-800 transition"
           title="Ver seguimiento"
         >
@@ -179,7 +179,7 @@
 
             <button
               v-if="hasProofOfDelivery"
-              @click="$emit('view-proof')"
+              @click="$emit('view-proof', order)"
               class="w-full flex items-center gap-2 px-4 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-700 transition"
             >
               📸 Prueba de Entrega
