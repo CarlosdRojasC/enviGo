@@ -63,6 +63,10 @@ module.exports = {
           '0%': { transform: 'translateX(-100%)' },
           '100%': { transform: 'translateX(100%)' },
         },
+        'shimmer': { // ✅ AÑADIR ESTE
+          '0%': { transform: 'translateX(-100%)' },
+          '100%': { transform: 'translateX(100%)' },
+        },
       },
       animation: {
         'pulse-bg': 'pulse-bg 1.5s infinite ease-in-out',
@@ -72,6 +76,7 @@ module.exports = {
         'slide-in-from-right': 'slide-in-from-right 0.4s ease-out',
         'modal-update-progress': 'modal-update-progress 2s ease-in-out',
         'loading-shine': 'loading-shine 1.5s infinite',
+        'shimmer': 'shimmer 3s infinite',
       }
     },
   },
