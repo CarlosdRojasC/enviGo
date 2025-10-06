@@ -373,10 +373,12 @@
   title="🖨️ Vista Previa de Etiquetas" 
   width="900px"
 >
-  <div class="labels-preview-container">
+  <!-- ✅ FIX: Agregar v-if para validar que labelsToPreview existe y tiene elementos -->
+  <div v-if="labelsToPreview && labelsToPreview.length > 0" class="labels-preview-container">
     <div class="preview-header">
       <div class="preview-info">
-        <h4>{{ labelsToPreview.length }} etiqueta(s) generada(s)</h4>
+        <!-- ✅ FIX: Usar optional chaining por seguridad adicional -->
+        <h4>{{ labelsToPreview?.length || 0 }} etiqueta(s) generada(s)</h4>
         <p>Revisa las etiquetas antes de imprimir</p>
       </div>
       <div class="preview-actions">
@@ -433,6 +435,11 @@
         </button>
       </div>
     </div>
+  </div>
+  
+  <!-- ✅ FIX: Mensaje cuando no hay etiquetas -->
+  <div v-else class="no-labels-message">
+    <p>No hay etiquetas para mostrar</p>
   </div>
 </Modal>
 
