@@ -1,117 +1,141 @@
-
 <template>
-  <div class="proof-container">
-     <div v-if="!hasProofOfDelivery" class="no-proof-message">
-      <div class="no-proof-icon">📋</div>
-      <h3>Sin Prueba de Entrega</h3>
-      <p>Este pedido aún no tiene prueba de entrega disponible.</p>
-      <p class="help-text">La prueba se generará cuando el conductor complete la entrega.</p>
+  <div class="max-w-3xl mx-auto p-5 bg-white rounded-xl shadow-lg">
+    <!-- Sin Prueba de Entrega -->
+    <div v-if="!hasProofOfDelivery" class="text-center py-15 px-5 text-gray-500">
+      <div class="text-6xl mb-5">📋</div>
+      <h3 class="m-0 mb-3 text-gray-700 text-2xl">Sin Prueba de Entrega</h3>
+      <p class="m-0 mb-2 text-base">Este pedido aún no tiene prueba de entrega disponible.</p>
+      <p class="text-sm text-gray-400">La prueba se generará cuando el conductor complete la entrega.</p>
     </div>
+
+    <!-- Con Prueba de Entrega -->
     <div v-else>
-    <!-- Header -->
-    <div class="proof-header">
-      <div class="delivery-success">
-        <div class="success-icon">✅</div>
-        <div class="success-text">
-          <h2>¡Pedido Entregado!</h2>
-          <p>Tu pedido #{{ order.order_number }} fue entregado exitosamente</p>
+      <!-- Header -->
+      <div class="text-center mb-8 p-5 bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-xl text-white">
+        <div class="flex items-center justify-center gap-4 mb-3">
+          <div class="text-5xl">✅</div>
+          <div>
+            <h2 class="m-0 mb-2 text-2xl">¡Pedido Entregado!</h2>
+            <p class="m-0 opacity-90">Tu pedido #{{ order.order_number }} fue entregado exitosamente</p>
+          </div>
+        </div>
+        <div class="text-base opacity-90">
+          {{ formatDateTime(order.delivery_date) }}
         </div>
       </div>
-      <div class="delivery-date">
-        {{ formatDateTime(order.delivery_date) }}
-      </div>
-    </div>
 
-    <!-- Información del Conductor -->
-    <div class="driver-info" v-if="order.driver_info">
-      <h3>Información del Conductor</h3>
-      <div class="driver-details">
-        <div class="driver-detail">
-          <span class="label">Nombre:</span>
-          <span class="value">{{ order.driver_info.name }}</span>
-        </div>
-        <div class="driver-detail" v-if="order.driver_info.phone">
-          <span class="label">Teléfono:</span>
-          <span class="value">{{ order.driver_info.phone }}</span>
+      <!-- Información del Conductor -->
+      <div v-if="order.driver_info" class="mb-6 p-4 bg-slate-50 rounded-lg border border-slate-200">
+        <h3 class="m-0 mb-3 text-lg font-semibold text-gray-800">Información del Conductor</h3>
+        <div class="space-y-2">
+          <div class="flex justify-between items-center">
+            <span class="text-sm font-medium text-gray-600">Nombre:</span>
+            <span class="text-sm text-gray-800">{{ order.driver_info.name }}</span>
+          </div>
+          <div v-if="order.driver_info.phone" class="flex justify-between items-center">
+            <span class="text-sm font-medium text-gray-600">Teléfono:</span>
+            <span class="text-sm text-gray-800">{{ order.driver_info.phone }}</span>
+          </div>
         </div>
       </div>
-    </div>
 
-    <!-- Prueba de Entrega -->
-    <div class="proof-evidence">
-      <h3>Pruebas de Entrega</h3>
-      
-      <!-- Fotos -->
-      <div class="photos-section" v-if="hasPhotos">
-        <h4>Fotografías</h4>
-        <div class="photos-grid">
-          <div 
-            v-for="(photo, index) in deliveryPhotos" 
-            :key="index"
-            class="photo-item"
-          >
-            <img 
-              :src="photo.url" 
-              :alt="`Foto de entrega ${index + 1}`"
-              class="delivery-photo"
-              @error="(event) => handleImageError(event, index + 1)"
-              @load="() => handleImageLoad(index)"
-            />
-            <div class="photo-overlay" v-if="photo.loading">
-              <div class="loading-spinner"></div>
+      <!-- Prueba de Entrega -->
+      <div class="mb-6">
+        <h3 class="m-0 mb-4 text-lg font-semibold text-gray-800">Pruebas de Entrega</h3>
+        
+        <!-- Fotos -->
+        <div v-if="hasPhotos" class="mb-6">
+          <h4 class="m-0 mb-3 text-base font-semibold text-gray-700">Fotografías</h4>
+          <div class="grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-4">
+            <div 
+              v-for="(photo, index) in deliveryPhotos" 
+              :key="index"
+              class="relative rounded-lg overflow-hidden aspect-square"
+            >
+              <img 
+                :src="photo.url" 
+                :alt="`Foto de entrega ${index + 1}`"
+                class="w-full h-full object-cover rounded-lg cursor-zoom-in"
+                @error="(event) => handleImageError(event, index + 1)"
+                @load="() => handleImageLoad(index)"
+              />
+              <div v-if="photo.loading" class="absolute inset-0 bg-black/70 flex items-center justify-center">
+                <div class="w-8 h-8 border-3 border-white/30 border-t-white rounded-full animate-spin"></div>
+              </div>
             </div>
           </div>
         </div>
-      </div>
 
-      <!-- Ubicación GPS -->
-      <div class="location-section" v-if="hasGpsLocation">
-        <h4>Ubicación de Entrega</h4>
-        <div class="location-info">
-          <div class="coordinates">
-            <span class="label">Coordenadas:</span>
-            <span class="value">
-              {{ order.proof_of_delivery.gps_coordinates.lat.toFixed(6) }}, 
-              {{ order.proof_of_delivery.gps_coordinates.lng.toFixed(6) }}
-            </span>
+        <!-- Ubicación GPS -->
+        <div v-if="hasGpsLocation" class="mb-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
+          <h4 class="m-0 mb-3 text-base font-semibold text-gray-700">Ubicación de Entrega</h4>
+          <div class="space-y-3">
+            <div class="flex flex-col gap-1">
+              <span class="text-sm font-medium text-gray-600">Coordenadas:</span>
+              <span class="text-sm text-gray-800 font-mono">
+                {{ order.proof_of_delivery.gps_coordinates.lat.toFixed(6) }}, 
+                {{ order.proof_of_delivery.gps_coordinates.lng.toFixed(6) }}
+              </span>
+            </div>
+            <button 
+              @click="openInMaps" 
+              class="w-full px-4 py-2 bg-blue-600 text-white rounded-lg font-medium text-sm hover:bg-blue-700 transition-colors"
+            >
+              📍 Ver en Mapa
+            </button>
           </div>
-          <button @click="openInMaps" class="maps-button">
-            📍 Ver en Mapa
-          </button>
+        </div>
+
+        <!-- Notas de Entrega -->
+        <div v-if="order.proof_of_delivery?.delivery_notes" class="p-4 bg-amber-50 rounded-lg border border-amber-200">
+          <h4 class="m-0 mb-2 text-base font-semibold text-gray-700">Notas de Entrega</h4>
+          <div class="text-sm text-gray-700 leading-relaxed">
+            {{ order.proof_of_delivery.delivery_notes }}
+          </div>
         </div>
       </div>
 
-      <!-- Notas de Entrega -->
-      <div class="notes-section" v-if="order.proof_of_delivery?.delivery_notes">
-        <h4>Notas de Entrega</h4>
-        <div class="delivery-notes">
-          {{ order.proof_of_delivery.delivery_notes }}
-        </div>
+      <!-- Acciones -->
+      <div class="flex justify-center gap-4 mt-6 pt-5 border-t border-slate-200 flex-wrap">
+        <button 
+          @click="shareProof" 
+          class="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg border-none bg-slate-50 border border-slate-200 text-slate-700 cursor-pointer font-semibold text-sm transition-all hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/10 hover:border-slate-300 hover:text-blue-600 hover:border-blue-600"
+        >
+          📤 Compartir Comprobante
+        </button>
+        <button 
+          @click="downloadProof" 
+          class="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg border-none bg-slate-50 border border-slate-200 text-slate-700 cursor-pointer font-semibold text-sm transition-all hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/10 hover:border-slate-300 hover:text-green-600 hover:border-green-600"
+        >
+          💾 Descargar
+        </button>
+        <button 
+          @click="reportIssue" 
+          class="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg border-none bg-slate-50 border border-slate-200 text-slate-700 cursor-pointer font-semibold text-sm transition-all hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/10 hover:border-slate-300 hover:text-red-600 hover:border-red-600"
+        >
+          ⚠️ Reportar Problema
+        </button>
       </div>
-    </div>
-
-    <!-- Acciones -->
-    <div class="proof-actions">
-      <button @click="shareProof" class="action-button share">
-        📤 Compartir Comprobante
-      </button>
-      <button @click="downloadProof" class="action-button download">
-        💾 Descargar
-      </button>
-      <button @click="reportIssue" class="action-button report">
-        ⚠️ Reportar Problema
-      </button>
-    </div>
     </div>
 
     <!-- Modal de Error de Imagen -->
-    <div v-if="showErrorModal" class="error-modal-overlay" @click="closeErrorModal">
-      <div class="error-modal">
-        <h3>Error al Cargar Imagen</h3>
-        <p>{{ errorMessage }}</p>
-        <div class="error-actions">
-          <button @click="retryImageLoad" class="retry-button">🔄 Reintentar</button>
-          <button @click="closeErrorModal" class="close-button">Cerrar</button>
+    <div v-if="showErrorModal" class="fixed inset-0 bg-black/70 flex items-center justify-center z-[1000]" @click="closeErrorModal">
+      <div class="bg-white p-6 rounded-xl max-w-md text-center" @click.stop>
+        <h3 class="m-0 mb-3 text-lg font-semibold text-gray-800">Error al Cargar Imagen</h3>
+        <p class="m-0 mb-5 text-sm text-gray-600">{{ errorMessage }}</p>
+        <div class="flex gap-3 justify-center">
+          <button 
+            @click="retryImageLoad" 
+            class="px-4 py-2 rounded-md border-none bg-blue-600 text-white cursor-pointer hover:bg-blue-700 transition-colors"
+          >
+            🔄 Reintentar
+          </button>
+          <button 
+            @click="closeErrorModal" 
+            class="px-4 py-2 rounded-md border-none bg-gray-100 text-gray-700 cursor-pointer hover:bg-gray-200 transition-colors"
+          >
+            Cerrar
+          </button>
         </div>
       </div>
     </div>
@@ -138,7 +162,7 @@ const errorMessage = ref('')
 const failedImageIndex = ref(null)
 const imageLoadStates = ref({})
 
-// ✅ COMPUTED PROPERTIES CORREGIDOS - CON VERIFICACIÓN DE NULL
+// Computed properties
 const hasProofOfDelivery = computed(() => {
   return !!(props.order?.proof_of_delivery)
 })
@@ -148,18 +172,16 @@ const hasPhotos = computed(() => {
   
   const proof = props.order.proof_of_delivery
   
-  // ✅ Buscar en TODAS las ubicaciones posibles
   return !!(
-    (Array.isArray(proof.photo_urls) && proof.photo_urls.length > 0) || // Cloudinary
-    (Array.isArray(proof.podUrls) && proof.podUrls.length > 0) ||       // Shipday
-    proof.photo_url                                                       // Formato antiguo
+    (Array.isArray(proof.photo_urls) && proof.photo_urls.length > 0) ||
+    (Array.isArray(proof.podUrls) && proof.podUrls.length > 0) ||
+    proof.photo_url
   )
 })
 
 const deliveryPhotos = computed(() => {
   const photoUrls = new Set();
   const proof = props.order?.proof_of_delivery;
-
 
   if (proof) {
     if (Array.isArray(proof.photo_urls) && proof.photo_urls.length > 0) {
@@ -184,34 +206,10 @@ const deliveryPhotos = computed(() => {
     loading: imageLoadStates.value[index] !== 'loaded'
   }));
 
-  // 🔍 DEBUG TEMPORAL
   console.log('🔍 RESULTADO deliveryPhotos:', result);
 
   return result;
 });
-
-
-const hasSignature = computed(() => {
-  if (!hasProofOfDelivery.value) return false
-  const proof = props.order.proof_of_delivery
-  return !!(proof.signature_url || proof.signatureUrl)
-})
-
-const signatureUrl = computed(() => {
-  const potentialSignature = props.order?.signatureUrl || props.order?.proof_of_delivery?.signature_url;
-
-  if (!potentialSignature) {
-    return null;
-  }
-
-  // Si la URL de la firma está incluida en las fotos, no la mostramos.
-  const isPhoto = deliveryPhotos.value.some(photo => photo.url === potentialSignature);
-  if (isPhoto) {
-    return null;
-  }
-
-  return potentialSignature;
-})
 
 const hasGpsLocation = computed(() => {
   if (!hasProofOfDelivery.value) return false
@@ -219,18 +217,7 @@ const hasGpsLocation = computed(() => {
   return coords && coords.lat && coords.lng
 })
 
-const hasDeliveryNotes = computed(() => {
-  if (!hasProofOfDelivery.value) return false
-  return !!(props.order.proof_of_delivery.delivery_notes || props.order.proof_of_delivery.notes)
-})
-
-const deliveryNotes = computed(() => {
-  if (!hasDeliveryNotes.value) return ''
-  const proof = props.order.proof_of_delivery
-  return proof.delivery_notes || proof.notes || ''
-})
-
-// ✅ RESTO DE MÉTODOS SIN CAMBIOS...
+// Methods
 function handleImageError(event, imageNumber) {
   console.error('Error cargando imagen:', event.target.src)
   
@@ -245,16 +232,11 @@ function handleImageLoad(index) {
   imageLoadStates.value[index] = 'loaded'
 }
 
-function handleSignatureError(event) {
-  console.error('Error cargando firma:', event.target.src)
-  toast.error('No se pudo cargar la firma digital')
-}
-
 function retryImageLoad() {
   if (failedImageIndex.value !== null) {
     imageLoadStates.value[failedImageIndex.value] = 'loading'
     
-    const imgElements = document.querySelectorAll('.delivery-photo')
+    const imgElements = document.querySelectorAll('.cursor-zoom-in')
     if (imgElements[failedImageIndex.value]) {
       const img = imgElements[failedImageIndex.value]
       const originalSrc = img.src
@@ -308,35 +290,30 @@ function shareProof() {
 }
 
 async function downloadProof() {
-    try {
-        toast.info('Generando comprobante...');
-        const orderId = props.order._id;
+  try {
+    toast.info('Generando comprobante...');
+    const orderId = props.order._id;
 
-        // ✅ INICIO DE LA CORRECCIÓN
-        // Cambiamos la sintaxis de la llamada a la API para que coincida
-        // con otros servicios de tu proyecto. Esto evita el error ".get is not a function".
-        const response = await apiService({
-            method: 'GET',
-            url: `/labels/proof/${orderId}/download`,
-            responseType: 'blob', // Importante para recibir un archivo
-        });
-        // ✅ FIN DE LA CORRECCIÓN
+    const response = await apiService({
+      method: 'GET',
+      url: `/labels/proof/${orderId}/download`,
+      responseType: 'blob',
+    });
 
-        // Crea un link para descargar el archivo (sin cambios aquí)
-        const url = window.URL.createObjectURL(new Blob([response.data]));
-        const link = document.createElement('a');
-        link.href = url;
-        link.setAttribute('download', `Comprobante-${props.order.order_number}.pdf`);
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        window.URL.revokeObjectURL(url);
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `Comprobante-${props.order.order_number}.pdf`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
 
-        toast.success('¡Comprobante descargado!');
-    } catch (error) {
-        console.error('Error al descargar el comprobante:', error);
-        toast.error('No se pudo generar el PDF.');
-    }
+    toast.success('¡Comprobante descargado!');
+  } catch (error) {
+    console.error('Error al descargar el comprobante:', error);
+    toast.error('No se pudo generar el PDF.');
+  }
 }
 
 function reportIssue() {
@@ -356,178 +333,7 @@ onMounted(() => {
 </script>
 
 <style scoped>
-
-.proof-actions {
-  display: flex;
-  justify-content: center;
-  gap: 16px; /* Aumenta el espacio */
-  margin-top: 24px;
-  padding-top: 20px;
-  border-top: 1px solid #e2e8f0;
-  flex-wrap: wrap; /* Para que se vea bien en móviles */
-}
-
-.action-button {
-  display: inline-flex; /* Permite alinear el ícono y el texto */
-  align-items: center;
-  gap: 8px; /* Espacio entre ícono y texto */
-  padding: 10px 20px;
-  border-radius: 8px;
-  border: none;
-  background-color: #f8fafc;
-  border: 1px solid #e2e8f0;
-  color: #334155;
-  cursor: pointer;
-  font-weight: 600; /* Letra más marcada */
-  font-size: 14px;
-  transition: all 0.2s ease;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
-}
-
-.action-button:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 10px rgba(0,0,0,0.1);
-  border-color: #cbd5e1;
-}
-
-/* Colores específicos por botón */
-.action-button.share:hover { color: #3b82f6; border-color: #3b82f6; }
-.action-button.download:hover { color: #16a34a; border-color: #16a34a; }
-.action-button.report:hover { color: #ef4444; border-color: #ef4444; }
-
-.proof-container {
-  max-width: 800px;
-  margin: 0 auto;
-  padding: 20px;
-  background: white;
-  border-radius: 12px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
-}
-
-.proof-header {
-  text-align: center;
-  margin-bottom: 30px;
-  padding: 20px;
-  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-  border-radius: 12px;
-  color: white;
-}
-
-.delivery-success {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 16px;
-  margin-bottom: 12px;
-}
-
-.success-icon {
-  font-size: 48px;
-}
-
-.success-text h2 {
-  margin: 0 0 8px 0;
-  font-size: 24px;
-}
-
-.success-text p {
-  margin: 0;
-  opacity: 0.9;
-}
-
-.delivery-date {
-  font-size: 16px;
-  opacity: 0.9;
-}
-
-.photos-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 16px;
-  margin-top: 12px;
-}
-
-.photo-item {
-  position: relative;
-  border-radius: 8px;
-  overflow: hidden;
-  aspect-ratio: 1;
-}
-
-.delivery-photo {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  border-radius: 8px;
-  cursor: zoom-in;
-}
-
-.photo-overlay {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.7);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.loading-spinner {
-  width: 32px;
-  height: 32px;
-  border: 3px solid rgba(255, 255, 255, 0.3);
-  border-top: 3px solid white;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-}
-
-.error-modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.7);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-}
-
-.error-modal {
-  background: white;
-  padding: 24px;
-  border-radius: 12px;
-  max-width: 400px;
-  text-align: center;
-}
-
-.error-actions {
-  display: flex;
-  gap: 12px;
-  justify-content: center;
-  margin-top: 20px;
-}
-
-.retry-button, .close-button {
-  padding: 8px 16px;
-  border-radius: 6px;
-  border: none;
-  cursor: pointer;
-}
-
-.retry-button {
-  background: #3b82f6;
-  color: white;
-}
-
-.close-button {
-  background: #f3f4f6;
-  color: #374151;
-}
-
+/* Solo animación de spin */
 @keyframes spin {
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }
@@ -535,44 +341,18 @@ onMounted(() => {
 
 /* Responsive */
 @media (max-width: 768px) {
-  .proof-container {
+  .max-w-3xl {
     margin: 10px;
-    padding: 16px;
+    padding: 1rem;
   }
   
-  .photos-grid {
+  .grid {
     grid-template-columns: 1fr;
   }
   
-  .delivery-success {
+  .flex.items-center.justify-center.gap-4 {
     flex-direction: column;
     text-align: center;
   }
-}
-.no-proof-message {
-  text-align: center;
-  padding: 60px 20px;
-  color: #6b7280;
-}
-
-.no-proof-icon {
-  font-size: 64px;
-  margin-bottom: 20px;
-}
-
-.no-proof-message h3 {
-  margin: 0 0 12px 0;
-  color: #374151;
-  font-size: 24px;
-}
-
-.no-proof-message p {
-  margin: 0 0 8px 0;
-  font-size: 16px;
-}
-
-.help-text {
-  font-size: 14px !important;
-  color: #9ca3af !important;
 }
 </style>

@@ -1,12 +1,24 @@
 <template>
   <transition name="modal-fade">
-    <div v-if="modelValue" class="modal-overlay" @click.self="close">
-      <div class="modal-container" :style="{ maxWidth: width }">
-        <div class="modal-header">
-          <h3 class="modal-title">{{ title }}</h3>
-          <button class="modal-close-btn" @click="close">&times;</button>
+    <div 
+      v-if="modelValue" 
+      class="fixed inset-0 bg-black/60 flex items-center justify-center z-[1000]" 
+      @click.self="close"
+    >
+      <div 
+        class="bg-white rounded-xl shadow-2xl w-[90%] max-h-[90vh] flex flex-col" 
+        :style="{ maxWidth: width }"
+      >
+        <div class="flex justify-between items-center px-6 py-4 border-b border-gray-200">
+          <h3 class="m-0 text-lg font-semibold text-gray-800">{{ title }}</h3>
+          <button 
+            class="bg-transparent border-none text-2xl cursor-pointer text-gray-500 leading-none hover:text-gray-700 transition-colors" 
+            @click="close"
+          >
+            &times;
+          </button>
         </div>
-        <div class="modal-body">
+        <div class="p-6 overflow-y-auto text-gray-700">
           <slot></slot>
         </div>
       </div>
@@ -29,64 +41,14 @@ function close() {
 </script>
 
 <style scoped>
-.modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: rgba(0, 0, 0, 0.6);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-}
-
-.modal-container {
-  background: white;
-  border-radius: 12px;
-  box-shadow: 0 5px 15px rgba(0,0,0,0.3);
-  width: 90%;
-  max-height: 90vh;
-  display: flex;
-  flex-direction: column;
-}
-
-.modal-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 16px 24px;
-  border-bottom: 1px solid #e5e7eb;
-}
-
-.modal-title {
-  margin: 0;
-  font-size: 18px;
-  font-weight: 600;
-  color: #1f2937;
-}
-
-.modal-close-btn {
-  background: none;
-  border: none;
-  font-size: 24px;
-  cursor: pointer;
-  color: #6b7280;
-  line-height: 1;
-}
-
-.modal-body {
-  padding: 24px;
-  overflow-y: auto;
-  color: #374151;
-}
-
-/* Animaciones */
-.modal-fade-enter-active, .modal-fade-leave-active {
+/* Animaciones de transición */
+.modal-fade-enter-active, 
+.modal-fade-leave-active {
   transition: opacity 0.3s ease;
 }
-.modal-fade-enter-from, .modal-fade-leave-to {
+
+.modal-fade-enter-from, 
+.modal-fade-leave-to {
   opacity: 0;
 }
 </style>
