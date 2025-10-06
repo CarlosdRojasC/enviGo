@@ -342,8 +342,19 @@ router.get('/stats', authenticateToken, async (req, res) => {
           _id: '$shipping_commune',
           total_orders: { $sum: 1 },
           delivered_orders: {
-            $sum: { $cond: [{ $eq: ['$status', 'delivered'] }, 1, 0] }
-          },
+  $sum: { 
+    $cond: [
+      { 
+        $or: [
+          { $eq: ['$status', 'delivered'] },
+          { $eq: ['$status', 'billed'] }
+        ]
+      }, 
+      1, 
+      0
+    ] 
+  }
+},
           pending_orders: {
             $sum: { $cond: [{ $eq: ['$status', 'pending'] }, 1, 0] }
           },
