@@ -1,4 +1,4 @@
-<!-- frontend/src/views/dashboard.vue - TAILWIND VERSION -->
+<!-- frontend/src/views/dashboard.vue - TAILWIND VERSION CORREGIDA -->
 <template>
   <div class="min-h-screen bg-gray-50">
     <!-- Header Principal -->
@@ -195,23 +195,35 @@
             </router-link>
           </div>
 
-          <div v-else class="space-y-3">
+          <div v-else class="space-y-3 max-h-[400px] overflow-y-auto">
             <div 
               v-for="channel in channels" 
               :key="channel._id"
-              class="flex items-center gap-3 p-3 rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 transition-all"
+              class="group flex items-center gap-3 p-4 rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 hover:shadow-md transition-all cursor-pointer"
             >
-              <div class="flex-shrink-0 w-10 h-10 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-lg flex items-center justify-center text-white font-bold text-sm">
-                {{ channel.channel_name.substring(0, 2).toUpperCase() }}
+              <!-- Avatar del canal -->
+              <div class="flex-shrink-0 w-12 h-12 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-lg flex items-center justify-center text-white font-bold shadow-sm">
+                {{ channel.channel_name?.substring(0, 2).toUpperCase() || '?' }}
               </div>
+              
+              <!-- Info del canal -->
               <div class="flex-1 min-w-0">
-                <p class="font-medium text-gray-900 truncate">{{ channel.channel_name }}</p>
+                <p class="font-semibold text-gray-900 truncate group-hover:text-blue-600 transition-colors">
+                  {{ channel.channel_name || 'Sin nombre' }}
+                </p>
                 <p class="text-xs text-gray-500">{{ getChannelTypeName(channel.channel_type) }}</p>
               </div>
-              <span 
-                class="flex-shrink-0 w-2 h-2 rounded-full"
-                :class="channel.is_active ? 'bg-green-500' : 'bg-gray-300'"
-              ></span>
+              
+              <!-- Indicador de estado -->
+              <div class="flex-shrink-0 flex items-center gap-2">
+                <span 
+                  class="w-2.5 h-2.5 rounded-full shadow-sm"
+                  :class="channel.is_active ? 'bg-green-500 animate-pulse' : 'bg-gray-300'"
+                ></span>
+                <span class="text-xs font-medium" :class="channel.is_active ? 'text-green-600' : 'text-gray-500'">
+                  {{ channel.is_active ? 'Activo' : 'Inactivo' }}
+                </span>
+              </div>
             </div>
           </div>
         </div>
@@ -289,7 +301,7 @@
 
         <div v-if="loadingCommunes" class="space-y-4">
           <div v-for="i in 5" :key="i" class="animate-pulse">
-            <div class="h-16 bg-gray-200 rounded-lg"></div>
+            <div class="h-20 bg-gray-200 rounded-lg"></div>
           </div>
         </div>
 
@@ -301,29 +313,34 @@
 
         <div v-else class="space-y-3">
           <div 
-            v-for="(commune, index) in communesStats" 
+            v-for="(commune, index) in communesStats.slice(0, 10)" 
             :key="commune.commune"
-            class="flex items-center gap-4 p-4 rounded-lg hover:bg-gray-50 transition-colors"
+            class="flex items-center gap-4 p-4 rounded-lg hover:bg-gray-50 transition-colors border border-gray-100"
           >
-            <div class="flex-shrink-0 w-8 h-8 bg-blue-100 text-blue-600 rounded-lg flex items-center justify-center font-bold text-sm">
+            <!-- Ranking -->
+            <div class="flex-shrink-0 w-10 h-10 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-lg flex items-center justify-center text-white font-bold">
               {{ index + 1 }}
             </div>
-            <div class="flex-1">
-              <p class="font-semibold text-gray-900">{{ commune.commune }}</p>
-              <p class="text-sm text-gray-500">{{ commune.delivered_orders }} entregas exitosas</p>
+            
+            <!-- Nombre comuna -->
+            <div class="flex-1 min-w-0">
+              <p class="font-semibold text-gray-900 truncate">{{ commune.commune }}</p>
+              <p class="text-sm text-gray-500">
+                {{ commune.delivered_orders || 0 }} de {{ commune.total_orders || 0 }} entregas exitosas
+              </p>
             </div>
-            <div class="flex-shrink-0 text-right">
-              <p class="font-semibold text-gray-900">{{ commune.total_orders }}</p>
-              <p class="text-xs text-gray-500">total</p>
-            </div>
-            <div class="flex-shrink-0 w-24">
-              <div class="h-2 bg-gray-200 rounded-full overflow-hidden">
+            
+            <!-- Barra de progreso -->
+            <div class="flex-shrink-0 w-32">
+              <div class="h-3 bg-gray-200 rounded-full overflow-hidden">
                 <div 
-                  class="h-full bg-gradient-to-r from-blue-500 to-cyan-500 transition-all duration-500"
-                  :style="{ width: commune.delivery_rate + '%' }"
+                  class="h-full bg-gradient-to-r from-blue-500 to-cyan-500 transition-all duration-500 ease-out"
+                  :style="{ width: (commune.delivery_rate || 0) + '%' }"
                 ></div>
               </div>
-              <p class="text-xs text-gray-600 mt-1 text-center">{{ Math.round(commune.delivery_rate) }}%</p>
+              <p class="text-xs text-gray-600 mt-1 text-center font-medium">
+                {{ Math.round(commune.delivery_rate || 0) }}%
+              </p>
             </div>
           </div>
         </div>
@@ -382,19 +399,36 @@ const trends = ref({
 const hasInitialData = computed(() => Object.keys(stats.value).length > 0)
 const currentMonth = computed(() => new Date().toLocaleDateString('es-ES', { month: 'long', year: 'numeric' }))
 
-const totalOrders = computed(() => stats.value.orders || 0)
-const todayOrders = computed(() => stats.value.ordersToday || 0)
-const monthlyOrders = computed(() => stats.value.monthlyOrders || 0)
+const totalOrders = computed(() => {
+  const value = stats.value.orders || 0
+  console.log('📊 totalOrders computed:', value)
+  return value
+})
+
+const todayOrders = computed(() => {
+  const value = stats.value.ordersToday || 0
+  console.log('📊 todayOrders computed:', value, 'from stats:', stats.value.ordersToday)
+  return value
+})
+
+const monthlyOrders = computed(() => {
+  const value = stats.value.monthlyOrders || 0
+  console.log('📊 monthlyOrders computed:', value)
+  return value
+})
+
 const deliveredOrders = computed(() => {
   return stats.value.deliveredTotal || 
          stats.value.ordersByStatus?.delivered || 
          0
 })
+
 const deliveryRate = computed(() => {
   const total = totalOrders.value
   const delivered = deliveredOrders.value
   return total > 0 ? Math.round((delivered / total) * 100) : 0
 })
+
 const estimatedMonthlyCost = computed(() => stats.value.estimatedMonthlyCost || 0)
 const pricePerOrder = computed(() => stats.value.pricePerOrder || 0)
 
@@ -468,11 +502,20 @@ async function fetchStats() {
   try {
     console.log('📊 Obteniendo estadísticas...')
     const response = await apiService.dashboard.getStats()
-    stats.value = response.data
+    const rawData = response.data
+    
+    // Debug para ver qué llega
+    console.log('📊 Raw stats recibidas:', rawData)
+    console.log('📊 ordersToday:', rawData.ordersToday)
+    console.log('📊 monthlyOrders:', rawData.monthlyOrders)
+    console.log('📊 deliveredTotal:', rawData.deliveredTotal)
+    
+    stats.value = rawData
     
     try {
       const trendsResponse = await apiService.dashboard.getTrends()
       trends.value = trendsResponse.data
+      console.log('📈 Trends recibidos:', trends.value)
     } catch (trendsError) {
       console.log('⚠️ Trends no disponibles, calculando manualmente...')
       calculateTrendsManually()
@@ -530,8 +573,15 @@ async function fetchChartData() {
 async function fetchChannels() {
   loadingChannels.value = true
   try {
+    console.log('📡 Obteniendo canales...')
     const response = await channelsService.getAll()
-    channels.value = response.data || []
+    console.log('📡 Canales recibidos:', response.data)
+    
+    // Filtrar solo los activos
+    const allChannels = response.data || []
+    channels.value = allChannels.filter(c => c.is_active !== false)
+    
+    console.log('📡 Canales activos:', channels.value.length)
   } catch (error) {
     console.error('❌ Error fetching channels:', error)
     channels.value = []
@@ -544,7 +594,9 @@ async function fetchCommunesStats() {
   loadingCommunes.value = true
   try {
     const response = await apiService.dashboard.getCommunesStats()
-    communesStats.value = response.data || []
+    console.log('🏘️ Comunas response:', response.data)
+    // El backend devuelve { all_stats: [...] } no directamente el array
+    communesStats.value = response.data?.all_stats || response.data || []
   } catch (error) {
     console.error('❌ Error fetching communes stats:', error)
     communesStats.value = []
@@ -622,6 +674,25 @@ onUnmounted(() => {
   word-wrap: normal;
   white-space: nowrap;
   direction: ltr;
+}
+
+/* Scrollbar personalizado para canales */
+.overflow-y-auto::-webkit-scrollbar {
+  width: 6px;
+}
+
+.overflow-y-auto::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 3px;
+}
+
+.overflow-y-auto::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+
+.overflow-y-auto::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
 }
 
 /* Responsive */
