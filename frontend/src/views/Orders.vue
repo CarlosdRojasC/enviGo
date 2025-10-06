@@ -1,5 +1,6 @@
 <template>
-  <div class="orders-page">
+
+  <div class="font-sans p-6">
     <!-- Header con estadísticas moderno -->
     <OrdersHeader 
       title="Mis Pedidos"
@@ -12,9 +13,7 @@
       @refresh="handleRefresh"
       @export="handleExport"
       @create-order="handleCreateOrder"
-      @bulk-upload="openBulkUploadModal" 
       @toggle-auto-refresh="toggleAutoRefresh"
-      @request-collection="openCollectionModal"
     />
 
     <!-- Filtros modernos -->
@@ -65,6 +64,8 @@
   @go-to-page="goToPage"
   @change-page-size="changePageSize"
   @sort="handleSort"
+  @view-circuit-plan="viewCircuitPlan"
+  @sync-circuit="syncCircuitOrder"
   :has-tracking-info="hasTrackingInfo"
   :has-proof-of-delivery="hasProofOfDelivery"
   :get-action-button="getActionButton"
@@ -436,31 +437,12 @@
 </Modal>
 
   </div>
-  <!-- Modal de Subida Masiva -->
-<BulkUploadModal
-  :show="showBulkUploadModal"
-  :selected-file="selectedBulkFile"
-  :downloading-template="downloadingTemplate"
-  :is-uploading="isBulkUploading"
-  :upload-feedback="bulkUploadFeedback"
-  :upload-status="bulkUploadStatus"
-  @close="closeBulkUploadModal"
-  @download-template="downloadBulkTemplate"
-  @file-selected="handleBulkFileSelect"
-  @clear-file="clearBulkFile"
-  @upload="handleBulkUpload"
-/>
-<CollectionRequestModal
-  :show="showCollectionModal"
-  :company-name="auth.user?.company?.name || 'Tu empresa'"
-  :company-address="auth.user?.company?.address || 'Dirección no disponible'"
-  :is-requesting="isRequestingCollection"
-  @close="showCollectionModal = false"
-  @submit="handleCollectionRequest"
-/>
+  
+
 </template>
 
-<script setup>
+<script>
+
 import { ref, onMounted, computed, onBeforeUnmount, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../store/auth'
@@ -474,9 +456,9 @@ import OrderTracking from '../components/OrderTracking.vue'
 import ProofOfDelivery from '../components/ProofOfDelivery.vue'
 
 // Nuevos componentes modernos
-import OrdersHeader from '../components/Orders/OrdersHeader.vue'
+import OrdersHeader from '../components/Orders/OrdersHeader.tailwind.vue'
 import OrdersFilters from '../components/Orders/OrdersFilters.vue'
-import OrdersTable from '../components/Orders/OrdersTable.vue'
+import OrdersTable from '../components/Orders/OrdersTable.tailwind.vue'
 
 
 // Composables (asumiendo que ya los extendiste)
@@ -486,8 +468,7 @@ import { useOrdersSelection } from '../composables/useOrdersSelection'
 import ExportDropdown from '../components/Orders/ExportDropdown.vue'
 import UnifiedOrdersFilters from '../components/UnifiedOrdersFilters.vue'
 import ManifestModal from '../components/ManifestModal.vue';
-import BulkUploadModal from '../components/Orders/BulkUploadModal.vue'
-import CollectionRequestModal from '../components/Orders/CollectionRequestModal.vue'
+
 
 
 const toast = useToast()
@@ -585,19 +566,6 @@ const showLabelsModal = ref(false)
 const generatingLabels = ref(false)
 const showLabelsPreviewModal = ref(false)
 const labelsToPreview = ref([])
-
-const showBulkUploadModal = ref(false)
-const selectedBulkFile = ref(null)
-const downloadingTemplate = ref(false)
-const isBulkUploading = ref(false)
-const bulkUploadFeedback = ref('')
-const bulkUploadStatus = ref('')
-const createInCircuit = ref(true)
-const createInShipday = ref(false)
-
-const showCollectionModal = ref(false)
-const isRequestingCollection = ref(false)
-
 // ✅
 // ⚡ TIEMPO REAL: Estado para actualización automática
 const realTimeEnabled = ref(true)
@@ -1043,21 +1011,47 @@ async function markAsReady(order) {
  * Verificar si una orden tiene tracking disponible
  */
 function hasTrackingInfo(order) {
-  // Usar la función del componente OrderTracking si está disponible
-  if (orderTrackingRef.value?.hasTrackingInfo) {
-    return orderTrackingRef.value.hasTrackingInfo(order)
+  // Tracking en vivo con Circuit
+  if (order.circuit_tracking_url || 
+      (order.circuit_plan_id && order.circuit_driver_id && order.status === 'shipped')) {
+    return true
   }
   
-  // Fallback: lógica básica
-  if (order.status === 'delivered') return false
-  return !!(
-    order.shipday_tracking_url ||
-    order.shipday_driver_id || 
-    order.shipday_order_id ||
-    ['processing', 'shipped'].includes(order.status)
-  )
+  // Tracking básico con Circuit
+  if (order.circuit_plan_id || order.circuit_driver_id || order.circuit_stop_id) {
+    return true
+  }
+  
+  // Estados que pueden tener tracking
+  return ['processing', 'shipped', 'ready_for_pickup'].includes(order.status)
 }
-
+async function loadCircuitDrivers() {
+  try {
+    console.log('👨‍💼 Cargando conductores de Circuit...')
+    const response = await apiService.circuit.getDrivers()
+    
+    if (response.data?.drivers) {
+      // Agregar a availableDrivers si existe esa variable
+      availableDrivers.value = response.data.drivers.map(driver => ({
+        id: driver.id,
+        circuit_id: driver.id,
+        name: driver.name,
+        email: driver.email,
+        phone: driver.phone,
+        is_active: driver.is_active,
+        is_available: driver.is_available,
+        is_on_route: driver.is_on_route,
+        vehicle_type: driver.vehicle_type
+      }))
+      
+      console.log(`✅ ${availableDrivers.value.length} conductores Circuit cargados`)
+    }
+    
+  } catch (error) {
+    console.error('❌ Error cargando conductores de Circuit:', error)
+    // No mostrar error al usuario, es información adicional
+  }
+}
 /**
  * Verificar si una orden tiene prueba de entrega
  */
@@ -1107,40 +1101,154 @@ function getActionButton(order) {
   
   return { type: 'none', available: false }
 }
-
-async function openLiveTracking(order) {
-  console.log('📍 Intentando abrir tracking para orden:', order.order_number)
-  
-  // Usar la función del componente si está disponible
-  if (orderTrackingRef.value?.openLiveTrackingFromExternal) {
-    await orderTrackingRef.value.openLiveTrackingFromExternal(order, updateOrderLocally)
+/**
+ * Ver plan de Circuit
+ */
+async function viewCircuitPlan(order) {
+  if (!order.circuit_plan_id) {
+    toast.warning('Esta orden no tiene un plan de Circuit asociado')
     return
   }
   
-  // Fallback: lógica básica
-  if (order.shipday_tracking_url) {
-    console.log('✅ Abriendo tracking URL directa:', order.shipday_tracking_url)
-    window.open(order.shipday_tracking_url, '_blank')
-  } else if (order.shipday_order_id) {
-    console.log('⚠️ No hay tracking URL, intentando refrescar datos...')
-    try {
-      const { data } = await apiService.orders.getById(order._id)
-      
-      if (data.shipday_tracking_url) {
-        console.log('✅ URL obtenida después de refresh:', data.shipday_tracking_url)
-        // Actualizar orden localmente
-        updateOrderLocally(data)
-        window.open(data.shipday_tracking_url, '_blank')
-      } else {
-        toast.warning('No se encontró URL de tracking. El pedido puede no estar asignado a un conductor aún.')
-      }
-    } catch (error) {
-      console.error('❌ Error refrescando orden:', error)
-      toast.error('Error obteniendo información de tracking')
-    }
-  } else {
-    toast.warning('No hay información de tracking disponible')
+  try {
+    console.log('📋 Abriendo plan de Circuit:', order.circuit_plan_id)
+    
+    // Opción 1: Abrir en nueva pestaña (si tienes una URL de Circuit)
+    // const circuitUrl = `https://app.getcircuit.com/plans/${order.circuit_plan_id}`
+    // window.open(circuitUrl, '_blank')
+    
+    // Opción 2: Mostrar modal con detalles del plan
+    const planResponse = await apiService.circuit.getPlan(order.circuit_plan_id)
+    
+    // Aquí podrías mostrar un modal con los detalles del plan
+    // Por ahora, mostrar información básica
+    const planInfo = planResponse.data
+    
+    const planDetails = `
+Plan ID: ${planInfo.id || order.circuit_plan_id}
+Estado: ${planInfo.status || 'Desconocido'}
+Conductor: ${planInfo.driver?.name || 'No asignado'}
+Paradas: ${planInfo.stops?.length || 0}
+Fecha: ${planInfo.date || 'No especificada'}
+    `.trim()
+    
+    // Mostrar en alert por ahora (puedes reemplazar con un modal mejor)
+    alert(`Detalles del Plan Circuit:\n\n${planDetails}`)
+    
+  } catch (error) {
+    console.error('❌ Error obteniendo plan de Circuit:', error)
+    toast.error('Error al obtener información del plan de Circuit')
   }
+}
+
+/**
+ * Sincronizar con Circuit
+ */
+async function syncCircuitOrder(order) {
+  if (!order.circuit_plan_id && !order.circuit_driver_id) {
+    toast.warning('Esta orden no está conectada con Circuit')
+    return
+  }
+  
+  try {
+    console.log('🔄 Sincronizando orden con Circuit:', order.order_number)
+    
+    const orderRow = document.querySelector(`[data-order-id="${order._id}"]`)
+    if (orderRow) {
+      orderRow.classList.add('syncing-circuit')
+    }
+    
+    // Opción 1: Endpoint específico de sync (si lo tienes)
+    // await apiService.circuit.syncOrder(order._id)
+    
+    // Opción 2: Refrescar datos de la orden y del plan
+    const [orderResponse, planResponse] = await Promise.allSettled([
+      apiService.orders.getById(order._id),
+      order.circuit_plan_id ? apiService.circuit.getPlan(order.circuit_plan_id) : Promise.resolve(null)
+    ])
+    
+    if (orderResponse.status === 'fulfilled') {
+      updateOrderLocally(orderResponse.value.data)
+      console.log('✅ Datos de orden actualizados desde Circuit')
+    }
+    
+    if (planResponse.status === 'fulfilled' && planResponse.value) {
+      console.log('✅ Datos del plan Circuit actualizados:', planResponse.value.data)
+    }
+    
+    toast.success(`Orden ${order.order_number} sincronizada con Circuit`)
+    
+  } catch (error) {
+    console.error('❌ Error sincronizando con Circuit:', error)
+    toast.error('Error al sincronizar con Circuit')
+  } finally {
+    const orderRow = document.querySelector(`[data-order-id="${order._id}"]`)
+    if (orderRow) {
+      orderRow.classList.remove('syncing-circuit')
+    }
+  }
+}
+async function openLiveTracking(order) {
+  console.log('📍 Abriendo tracking Circuit para:', order.order_number, {
+    has_circuit_url: !!order.circuit_tracking_url,
+    has_plan_id: !!order.circuit_plan_id,
+    has_driver: !!order.circuit_driver_id,
+    status: order.status
+  })
+  
+  // 1. Si ya tiene URL de tracking directo de Circuit
+  if (order.circuit_tracking_url) {
+    console.log('✅ Abriendo URL de tracking Circuit:', order.circuit_tracking_url)
+    window.open(order.circuit_tracking_url, '_blank')
+    return
+  }
+  
+  // 2. Si tiene plan_id pero no URL, intentar obtener tracking
+  if (order.circuit_plan_id) {
+    try {
+      const orderRow = document.querySelector(`[data-order-id="${order._id}"]`)
+      if (orderRow) {
+        orderRow.classList.add('refreshing-tracking')
+      }
+      
+      const trackingResponse = await apiService.circuit.getPlanTracking(order.circuit_plan_id)
+      
+      if (trackingResponse.data?.tracking_url) {
+        console.log('✅ URL de tracking obtenida de Circuit:', trackingResponse.data.tracking_url)
+        
+        // Actualizar orden localmente
+        const updatedOrder = { ...order, circuit_tracking_url: trackingResponse.data.tracking_url }
+        updateOrderLocally(updatedOrder)
+        
+        window.open(trackingResponse.data.tracking_url, '_blank')
+      } else {
+        console.log('⚠️ No hay URL de tracking disponible en Circuit')
+        toast.warning('El plan de Circuit aún no tiene tracking disponible')
+        openTrackingModal(order)
+      }
+      
+    } catch (error) {
+      console.error('❌ Error obteniendo tracking de Circuit:', error)
+      toast.error('Error obteniendo información de tracking de Circuit')
+    } finally {
+      const orderRow = document.querySelector(`[data-order-id="${order._id}"]`)
+      if (orderRow) {
+        orderRow.classList.remove('refreshing-tracking')
+      }
+    }
+    return
+  }
+  
+  // 3. Si no tiene datos de Circuit, abrir modal básico
+  if (['processing', 'ready_for_pickup'].includes(order.status)) {
+    console.log('ℹ️ Orden sin datos de Circuit, abriendo modal básico')
+    openTrackingModal(order)
+    return
+  }
+  
+  // 4. Sin tracking disponible
+  console.log('❌ No hay tracking disponible para esta orden')
+  toast.warning('No hay información de tracking disponible para este pedido')
 }
 function openTrackingModal(order) {
   selectedTrackingOrder.value = order
@@ -1627,190 +1735,10 @@ function redirectToChannels() {
   closeCreateOrderModal()
   toast.info('Redirigiendo a la configuración de canales...')
 }
-  
-  function openBulkUploadModal() {
-  showBulkUploadModal.value = true
-  console.log('⬆️ Opening customer bulk upload modal')
-}
 
-function closeBulkUploadModal() {
-  showBulkUploadModal.value = false
-  resetBulkUploadState()
-}
-
-function resetBulkUploadState() {
-  selectedBulkFile.value = null
-  bulkUploadFeedback.value = ''
-  bulkUploadStatus.value = ''
-  isBulkUploading.value = false
-  createInCircuit.value = true
-  createInShipday.value = false
-}
-
-function handleBulkFileSelect(event) {
-  const file = event.target.files[0]
-  if (!file) return
-  
-  const allowedTypes = [
-    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    'application/vnd.ms-excel'
-  ]
-  
-  if (!allowedTypes.includes(file.type)) {
-    toast.error('Por favor selecciona un archivo Excel válido (.xlsx o .xls)')
-    return
-  }
-  
-  if (file.size > 10 * 1024 * 1024) {
-    toast.error('El archivo es demasiado grande. Máximo 10MB permitido.')
-    return
-  }
-  
-  selectedBulkFile.value = file
-  bulkUploadFeedback.value = ''
-  bulkUploadStatus.value = ''
-}
-
-function clearBulkFile() {
-  selectedBulkFile.value = null
-}
-
-async function downloadBulkTemplate() {
-  try {
-    downloadingTemplate.value = true
-    
-    // Crear plantilla simple en el frontend
-    const templateData = [
-      // Encabezados
-      [
-        'Número de Pedido*',
-        'Nombre Cliente*', 
-        'Email Cliente',
-        'Teléfono Cliente',
-        'Dirección*',
-        'Comuna*',
-        'Región',
-        'Monto Total*',
-        'Costo Envío',
-        'Notas'
-      ],
-      // Ejemplo de datos
-      [
-        'PED-001',
-        'Juan Pérez',
-        'juan@email.com',
-        '+56912345678',
-        'Av. Providencia 1234, Dpto 567',
-        'Providencia',
-        'Región Metropolitana',
-        15000,
-        2500,
-        'Entregar en recepción'
-      ]
-    ]
-    
-    // Convertir a CSV
-    const csvContent = templateData
-      .map(row => row.map(cell => `"${cell}"`).join(','))
-      .join('\n')
-    
-    // Crear y descargar archivo
-    const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' })
-    const url = window.URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.setAttribute('download', 'plantilla_pedidos.csv')
-    document.body.appendChild(link)
-    link.click()
-    link.remove()
-    window.URL.revokeObjectURL(url)
-    
-    toast.success('Plantilla descargada exitosamente')
-    
-  } catch (error) {
-    console.error('Error generating template:', error)
-    toast.error('No se pudo generar la plantilla')
-  } finally {
-    downloadingTemplate.value = false
-  }
-}
-
-async function handleBulkUpload() {
-  if (!selectedBulkFile.value) {
-    toast.error('Selecciona un archivo')
-    return
-  }
-  
-  isBulkUploading.value = true
-  bulkUploadFeedback.value = 'Procesando archivo...'
-  bulkUploadStatus.value = 'processing'
-  
-  try {
-    const formData = new FormData()
-    formData.append('file', selectedBulkFile.value)
-    // Para clientes, NO enviar company_id - se usa automáticamente del token
-    
-    const { data } = await apiService.orders.bulkUpload(formData)
-    
-    const successful = data.database?.success || 0
-    const failed = data.database?.failed || 0
-    
-    bulkUploadFeedback.value = `Completado: ${successful} pedidos creados`
-    if (failed > 0) {
-      bulkUploadFeedback.value += `, ${failed} fallaron`
-    }
-    
-    bulkUploadStatus.value = failed > 0 ? 'error' : 'success'
-    
-    if (successful > 0) {
-      toast.success(`${successful} pedidos creados exitosamente`)
-      await fetchOrders()
-    }
-    
-    if (failed > 0) {
-      toast.warning(`${failed} pedidos fallaron`)
-    }
-    
-  } catch (error) {
-    console.error('Error in bulk upload:', error)
-    const errorMessage = error.response?.data?.error || error.message
-    bulkUploadFeedback.value = `Error: ${errorMessage}`
-    bulkUploadStatus.value = 'error'
-    toast.error(`Error: ${errorMessage}`)
-  } finally {
-    isBulkUploading.value = false
-  }
-}
-  function openCollectionModal() {
-  showCollectionModal.value = true
-}
-
-// Función para enviar solicitud
-async function handleCollectionRequest(requestData) {
-  try {
-    isRequestingCollection.value = true
-    
-    await apiService.collections.request({
-      packageCount: requestData.packageCount,
-      collectionDate: requestData.collectionDate,
-      notes: requestData.notes
-    })
-    
-    showCollectionModal.value = false
-    toast.success('Solicitud de colecta creada. Aparecerá en el panel de recolecciones.')
-    
-  } catch (error) {
-    console.error('Error solicitando colecta:', error)
-    toast.error('Error al solicitar colecta: ' + (error.response?.data?.error || error.message))
-  } finally {
-    isRequestingCollection.value = false
-  }
-}
 // ==================== LIFECYCLE ====================
 
 onMounted(async () => {
-
-  
   console.log('🚀 Orders.vue montado. Esperando ID de compañía para cargas secundarias...');
   try {
     // 1. Cargamos ÚNICAMENTE la lista de pedidos.
@@ -1826,6 +1754,9 @@ await fetchAvailableCommunes();
     console.error('❌ Error en la carga inicial de pedidos:', error);
     toast.error('Error al cargar la lista de pedidos.');
   }
+  // Cargar conductores de Circuit
+  await loadCircuitDrivers()
+
 });
 onBeforeUnmount(() => {
   // Cleanup existente
@@ -1841,1075 +1772,5 @@ onBeforeUnmount(() => {
   pendingOrderUpdates.value.clear()
   orderUpdateQueue.value = []
 })
+
 </script>
-
-<style scoped>
-/* ==================== ESTILOS PARA SELECTOR DE CANAL ==================== */
-
-/* ==================== ESTILOS MEJORADOS PARA SELECTOR DE CANAL ==================== */
-
-.section-description {
-  color: #64748b; /* Slate 500 */
-  font-size: 14px;
-  margin-top: -8px;
-  margin-bottom: 16px;
-}
-
-/* Container for the pickup point selection */
-.pickup-point-group {
-  background-color: #f8fafc; /* Slate 50 */
-  border: 1px solid #e2e8f0; /* Slate 200 */
-  border-radius: 12px;
-  padding: 20px;
-  transition: all 0.3s ease;
-}
-
-.pickup-point-group label {
-  font-size: 12px;
-  font-weight: 600;
-  color: #475569; /* Slate 600 */
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  margin-bottom: 8px;
-}
-
-/* Skeleton loader for a better loading UX */
-.channel-loading-skeleton {
-  height: 50px;
-  width: 100%;
-  border-radius: 8px;
-  background: linear-gradient(90deg, #e2e8f0 25%, #f1f5f9 50%, #e2e8f0 75%);
-  background-size: 200% 100%;
-  animation: pulse-bg 1.5s infinite ease-in-out;
-}
-
-@keyframes pulse-bg {
-  0% { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
-}
-
-
-/* Warning message for when no channels are available */
-.no-channels-warning {
-  display: flex;
-  gap: 12px;
-  padding: 16px;
-  background-color: #fffbeb; /* Amber 50 */
-  border: 1px solid #fcd34d; /* Amber 300 */
-  border-radius: 8px;
-  color: #92400e; /* Amber 800 */
-}
-
-.warning-icon {
-  font-size: 24px;
-  flex-shrink: 0;
-  margin-top: 2px;
-}
-
-.warning-content {
-  flex: 1;
-}
-
-.warning-content p {
-  margin: 0 0 10px 0;
-  line-height: 1.5;
-}
-
-.warning-content strong {
-  color: #78350f; /* Amber 900 */
-}
-
-.btn-link {
-  background: none;
-  border: none;
-  color: #2563eb; /* Blue 600 */
-  text-decoration: none;
-  cursor: pointer;
-  font-size: 14px;
-  padding: 0;
-  font-weight: 600;
-  transition: color 0.2s ease;
-}
-
-.btn-link:hover {
-  color: #1d4ed8; /* Blue 700 */
-  text-decoration: underline;
-}
-
-/* Modern custom select dropdown */
-.channel-selector {
-  appearance: none;
-  background-color: #ffffff;
-  border: 1px solid #cbd5e1; /* Slate 300 */
-  border-radius: 8px;
-  padding: 12px 40px 12px 16px;
-  font-size: 16px;
-  width: 100%;
-  cursor: pointer;
-  color: #1e293b; /* Slate 800 */
-  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%2364748b' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
-  background-repeat: no-repeat;
-  background-position: right 1rem center;
-  background-size: 1.5em 1.5em;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
-}
-
-.channel-selector:hover {
-  border-color: #94a3b8; /* Slate 400 */
-}
-
-.channel-selector:focus {
-  outline: none;
-  border-color: #4f46e5; /* Indigo 600 */
-  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.15);
-}
-
-.channel-selector:disabled {
-  background-color: #f1f5f9; /* Slate 100 */
-  cursor: not-allowed;
-  opacity: 0.7;
-}
-
-/* Preview of the selected channel */
-.channel-preview {
-  margin-top: 16px;
-  animation: fadeIn 0.5s ease-out;
-}
-
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(-10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.channel-info-card {
-  background-color: #ffffff;
-  border: 1px solid #e2e8f0; /* Slate 200 */
-  border-radius: 8px;
-  padding: 16px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.03);
-}
-
-.channel-header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.channel-icon {
-  font-size: 28px;
-  line-height: 1;
-}
-
-.channel-details {
-  flex: 1;
-}
-
-.channel-name {
-  font-weight: 600;
-  color: #1e293b; /* Slate 800 */
-  font-size: 16px;
-}
-
-.channel-type {
-  color: #64748b; /* Slate 500 */
-  font-size: 12px;
-  font-weight: 500;
-}
-
-.channel-meta {
-  margin-top: 12px;
-  padding-top: 8px;
-  border-top: 1px dashed #e2e8f0; /* Slate 200 */
-}
-
-.meta-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  color: #475569; /* Slate 600 */
-}
-
-.meta-icon {
-  font-size: 14px;
-}
-
-.meta-text {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: #0ea5e9; /* Sky 500 */
-}
-
-.help-text {
-  font-size: 13px;
-  color: #64748b; /* Slate 500 */
-  margin-top: 12px;
-  display: block;
-}
-
-
-.orders-page {
-  padding: 24px;
-  max-width: 1600px;
-  margin: 0 auto;
-  font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
-  background: #f8fafc;
-}
-
-/* Loading States */
-.loading-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 40px;
-  color: #6b7280;
-}
-
-.loading-spinner {
-  width: 32px;
-  height: 32px;
-  border: 3px solid #f3f4f6;
-  border-top: 3px solid #6366f1;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-  margin-bottom: 16px;
-}
-
-@keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
-
-/* Support Modal Styles */
-.support-form {
-  padding: 20px;
-}
-
-.support-order-info {
-  background: #f9fafb;
-  padding: 16px;
-  border-radius: 12px;
-  margin-bottom: 20px;
-  border: 1px solid #e5e7eb;
-}
-
-.support-order-info h4 {
-  margin: 0 0 8px 0;
-  color: #1f2937;
-  font-size: 16px;
-  font-weight: 600;
-}
-
-.support-order-info p {
-  margin: 4px 0;
-  color: #6b7280;
-  font-size: 14px;
-}
-
-.support-options {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 12px;
-}
-
-.support-option {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 16px;
-  background: white;
-  border: 2px solid #e5e7eb;
-  border-radius: 12px;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  font-size: 14px;
-  font-weight: 500;
-  color: #374151;
-}
-
-.support-option:hover {
-  border-color: #6366f1;
-  background: #f8fafc;
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.15);
-}
-
-/* Responsive Design */
-@media (max-width: 1024px) {
-  .orders-page {
-    padding: 16px;
-  }
-}
-
-@media (max-width: 768px) {
-  .orders-page {
-    padding: 12px;
-    background: white;
-  }
-}
-
-@media (max-width: 480px) {
-  .orders-page {
-    padding: 8px;
-  }
-  
-  .support-options {
-    gap: 8px;
-  }
-  
-  .support-option {
-    padding: 12px;
-    font-size: 13px;
-  }
-}
-
-/* Accessibility */
-.orders-page:focus-within {
-  outline: none;
-}
-
-/* Print styles */
-@media print {
-  .orders-page {
-    background: white;
-    padding: 0;
-  }
-}
-/* ⚡ TIEMPO REAL: Indicadores visuales de actualización */
-.order-updated {
-  animation: orderUpdateGlow 4s ease-out;
-  position: relative;
-  z-index: 1;
-}
-
-.order-updated.update-driver_assigned {
-  border-left: 4px solid #3b82f6 !important;
-  background: linear-gradient(90deg, #dbeafe, transparent) !important;
-}
-
-.order-updated.update-picked_up {
-  border-left: 4px solid #8b5cf6 !important;
-  background: linear-gradient(90deg, #e9d5ff, transparent) !important;
-}
-
-.order-updated.update-delivered {
-  border-left: 4px solid #10b981 !important;
-  background: linear-gradient(90deg, #d1fae5, transparent) !important;
-}
-
-.order-updated.update-proof_uploaded {
-  border-left: 4px solid #f59e0b !important;
-  background: linear-gradient(90deg, #fef3c7, transparent) !important;
-}
-
-@keyframes orderUpdateGlow {
-  0% {
-    transform: scale(1.02);
-    box-shadow: 0 4px 20px rgba(59, 130, 246, 0.3);
-  }
-  25% {
-    background-opacity: 0.8;
-  }
-  50% {
-    transform: scale(1.01);
-  }
-  75% {
-    background-opacity: 0.4;
-  }
-  100% {
-    transform: scale(1);
-    box-shadow: none;
-    background-opacity: 0;
-  }
-}
-
-/* Indicador de tiempo real en el header */
-.real-time-status {
-  position: fixed;
-  top: 80px;
-  right: 20px;
-  background: linear-gradient(135deg, #10b981, #059669);
-  color: white;
-  padding: 8px 16px;
-  border-radius: 20px;
-  font-size: 12px;
-  font-weight: 600;
-  z-index: 1000;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
-  cursor: pointer;
-  transition: all 0.3s ease;
-  user-select: none;
-}
-
-.real-time-status:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 16px rgba(16, 185, 129, 0.5);
-}
-
-.real-time-status.disabled {
-  background: linear-gradient(135deg, #6b7280, #4b5563);
-  box-shadow: 0 4px 12px rgba(107, 114, 128, 0.4);
-}
-
-.real-time-status.disabled:hover {
-  box-shadow: 0 6px 16px rgba(107, 114, 128, 0.5);
-}
-
-.pulse-indicator {
-  width: 8px;
-  height: 8px;
-  background: white;
-  border-radius: 50%;
-  animation: realtimePulse 2s infinite;
-}
-
-.real-time-status.disabled .pulse-indicator {
-  animation: none;
-  opacity: 0.6;
-}
-
-@keyframes realtimePulse {
-  0%, 100% { 
-    opacity: 1; 
-    transform: scale(1); 
-  }
-  50% { 
-    opacity: 0.4; 
-    transform: scale(1.2); 
-  }
-}
-
-.real-time-stats {
-  font-size: 10px;
-  opacity: 0.9;
-  margin-left: 4px;
-}
-
-/* Notificaciones flotantes de actualización */
-.order-notification {
-  position: fixed;
-  top: 120px;
-  right: 20px;
-  background: white;
-  border: 1px solid #e5e7eb;
-  border-radius: 12px;
-  padding: 12px 16px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
-  z-index: 1001;
-  max-width: 300px;
-  animation: slideInFromRight 0.4s ease-out;
-}
-
-.order-notification.driver-assigned {
-  border-left: 4px solid #3b82f6;
-}
-
-.order-notification.picked-up {
-  border-left: 4px solid #8b5cf6;
-}
-
-.order-notification.delivered {
-  border-left: 4px solid #10b981;
-}
-
-.order-notification.proof-uploaded {
-  border-left: 4px solid #f59e0b;
-}
-
-@keyframes slideInFromRight {
-  from {
-    transform: translateX(100%);
-    opacity: 0;
-  }
-  to {
-    transform: translateX(0);
-    opacity: 1;
-  }
-}
-
-.notification-content {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.notification-icon {
-  font-size: 20px;
-  flex-shrink: 0;
-}
-
-.notification-text {
-  flex: 1;
-}
-
-.notification-title {
-  font-weight: 600;
-  color: #1f2937;
-  font-size: 14px;
-  margin-bottom: 2px;
-}
-
-.notification-message {
-  color: #6b7280;
-  font-size: 12px;
-  line-height: 1.3;
-}
-
-.notification-time {
-  color: #9ca3af;
-  font-size: 10px;
-  margin-top: 4px;
-}
-
-/* Mejoras para modales cuando se actualizan */
-.modal-updating {
-  position: relative;
-}
-
-.modal-updating::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 3px;
-  background: linear-gradient(90deg, #3b82f6, #8b5cf6, #10b981);
-  background-size: 200% 100%;
-  animation: modalUpdateProgress 2s ease-in-out;
-  z-index: 1;
-}
-
-@keyframes modalUpdateProgress {
-  0% {
-    background-position: 200% 0;
-  }
-  100% {
-    background-position: -200% 0;
-  }
-}
-
-/* Estados de carga mejorados */
-.updating-indicator {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 4px 12px;
-  background: #f3f4f6;
-  border-radius: 16px;
-  font-size: 12px;
-  color: #6b7280;
-  font-weight: 500;
-}
-
-.updating-spinner {
-  width: 12px;
-  height: 12px;
-  border: 2px solid #e5e7eb;
-  border-top: 2px solid #3b82f6;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-}
-
-/* Responsive design para indicadores */
-@media (max-width: 768px) {
-  .real-time-status {
-    top: 60px;
-    right: 12px;
-    padding: 6px 12px;
-    font-size: 11px;
-  }
-  
-  .order-notification {
-    top: 100px;
-    right: 12px;
-    max-width: 280px;
-    padding: 10px 12px;
-  }
-  
-  .notification-title {
-    font-size: 13px;
-  }
-  
-  .notification-message {
-    font-size: 11px;
-  }
-}
-
-@media (max-width: 480px) {
-  .real-time-status {
-    position: relative;
-    top: auto;
-    right: auto;
-    margin: 8px 0;
-    align-self: flex-start;
-  }
-  
-  .order-notification {
-    top: 80px;
-    right: 8px;
-    left: 8px;
-    max-width: none;
-  }
-}
-
-/* Accesibilidad */
-.real-time-status:focus-visible {
-  outline: 2px solid #3b82f6;
-  outline-offset: 2px;
-}
-
-.order-updated:focus-within {
-  outline: 2px solid #3b82f6;
-  outline-offset: -2px;
-}
-
-/* Modo de contraste alto */
-@media (prefers-contrast: high) {
-  .order-updated {
-    border-width: 3px !important;
-  }
-  
-  .real-time-status {
-    border: 2px solid white;
-  }
-}
-/* Estilos para modal de crear pedido */
-.create-order-form {
-  max-height: 70vh;
-  overflow-y: auto;
-  padding: 20px;
-}
-
-.form-section {
-  margin-bottom: 24px;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  padding: 20px;
-}
-
-.form-section h4 {
-  margin: 0 0 16px 0;
-  color: #1f2937;
-  font-size: 16px;
-  font-weight: 600;
-}
-
-.form-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
-}
-
-.form-group {
-  display: flex;
-  flex-direction: column;
-}
-
-.form-group.full-width {
-  grid-column: 1 / -1;
-}
-
-.form-group label {
-  margin-bottom: 6px;
-  font-weight: 500;
-  color: #374151;
-  font-size: 14px;
-}
-
-.form-group label.required::after {
-  content: ' *';
-  color: #ef4444;
-}
-
-.form-group input,
-.form-group textarea {
-  padding: 10px 12px;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
-  font-size: 14px;
-  width: 100%;
-  box-sizing: border-box;
-}
-
-.form-group input:focus,
-.form-group textarea:focus {
-  outline: none;
-  border-color: #6366f1;
-  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.1);
-}
-.help-text {
-  font-size: 12px;
-  color: #6b7280;
-  margin-top: 4px;
-  font-style: italic;
-}
-
-.form-group input:focus + .help-text,
-.form-group textarea:focus + .help-text {
-  color: #3b82f6;
-}
-.modal-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 12px;
-  margin-top: 24px;
-  padding-top: 20px;
-  border-top: 1px solid #e5e7eb;
-}
-
-.btn-cancel {
-  background: #f3f4f6;
-  color: #374151;
-  border: 1px solid #d1d5db;
-  padding: 10px 20px;
-  border-radius: 6px;
-  font-weight: 500;
-  cursor: pointer;
-}
-
-.btn-cancel:hover {
-  background: #e5e7eb;
-}
-
-.btn-save {
-  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
-  color: white;
-  border: none;
-  padding: 10px 20px;
-  border-radius: 6px;
-  font-weight: 500;
-  cursor: pointer;
-}
-
-.btn-save:hover:not(:disabled) {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
-}
-
-.btn-save:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-  transform: none;
-}
-
-@media (max-width: 768px) {
-  .form-grid {
-    grid-template-columns: 1fr;
-  }
-  
-  .modal-actions {
-    flex-direction: column;
-  }
-  
-  .btn-cancel,
-  .btn-save {
-    width: 100%;
-  }
-}
-
-/* ✅ NUEVOS: Estilos para modal de etiquetas */
-.modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-  padding: 20px;
-}
-
-.modal-large {
-  background: white;
-  border-radius: 12px;
-  width: 95vw;
-  max-width: 800px;
-  max-height: 90vh;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  box-shadow: 0 20px 40px rgba(0,0,0,0.3);
-}
-
-.modal-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 20px;
-  border-bottom: 2px solid #f1f5f9;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-}
-
-.modal-header h3 {
-  margin: 0;
-  font-size: 1.5rem;
-}
-
-.modal-subtitle {
-  margin: 0;
-  font-size: 0.9rem;
-  opacity: 0.9;
-}
-
-.modal-close {
-  background: rgba(255,255,255,0.2);
-  border: none;
-  font-size: 2rem;
-  cursor: pointer;
-  color: white;
-  width: 40px;
-  height: 40px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  transition: all 0.3s ease;
-}
-
-.modal-close:hover {
-  background: rgba(255,255,255,0.3);
-}
-
-.modal-content {
-  flex: 1;
-  overflow: auto;
-  padding: 20px;
-}
-/* ✅ ESTILOS CORREGIDOS PARA MODAL DE ETIQUETAS */
-.labels-preview-container {
-  max-height: 70vh;
-  display: flex;
-  flex-direction: column;
-}
-
-.preview-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  padding-bottom: 20px;
-  border-bottom: 2px solid #e5e7eb;
-  margin-bottom: 20px;
-}
-
-.preview-info h4 {
-  margin: 0 0 4px 0;
-  color: #1f2937;
-  font-size: 18px;
-  font-weight: 600;
-}
-
-.preview-info p {
-  margin: 0;
-  color: #6b7280;
-  font-size: 14px;
-}
-
-.preview-actions {
-  display: flex;
-  gap: 12px;
-  flex-shrink: 0;
-}
-
-.btn {
-  padding: 10px 20px;
-  border: none;
-  border-radius: 8px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  font-size: 14px;
-}
-
-.btn-primary {
-  background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
-  color: white;
-}
-
-.btn-primary:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
-}
-
-.btn-secondary {
-  background: #f3f4f6;
-  color: #374151;
-  border: 1px solid #d1d5db;
-}
-
-.btn-secondary:hover {
-  background: #e5e7eb;
-}
-
-/* ✅ Grid de etiquetas mejorado */
-.labels-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
-  gap: 16px;
-  max-height: 50vh;
-  overflow-y: auto;
-  padding: 8px;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  background: #f9fafb;
-}
-
-.label-preview-card {
-  background: white;
-  border: 1px solid #d1d5db;
-  border-radius: 8px;
-  padding: 16px;
-  transition: all 0.2s ease;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.label-preview-card:hover {
-  border-color: #3b82f6;
-  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.1);
-}
-
-.label-mini-preview {
-  flex: 1;
-  border: 1px solid #e5e7eb;
-  border-radius: 6px;
-  padding: 12px;
-  background: #fafafa;
-  font-size: 12px;
-}
-
-.label-header-mini {
-  text-align: center;
-  border-bottom: 1px solid #d1d5db;
-  padding-bottom: 8px;
-  margin-bottom: 8px;
-}
-
-.company-name-mini {
-  font-weight: bold;
-  font-size: 14px;
-  color: #1f2937;
-}
-
-.envigo-code-mini {
-  font-size: 16px;
-  font-weight: bold;
-  color: #dc2626;
-  margin-top: 4px;
-  padding: 4px 8px;
-  background: #fef2f2;
-  border-radius: 4px;
-  display: inline-block;
-}
-
-.label-content-mini {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.label-info-item {
-  font-size: 11px;
-  line-height: 1.3;
-  color: #374151;
-}
-
-.label-info-item strong {
-  color: #1f2937;
-  display: inline-block;
-  width: 50px;
-  font-weight: 600;
-}
-
-.btn-single-print {
-  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
-  color: white;
-  border: none;
-  padding: 8px 12px;
-  border-radius: 6px;
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.btn-single-print:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.3);
-}
-
-/* ✅ Responsive design mejorado */
-@media (max-width: 768px) {
-  .labels-grid {
-    grid-template-columns: 1fr;
-    max-height: 40vh;
-  }
-  
-  .preview-header {
-    flex-direction: column;
-    gap: 16px;
-    align-items: stretch;
-  }
-  
-  .preview-actions {
-    justify-content: stretch;
-  }
-  
-  .btn {
-    flex: 1;
-  }
-}
-
-@media (max-width: 480px) {
-  .label-preview-card {
-    padding: 12px;
-  }
-  
-  .label-mini-preview {
-    padding: 8px;
-    font-size: 11px;
-  }
-  
-  .btn-single-print {
-    padding: 6px 10px;
-    font-size: 11px;
-  }
-}
-
-/* ✅ Estados de carga */
-.labels-grid:empty::after {
-  content: 'No hay etiquetas para mostrar';
-  display: block;
-  text-align: center;
-  color: #6b7280;
-  font-style: italic;
-  padding: 40px;
-  grid-column: 1 / -1;
-}
-
-/* ✅ Accesibilidad */
-.btn:focus-visible {
-  outline: 2px solid #3b82f6;
-  outline-offset: 2px;
-}
-
-.label-preview-card:focus-within {
-  border-color: #3b82f6;
-  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
-}
-</style>
