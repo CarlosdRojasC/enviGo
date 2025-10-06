@@ -1,7 +1,5 @@
-<!-- frontend/src/views/Orders.vue - TAILWIND VERSION -->
 <template>
-  <div class="min-h-screen bg-gray-50 p-6">
-    <!-- Header con estadísticas moderno -->
+  <div class="p-6 max-w-[1600px] mx-auto font-sans bg-slate-50 md:p-4 sm:p-3 sm:bg-white print:bg-white print:p-0">
     <OrdersHeader 
       title="Mis Pedidos"
       :stats="orderStats"
@@ -13,11 +11,9 @@
       @refresh="handleRefresh"
       @export="handleExport"
       @create-order="handleCreateOrder"
-      @bulk-upload="openBulkUploadModal" 
       @toggle-auto-refresh="toggleAutoRefresh"
     />
 
-    <!-- Filtros modernos -->
     <UnifiedOrdersFilters
       :filters="filters"
       :advanced-filters="advancedFilters"
@@ -39,9 +35,8 @@
       @remove-commune="removeCommune"
     />
 
-    <!-- Tabla moderna -->
     <OrdersTable
-      :orders="orders"
+       :orders="orders"
       :selected-orders="selectedOrders"
       :select-all-checked="selectAllChecked"
       :select-all-indeterminate="selectAllIndeterminate"
@@ -65,433 +60,285 @@
       @go-to-page="goToPage"
       @change-page-size="changePageSize"
       @sort="handleSort"
+      @view-circuit-plan="viewCircuitPlan"
+      @sync-circuit="syncCircuitOrder"
+      :has-tracking-info="hasTrackingInfo"
+      :has-proof-of-delivery="hasProofOfDelivery"
+      :get-action-button="getActionButton"
     />
 
-    <!-- Modal: Detalles del Pedido -->
-    <Modal
-      :show="showOrderDetailsModal"
-      title="Detalles del Pedido"
-      size="large"
-      @close="closeOrderDetailsModal"
-    >
-      <OrderDetails
-        v-if="selectedOrder"
-        :order="selectedOrder"
-        @close="closeOrderDetailsModal"
+    <Modal v-model="showOrderDetailsModal" :title="`Pedido #${selectedOrder?.order_number}`" width="800px">
+      <OrderDetails v-if="selectedOrder" :order="selectedOrder" />
+    </Modal>
+
+    <Modal v-model="showTrackingModal" :title="`🚚 Tracking - Pedido #${selectedTrackingOrder?.order_number}`"
+      width="700px">
+      <OrderTracking 
+        ref="orderTrackingRef"
+        v-if="selectedTrackingOrder" 
+        :order-id="selectedTrackingOrder._id" 
+        :order-number="selectedTrackingOrder.order_number"
+        @support-contact="handleTrackingSupport"
+        @show-proof="handleShowProof"
+        @close="showTrackingModal = false"
       />
     </Modal>
 
-    <!-- Modal: Tracking -->
-    <Modal
-      :show="showTrackingModal"
-      title="Seguimiento del Pedido"
-      size="large"
-      @close="closeTrackingModal"
-    >
-      <OrderTracking
-        v-if="selectedOrder"
-        :order="selectedOrder"
-        @close="closeTrackingModal"
-      />
+    <Modal v-model="showProofModal" :title="`📋 Prueba de Entrega - #${selectedProofOrder?.order_number}`"
+      width="700px">
+      <div v-if="loadingOrderDetails" class="flex flex-col items-center justify-center p-10 text-gray-500">
+        <div class="w-8 h-8 border-2 border-gray-100 border-t-indigo-500 rounded-full animate-spin mb-4"></div>
+      </div>
+      <ProofOfDelivery v-else-if="selectedProofOrder" :order="selectedProofOrder" />
     </Modal>
 
-    <!-- Modal: Proof of Delivery -->
-    <Modal
-      :show="showProofModal"
-      title="Prueba de Entrega"
-      size="large"
-      @close="closeProofModal"
-    >
-      <ProofOfDelivery
-        v-if="selectedOrder"
-        :order="selectedOrder"
-        @close="closeProofModal"
-      />
-    </Modal>
+    <Modal v-model="showSupportModal" title="💬 Contactar Soporte" width="500px">
+      <div v-if="supportOrder" class="p-5">
+        <div class="bg-gray-50 p-4 rounded-xl mb-5 border border-gray-200">
+          <h4 class="m-0 mb-2 text-gray-800 text-base font-semibold">Pedido: #{{ supportOrder.order_number }}</h4>
+          <p class="my-1 text-gray-500 text-sm">Cliente: {{ supportOrder.customer_name }}</p>
+          <p class="my-1 text-gray-500 text-sm">Estado: {{ getStatusName(supportOrder.status) }}</p>
+        </div>
 
-    <!-- Modal: Crear Pedido -->
-    <Modal
-      :show="showCreateOrderModal"
-      title="Crear Nuevo Pedido"
-      size="xlarge"
-      @close="closeCreateOrderModal"
-    >
-      <div class="space-y-6">
-        <form @submit.prevent="createNewOrder" class="space-y-6">
-          <!-- Selección de Canal -->
-          <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <h4 class="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-              <span class="text-2xl">📡</span>
-              Canal de Venta
-            </h4>
-            
-            <div class="space-y-4">
-              <div>
-                <label class="block text-sm font-medium text-gray-700 mb-2">
-                  Seleccionar Canal <span class="text-red-500">*</span>
-                </label>
-                <select
-                  v-model="newOrder.channel_id"
-                  required
-                  class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                >
-                  <option value="">-- Seleccionar Canal --</option>
-                  <option 
-                    v-for="channel in availableChannels" 
-                    :key="channel._id" 
-                    :value="channel._id"
-                  >
-                    {{ channel.channel_name }} ({{ channel.channel_type }})
+        <div class="grid grid-cols-1 gap-3 sm:gap-2">
+          <button @click="emailSupport(supportOrder)" class="flex items-center gap-3 p-4 bg-white border-2 border-gray-200 rounded-xl cursor-pointer transition-all duration-300 ease-in-out text-sm font-medium text-gray-700 hover:border-indigo-500 hover:bg-slate-50 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-indigo-500/15">
+            📧 Enviar Email
+          </button>
+          <button @click="whatsappSupport(supportOrder)" class="flex items-center gap-3 p-4 bg-white border-2 border-gray-200 rounded-xl cursor-pointer transition-all duration-300 ease-in-out text-sm font-medium text-gray-700 hover:border-indigo-500 hover:bg-slate-50 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-indigo-500/15">
+            💬 WhatsApp
+          </button>
+          <button @click="callSupport(supportOrder)" class="flex items-center gap-3 p-4 bg-white border-2 border-gray-200 rounded-xl cursor-pointer transition-all duration-300 ease-in-out text-sm font-medium text-gray-700 hover:border-indigo-500 hover:bg-slate-50 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-indigo-500/15">
+            📞 Llamar
+          </button>
+        </div>
+      </div>
+    </Modal>
+    
+    <ManifestModal 
+      v-if="showManifestModal" 
+      :manifestId="currentManifestId"
+      @close="showManifestModal = false"
+      @readyToPrint="printManifest"
+    />
+    
+    <Modal v-model="showCreateOrderModal" title="➕ Crear Nuevo Pedido" width="800px">
+      <div v-if="showCreateOrderModal" class="max-h-[70vh] overflow-y-auto p-5">
+        <form @submit.prevent="handleCreateOrderSubmit">
+          <div class="mb-6 border border-slate-200 rounded-lg p-5">
+            <h4 class="m-0 mb-4 text-gray-800 text-base font-semibold">🏪 Canal de Retiro</h4>
+            <p class="text-slate-500 text-sm -mt-2 mb-4">Selecciona dónde el conductor retirará este pedido</p>
+            <div class="grid grid-cols-1">
+              <div class="flex flex-col">
+                <label class="required mb-1.5 font-medium text-gray-700 text-sm">Punto de Retiro</label>
+                <div v-if="loadingChannels" class="flex items-center gap-2">
+                   <div class="w-5 h-5 border-2 border-gray-200 border-t-indigo-500 rounded-full animate-spin"></div>
+                  <span>Cargando canales...</span>
+                </div>
+                <div v-else-if="!availableChannels.length" class="flex gap-3 p-4 bg-amber-50 border border-amber-300 rounded-lg text-amber-800">
+                  <div class="text-2xl flex-shrink-0 mt-0.5">⚠️</div>
+                  <div class="flex-1">
+                    <p class="m-0 mb-2.5 leading-snug"><strong>No hay canales configurados</strong></p>
+                    <p class="m-0 mb-2.5 leading-snug">Tu empresa necesita tener al menos un canal configurado para crear pedidos.</p>
+                    <button type="button" @click="redirectToChannels" class="bg-none border-none text-blue-600 cursor-pointer p-0 font-semibold text-sm transition-colors hover:text-blue-700 hover:underline">
+                      → Configurar canales ahora
+                    </button>
+                  </div>
+                </div>
+                <select v-else v-model="newOrder.channel_id" class="channel-selector" required>
+                  <option value="" disabled>Selecciona dónde se retirará...</option>
+                  <option v-for="channel in availableChannels" :key="channel._id" :value="channel._id">
+                    {{ getChannelDisplayName(channel) }}
                   </option>
                 </select>
-              </div>
-
-              <!-- Info del canal seleccionado -->
-              <div v-if="selectedChannelInfo" class="bg-white border border-gray-200 rounded-lg p-4">
-                <div class="flex items-center gap-3">
-                  <div class="w-12 h-12 bg-gradient-to-br from-green-500 to-green-600 rounded-lg flex items-center justify-center text-2xl">
-                    📡
-                  </div>
-                  <div class="flex-1">
-                    <p class="font-semibold text-gray-900">{{ selectedChannelInfo.channel_name }}</p>
-                    <p class="text-sm text-gray-500">{{ getChannelTypeName(selectedChannelInfo.channel_type) }}</p>
+                <div v-if="selectedChannelInfo" class="mt-4 animate-fade-in">
+                  <div class="bg-white border border-slate-200 rounded-lg p-4 shadow-sm">
+                    <div class="flex items-center gap-3">
+                      <span class="text-3xl leading-none">{{ getChannelIcon(selectedChannelInfo.channel_type) }}</span>
+                      <div class="flex-1">
+                        <div class="font-semibold text-slate-800 text-base">{{ selectedChannelInfo.channel_name }}</div>
+                        <div class="text-slate-500 text-xs font-medium">{{ getChannelTypeName(selectedChannelInfo.channel_type) }}</div>
+                      </div>
+                    </div>
+                    <div v-if="selectedChannelInfo.store_url" class="mt-3 pt-2 border-t border-dashed border-slate-200">
+                      <div class="flex items-center gap-2 text-sm text-slate-600">
+                        <span class="text-sm">🌐</span>
+                        <span class="overflow-hidden text-ellipsis whitespace-nowrap text-sky-500">{{ selectedChannelInfo.store_url }}</span>
+                      </div>
+                    </div>
                   </div>
                 </div>
-                <div v-if="selectedChannelInfo.store_url" class="mt-3 text-sm text-gray-600">
-                  <span class="font-medium">🌐 URL:</span> {{ selectedChannelInfo.store_url }}
-                </div>
-              </div>
-
-              <p class="text-sm text-gray-600">
-                💡 El conductor recibirá las instrucciones de retiro para este canal específico
-              </p>
-            </div>
-          </div>
-
-          <!-- Información del Cliente -->
-          <div class="bg-white border border-gray-200 rounded-lg p-4">
-            <h4 class="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-              <span class="text-2xl">👤</span>
-              Información del Cliente
-            </h4>
-            
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <label class="block text-sm font-medium text-gray-700 mb-2">
-                  Nombre del Cliente <span class="text-red-500">*</span>
-                </label>
-                <input
-                  v-model="newOrder.customer_name"
-                  type="text"
-                  required
-                  placeholder="Juan Pérez"
-                  class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                />
-              </div>
-
-              <div>
-                <label class="block text-sm font-medium text-gray-700 mb-2">
-                  Email del Cliente
-                </label>
-                <input
-                  v-model="newOrder.customer_email"
-                  type="email"
-                  placeholder="cliente@email.com"
-                  class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                />
-              </div>
-
-              <div>
-                <label class="block text-sm font-medium text-gray-700 mb-2">
-                  Teléfono del Cliente
-                </label>
-                <input
-                  v-model="newOrder.customer_phone"
-                  type="tel"
-                  placeholder="+56 9 1234 5678"
-                  class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                />
+                <small class="text-sm text-slate-500 mt-3 block">
+                  💡 El conductor recibirá las instrucciones de retiro para este canal específico
+                </small>
               </div>
             </div>
           </div>
 
-          <!-- Dirección de Entrega -->
-          <div class="bg-white border border-gray-200 rounded-lg p-4">
-            <h4 class="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-              <span class="text-2xl">📍</span>
-              Dirección de Entrega
-            </h4>
-            
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div class="md:col-span-2">
-                <label class="block text-sm font-medium text-gray-700 mb-2">
-                  Dirección Completa <span class="text-red-500">*</span>
-                </label>
-                <input
-                  v-model="newOrder.shipping_address"
-                  type="text"
-                  required
-                  placeholder="Av. Providencia 1234, Depto 567"
-                  class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                />
+          <div class="form-section">
+            <h4>👤 Información del Cliente</h4>
+            <div class="form-grid">
+              <div class="form-group">
+                <label class="required">Nombre del Cliente</label>
+                <input v-model="newOrder.customer_name" type="text" required placeholder="Juan Pérez"/>
               </div>
-
-              <div>
-                <label class="block text-sm font-medium text-gray-700 mb-2">
-                  Comuna <span class="text-red-500">*</span>
-                </label>
-                <input
-                  v-model="newOrder.shipping_commune"
-                  type="text"
-                  required
-                  placeholder="Providencia"
-                  class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                />
+              <div class="form-group">
+                <label>Email del Cliente</label>
+                <input v-model="newOrder.customer_email" type="email" placeholder="cliente@email.com"/>
               </div>
-
-              <div>
-                <label class="block text-sm font-medium text-gray-700 mb-2">
-                  Región
-                </label>
-                <input
-                  v-model="newOrder.shipping_state"
-                  type="text"
-                  placeholder="Región Metropolitana"
-                  class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                />
+              <div class="form-group">
+                <label>Teléfono del Cliente</label>
+                <input v-model="newOrder.customer_phone" type="tel" placeholder="+56 9 1234 5678"/>
               </div>
             </div>
           </div>
 
-          <!-- Información del Pedido -->
-          <div class="bg-white border border-gray-200 rounded-lg p-4">
-            <h4 class="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-              <span class="text-2xl">📦</span>
-              Información del Pedido
-            </h4>
-            
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <label class="block text-sm font-medium text-gray-700 mb-2">
-                  Número de Pedido <span class="text-red-500">*</span>
-                </label>
-                <input
-                  v-model="newOrder.order_number"
-                  type="text"
-                  required
-                  placeholder="PED-001"
-                  class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                />
+          <div class="form-section">
+            <h4>📍 Dirección de Entrega</h4>
+            <div class="form-grid">
+              <div class="form-group full-width">
+                <label class="required">Dirección Completa</label>
+                <input v-model="newOrder.shipping_address" type="text" required placeholder="Av. Providencia 1234, Dpto 567"/>
               </div>
-
-              <div>
-                <label class="block text-sm font-medium text-gray-700 mb-2">
-                  Monto Total <span class="text-red-500">*</span>
-                </label>
-                <input
-                  v-model.number="newOrder.total_amount"
-                  type="number"
-                  required
-                  min="0"
-                  placeholder="15000"
-                  class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                />
+              <div class="form-group">
+                <label class="required">Comuna</label>
+                <input v-model="newOrder.shipping_commune" type="text" required placeholder="Providencia"/>
               </div>
-
-              <div>
-                <label class="block text-sm font-medium text-gray-700 mb-2">
-                  Costo de Envío
-                </label>
-                <input
-                  v-model.number="newOrder.shipping_cost"
-                  type="number"
-                  min="0"
-                  placeholder="2500"
-                  class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                />
-              </div>
-
-              <div class="md:col-span-3">
-                <label class="block text-sm font-medium text-gray-700 mb-2">
-                  Notas / Instrucciones de Entrega
-                </label>
-                <textarea
-                  v-model="newOrder.notes"
-                  rows="3"
-                  placeholder="Instrucciones especiales para el conductor..."
-                  class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                ></textarea>
+              <div class="form-group">
+                <label>Región</label>
+                <input v-model="newOrder.shipping_state" type="text" value="Región Metropolitana" placeholder="Región Metropolitana"/>
               </div>
             </div>
           </div>
 
-          <!-- Botones de acción -->
-          <div class="flex justify-end gap-3 pt-4 border-t border-gray-200">
-            <button
-              type="button"
-              @click="closeCreateOrderModal"
-              :disabled="creatingOrder"
-              class="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium transition-colors disabled:opacity-50"
-            >
+          <div class="form-section">
+            <h4>📦 Información del Pedido</h4>
+            <div class="form-grid">
+              <div class="form-group">
+                <label class="required">Número de Pedido</label>
+                <input v-model="newOrder.order_number" type="text" required placeholder="Ej: PED-001, #12345, ORDER-ABC" maxlength="50"/>
+                <small class="help-text">Ingresa tu número de pedido interno</small>
+              </div>
+              <div class="form-group">
+                <label>ID Externo (Opcional)</label>
+                <input v-model="newOrder.external_order_id" type="text" placeholder="ID de tu sistema de ventas" maxlength="100"/>
+                <small class="help-text">ID de tu tienda online, sistema POS, etc.</small>
+              </div>
+              <div class="form-group">
+                <label class="required">Monto Total</label>
+                <input v-model.number="newOrder.total_amount" type="number" required min="0" step="0.01" placeholder="15000"/>
+                <small class="help-text">Valor total del pedido en pesos</small>
+              </div>
+              <div class="form-group">
+                <label>Costo de Envío</label>
+                <input v-model.number="newOrder.shipping_cost" type="number" min="0" step="0.01" placeholder="2500"/>
+                <small class="help-text">Costo del despacho (opcional)</small>
+              </div>
+              <div class="form-group full-width">
+                <label>Notas del Pedido</label>
+                <textarea v-model="newOrder.notes" rows="3" placeholder="Instrucciones especiales para la entrega..." maxlength="500"></textarea>
+                <small class="help-text">Información adicional para el delivery</small>
+              </div>
+            </div>
+          </div>
+
+          <div class="flex justify-end gap-3 mt-6 pt-5 border-t border-gray-200 md:flex-col">
+            <button type="button" @click="closeCreateOrderModal" class="bg-gray-100 text-gray-700 border border-gray-300 py-2.5 px-5 rounded-md font-medium cursor-pointer hover:bg-gray-200 w-full md:w-auto">
               Cancelar
             </button>
-            <button
-              type="submit"
-              :disabled="creatingOrder"
-              class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors disabled:opacity-50 flex items-center gap-2"
-            >
-              <span v-if="creatingOrder" class="material-icons animate-spin text-lg">refresh</span>
-              <span v-else class="text-lg">💾</span>
-              {{ creatingOrder ? 'Creando...' : 'Crear Pedido' }}
+            <button type="submit" :disabled="isCreatingOrder" class="bg-gradient-to-r from-indigo-500 to-purple-600 text-white border-none py-2.5 px-5 rounded-md font-medium cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed disabled:transform-none hover:enabled:-translate-y-px hover:enabled:shadow-lg hover:enabled:shadow-indigo-500/30 w-full md:w-auto">
+              {{ isCreatingOrder ? '⏳ Creando...' : '💾 Crear Pedido' }}
             </button>
           </div>
         </form>
       </div>
     </Modal>
-
-    <!-- Modal: Bulk Upload -->
-    <Modal
-      :show="showBulkUploadModal"
-      title="Carga Masiva de Pedidos"
-      size="large"
-      @close="closeBulkUploadModal"
+    
+    <Modal 
+      v-model="showLabelsPreviewModal" 
+      title="🖨️ Vista Previa de Etiquetas" 
+      width="900px"
     >
-      <div class="space-y-6">
-        <!-- Instrucciones -->
-        <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
-          <h4 class="font-semibold text-blue-900 mb-2 flex items-center gap-2">
-            <span class="text-xl">ℹ️</span>
-            Instrucciones
-          </h4>
-          <ol class="list-decimal list-inside space-y-2 text-sm text-blue-800">
-            <li>Descarga la plantilla CSV haciendo clic en el botón</li>
-            <li>Completa los datos de tus pedidos en el archivo</li>
-            <li>Guarda el archivo y súbelo usando el botón de carga</li>
-            <li>Revisa los resultados y confirma la importación</li>
-          </ol>
-        </div>
-
-        <!-- Descarga plantilla -->
-        <div class="flex justify-center">
-          <button
-            @click="downloadBulkTemplate"
-            :disabled="downloadingTemplate"
-            class="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium transition-colors disabled:opacity-50 flex items-center gap-2"
-          >
-            <span class="text-xl">📥</span>
-            {{ downloadingTemplate ? 'Generando...' : 'Descargar Plantilla CSV' }}
-          </button>
-        </div>
-
-        <!-- Subida de archivo -->
-        <div class="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-blue-400 transition-colors">
-          <input
-            type="file"
-            ref="bulkFileInput"
-            accept=".csv,.xlsx,.xls"
-            @change="handleBulkFileSelect"
-            class="hidden"
-          />
-          
-          <div v-if="!selectedBulkFile" @click="$refs.bulkFileInput.click()" class="cursor-pointer">
-            <span class="text-5xl mb-4 block">📄</span>
-            <p class="text-lg font-medium text-gray-700 mb-2">
-              Haz clic para seleccionar archivo
-            </p>
-            <p class="text-sm text-gray-500">
-              Formatos soportados: CSV, XLSX, XLS
-            </p>
+      <div class="max-h-[70vh] flex flex-col">
+        <div class="flex justify-between items-start pb-5 border-b-2 border-gray-200 mb-5 md:flex-col md:gap-4 md:items-stretch">
+          <div>
+            <h4 class="m-0 mb-1 text-gray-800 text-lg font-semibold">{{ labelsToPreview.length }} etiqueta(s) generada(s)</h4>
+            <p class="m-0 text-gray-500 text-sm">Revisa las etiquetas antes de imprimir</p>
           </div>
-
-          <div v-else class="space-y-4">
-            <div class="flex items-center justify-center gap-3">
-              <span class="text-4xl">✅</span>
-              <div class="text-left">
-                <p class="font-medium text-gray-900">{{ selectedBulkFile.name }}</p>
-                <p class="text-sm text-gray-500">{{ (selectedBulkFile.size / 1024).toFixed(2) }} KB</p>
-              </div>
-            </div>
-            <button
-              @click="clearBulkFile"
-              class="text-sm text-red-600 hover:text-red-700 font-medium"
-            >
-              Cambiar archivo
+          <div class="flex gap-3 flex-shrink-0 md:justify-stretch">
+            <button @click="printLabelsFromPreview" class="btn btn-primary">
+              🖨️ Imprimir Todas
+            </button>
+            <button @click="showLabelsPreviewModal = false" class="btn btn-secondary">
+              Cerrar
             </button>
           </div>
         </div>
-
-        <!-- Feedback -->
-        <div v-if="bulkUploadFeedback" 
-          :class="[
-            'p-4 rounded-lg',
-            bulkUploadStatus === 'success' ? 'bg-green-50 border border-green-200 text-green-800' :
-            bulkUploadStatus === 'error' ? 'bg-red-50 border border-red-200 text-red-800' :
-            'bg-blue-50 border border-blue-200 text-blue-800'
-          ]"
-        >
-          {{ bulkUploadFeedback }}
-        </div>
-
-        <!-- Botones -->
-        <div class="flex justify-end gap-3 pt-4 border-t border-gray-200">
-          <button
-            @click="closeBulkUploadModal"
-            :disabled="isBulkUploading"
-            class="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium transition-colors disabled:opacity-50"
-          >
-            Cancelar
-          </button>
-          <button
-            @click="handleBulkUpload"
-            :disabled="!selectedBulkFile || isBulkUploading"
-            class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors disabled:opacity-50 flex items-center gap-2"
-          >
-            <span v-if="isBulkUploading" class="material-icons animate-spin text-lg">refresh</span>
-            <span v-else class="text-lg">📤</span>
-            {{ isBulkUploading ? 'Procesando...' : 'Importar Pedidos' }}
-          </button>
+        
+        <div class="grid grid-cols-[repeat(auto-fill,minmax(400px,1fr))] gap-4 max-h-[50vh] overflow-y-auto p-2 border border-gray-200 rounded-lg bg-gray-50 md:grid-cols-1 md:max-h-[40vh]">
+          <div v-for="label in labelsToPreview" :key="label.order_id" class="bg-white border border-gray-300 rounded-lg p-4 transition-all duration-200 ease-in-out flex flex-col gap-3 hover:border-blue-600 hover:shadow-lg hover:shadow-blue-600/10">
+            <div class="flex-1 border border-gray-200 rounded-md p-3 bg-gray-50 text-xs">
+              <div class="text-center border-b border-gray-300 pb-2 mb-2">
+                <div class="font-bold text-sm text-gray-800">enviGo</div>
+                <div class="text-base font-bold text-red-600 mt-1 px-2 py-1 bg-red-50 rounded-md inline-block">{{ label.unique_code }}</div>
+              </div>
+              <div class="flex flex-col gap-1">
+                <div class="text-xs leading-tight text-gray-700"><strong class="text-gray-800 inline-block w-12 font-semibold">Pedido:</strong> #{{ label.order_number }}</div>
+                <div class="text-xs leading-tight text-gray-700"><strong class="text-gray-800 inline-block w-12 font-semibold">Cliente:</strong> {{ label.customer_name }}</div>
+                <div class="text-xs leading-tight text-gray-700"><strong class="text-gray-800 inline-block w-12 font-semibold">Teléfono:</strong> {{ label.customer_phone || 'No disponible' }}</div>
+                <div class="text-xs leading-tight text-gray-700"><strong class="text-gray-800 inline-block w-12 font-semibold">Dirección:</strong> {{ label.shipping_address }}</div>
+                <div class="text-xs leading-tight text-gray-700"><strong class="text-gray-800 inline-block w-12 font-semibold">Comuna:</strong> {{ label.shipping_commune }}</div>
+                <div v-if="label.notes" class="text-xs leading-tight text-gray-700"><strong class="text-gray-800 inline-block w-12 font-semibold">Notas:</strong> {{ label.notes }}</div>
+              </div>
+            </div>
+            <button @click="printSingleLabelFromPreview(label)" class="bg-gradient-to-r from-amber-500 to-orange-600 text-white border-none py-2 px-3 rounded-md text-xs font-medium cursor-pointer transition-all duration-200 ease-in-out hover:-translate-y-px hover:shadow-lg hover:shadow-amber-500/30" title="Imprimir solo esta etiqueta">
+              🖨️ Individual
+            </button>
+          </div>
         </div>
       </div>
     </Modal>
-
-    <!-- Modal: Manifiesto -->
-    <ManifestModal
-      v-if="showManifestModal"
-      :selected-orders="selectedOrders"
-      @close="closeManifestModal"
-      @manifest-generated="handleManifestGenerated"
-    />
   </div>
 </template>
 
 <script setup>
+// ... TU SCRIPT SETUP SE MANTIENE EXACTAMENTE IGUAL ...
 import { ref, onMounted, computed, onBeforeUnmount, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../store/auth'
 import { apiService } from '../services/api'
 import { useToast } from 'vue-toastification'
 
-// Componentes
+// Componentes importados
 import Modal from '../components/Modal.vue'
 import OrderDetails from '../components/OrderDetails.vue'
 import OrderTracking from '../components/OrderTracking.vue'
 import ProofOfDelivery from '../components/ProofOfDelivery.vue'
-import OrdersHeader from '../components/Orders/OrdersHeader.vue'
-import OrdersTable from '../components/Orders/OrdersTable.vue'
-import UnifiedOrdersFilters from '../components/UnifiedOrdersFilters.vue'
-import ManifestModal from '../components/ManifestModal.vue'
 
-// Composables
+// Nuevos componentes modernos
+import OrdersHeader from '../components/Orders/OrdersHeader.vue'
+import OrdersFilters from '../components/Orders/OrdersFilters.vue'
+import OrdersTable from '../components/Orders/OrdersTable.vue'
+
+
+// Composables (asumiendo que ya los extendiste)
 import { useOrdersData } from '../composables/useOrdersData'
 import { useOrdersFilters } from '../composables/useOrdersFilters'
 import { useOrdersSelection } from '../composables/useOrdersSelection'
+import ExportDropdown from '../components/Orders/ExportDropdown.vue'
+import UnifiedOrdersFilters from '../components/UnifiedOrdersFilters.vue'
+import ManifestModal from '../components/ManifestModal.vue';
+
+
 
 const toast = useToast()
 const router = useRouter()
 const auth = useAuthStore()
 
+
+
 // ==================== COMPOSABLES ====================
 
+// Datos principales
 const {
   orders,
   channels,
@@ -514,446 +361,1363 @@ const {
   updateOrderLocally
 } = useOrdersData()
 
+// Filtros
 const {
   filters,
   advancedFilters,
   filtersUI,
   filterPresets,
+  allFilters,
   activeFiltersCount,
   availableCommunes,
-  applyFilters,
-  updateFilter,
-  updateAdvancedFilter,
-  resetFilters,
-  toggleAdvancedFilters,
   applyPreset,
+  toggleAdvancedFilters,
+  updateAdvancedFilter,
+  applySearch,
+  resetFilters,
+  handleFilterChange,  // NUEVA FUNCIÓN
+  clearAllFilters,
+  fetchAvailableCommunes, // ✨ NECESITAMOS ESTA FUNCIÓN
   addCommune,
-  removeCommune
-} = useOrdersFilters()
+  removeCommune,
+} = useOrdersFilters(orders, fetchOrders)
 
+// Selección múltiple
 const {
   selectedOrders,
   selectAllChecked,
   selectAllIndeterminate,
+  selectedCount,
+  selectedOrderObjects,
   toggleOrderSelection,
   toggleSelectAll,
-  clearSelection,
-  isOrderSelected
+  clearSelection
 } = useOrdersSelection(orders)
 
-// ==================== ESTADO ====================
+// ==================== ESTADO LOCAL ====================
 
-// Modales
-const showOrderDetailsModal = ref(false)
-const showTrackingModal = ref(false)
-const showProofModal = ref(false)
-const showCreateOrderModal = ref(false)
-const showBulkUploadModal = ref(false)
-const showManifestModal = ref(false)
-
-// Pedido seleccionado
-const selectedOrder = ref(null)
-
-// Crear pedido
-const creatingOrder = ref(false)
-const availableChannels = ref([])
-const newOrder = ref({
-  channel_id: '',
-  order_number: '',
-  customer_name: '',
-  customer_email: '',
-  customer_phone: '',
-  shipping_address: '',
-  shipping_commune: '',
-  shipping_state: '',
-  total_amount: 0,
-  shipping_cost: 0,
-  notes: ''
-})
-
-// Bulk upload
-const selectedBulkFile = ref(null)
-const bulkFileInput = ref(null)
-const isBulkUploading = ref(false)
-const downloadingTemplate = ref(false)
-const bulkUploadFeedback = ref('')
-const bulkUploadStatus = ref('')
-
-// Auto refresh
-const autoRefreshEnabled = ref(false)
+const user = computed(() => auth.user)
 const lastUpdate = ref(Date.now())
+const autoRefreshEnabled = ref(false)
+const loadingOrderDetails = ref(false)
+const orderTrackingRef = ref(null)
+const showManifestModal = ref(false);
+const currentManifestId = ref(null);
+const printManifest = ref(false);
+// ==================== NUEVO STATE PARA CANALES ====================
+const availableChannels = ref([])
+const loadingChannels = ref(false)
+// Estados de modales (mantener los existentes)
+const selectedOrder = ref(null)
+const showOrderDetailsModal = ref(false)
+const selectedTrackingOrder = ref(null)
+const showTrackingModal = ref(false)
+const selectedProofOrder = ref(null)
+const showProofModal = ref(false)
+const supportOrder = ref(null)
+const showSupportModal = ref(false)
+// Variables para crear pedido - AGREGAR ESTAS
+const showCreateOrderModal = ref(false)
+const newOrder = ref({})
+const isCreatingOrder = ref(false)
+const isGeneratingLabels = ref(false)
+const showLabelsModal = ref(false)
+const generatingLabels = ref(false)
+const showLabelsPreviewModal = ref(false)
+const labelsToPreview = ref([])
+// ✅
+// ⚡ TIEMPO REAL: Estado para actualización automática
+const realTimeEnabled = ref(true)
+const lastOrderUpdate = ref(null)
+const pendingOrderUpdates = ref(new Map()) // orderId -> updateData
+const orderUpdateQueue = ref([]) // Cola de notificaciones para mostrar
 
 // ==================== COMPUTED ====================
-
+// ==================== COMPUTED PARA CANALES ====================
+const selectedChannelInfo = computed(() => {
+  if (!newOrder.value.channel_id) return null
+  return availableChannels.value.find(channel => channel._id === newOrder.value.channel_id)
+})
+/**
+ * Estadísticas para el header
+ */
 const orderStats = computed(() => ({
-  total: orders.value.length,
+ total: orders.value.length,
   pending: orders.value.filter(o => o.status === 'pending').length,
   ready_for_pickup: orders.value.filter(o => o.status === 'ready_for_pickup').length,
+  warehouse_received: orders.value.filter(o => o.status === 'warehouse_received').length, // 🆕
   processing: orders.value.filter(o => o.status === 'processing').length,
   shipped: orders.value.filter(o => o.status === 'shipped').length,
   delivered: orders.value.filter(o => o.status === 'delivered').length,
   cancelled: orders.value.filter(o => o.status === 'cancelled').length
 }))
 
-const allFilters = computed(() => ({
-  ...filters.value,
-  ...advancedFilters.value
-}))
-
-const selectedChannelInfo = computed(() => {
-  if (!newOrder.value.channel_id) return null
-  return availableChannels.value.find(channel => channel._id === newOrder.value.channel_id)
-})
-
-// ==================== MÉTODOS ====================
+// ==================== MÉTODOS DEL HEADER ====================
 
 async function handleRefresh() {
   try {
     await refreshOrders(allFilters.value)
     lastUpdate.value = Date.now()
+    
+    // Limpiar actualizaciones pendientes después del refresh
+    pendingOrderUpdates.value.clear()
+    orderUpdateQueue.value = []
+    
     toast.success('Pedidos actualizados')
   } catch (error) {
     toast.error('Error al actualizar pedidos')
   }
 }
 
-async function handleExport() {
+async function handleExport(exportConfig = {}) {
   try {
+    const { type = 'excel', filters = {} } = exportConfig
+    
+    console.log('📤 Exportando pedidos:', { type, filters: allFilters.value })
+    
+    // Siempre usar la nueva exportación general
     await exportOrders('excel', allFilters.value)
-    toast.success('✅ Exportación completada')
+    toast.success('✅ Exportación de pedidos completada')
+    
   } catch (error) {
+    console.error('❌ Error en handleExport:', error)
     toast.error('Error al exportar pedidos')
   }
 }
-
-function handleFilterChange(newFilters) {
-  Object.keys(newFilters).forEach(key => {
-    updateFilter(key, newFilters[key])
+async function loadUserChannels() {
+  console.log('🚀 [loadUserChannels] INICIANDO...')
+  
+  // ✅ USAR auth.companyId que SÍ funciona (no auth.user?.company_id)
+  const companyId = auth.companyId
+  
+  console.log('👤 [loadUserChannels] Debug de usuario:', {
+    user_exists: !!auth.user,
+    user_role: auth.user?.role,
+    company_id_from_computed: companyId,  // ✅ Este funciona
+    company_id_from_user: auth.user?.company_id,  // ❌ Este es undefined
+    auth_logged_in: auth.isLoggedIn
   })
-  applyFilters()
-}
-
-function handleSort(sortConfig) {
-  console.log('Sort:', sortConfig)
-  // Implementar ordenamiento
-}
-
-function toggleAutoRefresh() {
-  autoRefreshEnabled.value = !autoRefreshEnabled.value
-  if (autoRefreshEnabled.value) {
-    startAutoRefresh()
-    toast.success('Actualización automática activada')
-  } else {
-    stopAutoRefresh()
-    toast.info('Actualización automática desactivada')
-  }
-}
-
-// Crear pedido
-async function handleCreateOrder() {
-  showCreateOrderModal.value = true
-  await loadAvailableChannels()
-}
-
-async function loadAvailableChannels() {
-  try {
-    await fetchChannels()
-    availableChannels.value = channels.value
-  } catch (error) {
-    console.error('Error loading channels:', error)
-  }
-}
-
-async function createNewOrder() {
-  if (!newOrder.value.channel_id) {
-    toast.error('Debes seleccionar un canal')
+  
+  // ✅ USAR companyId en lugar de auth.user?.company_id
+  if (!companyId) {
+    console.log('❌ [loadUserChannels] No companyId found from computed')
+    toast.warning('Error: No se pudo obtener la información de tu empresa')
     return
   }
-
-  creatingOrder.value = true
+  
+  loadingChannels.value = true
+  
   try {
-    await apiService.orders.create({
-      ...newOrder.value,
-      company_id: companyId.value
+    console.log(`🔍 [loadUserChannels] Cargando canales para empresa: ${companyId}`)
+    
+    // ✅ USAR companyId (no auth.user.company_id)
+    const response = await apiService.channels.getChannels(companyId)
+
+    
+    console.log('📡 [loadUserChannels] Respuesta de la API:', response)
+    
+    // Procesar respuesta
+    let allChannels = []
+    
+    if (response?.data?.data && Array.isArray(response.data.data)) {
+      allChannels = response.data.data
+      console.log('✅ [loadUserChannels] Formato correcto detectado')
+    } else if (response?.data && Array.isArray(response.data)) {
+      allChannels = response.data
+      console.log('✅ [loadUserChannels] Formato alternativo detectado')
+    } else {
+      console.log('❓ [loadUserChannels] Formato inesperado:', response?.data)
+      allChannels = []
+    }
+    
+    console.log('📊 [loadUserChannels] Análisis de canales:', {
+      total: allChannels.length,
+      activos: allChannels.filter(c => c.is_active).length,
+      inactivos: allChannels.filter(c => !c.is_active).length
     })
     
-    toast.success('✅ Pedido creado exitosamente')
-    closeCreateOrderModal()
-    await refreshOrders(allFilters.value)
+    // Filtrar canales activos y utilizables
+    const usableChannels = allChannels.filter(channel => {
+      const isActive = channel.is_active === true
+      const hasName = channel.channel_name && channel.channel_name.trim() !== ''
+      const belongsToCompany = channel.company_id?.toString() === companyId.toString()
+      
+      console.log(`🔍 [loadUserChannels] Evaluando canal "${channel.channel_name}":`, {
+        id: channel._id,
+        is_active: isActive,
+        has_name: hasName,
+        belongs_to_company: belongsToCompany,
+        will_include: isActive && hasName && belongsToCompany
+      })
+      
+      return isActive && hasName && belongsToCompany
+    })
+    
+    availableChannels.value = usableChannels
+    
+    // Mensajes informativos según el resultado
+    if (allChannels.length === 0) {
+      console.log('⚠️ [loadUserChannels] No hay canales configurados')
+      toast.warning('Tu empresa no tiene canales configurados')
+    } else if (usableChannels.length === 0) {
+      const inactiveCount = allChannels.filter(c => !c.is_active).length
+      console.log('⚠️ [loadUserChannels] Canales no utilizables:', {
+        total: allChannels.length,
+        inactivos: inactiveCount
+      })
+      
+      if (inactiveCount > 0) {
+        toast.warning(`Tienes ${inactiveCount} canal(es) inactivo(s). Actívalos en la sección Canales.`)
+      } else {
+        toast.warning('No hay canales utilizables para crear pedidos')
+      }
+    } else {
+      console.log('✅ [loadUserChannels] Canales utilizables cargados:', 
+        usableChannels.map(c => `${c.channel_name} (${c.channel_type})`).join(', ')
+      )
+      toast.success(`${usableChannels.length} canal(es) disponible(s)`)
+    }
+    
   } catch (error) {
-    console.error('Error creating order:', error)
-    toast.error('Error al crear el pedido')
+    console.error('❌ [loadUserChannels] Error completo:', {
+      error: error,
+      message: error.message,
+      response: error.response,
+      status: error.response?.status,
+      data: error.response?.data,
+      companyId_used: companyId
+    })
+    
+    // Manejo de errores específicos con mensajes útiles
+    if (error.response?.status === 404) {
+      toast.error('No se encontraron canales para tu empresa')
+    } else if (error.response?.status === 403) {
+      toast.error('No tienes permisos para ver los canales de esta empresa')
+    } else {
+      toast.error('Error cargando canales: ' + (error.response?.data?.error || error.message))
+    }
+    
+    availableChannels.value = []
   } finally {
-    creatingOrder.value = false
+    loadingChannels.value = false
+    console.log('🏁 [loadUserChannels] FINALIZADO')
   }
 }
-
-function closeCreateOrderModal() {
-  showCreateOrderModal.value = false
+function handleCreateOrder() {
+  console.log('➕ Abriendo modal crear pedido')
+  
+  // Inicializar formulario
   newOrder.value = {
-    channel_id: '',
-    order_number: '',
+    channel_id: '',         // ✅ NUEVO
+    order_number: '',       
+    external_order_id: '',  
     customer_name: '',
     customer_email: '',
     customer_phone: '',
     shipping_address: '',
     shipping_commune: '',
-    shipping_state: '',
+    shipping_state: 'Región Metropolitana',
     total_amount: 0,
     shipping_cost: 0,
     notes: ''
   }
+  
+  showCreateOrderModal.value = true
+  
+  // ✅ NUEVO: Cargar canales cuando abre el modal
+  loadUserChannels()
+}
+// Función para cerrar modal - AGREGAR
+function closeCreateOrderModal() {
+  showCreateOrderModal.value = false
+  newOrder.value = {}
+  isCreatingOrder.value = false
 }
 
-function getChannelTypeName(type) {
-  const types = {
-    shopify: 'Shopify',
-    woocommerce: 'WooCommerce',
-    mercadolibre: 'Mercado Libre',
-    manual: 'Manual'
-  }
-  return types[type] || type
-}
+// Función para crear pedido - AGREGAR
+async function handleCreateOrderSubmit() {
+  
 
-// Modales
-function openOrderDetailsModal(order) {
-  selectedOrder.value = order
-  showOrderDetailsModal.value = true
-}
-
-function closeOrderDetailsModal() {
-  showOrderDetailsModal.value = false
-  selectedOrder.value = null
-}
-
-function openTrackingModal(order) {
-  selectedOrder.value = order
-  showTrackingModal.value = true
-}
-
-function closeTrackingModal() {
-  showTrackingModal.value = false
-  selectedOrder.value = null
-}
-
-function openLiveTracking(order) {
-  console.log('Open live tracking:', order)
-  // Implementar
-}
-
-function showProofOfDelivery(order) {
-  selectedOrder.value = order
-  showProofModal.value = true
-}
-
-function closeProofModal() {
-  showProofModal.value = false
-  selectedOrder.value = null
-}
-
-// Acciones
-async function markAsReady(order) {
-  try {
-    await markOrderAsReady(order._id)
-    toast.success('Pedido marcado como listo')
-  } catch (error) {
-    toast.error('Error al marcar pedido')
-  }
-}
-
-async function handleBulkMarkReady() {
-  if (selectedOrders.value.length === 0) {
-    toast.warning('Selecciona al menos un pedido')
+  if (!newOrder.value.customer_name?.trim()) {
+    toast.warning('Por favor, ingrese el nombre del cliente')
     return
   }
+  
+  if (!newOrder.value.shipping_address?.trim()) {
+    toast.warning('Por favor, ingrese la dirección de envío')
+    return
+  }
+  
+  if (!newOrder.value.shipping_commune?.trim()) {
+    toast.warning('Por favor, ingrese la comuna')
+    return
+  }
+  
+  if (!newOrder.value.total_amount || newOrder.value.total_amount <= 0) {
+    toast.warning('Por favor, ingrese un monto total válido')
+    return
+  }
+  // ✅ NUEVA VALIDACIÓN: Canal requerido
+  if (!newOrder.value.channel_id) {
+    toast.warning('Por favor, selecciona el canal de retiro')
+    return
+  }
+  
+  // Validación básica (mantener las existentes)
+  if (!newOrder.value.order_number?.trim()) {
+    toast.warning('Por favor, ingrese el número de pedido')
+    return
+  }
+  
+  isCreatingOrder.value = true
+  
+  try {
+    console.log('➕ Creando pedido:', newOrder.value)
+    
+
+  
+    // Preparar datos del pedido
+    const orderData = {
+      ...newOrder.value,
+      external_order_id: `manual-company-${Date.now()}`,
+      order_date: new Date().toISOString(),
+      status: 'pending'
+    }
+    
+    console.log('📦 Datos del pedido a crear:', orderData)
+    
+    // Crear el pedido
+    const response = await apiService.orders.create(orderData)
+    
+    console.log('✅ Pedido creado exitosamente:', response.data)
+    toast.success(`✅ Pedido #${response.data.order_number} creado exitosamente`)
+    
+    // Cerrar modal y refrescar lista
+    closeCreateOrderModal()
+    await fetchOrders()
+    
+  } catch (error) {
+    console.error('❌ Error creando pedido:', error)
+    toast.error('Error al crear el pedido: ' + (error.response?.data?.error || error.message))
+  } finally {
+    isCreatingOrder.value = false
+  }
+}
+
+function handleSearchEvent(newSearchTerm) {
+  applySearch(newSearchTerm);
+}
+
+// Función que se llamará desde el evento @filter-change de OrdersFilters
+function handleFilterChangeEvent(key, value) {
+  handleFilterChange(key, value);
+}
+
+function toggleAutoRefresh() {
+  autoRefreshEnabled.value = !autoRefreshEnabled.value
+  if (autoRefreshEnabled.value) {
+    startAutoRefresh(5) // cada 5 minutos
+    toast.info('Auto-actualización activada (cada 5 min)')
+  } else {
+    stopAutoRefresh()
+    toast.info('Auto-actualización desactivada')
+  }
+}
+
+// ==================== MÉTODOS DE ACCIONES MASIVAS ====================
+
+async function handleBulkMarkReady() {
+  try {
+    const pendingOrders = selectedOrderObjects.value.filter(o => o.status === 'pending')
+    if (pendingOrders.length === 0) {
+      toast.warning('No hay pedidos pendientes seleccionados')
+      return
+    }
+
+    await markMultipleAsReady(pendingOrders.map(o => o._id))
+    clearSelection()
+    toast.success(`${pendingOrders.length} pedidos marcados como listos`)
+  } catch (error) {
+    toast.error('Error al marcar pedidos como listos')
+  }
+}
+async function printManifestDirectly(manifestId) {
+  try {
+    const url = `${import.meta.env.VITE_API_BASE_URL}/manifests/${manifestId}`;
+    
+    // Pedimos el manifiesto
+    const response = await axios.get(url, {
+      responseType: 'arraybuffer' // 👈 sirve para PDF y HTML
+    });
+
+    // Detectar tipo de contenido
+    const contentType = response.headers['content-type'];
+
+    if (contentType.includes('application/pdf')) {
+      // 👉 Caso PDF
+      const blob = new Blob([response.data], { type: 'application/pdf' });
+      const pdfUrl = URL.createObjectURL(blob);
+
+      const printWindow = window.open(pdfUrl, '_blank', 'width=900,height=700');
+      printWindow.onload = () => {
+        printWindow.focus();
+        printWindow.print();
+      };
+    } else if (contentType.includes('text/html')) {
+      // 👉 Caso HTML
+      const decoder = new TextDecoder('utf-8');
+      const html = decoder.decode(response.data);
+
+      const printWindow = window.open('', '_blank', 'width=900,height=700');
+      printWindow.document.open();
+      printWindow.document.write(html);
+      printWindow.document.close();
+
+      printWindow.onload = () => {
+        printWindow.focus();
+        printWindow.print();
+      };
+    } else {
+      throw new Error(`Tipo de contenido no soportado: ${contentType}`);
+    }
+  } catch (error) {
+    console.error('❌ Error al imprimir manifiesto:', error);
+    toast.error('Error al imprimir manifiesto');
+  }
+}
+async function viewManifest(manifest) {
+  const manifestUrl = `/app/manifest/${manifest._id}`;
+  window.open(manifestUrl, '_blank', 'width=900,height=700');
+}
+
+
+
+async function generateManifestAndMarkReady() {
+  if (selectedOrders.value.length === 0) {
+    toast.warning('Selecciona al menos un pedido');
+    return;
+  }
+
+  const confirmMsg = `¿Deseas generar el manifiesto y marcar ${selectedOrders.value.length} pedido(s) como "Listo para Retiro"?\n\nEl manifiesto se imprimirá automáticamente.`;
+  if (!confirm(confirmMsg)) return;
 
   try {
-    await markMultipleAsReady(selectedOrders.value.map(o => o._id))
-    toast.success(`${selectedOrders.value.length} pedidos marcados como listos`)
-    clearSelection()
+    console.log('📋 Creando manifiesto guardado...');
+    
+    // 1. Crear manifiesto en la base de datos
+    const response = await apiService.manifests.create(selectedOrders.value);
+    const manifest = response.data;
+    
+    console.log('✅ Manifiesto creado:', manifest);
+    
+    // 2. Actualizar órdenes localmente
+    orders.value.forEach(order => {
+      if (selectedOrders.value.includes(order._id)) {
+        order.status = 'ready_for_pickup';
+        order.manifest_id = manifest.manifest.id;
+        order.updated_at = new Date().toISOString();
+      }
+    });
+
+    // 3. ✅ IMPRIMIR DIRECTAMENTE
+viewManifest({ _id: manifest.manifest.id });
+
+    toast.success(`✅ Manifiesto ${manifest.manifest.manifest_number} creado e impreso`);
+    clearSelection();
+
   } catch (error) {
-    toast.error('Error en la operación masiva')
+    console.error('❌ Error creando manifiesto:', error);
+    
+    if (error.response?.status === 403) {
+      toast.error('No tienes permisos para crear manifiestos');
+    } else {
+      toast.error('Error al crear el manifiesto');
+    }
   }
 }
 
 async function handleBulkExport() {
-  if (selectedOrders.value.length === 0) {
-    toast.warning('Selecciona al menos un pedido')
-    return
-  }
-
   try {
-    await exportOrders('excel', {
-      order_ids: selectedOrders.value.map(o => o._id)
-    })
-    toast.success('Exportación completada')
+    const orderIds = selectedOrders.value
+    await exportOrders('excel', { order_ids: orderIds })
+    toast.success(`Exportación de ${orderIds.length} pedidos completada`)
   } catch (error) {
-    toast.error('Error al exportar')
+    toast.error('Error al exportar selección')
   }
 }
 
-function handleGenerateLabels() {
-  console.log('Generate labels for:', selectedOrders.value)
-  // Implementar
+// ==================== MÉTODOS DE TABLA ====================
+
+function handleSort(column) {
+  // Implementar lógica de ordenamiento
+  console.log('Sorting by:', column)
+  // Aquí puedes implementar la lógica de ordenamiento
 }
 
-function generateManifestAndMarkReady() {
-  showManifestModal.value = true
-}
+// ==================== MÉTODOS DE PEDIDOS INDIVIDUALES ====================
 
-function closeManifestModal() {
-  showManifestModal.value = false
-}
-
-function handleManifestGenerated() {
-  closeManifestModal()
-  clearSelection()
-  refreshOrders(allFilters.value)
-}
-
-function handleActionButton(action) {
-  console.log('Action:', action)
-}
-
-function contactSupport() {
-  toast.info('Función de soporte próximamente')
-}
-
-// Bulk upload
-function openBulkUploadModal() {
-  showBulkUploadModal.value = true
-}
-
-function closeBulkUploadModal() {
-  showBulkUploadModal.value = false
-  selectedBulkFile.value = null
-  bulkUploadFeedback.value = ''
-  bulkUploadStatus.value = ''
-}
-
-function handleBulkFileSelect(event) {
-  const file = event.target.files[0]
-  if (!file) return
-
-  if (file.size > 10 * 1024 * 1024) {
-    toast.error('Archivo muy grande. Máximo 10MB')
-    return
-  }
-
-  selectedBulkFile.value = file
-  bulkUploadFeedback.value = ''
-  bulkUploadStatus.value = ''
-}
-
-function clearBulkFile() {
-  selectedBulkFile.value = null
-  if (bulkFileInput.value) {
-    bulkFileInput.value.value = ''
-  }
-}
-
-async function downloadBulkTemplate() {
-  downloadingTemplate.value = true
+async function markAsReady(order) {
   try {
-    const templateData = [
-      ['Número de Pedido*', 'Nombre Cliente*', 'Email', 'Teléfono', 'Dirección*', 'Comuna*', 'Región', 'Monto Total*', 'Costo Envío', 'Notas'],
-      ['PED-001', 'Juan Pérez', 'juan@email.com', '+56912345678', 'Av. Providencia 1234', 'Providencia', 'RM', '15000', '2500', 'Entregar en recepción']
-    ]
-
-    const csvContent = templateData.map(row => row.map(cell => `"${cell}"`).join(',')).join('\n')
-    const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' })
-    const url = window.URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.setAttribute('download', 'plantilla_pedidos.csv')
-    document.body.appendChild(link)
-    link.click()
-    link.remove()
-    window.URL.revokeObjectURL(url)
-
-    toast.success('Plantilla descargada')
+    await markOrderAsReady(order)
+    // El composable ya actualiza localmente
   } catch (error) {
-    toast.error('Error al generar plantilla')
-  } finally {
-    downloadingTemplate.value = false
+    // El composable ya maneja el error
   }
 }
 
-async function handleBulkUpload() {
-  if (!selectedBulkFile.value) {
-    toast.error('Selecciona un archivo')
-    return
+// ==================== MÉTODOS DE TRACKING Y MODALES ====================
+/**
+ * Verificar si una orden tiene tracking disponible
+ */
+function hasTrackingInfo(order) {
+  // Tracking en vivo con Circuit
+  if (order.circuit_tracking_url || 
+      (order.circuit_plan_id && order.circuit_driver_id && order.status === 'shipped')) {
+    return true
   }
-
-  isBulkUploading.value = true
-  bulkUploadFeedback.value = 'Procesando archivo...'
-  bulkUploadStatus.value = 'processing'
-
+  
+  // Tracking básico con Circuit
+  if (order.circuit_plan_id || order.circuit_driver_id || order.circuit_stop_id) {
+    return true
+  }
+  
+  // Estados que pueden tener tracking
+  return ['processing', 'shipped', 'ready_for_pickup'].includes(order.status)
+}
+async function loadCircuitDrivers() {
   try {
-    const formData = new FormData()
-    formData.append('file', selectedBulkFile.value)
-
-    const { data } = await apiService.orders.bulkUpload(formData)
-
-    const successful = data.database?.success || 0
-    const failed = data.database?.failed || 0
-
-    bulkUploadFeedback.value = `Completado: ${successful} pedidos creados`
-    if (failed > 0) {
-      bulkUploadFeedback.value += `, ${failed} fallaron`
-    }
-
-    bulkUploadStatus.value = failed > 0 ? 'partial' : 'success'
+    console.log('👨‍💼 Cargando conductores de Circuit...')
+    const response = await apiService.circuit.getDrivers()
     
-    if (successful > 0) {
-      await refreshOrders(allFilters.value)
+    if (response.data?.drivers) {
+      // Agregar a availableDrivers si existe esa variable
+      availableDrivers.value = response.data.drivers.map(driver => ({
+        id: driver.id,
+        circuit_id: driver.id,
+        name: driver.name,
+        email: driver.email,
+        phone: driver.phone,
+        is_active: driver.is_active,
+        is_available: driver.is_available,
+        is_on_route: driver.is_on_route,
+        vehicle_type: driver.vehicle_type
+      }))
+      
+      console.log(`✅ ${availableDrivers.value.length} conductores Circuit cargados`)
+    }
+    
+  } catch (error) {
+    console.error('❌ Error cargando conductores de Circuit:', error)
+    // No mostrar error al usuario, es información adicional
+  }
+}
+/**
+ * Verificar si una orden tiene prueba de entrega
+ */
+function hasProofOfDelivery(order) {
+  if (orderTrackingRef.value?.orderHasProofOfDelivery) {
+    return orderTrackingRef.value.orderHasProofOfDelivery(order)
+  }
+  
+  // Fallback: lógica básica
+  if (order.status !== 'delivered') return false
+  return !!(
+    order.proof_of_delivery?.photo_url || 
+    order.proof_of_delivery?.signature_url ||
+    order.podUrls?.length > 0 ||
+    order.signatureUrl
+  )
+}
+
+/**
+ * Obtener configuración del botón de acción
+ */
+function getActionButton(order) {
+  if (orderTrackingRef.value?.getActionButton) {
+    return orderTrackingRef.value.getActionButton(order)
+  }
+  
+  // Fallback: lógica básica
+  if (order.status === 'delivered') {
+    return {
+      type: 'proof',
+      label: 'Ver Prueba de Entrega',
+      icon: '📸',
+      class: 'btn-success',
+      available: hasProofOfDelivery(order)
+    }
+  }
+  
+  if (['processing', 'shipped'].includes(order.status)) {
+    return {
+      type: 'tracking',
+      label: 'Tracking en Vivo',
+      icon: '📍',
+      class: 'btn-primary',
+      available: hasTrackingInfo(order)
+    }
+  }
+  
+  return { type: 'none', available: false }
+}
+/**
+ * Ver plan de Circuit
+ */
+async function viewCircuitPlan(order) {
+  if (!order.circuit_plan_id) {
+    toast.warning('Esta orden no tiene un plan de Circuit asociado')
+    return
+  }
+  
+  try {
+    console.log('📋 Abriendo plan de Circuit:', order.circuit_plan_id)
+    
+    // Opción 1: Abrir en nueva pestaña (si tienes una URL de Circuit)
+    // const circuitUrl = `https://app.getcircuit.com/plans/${order.circuit_plan_id}`
+    // window.open(circuitUrl, '_blank')
+    
+    // Opción 2: Mostrar modal con detalles del plan
+    const planResponse = await apiService.circuit.getPlan(order.circuit_plan_id)
+    
+    // Aquí podrías mostrar un modal con los detalles del plan
+    // Por ahora, mostrar información básica
+    const planInfo = planResponse.data
+    
+    const planDetails = `
+Plan ID: ${planInfo.id || order.circuit_plan_id}
+Estado: ${planInfo.status || 'Desconocido'}
+Conductor: ${planInfo.driver?.name || 'No asignado'}
+Paradas: ${planInfo.stops?.length || 0}
+Fecha: ${planInfo.date || 'No especificada'}
+    `.trim()
+    
+    // Mostrar en alert por ahora (puedes reemplazar con un modal mejor)
+    alert(`Detalles del Plan Circuit:\n\n${planDetails}`)
+    
+  } catch (error) {
+    console.error('❌ Error obteniendo plan de Circuit:', error)
+    toast.error('Error al obtener información del plan de Circuit')
+  }
+}
+
+/**
+ * Sincronizar con Circuit
+ */
+async function syncCircuitOrder(order) {
+  if (!order.circuit_plan_id && !order.circuit_driver_id) {
+    toast.warning('Esta orden no está conectada con Circuit')
+    return
+  }
+  
+  try {
+    console.log('🔄 Sincronizando orden con Circuit:', order.order_number)
+    
+    const orderRow = document.querySelector(`[data-order-id="${order._id}"]`)
+    if (orderRow) {
+      orderRow.classList.add('syncing-circuit')
+    }
+    
+    // Opción 1: Endpoint específico de sync (si lo tienes)
+    // await apiService.circuit.syncOrder(order._id)
+    
+    // Opción 2: Refrescar datos de la orden y del plan
+    const [orderResponse, planResponse] = await Promise.allSettled([
+      apiService.orders.getById(order._id),
+      order.circuit_plan_id ? apiService.circuit.getPlan(order.circuit_plan_id) : Promise.resolve(null)
+    ])
+    
+    if (orderResponse.status === 'fulfilled') {
+      updateOrderLocally(orderResponse.value.data)
+      console.log('✅ Datos de orden actualizados desde Circuit')
+    }
+    
+    if (planResponse.status === 'fulfilled' && planResponse.value) {
+      console.log('✅ Datos del plan Circuit actualizados:', planResponse.value.data)
+    }
+    
+    toast.success(`Orden ${order.order_number} sincronizada con Circuit`)
+    
+  } catch (error) {
+    console.error('❌ Error sincronizando con Circuit:', error)
+    toast.error('Error al sincronizar con Circuit')
+  } finally {
+    const orderRow = document.querySelector(`[data-order-id="${order._id}"]`)
+    if (orderRow) {
+      orderRow.classList.remove('syncing-circuit')
+    }
+  }
+}
+async function openLiveTracking(order) {
+  console.log('📍 Abriendo tracking Circuit para:', order.order_number, {
+    has_circuit_url: !!order.circuit_tracking_url,
+    has_plan_id: !!order.circuit_plan_id,
+    has_driver: !!order.circuit_driver_id,
+    status: order.status
+  })
+  
+  // 1. Si ya tiene URL de tracking directo de Circuit
+  if (order.circuit_tracking_url) {
+    console.log('✅ Abriendo URL de tracking Circuit:', order.circuit_tracking_url)
+    window.open(order.circuit_tracking_url, '_blank')
+    return
+  }
+  
+  // 2. Si tiene plan_id pero no URL, intentar obtener tracking
+  if (order.circuit_plan_id) {
+    try {
+      const orderRow = document.querySelector(`[data-order-id="${order._id}"]`)
+      if (orderRow) {
+        orderRow.classList.add('refreshing-tracking')
+      }
+      
+      const trackingResponse = await apiService.circuit.getPlanTracking(order.circuit_plan_id)
+      
+      if (trackingResponse.data?.tracking_url) {
+        console.log('✅ URL de tracking obtenida de Circuit:', trackingResponse.data.tracking_url)
+        
+        // Actualizar orden localmente
+        const updatedOrder = { ...order, circuit_tracking_url: trackingResponse.data.tracking_url }
+        updateOrderLocally(updatedOrder)
+        
+        window.open(trackingResponse.data.tracking_url, '_blank')
+      } else {
+        console.log('⚠️ No hay URL de tracking disponible en Circuit')
+        toast.warning('El plan de Circuit aún no tiene tracking disponible')
+        openTrackingModal(order)
+      }
+      
+    } catch (error) {
+      console.error('❌ Error obteniendo tracking de Circuit:', error)
+      toast.error('Error obteniendo información de tracking de Circuit')
+    } finally {
+      const orderRow = document.querySelector(`[data-order-id="${order._id}"]`)
+      if (orderRow) {
+        orderRow.classList.remove('refreshing-tracking')
+      }
+    }
+    return
+  }
+  
+  // 3. Si no tiene datos de Circuit, abrir modal básico
+  if (['processing', 'ready_for_pickup'].includes(order.status)) {
+    console.log('ℹ️ Orden sin datos de Circuit, abriendo modal básico')
+    openTrackingModal(order)
+    return
+  }
+  
+  // 4. Sin tracking disponible
+  console.log('❌ No hay tracking disponible para esta orden')
+  toast.warning('No hay información de tracking disponible para este pedido')
+}
+function openTrackingModal(order) {
+  selectedTrackingOrder.value = order
+  showTrackingModal.value = true
+  console.log('🚚 Abriendo modal de tracking:', order.order_number)
+}
+
+async function showProofOfDelivery(order) {
+  selectedProofOrder.value = null;      // 1. Limpia el estado anterior
+  loadingOrderDetails.value = true;   // 2. Activa el indicador de carga
+  showProofModal.value = true;          // 3. Muestra el modal (que mostrará el spinner)
+
+  try {
+    // 4. Llama a la API para obtener los datos más recientes y completos
+    const { data } = await apiService.orders.getById(order._id);
+    
+    // 5. Asigna los datos frescos para que el componente los muestre
+    selectedProofOrder.value = data;
+    console.log('✅ Prueba de entrega cargada para el modal:', data);
+
+  } catch (error) {
+    console.error('❌ Error cargando la prueba de entrega:', error);
+    toast.error('No se pudo cargar la información de la entrega.');
+    showProofModal.value = false; // Cierra el modal si hay un error
+  } finally {
+    loadingOrderDetails.value = false; // 6. Desactiva el indicador de carga
+  }
+}
+
+async function openOrderDetailsModal(order) {
+  selectedOrder.value = null
+  showOrderDetailsModal.value = true
+  loadingOrderDetails.value = true
+  
+  try {
+    const { data } = await apiService.orders.getById(order._id)
+    selectedOrder.value = data
+  } catch (error) {
+    console.error("Error al obtener detalles del pedido:", error)
+    showOrderDetailsModal.value = false
+    toast.error('Error al cargar detalles del pedido')
+  } finally {
+    loadingOrderDetails.value = false
+  }
+}
+
+function contactSupport(order) {
+  supportOrder.value = order
+  showSupportModal.value = true
+}
+
+function handleTrackingSupport(supportData) {
+  showTrackingModal.value = false
+  supportOrder.value = {
+    _id: supportData.orderId,
+    order_number: supportData.orderNumber,
+    customer_name: supportData.customerName,
+    status: selectedTrackingOrder.value?.status || 'unknown'
+  }
+  showSupportModal.value = true
+}
+
+function handleShowProof(proofData) {
+  showTrackingModal.value = false
+  selectedProofOrder.value = proofData.order
+  showProofModal.value = true
+}
+
+// ==================== MÉTODOS DE SOPORTE ====================
+
+function emailSupport(order) {
+  const subject = `Consulta sobre Pedido #${order.order_number}`
+  const body = `Hola,\n\nTengo una consulta sobre mi pedido #${order.order_number}.\n\nDetalles:\n- Cliente: ${order.customer_name}\n- Estado: ${getStatusName(order.status)}\n\nMi consulta es:\n\n[Describe tu consulta aquí]\n\nGracias.`
+  window.location.href = `mailto:contacto@envigo.cl?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
+  showSupportModal.value = false
+}
+
+function whatsappSupport(order) {
+  const message = `Hola, tengo una consulta sobre mi pedido #${order.order_number}. Estado: ${getStatusName(order.status)}`
+  const whatsappNumber = '56986147420'
+  window.open(`https://wa.me/${whatsappNumber}?text=${encodeURIComponent(message)}`, '_blank')
+  showSupportModal.value = false
+}
+
+function callSupport(order) {
+  const phoneNumber = '+56986147420'
+  window.location.href = `tel:${phoneNumber}`
+  showSupportModal.value = false
+}
+
+
+
+// ==================== MÉTODOS UTILITARIOS ====================
+
+function getStatusName(status) {
+  const names = {
+   pending: 'Pendiente',
+    ready_for_pickup: 'Listo para Retiro',
+    warehouse_received: '📦 En Bodega',      // 🆕 AGREGAR
+    processing: 'Procesando',
+    shipped: '🚚 En Ruta',                  // 🔧 MEJORAR con emoji
+    delivered: '✅ Entregado',
+    invoiced: '🧾 Facturado',
+    cancelled: '❌ Cancelado'
+  }
+  return names[status] || status
+}
+async function handleActionButton(order) {
+  const action = getActionButton(order)
+  
+  if (!action.available) {
+    console.log('❌ Acción no disponible para orden:', order.order_number)
+    return
+  }
+
+  switch (action.type) {
+    case 'proof':
+      showProofOfDelivery(order)
+      break
+    case 'tracking':
+      await openLiveTracking(order)
+      break
+    default:
+      console.log('❌ Tipo de acción desconocido:', action.type)
+  }
+}
+
+
+/**
+ * ⚡ ACTUALIZACIÓN AUTOMÁTICA EN TIEMPO REAL
+ * Maneja las actualizaciones de órdenes via WebSocket para empresas
+ */
+function handleOrderUpdate(event) {
+  const { orderId, orderNumber, newStatus, eventType, companyId } = event.detail
+  
+  // Verificar que la orden pertenece a esta empresa
+  if (companyId && auth.user?.company_id && companyId !== auth.user.company_id) {
+    console.log('🔒 [Orders] Orden de otra empresa, ignorando:', orderNumber)
+    return
+  }
+  
+  console.log('🔄 [Orders] Actualizando orden en tiempo real:', {
+    orderNumber,
+    newStatus,
+    eventType,
+    orderId,
+    companyMatches: !companyId || companyId === auth.user?.company_id
+  })
+  
+  // Buscar la orden en la lista actual
+  const orderIndex = orders.value.findIndex(order => 
+    order._id === orderId || order.order_number === orderNumber
+  )
+  
+  if (orderIndex !== -1) {
+    // ✅ Orden encontrada - actualizar localmente
+    const existingOrder = orders.value[orderIndex]
+    const previousStatus = existingOrder.status
+    
+    // Actualizar campos básicos
+    existingOrder.status = newStatus
+    existingOrder.updated_at = new Date().toISOString()
+    
+    // Actualizar campos específicos según el evento
+    switch (eventType) {
+      case 'driver_assigned':
+        console.log('👨‍💼 [Orders] Conductor asignado:', orderNumber)
+        // Marcar para actualizar datos completos más tarde
+        pendingOrderUpdates.value.set(orderId, { 
+          type: 'driver_assigned', 
+          timestamp: Date.now() 
+        })
+        break
+        
+      case 'picked_up':
+        console.log('🚚 [Orders] Pedido recogido:', orderNumber)
+        existingOrder.pickup_time = new Date().toISOString()
+        
+        // Si hay modal de tracking abierto para esta orden, actualizarlo
+        if (selectedTrackingOrder.value?._id === orderId) {
+          refreshTrackingModal()
+        }
+        break
+        
+      case 'delivered':
+        console.log('✅ [Orders] Pedido entregado:', orderNumber)
+        existingOrder.delivery_date = new Date().toISOString()
+        existingOrder.status = 'delivered'
+        
+        // Marcar para obtener prueba de entrega
+        pendingOrderUpdates.value.set(orderId, { 
+          type: 'delivered', 
+          timestamp: Date.now() 
+        })
+        break
+        
+      case 'proof_uploaded':
+        console.log('📸 [Orders] Prueba de entrega subida:', orderNumber)
+        existingOrder.has_proof_of_delivery = true
+        
+        // Si hay modal de prueba abierto para esta orden, actualizarlo
+        if (selectedProofOrder.value?._id === orderId) {
+          refreshProofModal()
+        }
+        break
+    }
+    
+    // Registrar la actualización
+    lastOrderUpdate.value = {
+      orderId,
+      orderNumber,
+      previousStatus,
+      newStatus,
+      eventType,
+      timestamp: new Date()
+    }
+    
+    // Agregar a cola de notificaciones si cambió el estado
+    if (previousStatus !== newStatus) {
+      orderUpdateQueue.value.push({
+        id: Date.now(),
+        orderId,
+        orderNumber,
+        previousStatus,
+        newStatus,
+        eventType,
+        timestamp: new Date()
+      })
+      
+      // Mostrar notificación visual temporal
+      showOrderUpdateIndicator(orderId, eventType)
+    }
+    
+    console.log(`✅ [Orders] Orden ${orderNumber} actualizada localmente:`, {
+      from: previousStatus,
+      to: newStatus,
+      eventType
+    })
+    
+  } else {
+    // ❓ Orden no encontrada en la lista actual
+    console.log(`🔄 [Orders] Orden ${orderNumber} no encontrada en lista actual`)
+    
+    // Si es una nueva orden o debería estar en la vista, recargar
+    if (shouldOrderBeInCurrentView(newStatus)) {
+      console.log('📥 [Orders] Recargando lista para incluir orden actualizada...')
+      handleRefresh()
+    }
+  }
+}
+
+/**
+ * Determinar si una orden debería estar en la vista actual
+ */
+function shouldOrderBeInCurrentView(status) {
+  // Si hay filtro de estado y no coincide, no debería estar
+  if (filters.value.status && filters.value.status !== status) {
+    return false
+  }
+  
+  // Por defecto, las órdenes de esta empresa deberían estar
+  return true
+}
+
+/**
+ * Mostrar indicador visual de actualización
+ */
+function showOrderUpdateIndicator(orderId, eventType) {
+  // Buscar el elemento en la tabla
+  const orderRow = document.querySelector(`[data-order-id="${orderId}"]`)
+  if (orderRow) {
+    // Agregar clase de actualización
+    orderRow.classList.add('order-updated', `update-${eventType}`)
+    
+    // Remover después de 4 segundos
+    setTimeout(() => {
+      orderRow.classList.remove('order-updated', `update-${eventType}`)
+    }, 4000)
+  }
+}
+
+/**
+ * Refrescar modal de tracking si está abierto
+ */
+async function refreshTrackingModal() {
+  if (!selectedTrackingOrder.value || !showTrackingModal.value) return
+  
+  try {
+    console.log('🔄 [Orders] Refrescando modal de tracking...')
+    const { data } = await apiService.orders.getById(selectedTrackingOrder.value._id)
+    selectedTrackingOrder.value = data
+    
+    // Si el componente de tracking tiene método de refresh, llamarlo
+    if (orderTrackingRef.value?.refreshTracking) {
+      orderTrackingRef.value.refreshTracking()
     }
   } catch (error) {
-    bulkUploadFeedback.value = 'Error al procesar el archivo'
-    bulkUploadStatus.value = 'error'
-    toast.error('Error en la carga masiva')
-  } finally {
-    isBulkUploading.value = false
+    console.error('❌ [Orders] Error refrescando tracking modal:', error)
   }
+}
+
+/**
+ * Refrescar modal de prueba de entrega si está abierto
+ */
+async function refreshProofModal() {
+  if (!selectedProofOrder.value || !showProofModal.value) return
+  
+  try {
+    console.log('🔄 [Orders] Refrescando modal de prueba de entrega...')
+    const { data } = await apiService.orders.getById(selectedProofOrder.value._id)
+    selectedProofOrder.value = data
+  } catch (error) {
+    console.error('❌ [Orders] Error refrescando proof modal:', error)
+  }
+}
+
+/**
+ * Procesar actualizaciones pendientes
+ */
+async function processPendingUpdates() {
+  if (pendingOrderUpdates.value.size === 0) return
+  
+  console.log(`🔄 [Orders] Procesando ${pendingOrderUpdates.value.size} actualizaciones pendientes...`)
+  
+  const updates = Array.from(pendingOrderUpdates.value.entries())
+  pendingOrderUpdates.value.clear()
+  
+  for (const [orderId, updateData] of updates) {
+    try {
+      console.log(`📡 [Orders] Obteniendo datos actualizados para orden ${orderId}...`)
+      const { data: updatedOrder } = await apiService.orders.getById(orderId)
+      
+      // Actualizar la orden en la lista local
+      updateOrderLocally(updatedOrder)
+      
+      console.log(`✅ [Orders] Orden ${updatedOrder.order_number} actualizada con datos completos`)
+      
+    } catch (error) {
+      console.error(`❌ [Orders] Error actualizando orden ${orderId}:`, error)
+    }
+  }
+}
+
+// ✅ NUEVO: Manejar generación de etiquetas
+async function handleGenerateLabels() {
+  if (selectedOrders.value.length === 0) {
+    toast.warning('Selecciona al menos un pedido para generar etiquetas.');
+    return;
+  }
+
+  isGeneratingLabels.value = true;
+  
+  try {
+    // 1. Llama a la API para generar los códigos de las etiquetas
+    const response = await apiService.labels.generateBulk(selectedOrders.value);
+    const generatedLabels = response.data.labels || [];
+
+    if (generatedLabels.length === 0) {
+      toast.warning('No se generaron nuevas etiquetas. Los pedidos podrían ya tener una.');
+      clearSelection();
+      return;
+    }
+
+    toast.success(`${generatedLabels.length} etiquetas generadas. Preparando PDF...`);
+    
+    // Actualiza los datos en la UI
+    const generatedOrderIds = [];
+    generatedLabels.forEach(label => {
+      generatedOrderIds.push(label.order_id);
+      const order = orders.value.find(o => o._id === label.order_id);
+      if (order) {
+        order.envigo_label = {
+          unique_code: label.unique_code,
+          generated_at: new Date().toISOString()
+        };
+      }
+    });
+
+    // 2. Llama al nuevo endpoint de PDF masivo con los IDs de las etiquetas recién generadas
+    await printBulkLabelsPDF(generatedOrderIds);
+
+    clearSelection();
+
+  } catch (error) {
+    console.error('Error en el proceso de generar e imprimir etiquetas:', error);
+    toast.error('Ocurrió un error: ' + (error.response?.data?.error || error.message));
+  } finally {
+    isGeneratingLabels.value = false;
+  }
+}
+async function printBulkLabelsPDF(orderIds) {
+  if (!orderIds || orderIds.length === 0) return;
+
+  try {
+    const response = await apiService.labels.printBulkLabelsPDF(orderIds);
+    const pdfBlob = new Blob([response.data], { type: 'application/pdf' });
+    const pdfUrl = URL.createObjectURL(pdfBlob);
+    
+    window.open(pdfUrl, '_blank');
+    URL.revokeObjectURL(pdfUrl);
+
+    // Marca todas las etiquetas como impresas de una sola vez
+    await Promise.all(orderIds.map(id => markLabelAsPrinted(id)));
+
+  } catch (error) {
+    console.error('Error al imprimir PDF masivo:', error);
+    toast.error('No se pudo generar el PDF masivo para impresión.');
+  }
+}
+
+/**
+ * Helper para marcar una etiqueta como impresa en el backend y la UI.
+ * (Esta función ahora es correcta y no dará el error 'not defined')
+ */
+async function markLabelAsPrinted(orderId) {
+  try {
+    await apiService.labels.markPrinted(orderId);
+    const order = orders.value.find(o => o._id === orderId);
+    if (order && order.envigo_label) {
+      order.envigo_label.printed_count = (order.envigo_label.printed_count || 0) + 1;
+    }
+  } catch (error) {
+    // No mostramos error al usuario por esto, solo lo logueamos
+    console.error(`Error marcando como impresa la orden ${orderId}:`, error);
+  }
+}
+
+/**
+ * ✅ AÑADE ESTA FUNCIÓN HELPER
+ * Se encarga de pedir e imprimir un único PDF.
+ */
+async function printSingleLabelPDF(orderId, uniqueCode) {
+  try {
+    const response = await apiService.labels.printLabelPDF(orderId);
+    const pdfBlob = new Blob([response.data], { type: 'application/pdf' });
+    const pdfUrl = URL.createObjectURL(pdfBlob);
+    
+    window.open(pdfUrl, '_blank');
+    URL.revokeObjectURL(pdfUrl);
+
+    await markLabelAsPrinted(orderId);
+  } catch (error) {
+    console.error(`Error al imprimir etiqueta ${uniqueCode}:`, error);
+    toast.error(`No se pudo imprimir la etiqueta ${uniqueCode}.`);
+  }
+}
+function getChannelDisplayName(channel) {
+  const typeLabels = {
+    'shopify': '🛍️ Shopify',
+    'woocommerce': '🏪 WooCommerce', 
+    'mercadolibre': '🛒 MercadoLibre',
+    'general_store': '🏬 Tienda General',
+    'jumpseller': '📦 Jumpseller',
+  }
+  
+  const typeLabel = typeLabels[channel.channel_type] || '📦'
+  return `${typeLabel} - ${channel.channel_name}`
+}
+
+function getChannelIcon(channelType) {
+  const icons = {
+    'shopify': '🛍️',
+    'woocommerce': '🏪',
+    'mercadolibre': '🛒', 
+    'general_store': '🏬',
+    'jumpseller': '📦',
+  }
+  return icons[channelType] || '📦'
+}
+
+function getChannelTypeName(channelType) {
+  const names = {
+    'shopify': 'Shopify Store',
+    'woocommerce': 'WooCommerce',
+    'mercadolibre': 'MercadoLibre',
+    'general_store': 'Tienda General',
+    'jumpseller': 'Jumpseller',
+  }
+  return names[channelType] || channelType
+}
+
+function redirectToChannels() {
+  router.push('/app/channels')
+  closeCreateOrderModal()
+  toast.info('Redirigiendo a la configuración de canales...')
 }
 
 // ==================== LIFECYCLE ====================
 
 onMounted(async () => {
-  console.log('🚀 Orders montado')
-  await Promise.all([
-    fetchOrders(allFilters.value),
-    fetchChannels()
-  ])
-})
+  console.log('🚀 Orders.vue montado. Esperando ID de compañía para cargas secundarias...');
+  try {
+    // 1. Cargamos ÚNICAMENTE la lista de pedidos.
+    // El backend ya debería saber qué pedidos mostrar basado en el token del usuario.
+    await fetchOrders();
+    lastUpdate.value = Date.now();
+await fetchAvailableCommunes();
+    // 2. Configuramos los listeners de tiempo real.
+    // No dependen de que los canales o comunas estén cargados.
+    window.addEventListener('orderUpdated', handleOrderUpdate);
 
+  } catch (error) {
+    console.error('❌ Error en la carga inicial de pedidos:', error);
+    toast.error('Error al cargar la lista de pedidos.');
+  }
+  // Cargar conductores de Circuit
+  await loadCircuitDrivers()
+
+});
 onBeforeUnmount(() => {
-  stopAutoRefresh()
+  // Cleanup existente
+  if (autoRefreshEnabled.value) {
+    stopAutoRefresh()
+  }
+  
+  // ⚡ NUEVO: Cleanup real-time listeners
+  console.log('🧹 [Orders] Limpiando listeners de tiempo real')
+  window.removeEventListener('orderUpdated', handleOrderUpdate)
+  
+  // Limpiar estado
+  pendingOrderUpdates.value.clear()
+  orderUpdateQueue.value = []
 })
 </script>
 
 <style scoped>
-/* Material Icons */
-.material-icons {
-  font-family: 'Material Icons';
-  font-weight: normal;
-  font-style: normal;
-  font-size: 24px;
-  display: inline-block;
-  line-height: 1;
-  text-transform: none;
-  letter-spacing: normal;
-  word-wrap: normal;
-  white-space: nowrap;
-  direction: ltr;
+/* Estilos que Tailwind no puede manejar fácilmente o que son más limpios aquí */
+
+/* Selector de canal personalizado con flecha SVG */
+.channel-selector {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%2364748b' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+  background-repeat: no-repeat;
+  background-position: right 1rem center;
+  background-size: 1.5em 1.5em;
+  /* Aplicamos estilos base con Tailwind en el template, pero la imagen se queda aquí */
+  @apply bg-white border border-slate-300 rounded-lg py-3 pr-10 pl-4 text-base w-full cursor-pointer text-slate-800 transition-colors duration-200 ease-in-out hover:border-slate-400 focus:outline-none focus:border-indigo-600 focus:ring-2 focus:ring-indigo-600/20 disabled:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-70;
 }
 
-.animate-spin {
-  animation: spin 1s linear infinite;
+/* Pseudo-elemento para el asterisco requerido */
+.form-group label.required::after {
+  content: ' *';
+  color: #ef4444; /* text-red-500 */
 }
 
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+/* Estilos de clases que se agregan dinámicamente con JS */
+.order-updated {
+  animation: order-update-glow 4s ease-out;
+  @apply relative z-[1];
+}
+
+.order-updated.update-driver_assigned {
+  @apply border-l-4 border-blue-500 bg-gradient-to-r from-blue-100 to-transparent;
+}
+.order-updated.update-picked_up {
+  @apply border-l-4 border-purple-500 bg-gradient-to-r from-purple-100 to-transparent;
+}
+.order-updated.update-delivered {
+  @apply border-l-4 border-emerald-500 bg-gradient-to-r from-emerald-100 to-transparent;
+}
+.order-updated.update-proof_uploaded {
+  @apply border-l-4 border-amber-500 bg-gradient-to-r from-amber-100 to-transparent;
+}
+
+.syncing-circuit {
+  @apply opacity-70 relative;
+}
+.syncing-circuit::after {
+  content: '';
+  @apply absolute top-0 left-0 right-0 bottom-0 bg-gradient-to-r from-transparent via-blue-500/10 to-transparent animate-loading-shine;
+}
+.refreshing-tracking .tracking-btn {
+  @apply animate-pulse;
+}
+
+/* Estilos para el formulario anidado */
+.form-section {
+  @apply mb-6 border border-slate-200 rounded-lg p-5;
+}
+.form-section h4 {
+  @apply m-0 mb-4 text-gray-800 text-base font-semibold;
+}
+.form-grid {
+  @apply grid grid-cols-2 gap-4 md:grid-cols-1;
+}
+.form-group {
+  @apply flex flex-col;
+}
+.form-group.full-width {
+  @apply col-span-full;
+}
+.form-group label {
+  @apply mb-1.5 font-medium text-gray-700 text-sm;
+}
+.form-group input,
+.form-group textarea {
+  @apply p-2.5 px-3 border border-gray-300 rounded-md text-sm w-full box-border focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20;
+}
+.help-text {
+  @apply text-xs text-gray-500 mt-1 italic;
+}
+
+/* Botones con utilidades de Tailwind en el template */
+.btn {
+  @apply py-2.5 px-5 border-none rounded-lg font-medium cursor-pointer transition-all duration-200 ease-in-out text-sm;
+}
+.btn-primary {
+  @apply bg-gradient-to-r from-blue-600 to-blue-800 text-white hover:-translate-y-px hover:shadow-lg hover:shadow-blue-600/30;
+}
+.btn-secondary {
+  @apply bg-gray-100 text-gray-700 border border-gray-300 hover:bg-gray-200;
 }
 </style>
