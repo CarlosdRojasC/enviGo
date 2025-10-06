@@ -115,7 +115,7 @@
             <label>Mostrar:</label>
             <select
               :value="pagination.limit"
-              @change="$emit('page-size-change', Number($event.target.value))"
+              @change="$emit('change-page-size', Number($event.target.value))"
               class="px-2 py-1 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded text-sm"
             >
               <option value="10">10</option>
@@ -130,7 +130,7 @@
         <!-- Controles de paginación -->
         <div class="flex items-center gap-1">
           <button
-            @click="$emit('page-change', 1)"
+            @click="$emit('go-to-page', 1)"
             :disabled="pagination.page <= 1"
             class="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
           >
@@ -138,7 +138,7 @@
           </button>
 
           <button
-            @click="$emit('page-change', pagination.page - 1)"
+            @click="$emit('go-to-page', pagination.page - 1)"
             :disabled="pagination.page <= 1"
             class="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
           >
@@ -147,7 +147,7 @@
 
           <template v-for="page in visiblePages" :key="page">
             <button
-              @click="$emit('page-change', page)"
+              @click="$emit('go-to-page', page)"
               :class="[
                 'px-3 py-1 rounded-md text-sm',
                 page === pagination.page
@@ -160,7 +160,7 @@
           </template>
 
           <button
-            @click="$emit('page-change', pagination.page + 1)"
+            @click="$emit('go-to-page', pagination.page + 1)"
             :disabled="pagination.page >= pagination.totalPages"
             class="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
           >
@@ -168,7 +168,7 @@
           </button>
 
           <button
-            @click="$emit('page-change', pagination.totalPages)"
+            @click="$emit('go-to-page', pagination.totalPages)"
             :disabled="pagination.page >= pagination.totalPages"
             class="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
           >
@@ -208,7 +208,7 @@ const props = defineProps({
 
 const emit = defineEmits([
   'select-order', 'select-all', 'view-details', 'mark-ready',
-  'view-tracking', 'page-change', 'page-size-change',
+  'view-tracking', 'go-to-page', 'change-page-size',
   'bulk-assign', 'bulk-export', 'refresh', 'create-order'
 ])
 
@@ -235,7 +235,7 @@ function isOrderSelected(order) {
 function goToPage(value) {
   const page = parseInt(value)
   if (page >= 1 && page <= props.pagination.totalPages) {
-    emit('page-change', page)
+    emit('go-to-page', page)
   }
 }
 </script>
