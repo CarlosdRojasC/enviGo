@@ -1,152 +1,153 @@
 <!-- frontend/src/components/Orders/OrderTableRow.vue -->
 <template>
   <tr 
-    class="order-row" 
+    class="border-b border-slate-200 transition-all duration-200 hover:bg-slate-100"
     :class="rowClasses"
     @click="handleRowClick"
   >
-    <!-- Checkbox Column - Estilo AdminOrdersTable -->
-    <td class="col-checkbox" @click.stop>
+    <!-- Checkbox Column -->
+    <td class="p-3 align-top text-center" @click.stop>
       <input 
         type="checkbox"
         :checked="selected"
         :disabled="!selectable"
         @change="$emit('toggle-selection')"
-        class="order-checkbox"
+        class="w-4 h-4 cursor-pointer"
       />
     </td>
 
-    <!-- Order Number Column - Estilo AdminOrdersTable -->
-    <td class="col-order">
-      <div class="order-info">
-        <div class="order-number">#{{ order.order_number }}</div>
-        <div class="order-id">ID: {{ order._id?.slice(-6) || 'N/A' }}</div>
-        <div v-if="order.external_order_id" class="external-id">
+    <!-- Order Number Column -->
+    <td class="p-3 align-top">
+      <div>
+        <div class="font-semibold text-slate-800 mb-0.5">#{{ order.order_number }}</div>
+        <div class="text-[11px] text-slate-500">ID: {{ order._id?.slice(-6) || 'N/A' }}</div>
+        <div v-if="order.external_order_id" class="text-[11px] text-slate-500">
           Ext: {{ order.external_order_id.slice(-8) }}
         </div>
       </div>
     </td>
 
-    <!-- Customer Column - Estilo AdminOrdersTable -->
-    <td class="col-customer">
-      <div class="customer-info">
-        <div class="customer-name">{{ order.customer_name }}</div>
-        <div class="customer-contact">
-          <div v-if="order.customer_phone" class="customer-phone">
-            <span class="contact-icon">📱</span> {{ formatPhone(order.customer_phone) }}
+    <!-- Customer Column -->
+    <td class="p-3 align-top max-lg:hidden">
+      <div>
+        <div class="font-medium text-slate-800 mb-1">{{ order.customer_name }}</div>
+        <div class="flex flex-col gap-0.5">
+          <div v-if="order.customer_phone" class="text-[11px] text-slate-500 flex items-center gap-1">
+            <span class="text-[10px]">📱</span> {{ formatPhone(order.customer_phone) }}
           </div>
-          <div v-if="order.customer_email" class="customer-email">
-            <span class="contact-icon">📧</span> {{ truncateText(order.customer_email, 25) }}
+          <div v-if="order.customer_email" class="text-[11px] text-slate-500 flex items-center gap-1">
+            <span class="text-[10px]">📧</span> {{ truncateText(order.customer_email, 25) }}
           </div>
         </div>
       </div>
     </td>
 
-    <!-- Address Column - Estilo AdminOrdersTable -->
-    <td class="col-address">
-      <div class="address-info">
-        <div class="address-main">{{ order.shipping_address }}</div>
-        <div class="address-details">
-          <span v-if="order.shipping_commune" class="commune">{{ order.shipping_commune }}</span>
-          <span v-if="order.shipping_city && order.shipping_city !== order.shipping_commune" class="city">
+    <!-- Address Column -->
+    <td class="p-3 align-top max-lg:hidden">
+      <div>
+        <div class="font-medium text-slate-800 mb-0.5">{{ order.shipping_address }}</div>
+        <div class="text-[11px] text-slate-500">
+          <span v-if="order.shipping_commune" class="font-medium">{{ order.shipping_commune }}</span>
+          <span v-if="order.shipping_city && order.shipping_city !== order.shipping_commune">
             , {{ order.shipping_city }}
           </span>
         </div>
       </div>
     </td>
 
-    <!-- Status Column - Manteniendo driver info -->
-    <td class="col-status">
-      <div class="status-container">
-        <span class="status-badge" :class="getStatusClass(order.status)">
+    <!-- Status Column -->
+    <td class="p-3 align-top">
+      <div class="flex flex-col gap-1">
+        <span 
+          class="px-2 py-1 rounded-md text-[11px] font-semibold text-center w-fit"
+          :class="getStatusClasses(order.status)"
+        >
           {{ getStatusName(order.status) }}
         </span>
-        <!-- Driver Info - Funcionalidad específica mantenida -->
-        <div v-if="order.driver_info?.name" class="driver-info">
-          <span class="driver-icon">👨‍💼</span>
-          <span class="driver-name">{{ order.driver_info.name }}</span>
+        <!-- Driver Info -->
+        <div v-if="order.driver_info?.name" class="flex items-center gap-1 text-[10px] text-slate-500">
+          <span class="text-[10px]">👨‍💼</span>
+          <span class="font-medium">{{ order.driver_info.name }}</span>
         </div>
       </div>
     </td>
 
-    <!-- Tracking Column - Funcionalidad específica mantenida -->
-    <td class="col-tracking">
-  <div class="tracking-container">
-    <!-- Delivered - Show Proof -->
-    <div v-if="order.status === 'delivered' || order.status === 'invoiced'" class="tracking-section delivered">
-      <button 
-        @click.stop="$emit('view-proof')" 
-        class="tracking-btn proof-btn"
-        title="Ver prueba de entrega"
-      >
-        📸 Prueba
-      </button>
-      <div class="tracking-status">
-        <span class="status-icon">✅</span>
-        <span class="status-text">Entregado</span>
+    <!-- Tracking Column -->
+    <td class="p-3 align-top max-sm:hidden">
+      <div class="flex flex-col gap-1 items-center">
+        <!-- Delivered - Show Proof -->
+        <div v-if="order.status === 'delivered' || order.status === 'invoiced'" class="flex flex-col items-center gap-0.5">
+          <button 
+            @click.stop="$emit('view-proof')" 
+            class="px-2 py-1 rounded bg-emerald-100 text-emerald-900 text-[10px] font-semibold cursor-pointer transition-all duration-200 flex items-center gap-1 hover:-translate-y-0.5 hover:shadow-sm"
+            title="Ver prueba de entrega"
+          >
+            📸 Prueba
+          </button>
+          <div class="flex items-center gap-0.5 text-[9px] text-slate-500">
+            <span>✅</span>
+            <span>Entregado</span>
+          </div>
+        </div>
+        
+        <!-- Has General Tracking -->
+        <div v-else-if="hasGeneralTracking || order.shipday_order_id" class="flex flex-col items-center gap-0.5">
+          <button 
+            @click.stop="$emit('view-tracking')" 
+            class="px-2 py-1 rounded bg-blue-100 text-blue-900 text-[10px] font-semibold cursor-pointer transition-all duration-200 flex items-center gap-1 hover:-translate-y-0.5 hover:shadow-sm"
+            title="Ver seguimiento del pedido"
+          >
+            📍 Seguimiento
+          </button>
+          <div class="flex items-center gap-0.5 text-[9px] text-slate-500">
+            <span>📦</span>
+            <span>Disponible</span>
+          </div>
+        </div>
+        
+        <!-- No Tracking -->
+        <div v-else class="flex flex-col items-center gap-0.5 text-gray-400 text-[10px]">
+          <span>❓</span>
+          <span>Sin info</span>
+        </div>
       </div>
-    </div>
-    
-    <!-- Tiene tracking disponible - Botón genérico "Seguimiento" -->
-    <div v-else-if="hasGeneralTracking || order.shipday_order_id" class="tracking-section general">
-      <button 
-        @click.stop="$emit('view-tracking')" 
-        class="tracking-btn general-btn"
-        title="Ver seguimiento del pedido"
-      >
-        📍 Seguimiento
-      </button>
-      <div class="tracking-status">
-        <span class="status-icon">📦</span>
-        <span class="status-text">Disponible</span>
-      </div>
-    </div>
-    
-    <!-- No Tracking -->
-    <div v-else class="tracking-section none">
-      <div class="no-tracking">
-        <span class="no-tracking-icon">❓</span>
-        <span class="no-tracking-text">Sin info</span>
-      </div>
-    </div>
-  </div>
-</td>
+    </td>
 
-    <!-- Amount Column - Estilo AdminOrdersTable -->
-    <td class="col-amount">
-      <div class="amount-info">
-        <div class="total-amount">${{ formatCurrency(order.total_amount || order.shipping_cost) }}</div>
-        <div v-if="order.shipping_cost && order.total_amount" class="shipping-cost">
+    <!-- Amount Column -->
+    <td class="p-3 align-top text-right">
+      <div>
+        <div class="font-semibold text-slate-800 mb-0.5">${{ formatCurrency(order.total_amount || order.shipping_cost) }}</div>
+        <div v-if="order.shipping_cost && order.total_amount" class="text-[11px] text-slate-500">
           Envío: ${{ formatCurrency(order.shipping_cost) }}
         </div>
       </div>
     </td>
 
-    <!-- Date Column - Estilo AdminOrdersTable -->
-    <td class="col-date">
-      <div class="date-info">
-        <div class="date-creation">
-          <span class="date-label">Creado:</span>
-          <span class="date-value">{{ formatDate(order.order_date) }}</span>
+    <!-- Date Column -->
+    <td class="p-3 align-top">
+      <div class="flex flex-col gap-1">
+        <div class="flex flex-col gap-0.5">
+          <span class="text-[10px] font-medium text-gray-600">Creado:</span>
+          <span class="text-[11px] text-gray-700">{{ formatDate(order.order_date) }}</span>
         </div>
-        <div v-if="order.delivery_date" class="date-delivery">
-          <span class="date-label">Entrega:</span>
-          <span class="date-value">{{ formatDate(order.delivery_date) }}</span>
+        <div v-if="order.delivery_date" class="flex flex-col gap-0.5">
+          <span class="text-[10px] font-medium text-gray-600">Entrega:</span>
+          <span class="text-[11px] text-gray-700">{{ formatDate(order.delivery_date) }}</span>
         </div>
-        <div v-if="isUrgent" class="urgent-indicator">
-          <span class="urgent-icon">⚡</span>
-          <span class="urgent-text">Urgente</span>
+        <div v-if="isUrgent" class="flex items-center gap-0.5 text-red-500 text-[9px] font-semibold">
+          <span>⚡</span>
+          <span>Urgente</span>
         </div>
       </div>
     </td>
 
-    <!-- Actions Column - Estilo AdminOrdersTable -->
-    <td class="col-actions" @click.stop>
-      <div class="action-buttons">
+    <!-- Actions Column -->
+    <td class="p-3 align-top" @click.stop>
+      <div class="flex gap-2 items-center max-md:flex-col max-md:gap-1">
         <!-- Primary Actions -->
         <button 
           @click="$emit('view-details')" 
-          class="btn-action view"
+          class="text-xs px-3 py-1.5 rounded-md border border-blue-200 bg-white text-blue-600 cursor-pointer transition-all duration-200 hover:bg-blue-50"
           title="Ver detalles"
         >
           👁️
@@ -155,22 +156,22 @@
         <button 
           v-if="order.status === 'pending'" 
           @click="$emit('mark-ready')" 
-          class="btn-action ready"
+          class="text-xs px-3 py-1.5 rounded-md border border-emerald-200 bg-white text-emerald-600 cursor-pointer transition-all duration-200 hover:bg-emerald-50"
           title="Marcar como listo"
         >
           ✔️
         </button>
 
         <!-- Dropdown Menu -->
-        <div class="action-dropdown">
-          <button class="btn-action more" title="Más opciones">
+        <div class="relative group">
+          <button class="text-xs px-3 py-1.5 rounded-md border border-gray-300 bg-white text-slate-500 cursor-pointer transition-all duration-200 hover:bg-slate-50">
             ⋮
           </button>
-          <div class="dropdown-menu">
+          <div class="absolute top-full right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-20 min-w-[160px] hidden group-hover:block">
             <button 
               v-if="hasLiveTracking" 
               @click="$emit('track-live')"
-              class="dropdown-item"
+              class="flex items-center gap-2 w-full px-3 py-2 border-none bg-transparent text-slate-500 text-xs cursor-pointer transition-colors hover:bg-slate-100"
             >
               🚚 Tracking en Vivo
             </button>
@@ -178,7 +179,7 @@
             <button 
               v-if="hasGeneralTracking && order.status !== 'delivered'" 
               @click="$emit('view-tracking')"
-              class="dropdown-item"
+              class="flex items-center gap-2 w-full px-3 py-2 border-none bg-transparent text-slate-500 text-xs cursor-pointer transition-colors hover:bg-slate-100"
             >
               📍 Ver Seguimiento
             </button>
@@ -186,7 +187,7 @@
             <button 
               v-if="hasProofOfDelivery" 
               @click="$emit('view-proof')"
-              class="dropdown-item"
+              class="flex items-center gap-2 w-full px-3 py-2 border-none bg-transparent text-slate-500 text-xs cursor-pointer transition-colors hover:bg-slate-100"
             >
               📸 Prueba de Entrega
             </button>
@@ -194,16 +195,16 @@
             <button 
               v-if="canContactSupport" 
               @click="$emit('contact-support')"
-              class="dropdown-item"
+              class="flex items-center gap-2 w-full px-3 py-2 border-none bg-transparent text-slate-500 text-xs cursor-pointer transition-colors hover:bg-slate-100"
             >
               💬 Contactar Soporte
             </button>
             
-            <div class="dropdown-divider"></div>
+            <div class="h-px bg-slate-200 my-1"></div>
             
             <button 
               @click="copyOrderNumber"
-              class="dropdown-item"
+              class="flex items-center gap-2 w-full px-3 py-2 border-none bg-transparent text-slate-500 text-xs cursor-pointer transition-colors hover:bg-slate-100"
             >
               📋 Copiar #Pedido
             </button>
@@ -246,14 +247,14 @@ defineEmits([
 const rowClasses = computed(() => {
   const classes = []
   
-  if (props.selected) classes.push('selected')
-  if (!props.selectable) classes.push('non-selectable')
-  if (props.order.status === 'delivered') classes.push('delivered-row')
-  if (props.order.status === 'shipped') classes.push('shipped-row')
-  if (props.order.shipday_tracking_url) classes.push('live-tracking-row')
-  if (props.order.status === 'warehouse_received') classes.push('warehouse-received-row')
-  if (props.order.status === 'invoiced') classes.push('invoiced-row')
-  if (isUrgent.value) classes.push('urgent-row')
+  if (props.selected) classes.push('!bg-blue-50 border-blue-600')
+  if (!props.selectable) classes.push('opacity-60')
+  if (props.order.status === 'delivered') classes.push('!bg-green-50')
+  if (props.order.status === 'shipped') classes.push('!bg-blue-50')
+  if (props.order.shipday_tracking_url) classes.push('border-l-4 border-l-amber-500')
+  if (props.order.status === 'warehouse_received') classes.push('!bg-gray-50')
+  if (props.order.status === 'invoiced') classes.push('!bg-yellow-50')
+  if (isUrgent.value) classes.push('border-l-4 border-l-red-500 !bg-red-50')
   
   return classes.join(' ')
 })
@@ -333,44 +334,6 @@ function formatDate(dateStr) {
   })
 }
 
-function getChannelIcon(channelType) {
-  const icons = {
-    shopify: '🛍️',
-    woocommerce: '🏪',
-    mercadolibre: '🛒',
-    manual: '📝',
-    api: '🔗'
-  }
-  return icons[channelType] || '🏬'
-}
-
-function getChannelClass(channelType) {
-  return `channel-${channelType}`
-}
-
-function getPriorityIcon(priority) {
-  const icons = {
-    high: '🔴',
-    medium: '🟡',
-    low: '🟢'
-  }
-  return icons[priority] || ''
-}
-
-function getStatusIcon(status) {
-  const icons = {
-    pending: '⏳',
-    ready_for_pickup: '📦',
-    shipped: '🚚',
-    delivered: '✅',
-    cancelled: '❌',
-    warehouse_received: '🏭',
-    out_for_delivery: '📦',
-    invoiced: '💰',
-  }
-  return icons[status] || '📦'
-}
-
 function getStatusName(status) {
   const names = {
     pending: 'Pendiente',
@@ -386,8 +349,18 @@ function getStatusName(status) {
   return names[status] || status
 }
 
-function getStatusClass(status) {
-  return `status-${status}`
+function getStatusClasses(status) {
+  const classes = {
+    pending: 'bg-amber-100 text-amber-800',
+    processing: 'bg-blue-100 text-blue-900',
+    ready_for_pickup: 'bg-purple-100 text-purple-800',
+    shipped: 'bg-emerald-100 text-emerald-700',
+    delivered: 'bg-emerald-200 text-emerald-900',
+    cancelled: 'bg-red-100 text-red-800',
+    warehouse_received: 'bg-gray-100 text-gray-700',
+    invoiced: 'bg-yellow-100 text-yellow-900'
+  }
+  return classes[status] || 'bg-gray-100 text-gray-700'
 }
 
 async function copyOrderNumber() {
@@ -414,362 +387,7 @@ function shareOrder() {
 </script>
 
 <style scoped>
-/* ==================== ROW STYLES - Como AdminOrdersTable ==================== */
-.order-row {
-  border-bottom: 1px solid #e2e8f0;
-  transition: all 0.2s ease;
-}
-
-.order-row:hover {
-  background: #f1f5f9;
-}
-
-.order-row.selected {
-  background: #eff6ff;
-  border-color: #3b82f6;
-}
-
-.order-row.delivered-row {
-  background: #f0fdf4;
-}
-
-.order-row.shipped-row {
-  background: #eff6ff;
-}
-
-.order-row.live-tracking-row {
-  border-left: 3px solid #f59e0b;
-}
-
-.order-row.urgent-row {
-  border-left: 3px solid #ef4444;
-  background: #fef2f2;
-}
-.order-row.warehouse-received-row {
-  background: #f3f4f6;
-}
-
-.order-row td {
-  padding: 12px;
-  vertical-align: top;
-}
-
-/* ==================== CHECKBOX - Como AdminOrdersTable ==================== */
-.order-checkbox {
-  width: 16px;
-  height: 16px;
-  cursor: pointer;
-}
-
-/* ==================== ORDER INFO - Como AdminOrdersTable ==================== */
-.order-info .order-number {
-  font-weight: 600;
-  color: #1e293b;
-  margin-bottom: 2px;
-}
-
-.order-info .order-id,
-.order-info .external-id {
-  font-size: 11px;
-  color: #64748b;
-}
-
-/* ==================== CUSTOMER INFO - Como AdminOrdersTable ==================== */
-.customer-info .customer-name {
-  font-weight: 500;
-  color: #1e293b;
-  margin-bottom: 4px;
-}
-
-.customer-contact {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.customer-phone,
-.customer-email {
-  font-size: 11px;
-  color: #64748b;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.contact-icon {
-  font-size: 10px;
-}
-
-/* ==================== ADDRESS INFO - Como AdminOrdersTable ==================== */
-.address-info .address-main {
-  font-weight: 500;
-  color: #1e293b;
-  margin-bottom: 2px;
-}
-
-.address-details {
-  font-size: 11px;
-  color: #64748b;
-}
-
-.commune {
-  font-weight: 500;
-}
-
-/* ==================== STATUS - Como AdminOrdersTable ==================== */
-.status-container {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.status-badge {
-  padding: 4px 8px;
-  border-radius: 6px;
-  font-size: 11px;
-  font-weight: 600;
-  text-align: center;
-  width: fit-content;
-}
-
-.status-pending { background: #fef3c7; color: #92400e; }
-.status-processing { background: #dbeafe; color: #1e40af; }
-.status-ready_for_pickup { background: #e9d5ff; color: #6b21a8; }
-.status-shipped { background: #dcfce7; color: #166534; }
-.status-delivered { background: #d1fae5; color: #065f46; }
-.status-cancelled { background: #fee2e2; color: #991b1b; }
-.status-warehouse_received { background: #f3f4f6; color: #6b7280; }
-.status-invoiced { background: #fef9c3; color: #b45309; }
-.driver-info {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 10px;
-  color: #64748b;
-}
-
-.driver-icon {
-  font-size: 10px;
-}
-
-.driver-name {
-  font-weight: 500;
-}
-
-/* ==================== TRACKING - Funcionalidad específica mejorada ==================== */
-.tracking-container {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  align-items: center;
-}
-
-.tracking-section {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-}
-
-.tracking-btn {
-  padding: 4px 8px;
-  border: none;
-  border-radius: 4px;
-  font-size: 10px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.proof-btn {
-  background: #d1fae5;
-  color: #065f46;
-}
-
-.live-btn {
-  background: #fed7aa;
-  color: #9a3412;
-  animation: pulse 2s infinite;
-}
-
-.general-btn {
-  background: #dbeafe;
-  color: #1e40af;
-}
-
-.tracking-btn:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-}
-
-.tracking-status {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  font-size: 9px;
-  color: #64748b;
-}
-
-.live-dot {
-  width: 6px;
-  height: 6px;
-  background: #ef4444;
-  border-radius: 50%;
-  animation: pulse 1s infinite;
-}
-
-.no-tracking {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-  color: #9ca3af;
-  font-size: 10px;
-}
-
-/* ==================== AMOUNT - Como AdminOrdersTable ==================== */
-.amount-info {
-  text-align: right;
-}
-
-.total-amount {
-  font-weight: 600;
-  color: #1e293b;
-  margin-bottom: 2px;
-}
-
-.shipping-cost {
-  font-size: 11px;
-  color: #64748b;
-}
-
-/* ==================== DATE - Como AdminOrdersTable ==================== */
-.date-info {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.date-creation,
-.date-delivery {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
-
-.date-label {
-  font-size: 10px;
-  font-weight: 500;
-  color: #6b7280;
-}
-
-.date-value {
-  font-size: 11px;
-  color: #374151;
-}
-
-.urgent-indicator {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  color: #ef4444;
-  font-size: 9px;
-  font-weight: 600;
-}
-
-/* ==================== ACTIONS - Como AdminOrdersTable ==================== */
-.action-buttons {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-}
-
-.btn-action {
-  font-size: 12px;
-  padding: 6px 12px;
-  border-radius: 6px;
-  border: 1px solid #d1d5db;
-  background: white;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.btn-action.view {
-  color: #3b82f6;
-  border-color: #bfdbfe;
-}
-
-.btn-action.view:hover {
-  background: #eff6ff;
-}
-
-.btn-action.ready {
-  color: #059669;
-  border-color: #6ee7b7;
-}
-
-.btn-action.ready:hover {
-  background: #d1fae5;
-}
-
-.btn-action.more {
-  color: #64748b;
-}
-
-.btn-action.more:hover {
-  background: #f1f5f9;
-}
-
-/* ==================== DROPDOWN - Como AdminOrdersTable ==================== */
-.action-dropdown {
-  position: relative;
-}
-
-.dropdown-menu {
-  position: absolute;
-  top: 100%;
-  right: 0;
-  background: white;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-  z-index: 20;
-  min-width: 160px;
-  display: none;
-}
-
-.action-dropdown:hover .dropdown-menu {
-  display: block;
-}
-
-.dropdown-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  padding: 8px 12px;
-  border: none;
-  background: none;
-  color: #64748b;
-  font-size: 12px;
-  cursor: pointer;
-  transition: background 0.2s;
-}
-
-.dropdown-item:hover {
-  background: #f1f5f9;
-}
-
-.dropdown-divider {
-  height: 1px;
-  background: #e2e8f0;
-  margin: 4px 0;
-}
-
-/* ==================== ANIMATIONS ==================== */
+/* Animación de pulse para tracking en vivo - mantenida porque es necesaria */
 @keyframes pulse {
   0%, 100% {
     opacity: 1;
@@ -779,40 +397,12 @@ function shareOrder() {
   }
 }
 
-/* ==================== RESPONSIVE ==================== */
-@media (max-width: 1024px) {
-  .order-row td {
-    padding: 12px 8px;
-  }
-  
-  .customer-contact {
-    display: none;
-  }
-  
-  .address-details {
-    display: none;
-  }
+.live-tracking-animation {
+  animation: pulse 2s infinite;
 }
 
-@media (max-width: 768px) {
-  .col-customer,
-  .col-address {
-    display: none;
-  }
-  
-  .action-buttons {
-    flex-direction: column;
-    gap: 4px;
-  }
-}
-
-@media (max-width: 480px) {
-  .col-tracking {
-    display: none;
-  }
-  
-  .order-row td {
-    padding: 8px 6px;
-  }
+/* Asegurar que el dropdown se muestre correctamente */
+.group:hover > div {
+  display: block;
 }
 </style>

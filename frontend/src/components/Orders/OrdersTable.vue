@@ -1,33 +1,40 @@
 <!-- frontend/src/components/Orders/OrdersTable.vue -->
 <template>
-  <div class="orders-table-container">
-    <!-- Table Header with Bulk Actions -->
-    <div v-if="selectedOrders.length > 0" class="bulk-actions-bar">
-      <div class="bulk-selection-info">
-        <span class="selection-count">{{ selectedOrders.length }} pedido{{ selectedOrders.length !== 1 ? 's' : '' }} seleccionado{{ selectedOrders.length !== 1 ? 's' : '' }}</span>
-        <button @click="$emit('clear-selection')" class="clear-selection-btn">
+  <div class="bg-white rounded-xl shadow-sm flex flex-col overflow-hidden">
+    <!-- Bulk Actions Bar -->
+    <div 
+      v-if="selectedOrders.length > 0" 
+      class="flex justify-between items-center px-6 py-4 bg-gradient-to-r from-blue-500 to-blue-700 text-white border-b border-white/10"
+    >
+      <div class="flex items-center gap-4">
+        <span class="font-semibold text-sm">
+          {{ selectedOrders.length }} pedido{{ selectedOrders.length !== 1 ? 's' : '' }} seleccionado{{ selectedOrders.length !== 1 ? 's' : '' }}
+        </span>
+        <button 
+          @click="$emit('clear-selection')" 
+          class="bg-white/20 hover:bg-white/30 text-white px-3 py-1.5 rounded-lg text-xs transition-all duration-200"
+        >
           ✕ Limpiar selección
         </button>
       </div>
       
-      <div class="bulk-actions">
-
+      <div class="flex gap-3">
         <button 
           @click="$emit('generate-manifest')" 
-          class="bulk-btn manifest-btn"
+          class="flex items-center gap-2 px-4 py-2.5 bg-blue-500/20 hover:bg-blue-500/30 border border-blue-500/30 text-white rounded-xl font-semibold text-sm backdrop-blur-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg"
         >
           📋 Marcar como listos
         </button>
         <button 
-    @click="$emit('generate-labels')" 
-    class="bulk-btn labels-btn"
-    :disabled="!canGenerateLabels"
-  >
-    🏷️ Generar Etiquetas ({{ selectedOrders.length }})
-  </button>
+          @click="$emit('generate-labels')" 
+          class="flex items-center gap-2 px-4 py-2.5 bg-purple-500/20 hover:bg-purple-500/30 border border-purple-500/30 text-white rounded-xl font-semibold text-sm backdrop-blur-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg disabled:opacity-40 disabled:cursor-not-allowed disabled:transform-none"
+          :disabled="!canGenerateLabels"
+        >
+          🏷️ Generar Etiquetas ({{ selectedOrders.length }})
+        </button>
         <button 
           @click="$emit('bulk-export')" 
-          class="bulk-btn export-btn"
+          class="flex items-center gap-2 px-4 py-2.5 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/30 text-white rounded-xl font-semibold text-sm backdrop-blur-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg"
         >
           📊 Exportar Selección
         </button>
@@ -35,25 +42,25 @@
     </div>
 
     <!-- Loading State -->
-    <div v-if="loading" class="loading-container">
-      <div class="loading-content">
-        <div class="loading-spinner"></div>
-        <p class="loading-text">Cargando pedidos...</p>
+    <div v-if="loading" class="py-20 px-5 text-center">
+      <div class="flex flex-col items-center gap-5">
+        <div class="w-12 h-12 border-4 border-gray-200 border-t-indigo-600 rounded-full animate-spin"></div>
+        <p class="text-gray-500 text-base m-0">Cargando pedidos...</p>
       </div>
     </div>
 
     <!-- Empty State -->
-    <div v-else-if="orders.length === 0" class="empty-container">
-      <div class="empty-content">
-        <div class="empty-icon">📦</div>
-        <h3 class="empty-title">No hay pedidos</h3>
-        <p class="empty-description">
+    <div v-else-if="orders.length === 0" class="py-20 px-5 text-center">
+      <div class="max-w-md mx-auto">
+        <div class="text-6xl mb-5 opacity-60">📦</div>
+        <h3 class="text-2xl font-semibold text-gray-700 mb-3">No hay pedidos</h3>
+        <p class="text-gray-500 text-base leading-relaxed mb-6">
           {{ emptyMessage || 'No se encontraron pedidos con los filtros actuales.' }}
         </p>
         <button 
           v-if="showCreateButton" 
           @click="$emit('create-order')" 
-          class="create-order-btn"
+          class="bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-6 py-3 rounded-xl font-semibold text-sm transition-all duration-300 shadow-lg shadow-indigo-600/30 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-indigo-600/40"
         >
           ➕ Crear Primer Pedido
         </button>
@@ -61,65 +68,80 @@
     </div>
 
     <!-- Table -->
-    <div v-else class="table-wrapper">
-      <table class="orders-table">
-        <thead class="table-header">
+    <div v-else class="overflow-x-auto min-h-[400px] bg-white">
+      <table class="w-full border-collapse text-sm bg-white">
+        <thead>
           <tr>
-            <th class="col-checkbox">
-              <div class="checkbox-wrapper">
+            <th class="bg-slate-50 px-3 py-4 text-left font-semibold text-slate-600 border-b-2 border-slate-200 text-xs whitespace-nowrap sticky top-0 z-10 w-[60px] text-center">
+              <div class="flex flex-col items-center gap-1">
                 <input 
                   type="checkbox" 
                   :checked="selectAllChecked"
                   :indeterminate="selectAllIndeterminate"
                   @change="$emit('toggle-select-all')"
-                  class="select-all-checkbox"
+                  class="w-4 h-4 cursor-pointer"
                 />
-                <span class="checkbox-label">Todo</span>
+                <span class="text-[10px] text-gray-500 font-medium">Todo</span>
               </div>
             </th>
-            <th class="col-order sortable" @click="$emit('sort', 'order_number')">
-              <div class="header-content">
-                <span class="header-text">Pedido</span>
-                <span class="sort-icon">⇅</span>
+            <th 
+              class="bg-slate-50 px-3 py-4 text-left font-semibold text-slate-600 border-b-2 border-slate-200 text-xs whitespace-nowrap sticky top-0 z-10 w-[140px] cursor-pointer select-none transition-all duration-200 hover:bg-slate-100"
+              @click="$emit('sort', 'order_number')"
+            >
+              <div class="flex items-center justify-between gap-2">
+                <span class="font-semibold">Pedido</span>
+                <span class="text-xs opacity-50 hover:opacity-100 transition-opacity">⇅</span>
               </div>
             </th>
-            <th class="col-customer sortable" @click="$emit('sort', 'customer_name')">
-              <div class="header-content">
-                <span class="header-text">Cliente</span>
-                <span class="sort-icon">⇅</span>
+            <th 
+              class="bg-slate-50 px-3 py-4 text-left font-semibold text-slate-600 border-b-2 border-slate-200 text-xs whitespace-nowrap sticky top-0 z-10 w-[180px] cursor-pointer select-none transition-all duration-200 hover:bg-slate-100"
+              @click="$emit('sort', 'customer_name')"
+            >
+              <div class="flex items-center justify-between gap-2">
+                <span class="font-semibold">Cliente</span>
+                <span class="text-xs opacity-50 hover:opacity-100 transition-opacity">⇅</span>
               </div>
             </th>
-            <th class="col-address">
-              <span class="header-text">Dirección</span>
+            <th class="bg-slate-50 px-3 py-4 text-left font-semibold text-slate-600 border-b-2 border-slate-200 text-xs whitespace-nowrap sticky top-0 z-10 w-[220px]">
+              <span class="font-semibold">Dirección</span>
             </th>
-            <th class="col-status sortable" @click="$emit('sort', 'status')">
-              <div class="header-content">
-                <span class="header-text">Estado</span>
-                <span class="sort-icon">⇅</span>
+            <th 
+              class="bg-slate-50 px-3 py-4 text-left font-semibold text-slate-600 border-b-2 border-slate-200 text-xs whitespace-nowrap sticky top-0 z-10 w-[140px] cursor-pointer select-none transition-all duration-200 hover:bg-slate-100"
+              @click="$emit('sort', 'status')"
+            >
+              <div class="flex items-center justify-between gap-2">
+                <span class="font-semibold">Estado</span>
+                <span class="text-xs opacity-50 hover:opacity-100 transition-opacity">⇅</span>
               </div>
             </th>
-            <th class="col-tracking">
-              <span class="header-text">Seguimiento</span>
+            <th class="bg-slate-50 px-3 py-4 text-left font-semibold text-slate-600 border-b-2 border-slate-200 text-xs whitespace-nowrap sticky top-0 z-10 w-[140px]">
+              <span class="font-semibold">Seguimiento</span>
             </th>
-            <th class="col-amount sortable" @click="$emit('sort', 'total_amount')">
-              <div class="header-content">
-                <span class="header-text">Monto</span>
-                <span class="sort-icon">⇅</span>
+            <th 
+              class="bg-slate-50 px-3 py-4 text-left font-semibold text-slate-600 border-b-2 border-slate-200 text-xs whitespace-nowrap sticky top-0 z-10 w-[120px] cursor-pointer select-none transition-all duration-200 hover:bg-slate-100"
+              @click="$emit('sort', 'total_amount')"
+            >
+              <div class="flex items-center justify-between gap-2">
+                <span class="font-semibold">Monto</span>
+                <span class="text-xs opacity-50 hover:opacity-100 transition-opacity">⇅</span>
               </div>
             </th>
-            <th class="col-date sortable" @click="$emit('sort', 'order_date')">
-              <div class="header-content">
-                <span class="header-text">Fecha</span>
-                <span class="sort-icon">⇅</span>
+            <th 
+              class="bg-slate-50 px-3 py-4 text-left font-semibold text-slate-600 border-b-2 border-slate-200 text-xs whitespace-nowrap sticky top-0 z-10 w-[120px] cursor-pointer select-none transition-all duration-200 hover:bg-slate-100"
+              @click="$emit('sort', 'order_date')"
+            >
+              <div class="flex items-center justify-between gap-2">
+                <span class="font-semibold">Fecha</span>
+                <span class="text-xs opacity-50 hover:opacity-100 transition-opacity">⇅</span>
               </div>
             </th>
-            <th class="col-actions">
-              <span class="header-text">Acciones</span>
+            <th class="bg-slate-50 px-3 py-4 text-left font-semibold text-slate-600 border-b-2 border-slate-200 text-xs whitespace-nowrap sticky top-0 z-10 w-[140px]">
+              <span class="font-semibold">Acciones</span>
             </th>
           </tr>
         </thead>
         
-        <tbody class="table-body">
+        <tbody>
           <OrderTableRow
             v-for="order in orders"
             :key="order._id"
@@ -140,31 +162,31 @@
     </div>
 
     <!-- Pagination -->
-    <div class="pagination-container">
-      <div class="pagination-info">
-        <span class="info-text">
+    <div class="flex justify-between items-center px-6 py-5 bg-gradient-to-r from-slate-50 to-slate-100 border-t border-slate-200">
+      <div class="flex items-center gap-4">
+        <span class="text-gray-600 text-sm font-medium">
           Mostrando {{ ((pagination.page - 1) * pagination.limit) + 1 }} - 
           {{ Math.min(pagination.page * pagination.limit, pagination.total) }} 
           de {{ pagination.total }} pedidos
         </span>
         
         <select 
-  :value="pagination.limit" 
-  @change="$emit('change-page-size', $event.target.value)"
-  class="page-size-select"
->
-  <option value="15">15 por página</option>
-  <option value="25">25 por página</option>
-  <option value="30">30 por página</option>
-  <option value="50">50 por página</option>
-</select>
+          :value="pagination.limit" 
+          @change="$emit('change-page-size', $event.target.value)"
+          class="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white text-gray-700 cursor-pointer transition-all duration-200 focus:outline-none focus:border-indigo-600 focus:ring-2 focus:ring-indigo-600/10"
+        >
+          <option value="15">15 por página</option>
+          <option value="25">25 por página</option>
+          <option value="30">30 por página</option>
+          <option value="50">50 por página</option>
+        </select>
       </div>
       
-      <div v-if="pagination.totalPages > 1" class="pagination-controls">
+      <div v-if="pagination.totalPages > 1" class="flex items-center gap-2">
         <button 
           @click="$emit('go-to-page', 1)" 
           :disabled="pagination.page <= 1"
-          class="page-btn first-btn"
+          class="flex items-center justify-center px-3 py-2 min-w-[40px] border border-gray-300 bg-white text-gray-700 rounded-lg text-sm font-medium cursor-pointer transition-all duration-200 hover:bg-gray-50 hover:border-gray-400 hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
           title="Primera página"
         >
           ⏮️
@@ -173,18 +195,20 @@
         <button 
           @click="$emit('go-to-page', pagination.page - 1)" 
           :disabled="pagination.page <= 1"
-          class="page-btn prev-btn"
+          class="flex items-center justify-center px-3 py-2 min-w-[40px] border border-gray-300 bg-white text-gray-700 rounded-lg text-sm font-medium cursor-pointer transition-all duration-200 hover:bg-gray-50 hover:border-gray-400 hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
         >
           ← Anterior
         </button>
         
-        <div class="page-numbers">
+        <div class="flex gap-1 mx-2">
           <button
             v-for="page in visiblePages"
             :key="page"
             @click="$emit('go-to-page', page)"
-            class="page-number-btn"
-            :class="{ 'active': page === pagination.page }"
+            class="flex items-center justify-center w-10 h-10 border border-gray-300 bg-white text-gray-700 rounded-lg text-sm font-medium cursor-pointer transition-all duration-300 hover:bg-gray-50 hover:border-gray-400 hover:-translate-y-0.5"
+            :class="{
+              'bg-gradient-to-br from-indigo-600 to-purple-600 border-indigo-600 text-white shadow-lg shadow-indigo-600/30': page === pagination.page
+            }"
           >
             {{ page }}
           </button>
@@ -193,7 +217,7 @@
         <button 
           @click="$emit('go-to-page', pagination.page + 1)" 
           :disabled="pagination.page >= pagination.totalPages"
-          class="page-btn next-btn"
+          class="flex items-center justify-center px-3 py-2 min-w-[40px] border border-gray-300 bg-white text-gray-700 rounded-lg text-sm font-medium cursor-pointer transition-all duration-200 hover:bg-gray-50 hover:border-gray-400 hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
         >
           Siguiente →
         </button>
@@ -201,7 +225,7 @@
         <button 
           @click="$emit('go-to-page', pagination.totalPages)" 
           :disabled="pagination.page >= pagination.totalPages"
-          class="page-btn last-btn"
+          class="flex items-center justify-center px-3 py-2 min-w-[40px] border border-gray-300 bg-white text-gray-700 rounded-lg text-sm font-medium cursor-pointer transition-all duration-200 hover:bg-gray-50 hover:border-gray-400 hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
           title="Última página"
         >
           ⏭️
@@ -327,502 +351,24 @@ function isOrderSelectable(order) {
 </script>
 
 <style scoped>
-.orders-table-container {
-  background: white;
-  border-radius: 12px; /* Cambié de 16px a 12px como AdminOrdersTable */
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1); /* Simplificado como AdminOrdersTable */
-  display: flex;
-  flex-direction: column;
-  border: none; /* Quitar border */
-  overflow: hidden; /* CRÍTICO: evita el scroll del contenedor */
-  /* QUITAR max-height: 85vh; */
-}
-/* Bulk Actions Bar */
-.bulk-actions-bar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 16px 24px;
-  background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
-  color: white;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  flex-shrink: 0;
-}
+/* Animación de spinner - mantenida porque Tailwind animate-spin ya la maneja */
 
-.bulk-selection-info {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-.selection-count {
-  font-weight: 600;
-  font-size: 14px;
-}
-
-.clear-selection-btn {
-  background: rgba(255, 255, 255, 0.2);
-  color: white;
-  border: none;
-  padding: 6px 12px;
-  border-radius: 8px;
-  font-size: 12px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.clear-selection-btn:hover {
-  background: rgba(255, 255, 255, 0.3);
-}
-
-.bulk-actions {
-  display: flex;
-  gap: 12px;
-}
-
-.bulk-btn {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 16px;
-  border: none;
-  border-radius: 10px;
-  font-weight: 600;
-  font-size: 13px;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  backdrop-filter: blur(10px);
-}
-
-.bulk-btn:hover:not(:disabled) {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
-}
-
-.bulk-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-  transform: none;
-}
-
-.ready-btn {
-  background: rgba(16, 185, 129, 0.2);
-  color: white;
-  border: 1px solid rgba(16, 185, 129, 0.3);
-}
-
-.manifest-btn {
-  background: rgba(59, 130, 246, 0.2);
-  color: white;
-  border: 1px solid rgba(59, 130, 246, 0.3);
-}
-
-.export-btn {
-  background: rgba(245, 158, 11, 0.2);
-  color: white;
-  border: 1px solid rgba(245, 158, 11, 0.3);
-}
-
-/* Loading State */
-.loading-container {
-  padding: 80px 20px;
-  text-align: center;
-}
-
-.loading-content {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 20px;
-}
-
-.loading-spinner {
-  width: 48px;
-  height: 48px;
-  border: 4px solid #f3f4f6;
-  border-top: 4px solid #6366f1;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-}
-
-.loading-text {
-  color: #6b7280;
-  font-size: 16px;
-  margin: 0;
-}
-
-@keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
-
-/* Empty State */
-.empty-container {
-  padding: 80px 20px;
-  text-align: center;
-}
-
-.empty-content {
-  max-width: 400px;
-  margin: 0 auto;
-}
-
-.empty-icon {
-  font-size: 64px;
-  margin-bottom: 20px;
-  opacity: 0.6;
-}
-
-.empty-title {
-  font-size: 24px;
-  font-weight: 600;
-  color: #374151;
-  margin: 0 0 12px 0;
-}
-
-.empty-description {
-  color: #6b7280;
-  font-size: 16px;
-  line-height: 1.5;
-  margin: 0 0 24px 0;
-}
-
-.create-order-btn {
-  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
-  color: white;
-  border: none;
-  padding: 12px 24px;
-  border-radius: 12px;
-  font-weight: 600;
-  font-size: 14px;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  box-shadow: 0 4px 16px rgba(99, 102, 241, 0.3);
-}
-
-.create-order-btn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(99, 102, 241, 0.4);
-}
-
-/* Table Wrapper */
-.table-wrapper {
-  overflow-x: auto; /* Solo para móvil */
-  min-height: 400px; /* Como AdminOrdersTable */
-  background: white;
-}
-
-.orders-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 14px;
-  background: white;
-}
-
-/* Table Header */
-.table-header th {
-  background: #f8fafc; /* Color plano como AdminOrdersTable */
-  padding: 16px 12px;
-  text-align: left;
-  font-weight: 600;
-  color: #475569; /* Color como AdminOrdersTable */
-  border-bottom: 2px solid #e2e8f0;
-  font-size: 13px;
-  white-space: nowrap;
-  position: sticky;
-  top: 0;
-  z-index: 10;
-}
-
-.table-header th.sortable {
-  cursor: pointer;
-  user-select: none;
-  transition: all 0.2s ease;
-}
-
-.table-header th.sortable:hover {
-  background: #f1f5f9; /* Sin gradiente como AdminOrdersTable */
-}
-
-.header-content {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.header-text {
-  font-weight: 600;
-}
-
-.sort-icon {
-  font-size: 12px;
-  opacity: 0.5;
-  transition: opacity 0.2s ease;
-}
-
-.sortable:hover .sort-icon {
-  opacity: 1;
-}
-
-/* Checkbox Column */
-.col-checkbox {
-  width: 60px;
-  text-align: center;
-}
-
-.checkbox-wrapper {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-}
-
-.select-all-checkbox {
-  width: 16px;
-  height: 16px;
-  cursor: pointer;
-}
-
-.checkbox-label {
-  font-size: 10px;
-  color: #6b7280;
-  font-weight: 500;
-}
-
-/* Column Widths */
-.col-order { width: 140px; }
-.col-customer { width: 180px; }
-.col-address { width: 220px; }
-.col-status { width: 140px; }
-.col-tracking { width: 140px; }
-.col-amount { width: 120px; }
-.col-date { width: 120px; }
-.col-actions { width: 140px; }
-
-/* Table Body */
-.table-body tr {
-  border-bottom: 1px solid #f1f5f9;
-  transition: all 0.2s ease;
-}
-
-.table-body tr:hover {
-  background: linear-gradient(135deg, #fafbfc 0%, #f8fafc 100%);
-  transform: scale(1.001);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
-}
-
-.table-body tr:last-child {
-  border-bottom: none;
-}
-
-/* Pagination */
-.pagination-container {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 20px 24px;
-  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
-  border-top: 1px solid #e2e8f0;
-}
-
-.pagination-info {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-.info-text {
-  color: #6b7280;
-  font-size: 14px;
-  font-weight: 500;
-}
-
-.page-size-select {
-  padding: 8px 12px;
-  border: 1px solid #d1d5db;
-  border-radius: 8px;
-  font-size: 13px;
-  background: white;
-  color: #374151;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.page-size-select:focus {
-  outline: none;
-  border-color: #6366f1;
-  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.1);
-}
-
-.pagination-controls {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.page-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 8px 12px;
-  border: 1px solid #d1d5db;
-  background: white;
-  color: #374151;
-  border-radius: 8px;
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  min-width: 40px;
-}
-
-.page-btn:hover:not(:disabled) {
-  background: #f9fafb;
-  border-color: #9ca3af;
-  transform: translateY(-1px);
-}
-
-.page-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-  transform: none;
-}
-
-.page-numbers {
-  display: flex;
-  gap: 4px;
-  margin: 0 8px;
-}
-
-.page-number-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 40px;
-  height: 40px;
-  border: 1px solid #d1d5db;
-  background: white;
-  color: #374151;
-  border-radius: 8px;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.3s ease;
-}
-
-.page-number-btn:hover {
-  background: #f9fafb;
-  border-color: #9ca3af;
-  transform: translateY(-1px);
-}
-
-.page-number-btn.active {
-  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
-  border-color: #6366f1;
-  color: white;
-  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
-}
-
-/* Responsive Design */
+/* Responsive breakpoints para ocultar columnas */
 @media (max-width: 1200px) {
-  .col-address { width: 180px; }
-  .col-customer { width: 150px; }
+  .col-address { 
+    display: none; 
+  }
 }
 
 @media (max-width: 1024px) {
-  .orders-table-container {
-    margin: 0 -16px;
-    border-radius: 0;
-    border-left: none;
-    border-right: none;
-  }
-  
-  .bulk-actions-bar,
-  .pagination-container {
-    padding: 16px;
-  }
-  
-  .bulk-actions {
-    flex-direction: column;
-    gap: 8px;
-    width: 100%;
-  }
-  
-  .bulk-btn {
-    width: 100%;
-    justify-content: center;
-  }
-  
-  .pagination-container {
-    flex-direction: column;
-    gap: 16px;
-  }
-  
-  .pagination-info {
-    flex-direction: column;
-    gap: 8px;
-    text-align: center;
+  .col-customer { 
+    display: none; 
   }
 }
 
 @media (max-width: 768px) {
-  .table-wrapper {
-    overflow-x: scroll;
-    -webkit-overflow-scrolling: touch;
-  }
-  
-  .orders-table {
+  table {
     min-width: 800px;
-  }
-  
-  .table-header th,
-  .table-body td {
-    padding: 12px 8px;
-  }
-  
-  .col-address,
-  .col-customer {
-    display: none;
-  }
-  
-  .page-numbers {
-    display: none;
-  }
-  
-  .pagination-controls {
-    justify-content: center;
-    gap: 12px;
-  }
-  
-  .first-btn,
-  .last-btn {
-    display: none;
-  }
-}
-
-@media (max-width: 480px) {
-  .bulk-actions-bar {
-    padding: 12px;
-  }
-  
-  .bulk-selection-info {
-    flex-direction: column;
-    gap: 8px;
-    align-items: flex-start;
-  }
-  
-  .selection-count {
-    font-size: 13px;
-  }
-  
-  .orders-table {
-    font-size: 12px;
-  }
-  
-  .table-header th,
-  .table-body td {
-    padding: 8px 6px;
   }
   
   .col-tracking {
@@ -830,180 +376,24 @@ function isOrderSelectable(order) {
   }
 }
 
-/* Loading animation for table rows */
-@keyframes shimmer {
-  0% {
-    background-position: -200px 0;
-  }
-  100% {
-    background-position: calc(200px + 100%) 0;
-  }
-}
-
-.loading-row {
-  background: linear-gradient(
-    90deg,
-    #f0f0f0 0px,
-    #e0e0e0 40px,
-    #f0f0f0 80px
-  );
-  background-size: 200px 100%;
-  animation: shimmer 1.5s infinite;
-}
-
-/* Accessibility improvements */
-.orders-table-container:focus-within {
-  outline: 2px solid #6366f1;
-  outline-offset: 2px;
-}
-
-.select-all-checkbox:focus,
-.page-btn:focus,
-.page-number-btn:focus,
-.page-size-select:focus {
-  outline: 2px solid #6366f1;
-  outline-offset: 2px;
-}
-
-/* Print styles */
+/* Estilos de impresión */
 @media print {
   .bulk-actions-bar,
   .pagination-container {
-    display: none;
+    display: none !important;
   }
   
-  .orders-table-container {
-    box-shadow: none;
-    border: 1px solid #000;
-  }
-  
-  .table-header th {
+  table thead th {
     background: #f5f5f5 !important;
     color: #000 !important;
   }
 }
-.status-badge.status-warehouse_received {
-  background: linear-gradient(135deg, #6f42c1, #8e44ad);
-  color: white;
-  border: none;
-  font-weight: 600;
-  padding: 6px 14px;
-  border-radius: 16px;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  box-shadow: 0 2px 4px rgba(111, 66, 193, 0.3);
-}
 
-/* Badge para En Ruta mejorado */
-.status-badge.status-shipped {
-  background: linear-gradient(135deg, #28a745, #20c997);
-  color: white;
-  border: none;
-  font-weight: 600;
-  padding: 6px 14px;
-  border-radius: 16px;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  box-shadow: 0 2px 4px rgba(40, 167, 69, 0.3);
-}
-.status-badge.status-out_for_delivery {
-  background: linear-gradient(135deg, #ffc107, #ffca2c);
-  color: white;
-  border: none;
-  font-weight: 600;
-  padding: 6px 14px;
-  border-radius: 16px;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  box-shadow: 0 2px 4px rgba(255, 193, 7, 0.3);
-}
-.status-badge.status-invoiced {
-  background: linear-gradient(135deg, #17a2b8, #138496);
-  color: white;
-  border: none;
-  font-weight: 600;
-  padding: 6px 14px;
-  border-radius: 16px;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  box-shadow: 0 2px 4px rgba(23, 162, 184, 0.3);
-}
-
-/* Animación sutil para estados activos */
-.status-badge.status-warehouse_received,
-.status-badge.status-shipped {
-  animation: gentlePulse 4s infinite;
-}
-
-@keyframes gentlePulse {
-  0%, 100% { 
-    opacity: 1;
-    transform: scale(1);
-  }
-  50% { 
-    opacity: 0.9;
-    transform: scale(1.02);
-  }
-}
-
-/* Filas con indicador visual sutil */
-.order-row:has(.status-warehouse_received) {
-  background: linear-gradient(90deg, rgba(111, 66, 193, 0.04), transparent);
-  border-left: 3px solid #6f42c1;
-}
-
-.order-row:has(.status-shipped) {
-  background: linear-gradient(90deg, rgba(40, 167, 69, 0.04), transparent);
-  border-left: 3px solid #28a745;
-}
-
-/* Hover effect mejorado */
-.order-row:hover .status-badge {
-  transform: scale(1.05);
-  transition: transform 0.2s ease;
-}
-
-/* Badge responsive */
-@media (max-width: 768px) {
-  .status-badge.status-warehouse_received,
-  .status-badge.status-shipped {
-    font-size: 10px;
-    padding: 4px 10px;
-  }
-}
-.labels-btn {
-  background: rgba(139, 92, 246, 0.2);
-  color: white;
-  border: 1px solid rgba(139, 92, 246, 0.3);
-}
-
-.labels-btn:hover:not(:disabled) {
-  background: rgba(139, 92, 246, 0.3);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 16px rgba(139, 92, 246, 0.4);
-}
-
-.labels-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-  transform: none;
-}
-
-/* Responsive para mobile */
-@media (max-width: 1024px) {
-  .bulk-actions {
-    flex-direction: column;
-    gap: 8px;
-    width: 100%;
-  }
-  
-  .bulk-btn {
-    width: 100%;
-    justify-content: center;
-  }
+/* Accesibilidad - focus visible */
+input[type="checkbox"]:focus,
+button:focus,
+select:focus {
+  outline: 2px solid #6366f1;
+  outline-offset: 2px;
 }
 </style>
