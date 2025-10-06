@@ -1,4 +1,4 @@
-<!-- frontend/src/views/dashboard.vue - TAILWIND VERSION CORREGIDA -->
+<!-- frontend/src/views/dashboard.vue - TAILWIND VERSION CORREGIDA FINAL -->
 <template>
   <div class="min-h-screen bg-gray-50">
     <!-- Header Principal -->
@@ -6,9 +6,9 @@
       <div class="bg-gradient-to-r from-blue-600 to-cyan-600 rounded-lg p-6 flex justify-between items-center shadow-lg">
         <div>
           <h1 class="text-3xl font-bold text-white">
-            {{ getGreeting() }}, {{ auth.user?.full_name || 'Usuario' }} 👋
+            {{ getGreeting() }}, {{ auth.user?.full_name?.split(' ')[0] || 'Usuario' }} 👋
           </h1>
-          <p class="text-blue-100 mt-1">Panel de control de {{ auth.company?.name || 'tu empresa' }}</p>
+          <p class="text-blue-100 mt-1">{{ auth.user?.full_name || 'Usuario' }}, aquí tienes un resumen de tu operación</p>
         </div>
         <div class="flex items-center gap-6">
           <div class="text-right">
@@ -27,24 +27,6 @@
       </div>
     </header>
 
-    <!-- Notificaciones de actualizaciones pendientes -->
-    <div v-if="pendingUpdates.size > 0" class="mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-center justify-between">
-      <div class="flex items-center gap-3">
-        <span class="text-2xl">🔄</span>
-        <span class="text-blue-900 font-medium">
-          {{ pendingUpdates.size }} actualización{{ pendingUpdates.size > 1 ? 'es' : '' }} pendiente{{ pendingUpdates.size > 1 ? 's' : '' }}
-        </span>
-      </div>
-      <div class="flex items-center gap-2">
-        <button @click="applyPendingUpdates" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
-          Aplicar ahora
-        </button>
-        <button @click="clearPendingUpdates" class="text-gray-500 hover:text-gray-700 px-2">
-          <span class="text-xl">×</span>
-        </button>
-      </div>
-    </div>
-
     <!-- Loading inicial -->
     <div v-if="loading && !hasInitialData" class="flex flex-col items-center justify-center py-20">
       <span class="material-icons text-6xl text-gray-400 animate-spin mb-4">refresh</span>
@@ -62,12 +44,10 @@
 
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <!-- KPI Pedidos Hoy -->
-          <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-200" :class="{ 'ring-2 ring-blue-500': kpiUpdates.ordersToday }">
+          <div class="bg-white p-6 rounded-lg shadow-sm border-l-4 border-blue-500 hover:shadow-md transition-shadow">
             <div class="flex items-center justify-between">
               <div class="flex-1">
-                <p class="text-3xl font-bold text-gray-900 transition-all" :class="{ 'scale-110': kpiUpdates.ordersToday }">
-                  {{ todayOrders }}
-                </p>
+                <p class="text-3xl font-bold text-gray-900">{{ todayOrders }}</p>
                 <p class="text-sm text-gray-500 mt-1">Pedidos Hoy</p>
                 <div v-if="trends.orders_today" class="flex items-center gap-1 mt-2 text-xs">
                   <span :class="trends.orders_today.direction === 'up' ? 'text-green-600' : trends.orders_today.direction === 'down' ? 'text-red-600' : 'text-gray-600'">
@@ -75,18 +55,17 @@
                   </span>
                   <span class="text-gray-600">{{ trends.orders_today.percentage }}% {{ trends.orders_today.label }}</span>
                 </div>
+                <p v-else class="text-xs text-gray-400 mt-2">Calculando...</p>
               </div>
               <span class="text-4xl">📦</span>
             </div>
           </div>
 
           <!-- KPI Pedidos Este Mes -->
-          <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-200" :class="{ 'ring-2 ring-blue-500': kpiUpdates.monthlyOrders }">
+          <div class="bg-white p-6 rounded-lg shadow-sm border-l-4 border-blue-500 hover:shadow-md transition-shadow">
             <div class="flex items-center justify-between">
               <div class="flex-1">
-                <p class="text-3xl font-bold text-gray-900 transition-all" :class="{ 'scale-110': kpiUpdates.monthlyOrders }">
-                  {{ monthlyOrders }}
-                </p>
+                <p class="text-3xl font-bold text-gray-900">{{ monthlyOrders }}</p>
                 <p class="text-sm text-gray-500 mt-1">Pedidos Este Mes</p>
                 <div v-if="trends.orders_month" class="flex items-center gap-1 mt-2 text-xs">
                   <span :class="trends.orders_month.direction === 'up' ? 'text-green-600' : trends.orders_month.direction === 'down' ? 'text-red-600' : 'text-gray-600'">
@@ -101,12 +80,10 @@
           </div>
 
           <!-- KPI Entregados -->
-          <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-200" :class="{ 'ring-2 ring-green-500': kpiUpdates.deliveredOrders }">
+          <div class="bg-white p-6 rounded-lg shadow-sm border-l-4 border-green-500 hover:shadow-md transition-shadow">
             <div class="flex items-center justify-between">
               <div class="flex-1">
-                <p class="text-3xl font-bold text-gray-900 transition-all" :class="{ 'scale-110': kpiUpdates.deliveredOrders }">
-                  {{ deliveredOrders }}
-                </p>
+                <p class="text-3xl font-bold text-gray-900">{{ deliveredOrders }}</p>
                 <p class="text-sm text-gray-500 mt-1">Entregados</p>
                 <p class="text-xs text-green-600 mt-2">{{ deliveryRate }}% de éxito</p>
               </div>
@@ -115,7 +92,7 @@
           </div>
 
           <!-- KPI Costo Estimado -->
-          <div class="bg-gradient-to-br from-orange-500 to-red-600 p-6 rounded-lg shadow-sm text-white">
+          <div class="bg-gradient-to-br from-orange-500 to-red-600 p-6 rounded-lg shadow-sm text-white hover:shadow-md transition-shadow">
             <div class="flex items-center justify-between">
               <div class="flex-1">
                 <p class="text-3xl font-bold">${{ formatCurrency(estimatedMonthlyCost) }}</p>
@@ -135,7 +112,7 @@
           <div class="flex justify-between items-center mb-4">
             <div>
               <h3 class="text-xl font-semibold text-gray-900">Tendencia de Pedidos</h3>
-              <p class="text-sm text-gray-500">Actividad de tu empresa</p>
+              <p class="text-sm text-gray-500">Evolución de tu operación en el tiempo</p>
             </div>
             <select 
               v-model="chartPeriod" 
@@ -144,7 +121,7 @@
             >
               <option value="7d">7 días</option>
               <option value="30d">30 días</option>
-              <option value="90d">90 días</option>
+              <option value="90d">3 meses</option>
             </select>
           </div>
 
@@ -168,11 +145,11 @@
           />
         </div>
 
-        <!-- Canales Activos -->
+        <!-- Mis Canales -->
         <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
           <div class="flex justify-between items-center mb-4">
             <div>
-              <h3 class="text-xl font-semibold text-gray-900">Canales Activos</h3>
+              <h3 class="text-xl font-semibold text-gray-900">Mis Canales</h3>
               <p class="text-sm text-gray-500">Tus integraciones</p>
             </div>
             <router-link to="/app/channels" class="text-sm text-blue-600 hover:text-blue-700 font-medium">
@@ -182,47 +159,54 @@
 
           <div v-if="loadingChannels" class="space-y-4">
             <div v-for="i in 3" :key="i" class="animate-pulse">
-              <div class="h-16 bg-gray-200 rounded-lg"></div>
+              <div class="h-20 bg-gray-200 rounded-lg"></div>
             </div>
           </div>
 
           <div v-else-if="channels.length === 0" class="text-center py-8">
-            <span class="material-icons text-5xl text-gray-300 mb-3">store</span>
-            <p class="text-gray-500 mb-4">No tienes canales configurados</p>
+            <span class="text-5xl mb-3 block">📡</span>
+            <h3 class="text-lg font-semibold text-gray-700 mb-2">No hay canales configurados</h3>
+            <p class="text-sm text-gray-500 mb-4">Conecta tus tiendas online para sincronizar pedidos automáticamente</p>
             <router-link to="/app/channels" class="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
               <span class="material-icons text-lg">add</span>
-              Agregar Canal
+              Conectar Canal
             </router-link>
           </div>
 
-          <div v-else class="space-y-3 max-h-[400px] overflow-y-auto">
+          <div v-else class="space-y-3 max-h-[400px] overflow-y-auto pr-2">
             <div 
-              v-for="channel in channels" 
+              v-for="channel in channels.slice(0, 4)" 
               :key="channel._id"
-              class="group flex items-center gap-3 p-4 rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 hover:shadow-md transition-all cursor-pointer"
+              class="flex items-center gap-3 p-4 rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 transition-all"
             >
-              <!-- Avatar del canal -->
-              <div class="flex-shrink-0 w-12 h-12 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-lg flex items-center justify-center text-white font-bold shadow-sm">
-                {{ channel.channel_name?.substring(0, 2).toUpperCase() || '?' }}
+              <!-- Icono del canal -->
+              <div class="flex-shrink-0 w-12 h-12 bg-gradient-to-br from-green-500 to-green-600 rounded-lg flex items-center justify-center text-2xl">
+                {{ getChannelIcon(channel.channel_type) }}
               </div>
               
               <!-- Info del canal -->
               <div class="flex-1 min-w-0">
-                <p class="font-semibold text-gray-900 truncate group-hover:text-blue-600 transition-colors">
-                  {{ channel.channel_name || 'Sin nombre' }}
-                </p>
-                <p class="text-xs text-gray-500">{{ getChannelTypeName(channel.channel_type) }}</p>
+                <p class="font-semibold text-gray-900 truncate">{{ channel.channel_name }}</p>
+                <p class="text-xs text-gray-500 uppercase tracking-wide">{{ formatChannelType(channel.channel_type) }}</p>
               </div>
               
-              <!-- Indicador de estado -->
-              <div class="flex-shrink-0 flex items-center gap-2">
+              <!-- Stats del canal -->
+              <div class="flex flex-col items-center">
+                <span class="text-lg font-bold text-gray-900">{{ channel.total_orders || 0 }}</span>
+                <span class="text-xs text-gray-500 uppercase">Pedidos</span>
+              </div>
+              
+              <!-- Estado -->
+              <div class="flex items-center gap-2">
                 <span 
-                  class="w-2.5 h-2.5 rounded-full shadow-sm"
-                  :class="channel.is_active ? 'bg-green-500 animate-pulse' : 'bg-gray-300'"
+                  class="w-2.5 h-2.5 rounded-full"
+                  :class="{
+                    'bg-green-500 animate-pulse': getChannelStatusClass(channel) === 'active',
+                    'bg-yellow-500': getChannelStatusClass(channel) === 'warning',
+                    'bg-red-500': getChannelStatusClass(channel) === 'inactive'
+                  }"
                 ></span>
-                <span class="text-xs font-medium" :class="channel.is_active ? 'text-green-600' : 'text-gray-500'">
-                  {{ channel.is_active ? 'Activo' : 'Inactivo' }}
-                </span>
+                <span class="text-xs text-gray-600">{{ getChannelStatus(channel) }}</span>
               </div>
             </div>
           </div>
@@ -233,56 +217,22 @@
       <section class="mb-8 bg-white p-6 rounded-lg shadow-sm border border-gray-200">
         <div class="mb-6">
           <h2 class="text-xl font-semibold text-gray-900">Acciones Rápidas</h2>
-          <p class="text-sm text-gray-500">Accede rápidamente a las funciones principales</p>
+          <p class="text-sm text-gray-500">Herramientas frecuentes</p>
         </div>
 
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <router-link 
-            to="/app/orders?action=create"
+            v-for="action in quickActions" 
+            :key="action.id"
+            :to="action.route"
             class="group flex items-center gap-4 p-4 rounded-lg border-2 border-gray-200 hover:border-blue-500 hover:bg-blue-50 transition-all"
           >
-            <div class="text-3xl">📦</div>
+            <div class="text-3xl">{{ action.icon }}</div>
             <div class="flex-1">
-              <div class="font-semibold text-gray-900 group-hover:text-blue-600">Crear Pedido</div>
-              <div class="text-sm text-gray-500">Nuevo envío manual</div>
+              <div class="font-semibold text-gray-900 group-hover:text-blue-600">{{ action.title }}</div>
+              <div class="text-sm text-gray-500">{{ action.description }}</div>
             </div>
-            <span class="material-icons text-gray-400 group-hover:text-blue-600 transition-transform group-hover:translate-x-1">arrow_forward</span>
-          </router-link>
-
-          <router-link 
-            to="/app/orders"
-            class="group flex items-center gap-4 p-4 rounded-lg border-2 border-gray-200 hover:border-blue-500 hover:bg-blue-50 transition-all"
-          >
-            <div class="text-3xl">📋</div>
-            <div class="flex-1">
-              <div class="font-semibold text-gray-900 group-hover:text-blue-600">Ver Pedidos</div>
-              <div class="text-sm text-gray-500">Gestionar envíos</div>
-            </div>
-            <span class="material-icons text-gray-400 group-hover:text-blue-600 transition-transform group-hover:translate-x-1">arrow_forward</span>
-          </router-link>
-
-          <router-link 
-            to="/app/channels"
-            class="group flex items-center gap-4 p-4 rounded-lg border-2 border-gray-200 hover:border-blue-500 hover:bg-blue-50 transition-all"
-          >
-            <div class="text-3xl">📡</div>
-            <div class="flex-1">
-              <div class="font-semibold text-gray-900 group-hover:text-blue-600">Canales</div>
-              <div class="text-sm text-gray-500">Gestionar integraciones</div>
-            </div>
-            <span class="material-icons text-gray-400 group-hover:text-blue-600 transition-transform group-hover:translate-x-1">arrow_forward</span>
-          </router-link>
-
-          <router-link 
-            to="/app/billing"
-            class="group flex items-center gap-4 p-4 rounded-lg border-2 border-gray-200 hover:border-blue-500 hover:bg-blue-50 transition-all"
-          >
-            <div class="text-3xl">💳</div>
-            <div class="flex-1">
-              <div class="font-semibold text-gray-900 group-hover:text-blue-600">Facturación</div>
-              <div class="text-sm text-gray-500">Ver facturas</div>
-            </div>
-            <span class="material-icons text-gray-400 group-hover:text-blue-600 transition-transform group-hover:translate-x-1">arrow_forward</span>
+            <span class="text-gray-400 group-hover:text-blue-600 transition-transform group-hover:translate-x-1">→</span>
           </router-link>
         </div>
       </section>
@@ -306,35 +256,42 @@
         </div>
 
         <div v-else-if="communesStats.length === 0" class="text-center py-12">
-          <span class="material-icons text-6xl text-gray-300 mb-3">location_on</span>
+          <span class="text-6xl mb-3 block">🏘️</span>
           <h3 class="text-lg font-semibold text-gray-700 mb-2">No hay datos de entregas</h3>
           <p class="text-gray-500">Aún no tienes entregas registradas por comuna</p>
         </div>
 
         <div v-else class="space-y-3">
           <div 
-            v-for="(commune, index) in communesStats.slice(0, 10)" 
+            v-for="(commune, index) in communesStats" 
             :key="commune.commune"
             class="flex items-center gap-4 p-4 rounded-lg hover:bg-gray-50 transition-colors border border-gray-100"
           >
             <!-- Ranking -->
-            <div class="flex-shrink-0 w-10 h-10 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-lg flex items-center justify-center text-white font-bold">
+            <div class="flex-shrink-0 w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center text-white font-bold shadow-md">
               {{ index + 1 }}
             </div>
             
             <!-- Nombre comuna -->
             <div class="flex-1 min-w-0">
               <p class="font-semibold text-gray-900 truncate">{{ commune.commune }}</p>
-              <p class="text-sm text-gray-500">
-                {{ commune.delivered_orders || 0 }} de {{ commune.total_orders || 0 }} entregas exitosas
+              <p class="text-sm text-gray-500 flex items-center gap-1">
+                <span>📦</span>
+                {{ commune.delivered_orders || 0 }} entregas exitosas
               </p>
+            </div>
+            
+            <!-- Total -->
+            <div class="flex flex-col items-center">
+              <span class="text-lg font-bold text-gray-900">{{ commune.total_orders || 0 }}</span>
+              <span class="text-xs text-gray-500 uppercase">Total</span>
             </div>
             
             <!-- Barra de progreso -->
             <div class="flex-shrink-0 w-32">
               <div class="h-3 bg-gray-200 rounded-full overflow-hidden">
                 <div 
-                  class="h-full bg-gradient-to-r from-blue-500 to-cyan-500 transition-all duration-500 ease-out"
+                  class="h-full bg-gradient-to-r from-green-500 to-green-600 transition-all duration-500 ease-out"
                   :style="{ width: (commune.delivery_rate || 0) + '%' }"
                 ></div>
               </div>
@@ -377,17 +334,6 @@ const currentTime = ref('')
 const currentDate = ref('')
 const timeInterval = ref(null)
 
-// Estado tiempo real
-const realtimeEnabled = ref(true)
-const realtimeInterval = ref(null)
-const lastDataUpdate = ref(null)
-const pendingUpdates = ref(new Map())
-const kpiUpdates = ref({
-  ordersToday: false,
-  monthlyOrders: false,
-  deliveredOrders: false
-})
-
 // Trends
 const trends = ref({
   orders_today: null,
@@ -429,8 +375,42 @@ const deliveryRate = computed(() => {
   return total > 0 ? Math.round((delivered / total) * 100) : 0
 })
 
-const estimatedMonthlyCost = computed(() => stats.value.estimatedMonthlyCost || 0)
-const pricePerOrder = computed(() => stats.value.pricePerOrder || 0)
+const estimatedMonthlyCost = computed(() => {
+  return stats.value.estimatedMonthlyCost || (monthlyOrders.value * pricePerOrder.value)
+})
+
+const pricePerOrder = computed(() => stats.value.pricePerOrder || 2500)
+
+const quickActions = computed(() => [
+  { 
+    id: 'new-order', 
+    title: 'Crear Pedido', 
+    description: 'Agregar un nuevo pedido manual', 
+    icon: '➕', 
+    route: '/app/orders?action=create' 
+  },
+  { 
+    id: 'view-orders', 
+    title: 'Ver Mis Pedidos', 
+    description: 'Gestionar todos los pedidos', 
+    icon: '📦', 
+    route: '/app/orders' 
+  },
+  { 
+    id: 'sync-channels', 
+    title: 'Sincronizar Canales', 
+    description: 'Actualizar desde tus tiendas', 
+    icon: '🔄', 
+    route: '/app/channels' 
+  },
+  { 
+    id: 'billing', 
+    title: 'Facturación', 
+    description: 'Revisar costos y facturas', 
+    icon: '💳', 
+    route: '/app/billing' 
+  }
+])
 
 // ==================== MÉTODOS ====================
 
@@ -465,15 +445,62 @@ function getTrendIcon(direction) {
   }
 }
 
-function getChannelTypeName(type) {
+function getChannelIcon(type) {
+  const icons = { 
+    shopify: '🛍️', 
+    woocommerce: '🛒', 
+    mercadolibre: '🏪',
+    manual: '✏️'
+  }
+  return icons[type] || '📦'
+}
+
+function formatChannelType(type) {
   const types = {
-    'shopify': 'Shopify',
-    'woocommerce': 'WooCommerce',
-    'mercadolibre': 'Mercado Libre',
-    'manual': 'Manual',
-    'api': 'API'
+    shopify: 'Shopify',
+    woocommerce: 'WooCommerce',
+    mercadolibre: 'MercadoLibre',
+    manual: 'Manual'
   }
   return types[type] || type
+}
+
+function getChannelStatus(channel) {
+  const lastSync = channel.last_sync_at || channel.last_sync
+  
+  if (!lastSync) {
+    return 'Necesita sincronización'
+  }
+  
+  const daysSinceSync = Math.floor((new Date() - new Date(lastSync)) / (1000 * 60 * 60 * 24))
+  
+  if (daysSinceSync === 0) {
+    return 'Sincronizado hoy'
+  } else if (daysSinceSync <= 1) {
+    return 'Sincronizado'
+  } else if (daysSinceSync <= 7) {
+    return `Hace ${daysSinceSync} días`
+  } else {
+    return 'Necesita sincronización'
+  }
+}
+
+function getChannelStatusClass(channel) {
+  const lastSync = channel.last_sync_at || channel.last_sync
+  
+  if (!lastSync) {
+    return 'inactive'
+  }
+  
+  const daysSinceSync = Math.floor((new Date() - new Date(lastSync)) / (1000 * 60 * 60 * 24))
+  
+  if (daysSinceSync <= 1) {
+    return 'active'
+  } else if (daysSinceSync <= 7) {
+    return 'warning'
+  } else {
+    return 'inactive'
+  }
 }
 
 async function fetchAllData() {
@@ -488,7 +515,6 @@ async function fetchAllData() {
       fetchCommunesStats()
     ])
     
-    lastDataUpdate.value = Date.now()
     console.log('✅ Todos los datos cargados')
   } catch (error) {
     console.error("❌ Error loading dashboard data", error)
@@ -504,7 +530,6 @@ async function fetchStats() {
     const response = await apiService.dashboard.getStats()
     const rawData = response.data
     
-    // Debug para ver qué llega
     console.log('📊 Raw stats recibidas:', rawData)
     console.log('📊 ordersToday:', rawData.ordersToday)
     console.log('📊 monthlyOrders:', rawData.monthlyOrders)
@@ -550,8 +575,8 @@ function calculateTrendsManually() {
     },
     delivered: {
       direction: deliveryRate.value > 80 ? 'up' : deliveryRate.value > 60 ? 'neutral' : 'down',
-      percentage: deliveryRate.value,
-      label: 'tasa de éxito'
+      percentage: Math.abs(deliveryRate.value - 75),
+      label: 'vs promedio'
     }
   }
 }
@@ -561,11 +586,20 @@ async function fetchChartData() {
   try {
     console.log('📈 Obteniendo datos del gráfico para período:', chartPeriod.value)
     const response = await apiService.orders.getTrend({ period: chartPeriod.value })
-    chartData.value = response.data || []
+    const newData = response.data
+    
+    if (Array.isArray(newData)) {
+      setTimeout(() => {
+        chartData.value = newData
+        loadingChart.value = false
+      }, 200)
+    } else {
+      chartData.value = []
+      loadingChart.value = false
+    }
   } catch (error) {
     console.error('❌ Error fetching chart data:', error)
     chartData.value = []
-  } finally {
     loadingChart.value = false
   }
 }
@@ -574,14 +608,21 @@ async function fetchChannels() {
   loadingChannels.value = true
   try {
     console.log('📡 Obteniendo canales...')
-    const response = await channelsService.getAll()
-    console.log('📡 Canales recibidos:', response.data)
+    const companyId = auth.user?.company?._id || auth.user?.company_id
     
-    // Filtrar solo los activos
-    const allChannels = response.data || []
-    channels.value = allChannels.filter(c => c.is_active !== false)
+    console.log('📡 Company ID:', companyId)
     
-    console.log('📡 Canales activos:', channels.value.length)
+    if (companyId) {
+      const response = await channelsService.getByCompany(companyId)
+      console.log('📡 Response completo:', response)
+      console.log('📡 Response.data:', response.data)
+      channels.value = response.data.data || response.data || []
+    } else {
+      console.warn('⚠️ No se encontró company_id')
+      channels.value = []
+    }
+    
+    console.log('📡 Canales cargados:', channels.value.length)
   } catch (error) {
     console.error('❌ Error fetching channels:', error)
     channels.value = []
@@ -593,28 +634,25 @@ async function fetchChannels() {
 async function fetchCommunesStats() {
   loadingCommunes.value = true
   try {
+    console.log('🏘️ Obteniendo estadísticas de comunas...')
     const response = await apiService.dashboard.getCommunesStats()
-    console.log('🏘️ Comunas response:', response.data)
-    // El backend devuelve { all_stats: [...] } no directamente el array
-    communesStats.value = response.data?.all_stats || response.data || []
+    console.log('🏘️ Response de comunas:', response.data)
+    
+    const communesArray = response.data.all_stats || response.data || []
+    console.log('🏘️ Array de comunas:', communesArray.length)
+    
+    // Ordenar por entregas exitosas y tomar top 5
+    communesStats.value = communesArray
+      .sort((a, b) => (b.delivered_orders || 0) - (a.delivered_orders || 0))
+      .slice(0, 5)
+      
+    console.log('🏘️ Top 5 comunas:', communesStats.value)
   } catch (error) {
     console.error('❌ Error fetching communes stats:', error)
     communesStats.value = []
   } finally {
     loadingCommunes.value = false
   }
-}
-
-function applyPendingUpdates() {
-  console.log(`🔄 Aplicando ${pendingUpdates.value.size} actualizaciones pendientes`)
-  pendingUpdates.value.clear()
-  fetchStats()
-  toast.success('✅ Datos actualizados correctamente')
-}
-
-function clearPendingUpdates() {
-  pendingUpdates.value.clear()
-  toast.info('🗑️ Actualizaciones pendientes descartadas')
 }
 
 // ==================== LIFECYCLE ====================
@@ -629,25 +667,11 @@ onUnmounted(() => {
   if (timeInterval.value) {
     clearInterval(timeInterval.value)
   }
-  if (realtimeInterval.value) {
-    clearInterval(realtimeInterval.value)
-  }
 })
 </script>
 
 <style scoped>
 /* Animaciones personalizadas */
-@keyframes pulse-ring {
-  0%, 100% {
-    transform: scale(1);
-    opacity: 1;
-  }
-  50% {
-    transform: scale(1.1);
-    opacity: 0.8;
-  }
-}
-
 .animate-spin-slow {
   animation: spin 3s linear infinite;
 }
@@ -676,7 +700,7 @@ onUnmounted(() => {
   direction: ltr;
 }
 
-/* Scrollbar personalizado para canales */
+/* Scrollbar personalizado */
 .overflow-y-auto::-webkit-scrollbar {
   width: 6px;
 }
@@ -699,6 +723,10 @@ onUnmounted(() => {
 @media (max-width: 768px) {
   .lg\:col-span-2 {
     grid-column: span 1;
+  }
+  
+  .grid {
+    gap: 1rem;
   }
 }
 </style>
