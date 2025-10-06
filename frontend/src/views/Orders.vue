@@ -456,9 +456,9 @@ import OrderTracking from '../components/OrderTracking.vue'
 import ProofOfDelivery from '../components/ProofOfDelivery.vue'
 
 // Nuevos componentes modernos
-import OrdersHeader from '../components/Orders/OrdersHeader.tailwind.vue'
+import OrdersHeader from '../components/Orders/OrdersHeader.vue'
 import OrdersFilters from '../components/Orders/OrdersFilters.vue'
-import OrdersTable from '../components/Orders/OrdersTable.tailwind.vue'
+import OrdersTable from '../components/Orders/OrdersTable.vue'
 
 
 // Composables (asumiendo que ya los extendiste)
