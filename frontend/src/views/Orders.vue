@@ -582,16 +582,19 @@ const selectedChannelInfo = computed(() => {
 /**
  * Estadísticas para el header
  */
-const orderStats = computed(() => ({
- total: orders.value.length,
-  pending: orders.value.filter(o => o.status === 'pending').length,
-  ready_for_pickup: orders.value.filter(o => o.status === 'ready_for_pickup').length,
-  warehouse_received: orders.value.filter(o => o.status === 'warehouse_received').length, // 🆕
-  processing: orders.value.filter(o => o.status === 'processing').length,
-  shipped: orders.value.filter(o => o.status === 'shipped').length,
-  delivered: orders.value.filter(o => o.status === 'delivered').length,
-  cancelled: orders.value.filter(o => o.status === 'cancelled').length
-}))
+const orderStats = computed(() => {
+  const list = Array.isArray(orders.value) ? orders.value : []
+  return {
+    total: list.length,
+    pending: list.filter(o => o.status === 'pending').length,
+    ready_for_pickup: list.filter(o => o.status === 'ready_for_pickup').length,
+    warehouse_received: list.filter(o => o.status === 'warehouse_received').length,
+    processing: list.filter(o => o.status === 'processing').length,
+    shipped: list.filter(o => o.status === 'shipped').length,
+    delivered: list.filter(o => o.status === 'delivered').length,
+    cancelled: list.filter(o => o.status === 'cancelled').length
+  }
+})
 
 // ==================== MÉTODOS DEL HEADER ====================
 
@@ -934,7 +937,7 @@ async function viewManifest(manifest) {
 
 
 async function generateManifestAndMarkReady() {
-  if (selectedOrders.value.length === 0) {
+  if (!Array.isArray(selectedOrders.value) || selectedOrders.value.length === 0) {
     toast.warning('Selecciona al menos un pedido');
     return;
   }
@@ -1594,7 +1597,7 @@ async function processPendingUpdates() {
 
 // ✅ NUEVO: Manejar generación de etiquetas
 async function handleGenerateLabels() {
-  if (selectedOrders.value.length === 0) {
+  if (!Array.isArray(selectedOrders.value) || selectedOrders.value.length === 0) {
     toast.warning('Selecciona al menos un pedido para generar etiquetas.');
     return;
   }
