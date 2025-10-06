@@ -358,7 +358,7 @@
 </Modal>
 <Modal 
   v-model="showLabelsModal" 
-  :title="`🏷️ Generar Etiquetas - ${selectedOrders.length} pedidos`" 
+  :title="`🏷️ Generar Etiquetas - ${(selectedOrders?.length || 0)} pedidos`" 
   width="800px"
 >
   <LabelGenerator 
