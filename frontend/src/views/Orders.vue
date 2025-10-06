@@ -1,12 +1,13 @@
+
 <template>
-  <div class="orders-page">
+  <div class="p-6 max-w-[1600px] mx-auto font-sans bg-slate-50 max-lg:p-4 max-md:p-3 max-sm:p-2 max-sm:bg-white">
     <!-- Header con estadísticas moderno -->
     <OrdersHeader 
       title="Mis Pedidos"
       :stats="orderStats"
       :additional-stats="additionalStats"
       :loading="loadingOrders || refreshing"
-      :exporting="loadingStates?.exporting || false"
+      :is-exporting="loadingStates?.exporting || false"
       :last-update="lastUpdate"
       :auto-refresh="autoRefreshEnabled"
       @refresh="handleRefresh"
@@ -18,446 +19,463 @@
     />
 
     <!-- Filtros modernos -->
-<UnifiedOrdersFilters
-  :filters="filters"
-  :advanced-filters="advancedFilters"
-  :filters-u-i="filtersUI"
-  :companies="[]"
-  :channels="channels"
-  :available-communes="availableCommunes"
-  :filter-presets="filterPresets"
-  :active-filters-count="activeFiltersCount"
-  :is-admin="false"
-  :company-id="companyId" 
-  :loading="loadingOrders"
-  @filter-change="handleFilterChange"
-  @advanced-filter-change="updateAdvancedFilter"
-  @reset-filters="resetFilters"
-  @toggle-advanced="toggleAdvancedFilters"
-  @apply-preset="applyPreset"
-  @add-commune="addCommune"
-  @remove-commune="removeCommune"
-/>
+    <UnifiedOrdersFilters
+      :filters="filters"
+      :advanced-filters="advancedFilters"
+      :filters-u-i="filtersUI"
+      :companies="[]"
+      :channels="channels"
+      :available-communes="availableCommunes"
+      :filter-presets="filterPresets"
+      :active-filters-count="activeFiltersCount"
+      :is-admin="false"
+      :company-id="companyId" 
+      :loading="loadingOrders"
+      @filter-change="handleFilterChange"
+      @advanced-filter-change="updateAdvancedFilter"
+      @reset-filters="resetFilters"
+      @toggle-advanced="toggleAdvancedFilters"
+      @apply-preset="applyPreset"
+      @add-commune="addCommune"
+      @remove-commune="removeCommune"
+    />
 
     <!-- Tabla moderna -->
     <OrdersTable
-       :orders="orders"
-  :selected-orders="selectedOrders"
-  :select-all-checked="selectAllChecked"
-  :select-all-indeterminate="selectAllIndeterminate"
-  :loading="loadingOrders"
-  :pagination="pagination"
-  @toggle-selection="toggleOrderSelection"
-  @toggle-select-all="toggleSelectAll"
-  @clear-selection="clearSelection"
-  @view-details="openOrderDetailsModal"
-  @mark-ready="markAsReady"
-  @track-live="openLiveTracking"
-  @view-tracking="openTrackingModal"
-  @view-proof="showProofOfDelivery"
-  @handle-action="handleActionButton"
-  @contact-support="contactSupport"
-  @bulk-mark-ready="handleBulkMarkReady"
-  @generate-manifest="generateManifestAndMarkReady"
-  @bulk-export="handleBulkExport"
-  @generate-labels="handleGenerateLabels"
-  @create-order="handleCreateOrder"
-  @go-to-page="goToPage"
-  @change-page-size="changePageSize"
-  @sort="handleSort"
-  :has-tracking-info="hasTrackingInfo"
-  :has-proof-of-delivery="hasProofOfDelivery"
-  :get-action-button="getActionButton"
+      :orders="orders"
+      :selected-orders="selectedOrders"
+      :select-all-checked="selectAllChecked"
+      :select-all-indeterminate="selectAllIndeterminate"
+      :loading="loadingOrders"
+      :pagination="pagination"
+      @toggle-selection="toggleOrderSelection"
+      @toggle-select-all="toggleSelectAll"
+      @clear-selection="clearSelection"
+      @view-details="openOrderDetailsModal"
+      @mark-ready="markAsReady"
+      @track-live="openLiveTracking"
+      @view-tracking="openTrackingModal"
+      @view-proof="showProofOfDelivery"
+      @handle-action="handleActionButton"
+      @contact-support="contactSupport"
+      @bulk-mark-ready="handleBulkMarkReady"
+      @generate-manifest="generateManifestAndMarkReady"
+      @bulk-export="handleBulkExport"
+      @generate-labels="handleGenerateLabels"
+      @create-order="handleCreateOrder"
+      @go-to-page="goToPage"
+      @change-page-size="changePageSize"
+      @sort="handleSort"
+      :has-tracking-info="hasTrackingInfo"
+      :has-proof-of-delivery="hasProofOfDelivery"
+      :get-action-button="getActionButton"
     />
 
-    <!-- Modales existentes (mantener tal como están) -->
+    <!-- Modal: Order Details -->
     <Modal v-model="showOrderDetailsModal" :title="`Pedido #${selectedOrder?.order_number}`" width="800px">
       <OrderDetails v-if="selectedOrder" :order="selectedOrder" />
     </Modal>
 
-<Modal v-model="showTrackingModal" :title="`🚚 Tracking - Pedido #${selectedTrackingOrder?.order_number}`"
-  width="700px">
-  <OrderTracking 
-    ref="orderTrackingRef"
-    v-if="selectedTrackingOrder" 
-    :order-id="selectedTrackingOrder._id" 
-    :order-number="selectedTrackingOrder.order_number"
-    @support-contact="handleTrackingSupport"
-    @show-proof="handleShowProof"
-    @close="showTrackingModal = false"
-  />
-</Modal>
+    <!-- Modal: Tracking -->
+    <Modal v-model="showTrackingModal" :title="`🚚 Tracking - Pedido #${selectedTrackingOrder?.order_number}`" width="700px">
+      <OrderTracking 
+        ref="orderTrackingRef"
+        v-if="selectedTrackingOrder" 
+        :order-id="selectedTrackingOrder._id" 
+        :order-number="selectedTrackingOrder.order_number"
+        @support-contact="handleTrackingSupport"
+        @show-proof="handleShowProof"
+        @close="showTrackingModal = false"
+      />
+    </Modal>
 
-    <Modal v-model="showProofModal" :title="`📋 Prueba de Entrega - #${selectedProofOrder?.order_number}`"
-      width="700px">
-      <div v-if="loadingOrderDetails" class="loading-state">
-        <div class="loading-spinner"></div>
+    <!-- Modal: Proof of Delivery -->
+    <Modal v-model="showProofModal" :title="`📋 Prueba de Entrega - #${selectedProofOrder?.order_number}`" width="700px">
+      <div v-if="loadingOrderDetails" class="flex flex-col items-center justify-center p-10 text-gray-500">
+        <div class="w-8 h-8 border-4 border-gray-200 border-t-indigo-600 rounded-full animate-spin mb-4"></div>
       </div>
       <ProofOfDelivery v-else-if="selectedProofOrder" :order="selectedProofOrder" />
     </Modal>
 
-    <!-- Modal de soporte -->
+    <!-- Modal: Support -->
     <Modal v-model="showSupportModal" title="💬 Contactar Soporte" width="500px">
-      <div v-if="supportOrder" class="support-form">
-        <div class="support-order-info">
-          <h4>Pedido: #{{ supportOrder.order_number }}</h4>
-          <p>Cliente: {{ supportOrder.customer_name }}</p>
-          <p>Estado: {{ getStatusName(supportOrder.status) }}</p>
+      <div v-if="supportOrder" class="p-5">
+        <div class="bg-gray-50 p-4 rounded-xl mb-5 border border-gray-200">
+          <h4 class="m-0 mb-2 text-gray-800 text-base font-semibold">Pedido: #{{ supportOrder.order_number }}</h4>
+          <p class="my-1 text-gray-600 text-sm">Cliente: {{ supportOrder.customer_name }}</p>
+          <p class="my-1 text-gray-600 text-sm">Estado: {{ getStatusName(supportOrder.status) }}</p>
         </div>
 
-        <div class="support-options">
-          <button @click="emailSupport(supportOrder)" class="support-option">
+        <div class="grid grid-cols-1 gap-3">
+          <button 
+            @click="emailSupport(supportOrder)" 
+            class="flex items-center gap-3 p-4 bg-white border-2 border-gray-200 rounded-xl cursor-pointer transition-all duration-300 text-sm font-medium text-gray-700 hover:border-indigo-600 hover:bg-slate-50 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-indigo-600/15"
+          >
             📧 Enviar Email
           </button>
-          <button @click="whatsappSupport(supportOrder)" class="support-option">
+          <button 
+            @click="whatsappSupport(supportOrder)" 
+            class="flex items-center gap-3 p-4 bg-white border-2 border-gray-200 rounded-xl cursor-pointer transition-all duration-300 text-sm font-medium text-gray-700 hover:border-indigo-600 hover:bg-slate-50 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-indigo-600/15"
+          >
             💬 WhatsApp
           </button>
-          <button @click="callSupport(supportOrder)" class="support-option">
+          <button 
+            @click="callSupport(supportOrder)" 
+            class="flex items-center gap-3 p-4 bg-white border-2 border-gray-200 rounded-xl cursor-pointer transition-all duration-300 text-sm font-medium text-gray-700 hover:border-indigo-600 hover:bg-slate-50 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-indigo-600/15"
+          >
             📞 Llamar
           </button>
         </div>
       </div>
     </Modal>
-    <!-- Modal de Manifiesto -->
-<ManifestModal 
-  v-if="showManifestModal" 
-  :manifestId="currentManifestId"
-  @close="showManifestModal = false"
-  @readyToPrint="printManifest"
-/>
-<Modal v-model="showCreateOrderModal" title="➕ Crear Nuevo Pedido" width="800px">
-  <div v-if="showCreateOrderModal" class="create-order-form">
-    <form @submit.prevent="handleCreateOrderSubmit">
-      <div class="form-section">
-  <h4>🏪 Canal de Retiro</h4>
-  <p class="section-description">Selecciona dónde el conductor retirará este pedido</p>
-  
-  <div class="form-grid">
-    <div class="form-group full-width">
-      <label class="required">Punto de Retiro</label>
-      
-      <!-- Loading state -->
-      <div v-if="loadingChannels" class="channel-loading">
-        <div class="loading-spinner"></div>
-        <span>Cargando canales...</span>
+
+    <!-- Modal: Manifest -->
+    <ManifestModal 
+      v-if="showManifestModal" 
+      :manifestId="currentManifestId"
+      @close="showManifestModal = false"
+      @readyToPrint="printManifest"
+    />
+
+    <!-- Modal: Create Order -->
+    <Modal v-model="showCreateOrderModal" title="➕ Crear Nuevo Pedido" width="800px">
+      <div v-if="showCreateOrderModal" class="max-h-[70vh] overflow-y-auto p-5">
+        <form @submit.prevent="handleCreateOrderSubmit">
+          <!-- Canal de Retiro Section -->
+          <div class="mb-6 border border-slate-200 rounded-lg p-5">
+            <h4 class="m-0 mb-4 text-gray-800 text-base font-semibold">🏪 Canal de Retiro</h4>
+            <p class="text-slate-500 text-sm -mt-2 mb-4">Selecciona dónde el conductor retirará este pedido</p>
+            
+            <div class="grid grid-cols-2 gap-4 max-md:grid-cols-1">
+              <div class="flex flex-col col-span-2">
+                <label class="mb-1.5 font-medium text-gray-700 text-sm after:content-['_*'] after:text-red-500">Punto de Retiro</label>
+                
+                <!-- Loading channels -->
+                <div v-if="loadingChannels" class="h-[50px] w-full rounded-lg bg-gradient-to-r from-slate-200 via-slate-100 to-slate-200 bg-[length:200%_100%] animate-pulse-bg"></div>
+                
+                <!-- No channels warning -->
+                <div v-else-if="!availableChannels.length" class="flex gap-3 p-4 bg-amber-50 border border-amber-300 rounded-lg text-amber-900">
+                  <span class="text-2xl flex-shrink-0 mt-0.5">⚠️</span>
+                  <div class="flex-1">
+                    <p class="m-0 mb-2.5 leading-relaxed"><strong class="text-amber-950">No hay canales configurados</strong></p>
+                    <p class="m-0 mb-2.5 leading-relaxed">Tu empresa necesita tener al menos un canal configurado para crear pedidos.</p>
+                    <button 
+                      type="button" 
+                      @click="redirectToChannels" 
+                      class="bg-transparent border-none text-blue-600 no-underline cursor-pointer text-sm p-0 font-semibold transition-colors hover:text-blue-700 hover:underline"
+                    >
+                      → Configurar canales ahora
+                    </button>
+                  </div>
+                </div>
+                
+                <!-- Channel selector -->
+                <select 
+                  v-else
+                  v-model="newOrder.channel_id" 
+                  class="appearance-none bg-white border border-slate-300 rounded-lg px-4 pr-10 py-3 text-base w-full cursor-pointer text-slate-800 bg-[url('data:image/svg+xml,%3csvg xmlns=%27http://www.w3.org/2000/svg%27 fill=%27none%27 viewBox=%270 0 20 20%27%3e%3cpath stroke=%27%2364748b%27 stroke-linecap=%27round%27 stroke-linejoin=%27round%27 stroke-width=%271.5%27 d=%27M6 8l4 4 4-4%27/%3e%3c/svg%3e')] bg-no-repeat bg-[right_1rem_center] bg-[length:1.5em_1.5em] transition-all hover:border-slate-400 focus:outline-none focus:border-indigo-600 focus:ring-2 focus:ring-indigo-600/10 disabled:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-70" 
+                  required
+                >
+                  <option value="" disabled>Selecciona dónde se retirará...</option>
+                  <option 
+                    v-for="channel in availableChannels" 
+                    :key="channel._id" 
+                    :value="channel._id"
+                  >
+                    {{ getChannelDisplayName(channel) }}
+                  </option>
+                </select>
+                
+                <!-- Channel preview -->
+                <div v-if="selectedChannelInfo" class="mt-4 animate-fadeIn">
+                  <div class="bg-white border border-slate-200 rounded-lg p-4 shadow-sm">
+                    <div class="flex items-center gap-3">
+                      <span class="text-[28px] leading-none">{{ getChannelIcon(selectedChannelInfo.channel_type) }}</span>
+                      <div class="flex-1">
+                        <div class="font-semibold text-slate-800 text-base">{{ selectedChannelInfo.channel_name }}</div>
+                        <div class="text-slate-500 text-xs font-medium">{{ getChannelTypeName(selectedChannelInfo.channel_type) }}</div>
+                      </div>
+                    </div>
+                    <div v-if="selectedChannelInfo.store_url" class="mt-3 pt-2 border-t border-dashed border-slate-200">
+                      <div class="flex items-center gap-2 text-[13px] text-slate-600">
+                        <span class="text-sm">🌐</span>
+                        <span class="overflow-hidden text-ellipsis whitespace-nowrap text-sky-500">{{ selectedChannelInfo.store_url }}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                
+                <small class="text-[13px] text-slate-500 mt-3 block">
+                  💡 El conductor recibirá las instrucciones de retiro para este canal específico
+                </small>
+              </div>
+            </div>
+          </div>
+
+          <!-- Cliente Section -->
+          <div class="mb-6 border border-slate-200 rounded-lg p-5">
+            <h4 class="m-0 mb-4 text-gray-800 text-base font-semibold">👤 Información del Cliente</h4>
+            <div class="grid grid-cols-2 gap-4 max-md:grid-cols-1">
+              <div class="flex flex-col">
+                <label class="mb-1.5 font-medium text-gray-700 text-sm after:content-['_*'] after:text-red-500">Nombre del Cliente</label>
+                <input 
+                  v-model="newOrder.customer_name" 
+                  type="text" 
+                  required 
+                  placeholder="Juan Pérez"
+                  class="px-3 py-2.5 border border-gray-300 rounded-md text-sm w-full box-border focus:outline-none focus:border-indigo-600 focus:ring-2 focus:ring-indigo-600/10"
+                />
+              </div>
+              
+              <div class="flex flex-col">
+                <label class="mb-1.5 font-medium text-gray-700 text-sm">Email del Cliente</label>
+                <input 
+                  v-model="newOrder.customer_email" 
+                  type="email" 
+                  placeholder="cliente@email.com"
+                  class="px-3 py-2.5 border border-gray-300 rounded-md text-sm w-full box-border focus:outline-none focus:border-indigo-600 focus:ring-2 focus:ring-indigo-600/10"
+                />
+              </div>
+              
+              <div class="flex flex-col">
+                <label class="mb-1.5 font-medium text-gray-700 text-sm">Teléfono del Cliente</label>
+                <input 
+                  v-model="newOrder.customer_phone" 
+                  type="tel" 
+                  placeholder="+56 9 1234 5678"
+                  class="px-3 py-2.5 border border-gray-300 rounded-md text-sm w-full box-border focus:outline-none focus:border-indigo-600 focus:ring-2 focus:ring-indigo-600/10"
+                />
+              </div>
+            </div>
+          </div>
+
+          <!-- Dirección Section -->
+          <div class="mb-6 border border-slate-200 rounded-lg p-5">
+            <h4 class="m-0 mb-4 text-gray-800 text-base font-semibold">📍 Dirección de Entrega</h4>
+            <div class="grid grid-cols-2 gap-4 max-md:grid-cols-1">
+              <div class="flex flex-col col-span-2">
+                <label class="mb-1.5 font-medium text-gray-700 text-sm after:content-['_*'] after:text-red-500">Dirección Completa</label>
+                <input 
+                  v-model="newOrder.shipping_address" 
+                  type="text" 
+                  required 
+                  placeholder="Av. Providencia 1234, Dpto 567"
+                  class="px-3 py-2.5 border border-gray-300 rounded-md text-sm w-full box-border focus:outline-none focus:border-indigo-600 focus:ring-2 focus:ring-indigo-600/10"
+                />
+              </div>
+              
+              <div class="flex flex-col">
+                <label class="mb-1.5 font-medium text-gray-700 text-sm after:content-['_*'] after:text-red-500">Comuna</label>
+                <input 
+                  v-model="newOrder.shipping_commune" 
+                  type="text" 
+                  required 
+                  placeholder="Providencia"
+                  class="px-3 py-2.5 border border-gray-300 rounded-md text-sm w-full box-border focus:outline-none focus:border-indigo-600 focus:ring-2 focus:ring-indigo-600/10"
+                />
+              </div>
+              
+              <div class="flex flex-col">
+                <label class="mb-1.5 font-medium text-gray-700 text-sm">Región</label>
+                <input 
+                  v-model="newOrder.shipping_state" 
+                  type="text" 
+                  value="Región Metropolitana"
+                  placeholder="Región Metropolitana"
+                  class="px-3 py-2.5 border border-gray-300 rounded-md text-sm w-full box-border focus:outline-none focus:border-indigo-600 focus:ring-2 focus:ring-indigo-600/10"
+                />
+              </div>
+            </div>
+          </div>
+
+          <!-- Pedido Info Section -->
+          <div class="mb-6 border border-slate-200 rounded-lg p-5">
+            <h4 class="m-0 mb-4 text-gray-800 text-base font-semibold">📦 Información del Pedido</h4>
+            <div class="grid grid-cols-2 gap-4 max-md:grid-cols-1">
+              <div class="flex flex-col">
+                <label class="mb-1.5 font-medium text-gray-700 text-sm after:content-['_*'] after:text-red-500">Número de Pedido</label>
+                <input 
+                  v-model="newOrder.order_number" 
+                  type="text" 
+                  required 
+                  placeholder="Ej: PED-001, #12345, ORDER-ABC"
+                  maxlength="50"
+                  class="px-3 py-2.5 border border-gray-300 rounded-md text-sm w-full box-border focus:outline-none focus:border-indigo-600 focus:ring-2 focus:ring-indigo-600/10"
+                />
+                <small class="text-xs text-gray-600 mt-1 italic">Ingresa tu número de pedido interno</small>
+              </div>
+              
+              <div class="flex flex-col">
+                <label class="mb-1.5 font-medium text-gray-700 text-sm">ID Externo (Opcional)</label>
+                <input 
+                  v-model="newOrder.external_order_id" 
+                  type="text" 
+                  placeholder="ID de tu sistema de ventas"
+                  maxlength="100"
+                  class="px-3 py-2.5 border border-gray-300 rounded-md text-sm w-full box-border focus:outline-none focus:border-indigo-600 focus:ring-2 focus:ring-indigo-600/10"
+                />
+                <small class="text-xs text-gray-600 mt-1 italic">ID de tu tienda online, sistema POS, etc.</small>
+              </div>
+              
+              <div class="flex flex-col">
+                <label class="mb-1.5 font-medium text-gray-700 text-sm after:content-['_*'] after:text-red-500">Monto Total</label>
+                <input 
+                  v-model.number="newOrder.total_amount" 
+                  type="number" 
+                  required 
+                  min="0" 
+                  step="0.01"
+                  placeholder="15000"
+                  class="px-3 py-2.5 border border-gray-300 rounded-md text-sm w-full box-border focus:outline-none focus:border-indigo-600 focus:ring-2 focus:ring-indigo-600/10"
+                />
+                <small class="text-xs text-gray-600 mt-1 italic">Valor total del pedido en pesos</small>
+              </div>
+              
+              <div class="flex flex-col">
+                <label class="mb-1.5 font-medium text-gray-700 text-sm">Costo de Envío</label>
+                <input 
+                  v-model.number="newOrder.shipping_cost" 
+                  type="number" 
+                  min="0" 
+                  step="0.01"
+                  placeholder="2500"
+                  class="px-3 py-2.5 border border-gray-300 rounded-md text-sm w-full box-border focus:outline-none focus:border-indigo-600 focus:ring-2 focus:ring-indigo-600/10"
+                />
+                <small class="text-xs text-gray-600 mt-1 italic">Costo del despacho (opcional)</small>
+              </div>
+              
+              <div class="flex flex-col col-span-2">
+                <label class="mb-1.5 font-medium text-gray-700 text-sm">Notas del Pedido</label>
+                <textarea 
+                  v-model="newOrder.notes" 
+                  rows="3"
+                  placeholder="Instrucciones especiales para la entrega..."
+                  maxlength="500"
+                  class="px-3 py-2.5 border border-gray-300 rounded-md text-sm w-full box-border focus:outline-none focus:border-indigo-600 focus:ring-2 focus:ring-indigo-600/10"
+                ></textarea>
+                <small class="text-xs text-gray-600 mt-1 italic">Información adicional para el delivery</small>
+              </div>
+            </div>
+          </div>
+
+          <!-- Actions -->
+          <div class="flex justify-end gap-3 mt-6 pt-5 border-t border-gray-200 max-md:flex-col">
+            <button 
+              type="button" 
+              @click="closeCreateOrderModal" 
+              class="bg-gray-100 text-gray-700 border border-gray-300 px-5 py-2.5 rounded-md font-medium cursor-pointer hover:bg-gray-200 max-md:w-full"
+            >
+              Cancelar
+            </button>
+            <button 
+              type="submit" 
+              :disabled="isCreatingOrder" 
+              class="bg-gradient-to-br from-indigo-600 to-purple-600 text-white border-none px-5 py-2.5 rounded-md font-medium cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed disabled:transform-none hover:not-disabled:-translate-y-px hover:not-disabled:shadow-lg hover:not-disabled:shadow-indigo-600/30 max-md:w-full"
+            >
+              {{ isCreatingOrder ? '⏳ Creando...' : '💾 Crear Pedido' }}
+            </button>
+          </div>
+        </form>
       </div>
-      
-      <!-- No channels available -->
-      <div v-else-if="!availableChannels.length" class="no-channels-warning">
-        <div class="warning-icon">⚠️</div>
-        <div class="warning-content">
-          <p><strong>No hay canales configurados</strong></p>
-          <p>Tu empresa necesita tener al menos un canal configurado para crear pedidos.</p>
-          <button 
-            type="button" 
-            @click="redirectToChannels" 
-            class="btn-link"
+    </Modal>
+
+    <!-- Modal: Labels Preview -->
+    <Modal 
+      v-model="showLabelsPreviewModal" 
+      title="🖨️ Vista Previa de Etiquetas" 
+      width="900px"
+    >
+      <div v-if="labelsToPreview && labelsToPreview.length > 0" class="max-h-[70vh] flex flex-col">
+        <div class="flex justify-between items-start pb-5 border-b-2 border-gray-200 mb-5 max-md:flex-col max-md:gap-4 max-md:items-stretch">
+          <div>
+            <h4 class="m-0 mb-1 text-gray-800 text-lg font-semibold">{{ labelsToPreview?.length || 0 }} etiqueta(s) generada(s)</h4>
+            <p class="m-0 text-gray-600 text-sm">Revisa las etiquetas antes de imprimir</p>
+          </div>
+          <div class="flex gap-3 flex-shrink-0 max-md:justify-stretch">
+            <button @click="printLabelsFromPreview" class="px-5 py-2.5 border-none rounded-lg font-medium cursor-pointer transition-all duration-200 text-sm bg-gradient-to-br from-blue-500 to-blue-800 text-white hover:-translate-y-px hover:shadow-lg hover:shadow-blue-500/30 max-md:flex-1">
+              🖨️ Imprimir Todas
+            </button>
+            <button @click="printLabelsDirectly" class="px-5 py-2.5 border-none rounded-lg font-medium cursor-pointer transition-all duration-200 text-sm bg-gradient-to-br from-blue-500 to-blue-800 text-white hover:-translate-y-px hover:shadow-lg hover:shadow-blue-500/30 max-md:flex-1" title="Impresión directa (sin ventana adicional)">
+              ⚡ Imprimir Directo
+            </button>
+            <button @click="showLabelsPreviewModal = false" class="px-5 py-2.5 rounded-lg font-medium cursor-pointer transition-all duration-200 text-sm bg-gray-100 text-gray-700 border border-gray-300 hover:bg-gray-200 max-md:hidden">
+              Cerrar
+            </button>
+          </div>
+        </div>
+        
+        <div class="grid grid-cols-[repeat(auto-fill,minmax(400px,1fr))] gap-4 max-h-[50vh] overflow-y-auto p-2 border border-gray-200 rounded-lg bg-gray-50 max-md:grid-cols-1 max-md:max-h-[40vh]">
+          <div 
+            v-for="label in labelsToPreview" 
+            :key="label.order_id"
+            class="bg-white border border-gray-300 rounded-lg p-4 transition-all duration-200 flex flex-col gap-3 hover:border-blue-500 hover:shadow-sm hover:shadow-blue-500/10 max-sm:p-3"
           >
-            → Configurar canales ahora
-          </button>
-        </div>
-      </div>
-      
-      <!-- Channel selector -->
-      <select 
-        v-else
-        v-model="newOrder.channel_id" 
-        class="channel-selector" 
-        required
-      >
-        <option value="" disabled>Selecciona dónde se retirará...</option>
-        <option 
-          v-for="channel in availableChannels" 
-          :key="channel._id" 
-          :value="channel._id"
-        >
-          {{ getChannelDisplayName(channel) }}
-        </option>
-      </select>
-      
-      <!-- Channel info preview -->
-      <div v-if="selectedChannelInfo" class="channel-preview">
-        <div class="channel-info-card">
-          <div class="channel-header">
-            <span class="channel-icon">{{ getChannelIcon(selectedChannelInfo.channel_type) }}</span>
-            <div class="channel-details">
-              <div class="channel-name">{{ selectedChannelInfo.channel_name }}</div>
-              <div class="channel-type">{{ getChannelTypeName(selectedChannelInfo.channel_type) }}</div>
+            <div class="flex-1 border border-gray-200 rounded-md p-3 bg-[#fafafa] text-xs max-sm:p-2 max-sm:text-[11px]">
+              <div class="text-center border-b border-gray-300 pb-2 mb-2">
+                <div class="font-bold text-sm text-gray-800">enviGo</div>
+                <div class="text-base font-bold text-red-600 mt-1 px-2 py-1 bg-red-50 rounded inline-block">{{ label.unique_code }}</div>
+              </div>
+              <div class="flex flex-col gap-1">
+                <div class="text-[11px] leading-snug text-gray-700">
+                  <strong class="text-gray-900 inline-block w-[50px] font-semibold">Pedido:</strong> #{{ label.order_number }}
+                </div>
+                <div class="text-[11px] leading-snug text-gray-700">
+                  <strong class="text-gray-900 inline-block w-[50px] font-semibold">Cliente:</strong> {{ label.customer_name }}
+                </div>
+                <div class="text-[11px] leading-snug text-gray-700">
+                  <strong class="text-gray-900 inline-block w-[50px] font-semibold">Teléfono:</strong> {{ label.customer_phone || 'No disponible' }}
+                </div>
+                <div class="text-[11px] leading-snug text-gray-700">
+                  <strong class="text-gray-900 inline-block w-[50px] font-semibold">Dirección:</strong> {{ label.shipping_address }}
+                </div>
+                <div class="text-[11px] leading-snug text-gray-700">
+                  <strong class="text-gray-900 inline-block w-[50px] font-semibold">Comuna:</strong> {{ label.shipping_commune }}
+                </div>
+                <div v-if="label.notes" class="text-[11px] leading-snug text-gray-700">
+                  <strong class="text-gray-900 inline-block w-[50px] font-semibold">Notas:</strong> {{ label.notes }}
+                </div>
+              </div>
             </div>
-          </div>
-          <div class="channel-meta">
-            <div class="meta-item" v-if="selectedChannelInfo.store_url">
-              <span class="meta-icon">🌐</span>
-              <span class="meta-text">{{ selectedChannelInfo.store_url }}</span>
-            </div>
+            <button 
+              @click="printSingleLabelFromPreview(label)" 
+              class="bg-gradient-to-br from-amber-500 to-amber-700 text-white border-none px-3 py-2 rounded-md text-xs font-medium cursor-pointer transition-all duration-200 hover:-translate-y-px hover:shadow-sm hover:shadow-amber-500/30 max-sm:px-2.5 max-sm:py-1.5 max-sm:text-[11px]"
+              title="Imprimir solo esta etiqueta"
+            >
+              🖨️ Individual
+            </button>
           </div>
         </div>
       </div>
       
-      <small class="help-text">
-        💡 El conductor recibirá las instrucciones de retiro para este canal específico
-      </small>
-    </div>
-  </div>
-</div>
-      <!-- Información del Cliente -->
-      <div class="form-section">
-        <h4>👤 Información del Cliente</h4>
-        <div class="form-grid">
-          <div class="form-group">
-            <label class="required">Nombre del Cliente</label>
-            <input 
-              v-model="newOrder.customer_name" 
-              type="text" 
-              required 
-              placeholder="Juan Pérez"
-            />
-          </div>
-          
-          <div class="form-group">
-            <label>Email del Cliente</label>
-            <input 
-              v-model="newOrder.customer_email" 
-              type="email" 
-              placeholder="cliente@email.com"
-            />
-          </div>
-          
-          <div class="form-group">
-            <label>Teléfono del Cliente</label>
-            <input 
-              v-model="newOrder.customer_phone" 
-              type="tel" 
-              placeholder="+56 9 1234 5678"
-            />
-          </div>
-        </div>
+      <div v-else class="p-10 text-center text-gray-500 italic">
+        No hay etiquetas para mostrar
       </div>
+    </Modal>
 
-      <!-- Dirección de Entrega -->
-      <div class="form-section">
-        <h4>📍 Dirección de Entrega</h4>
-        <div class="form-grid">
-          <div class="form-group full-width">
-            <label class="required">Dirección Completa</label>
-            <input 
-              v-model="newOrder.shipping_address" 
-              type="text" 
-              required 
-              placeholder="Av. Providencia 1234, Dpto 567"
-            />
-          </div>
-          
-          <div class="form-group">
-            <label class="required">Comuna</label>
-            <input 
-              v-model="newOrder.shipping_commune" 
-              type="text" 
-              required 
-              placeholder="Providencia"
-            />
-          </div>
-          
-          <div class="form-group">
-            <label>Región</label>
-            <input 
-              v-model="newOrder.shipping_state" 
-              type="text" 
-              value="Región Metropolitana"
-              placeholder="Región Metropolitana"
-            />
-          </div>
-        </div>
-      </div>
-
-      <!-- Información del Pedido -->
-      <div class="form-section">
-  <h4>📦 Información del Pedido</h4>
-  <div class="form-grid">
-    <div class="form-group">
-      <label class="required">Número de Pedido</label>
-      <input 
-        v-model="newOrder.order_number" 
-        type="text" 
-        required 
-        placeholder="Ej: PED-001, #12345, ORDER-ABC"
-        maxlength="50"
-      />
-      <small class="help-text">Ingresa tu número de pedido interno</small>
-    </div>
+    <!-- Modales adicionales -->
+    <BulkUploadModal
+      :show="showBulkUploadModal"
+      :selected-file="selectedBulkFile"
+      :downloading-template="downloadingTemplate"
+      :is-uploading="isBulkUploading"
+      :upload-feedback="bulkUploadFeedback"
+      :upload-status="bulkUploadStatus"
+      @close="closeBulkUploadModal"
+      @download-template="downloadBulkTemplate"
+      @file-selected="handleBulkFileSelect"
+      @clear-file="clearBulkFile"
+      @upload="handleBulkUpload"
+    />
     
-    <div class="form-group">
-      <label>ID Externo (Opcional)</label>
-      <input 
-        v-model="newOrder.external_order_id" 
-        type="text" 
-        placeholder="ID de tu sistema de ventas"
-        maxlength="100"
-      />
-      <small class="help-text">ID de tu tienda online, sistema POS, etc.</small>
-    </div>
-    
-    <div class="form-group">
-      <label class="required">Monto Total</label>
-      <input 
-        v-model.number="newOrder.total_amount" 
-        type="number" 
-        required 
-        min="0" 
-        step="0.01"
-        placeholder="15000"
-      />
-      <small class="help-text">Valor total del pedido en pesos</small>
-    </div>
-    
-    <div class="form-group">
-      <label>Costo de Envío</label>
-      <input 
-        v-model.number="newOrder.shipping_cost" 
-        type="number" 
-        min="0" 
-        step="0.01"
-        placeholder="2500"
-      />
-      <small class="help-text">Costo del despacho (opcional)</small>
-    </div>
-    
-    <div class="form-group full-width">
-      <label>Notas del Pedido</label>
-      <textarea 
-        v-model="newOrder.notes" 
-        rows="3"
-        placeholder="Instrucciones especiales para la entrega..."
-        maxlength="500"
-      ></textarea>
-      <small class="help-text">Información adicional para el delivery</small>
-    </div>
+    <CollectionRequestModal
+      :show="showCollectionModal"
+      :company-name="auth.user?.company?.name || 'Tu empresa'"
+      :company-address="auth.user?.company?.address || 'Dirección no disponible'"
+      :is-requesting="isRequestingCollection"
+      @close="showCollectionModal = false"
+      @submit="handleCollectionRequest"
+    />
   </div>
-</div>
-
-      <!-- Botones -->
-      <div class="modal-actions">
-        <button 
-          type="button" 
-          @click="closeCreateOrderModal" 
-          class="btn-cancel"
-        >
-          Cancelar
-        </button>
-        <button 
-          type="submit" 
-          :disabled="isCreatingOrder" 
-          class="btn-save"
-        >
-          {{ isCreatingOrder ? '⏳ Creando...' : '💾 Crear Pedido' }}
-        </button>
-      </div>
-    </form>
-  </div>
-</Modal>
-<Modal 
-  v-model="showLabelsModal" 
-  :title="`🏷️ Generar Etiquetas - ${selectedOrders.length} pedidos`" 
-  width="800px"
->
-  <LabelGenerator 
-    :selected-order-ids="selectedOrders"
-    @labels-generated="onLabelsGenerated"
-    @close="showLabelsModal = false"
-  />
-</Modal>
-<!-- Modal de Vista Previa de Etiquetas -->
-<Modal 
-  v-model="showLabelsPreviewModal" 
-  title="🖨️ Vista Previa de Etiquetas" 
-  width="900px"
->
-  <div class="labels-preview-container">
-    <div class="preview-header">
-      <div class="preview-info">
-        <h4>{{ labelsToPreview.length }} etiqueta(s) generada(s)</h4>
-        <p>Revisa las etiquetas antes de imprimir</p>
-      </div>
-      <div class="preview-actions">
-        <button @click="printLabelsFromPreview" class="btn btn-primary">
-          🖨️ Imprimir Todas
-        </button>
-        <button @click="printLabelsDirectly" class="btn btn-print-direct" title="Impresión directa (sin ventana adicional)">
-          ⚡ Imprimir Directo
-        </button>
-        <button @click="showLabelsPreviewModal = false" class="btn btn-secondary">
-          Cerrar
-        </button>
-      </div>
-    </div>
-    
-    <div class="labels-grid">
-      <div 
-        v-for="label in labelsToPreview" 
-        :key="label.order_id"
-        class="label-preview-card"
-      >
-        <div class="label-mini-preview">
-          <div class="label-header-mini">
-            <div class="company-name-mini">enviGo</div>
-            <div class="envigo-code-mini">{{ label.unique_code }}</div>
-          </div>
-          <div class="label-content-mini">
-            <div class="label-info-item">
-              <strong>Pedido:</strong> #{{ label.order_number }}
-            </div>
-            <div class="label-info-item">
-              <strong>Cliente:</strong> {{ label.customer_name }}
-            </div>
-            <div class="label-info-item">
-              <strong>Teléfono:</strong> {{ label.customer_phone || 'No disponible' }}
-            </div>
-            <div class="label-info-item">
-              <strong>Dirección:</strong> {{ label.shipping_address }}
-            </div>
-            <div class="label-info-item">
-              <strong>Comuna:</strong> {{ label.shipping_commune }}
-            </div>
-            <div v-if="label.notes" class="label-info-item">
-              <strong>Notas:</strong> {{ label.notes }}
-            </div>
-          </div>
-        </div>
-        <button 
-          @click="printSingleLabelFromPreview(label)" 
-          class="btn-single-print"
-          title="Imprimir solo esta etiqueta"
-        >
-          🖨️ Individual
-        </button>
-      </div>
-    </div>
-  </div>
-</Modal>
-
-  </div>
-  <!-- Modal de Subida Masiva -->
-<BulkUploadModal
-  :show="showBulkUploadModal"
-  :selected-file="selectedBulkFile"
-  :downloading-template="downloadingTemplate"
-  :is-uploading="isBulkUploading"
-  :upload-feedback="bulkUploadFeedback"
-  :upload-status="bulkUploadStatus"
-  @close="closeBulkUploadModal"
-  @download-template="downloadBulkTemplate"
-  @file-selected="handleBulkFileSelect"
-  @clear-file="clearBulkFile"
-  @upload="handleBulkUpload"
-/>
-<CollectionRequestModal
-  :show="showCollectionModal"
-  :company-name="auth.user?.company?.name || 'Tu empresa'"
-  :company-address="auth.user?.company?.address || 'Dirección no disponible'"
-  :is-requesting="isRequestingCollection"
-  @close="showCollectionModal = false"
-  @submit="handleCollectionRequest"
-/>
 </template>
 
 <script setup>
@@ -1844,136 +1862,14 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
-/* ==================== ESTILOS PARA SELECTOR DE CANAL ==================== */
-
-/* ==================== ESTILOS MEJORADOS PARA SELECTOR DE CANAL ==================== */
-
-.section-description {
-  color: #64748b; /* Slate 500 */
-  font-size: 14px;
-  margin-top: -8px;
-  margin-bottom: 16px;
-}
-
-/* Container for the pickup point selection */
-.pickup-point-group {
-  background-color: #f8fafc; /* Slate 50 */
-  border: 1px solid #e2e8f0; /* Slate 200 */
-  border-radius: 12px;
-  padding: 20px;
-  transition: all 0.3s ease;
-}
-
-.pickup-point-group label {
-  font-size: 12px;
-  font-weight: 600;
-  color: #475569; /* Slate 600 */
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  margin-bottom: 8px;
-}
-
-/* Skeleton loader for a better loading UX */
-.channel-loading-skeleton {
-  height: 50px;
-  width: 100%;
-  border-radius: 8px;
-  background: linear-gradient(90deg, #e2e8f0 25%, #f1f5f9 50%, #e2e8f0 75%);
-  background-size: 200% 100%;
-  animation: pulse-bg 1.5s infinite ease-in-out;
-}
-
+/* Animaciones que Tailwind no puede replicar exactamente */
 @keyframes pulse-bg {
   0% { background-position: 200% 0; }
   100% { background-position: -200% 0; }
 }
 
-
-/* Warning message for when no channels are available */
-.no-channels-warning {
-  display: flex;
-  gap: 12px;
-  padding: 16px;
-  background-color: #fffbeb; /* Amber 50 */
-  border: 1px solid #fcd34d; /* Amber 300 */
-  border-radius: 8px;
-  color: #92400e; /* Amber 800 */
-}
-
-.warning-icon {
-  font-size: 24px;
-  flex-shrink: 0;
-  margin-top: 2px;
-}
-
-.warning-content {
-  flex: 1;
-}
-
-.warning-content p {
-  margin: 0 0 10px 0;
-  line-height: 1.5;
-}
-
-.warning-content strong {
-  color: #78350f; /* Amber 900 */
-}
-
-.btn-link {
-  background: none;
-  border: none;
-  color: #2563eb; /* Blue 600 */
-  text-decoration: none;
-  cursor: pointer;
-  font-size: 14px;
-  padding: 0;
-  font-weight: 600;
-  transition: color 0.2s ease;
-}
-
-.btn-link:hover {
-  color: #1d4ed8; /* Blue 700 */
-  text-decoration: underline;
-}
-
-/* Modern custom select dropdown */
-.channel-selector {
-  appearance: none;
-  background-color: #ffffff;
-  border: 1px solid #cbd5e1; /* Slate 300 */
-  border-radius: 8px;
-  padding: 12px 40px 12px 16px;
-  font-size: 16px;
-  width: 100%;
-  cursor: pointer;
-  color: #1e293b; /* Slate 800 */
-  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%2364748b' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
-  background-repeat: no-repeat;
-  background-position: right 1rem center;
-  background-size: 1.5em 1.5em;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
-}
-
-.channel-selector:hover {
-  border-color: #94a3b8; /* Slate 400 */
-}
-
-.channel-selector:focus {
-  outline: none;
-  border-color: #4f46e5; /* Indigo 600 */
-  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.15);
-}
-
-.channel-selector:disabled {
-  background-color: #f1f5f9; /* Slate 100 */
-  cursor: not-allowed;
-  opacity: 0.7;
-}
-
-/* Preview of the selected channel */
-.channel-preview {
-  margin-top: 16px;
-  animation: fadeIn 0.5s ease-out;
+.animate-pulse-bg {
+  animation: pulse-bg 1.5s infinite ease-in-out;
 }
 
 @keyframes fadeIn {
@@ -1987,229 +1883,11 @@ onBeforeUnmount(() => {
   }
 }
 
-.channel-info-card {
-  background-color: #ffffff;
-  border: 1px solid #e2e8f0; /* Slate 200 */
-  border-radius: 8px;
-  padding: 16px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+.animate-fadeIn {
+  animation: fadeIn 0.5s ease-out;
 }
 
-.channel-header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.channel-icon {
-  font-size: 28px;
-  line-height: 1;
-}
-
-.channel-details {
-  flex: 1;
-}
-
-.channel-name {
-  font-weight: 600;
-  color: #1e293b; /* Slate 800 */
-  font-size: 16px;
-}
-
-.channel-type {
-  color: #64748b; /* Slate 500 */
-  font-size: 12px;
-  font-weight: 500;
-}
-
-.channel-meta {
-  margin-top: 12px;
-  padding-top: 8px;
-  border-top: 1px dashed #e2e8f0; /* Slate 200 */
-}
-
-.meta-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  color: #475569; /* Slate 600 */
-}
-
-.meta-icon {
-  font-size: 14px;
-}
-
-.meta-text {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: #0ea5e9; /* Sky 500 */
-}
-
-.help-text {
-  font-size: 13px;
-  color: #64748b; /* Slate 500 */
-  margin-top: 12px;
-  display: block;
-}
-
-
-.orders-page {
-  padding: 24px;
-  max-width: 1600px;
-  margin: 0 auto;
-  font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
-  background: #f8fafc;
-}
-
-/* Loading States */
-.loading-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 40px;
-  color: #6b7280;
-}
-
-.loading-spinner {
-  width: 32px;
-  height: 32px;
-  border: 3px solid #f3f4f6;
-  border-top: 3px solid #6366f1;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-  margin-bottom: 16px;
-}
-
-@keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
-
-/* Support Modal Styles */
-.support-form {
-  padding: 20px;
-}
-
-.support-order-info {
-  background: #f9fafb;
-  padding: 16px;
-  border-radius: 12px;
-  margin-bottom: 20px;
-  border: 1px solid #e5e7eb;
-}
-
-.support-order-info h4 {
-  margin: 0 0 8px 0;
-  color: #1f2937;
-  font-size: 16px;
-  font-weight: 600;
-}
-
-.support-order-info p {
-  margin: 4px 0;
-  color: #6b7280;
-  font-size: 14px;
-}
-
-.support-options {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 12px;
-}
-
-.support-option {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 16px;
-  background: white;
-  border: 2px solid #e5e7eb;
-  border-radius: 12px;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  font-size: 14px;
-  font-weight: 500;
-  color: #374151;
-}
-
-.support-option:hover {
-  border-color: #6366f1;
-  background: #f8fafc;
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.15);
-}
-
-/* Responsive Design */
-@media (max-width: 1024px) {
-  .orders-page {
-    padding: 16px;
-  }
-}
-
-@media (max-width: 768px) {
-  .orders-page {
-    padding: 12px;
-    background: white;
-  }
-}
-
-@media (max-width: 480px) {
-  .orders-page {
-    padding: 8px;
-  }
-  
-  .support-options {
-    gap: 8px;
-  }
-  
-  .support-option {
-    padding: 12px;
-    font-size: 13px;
-  }
-}
-
-/* Accessibility */
-.orders-page:focus-within {
-  outline: none;
-}
-
-/* Print styles */
-@media print {
-  .orders-page {
-    background: white;
-    padding: 0;
-  }
-}
-/* ⚡ TIEMPO REAL: Indicadores visuales de actualización */
-.order-updated {
-  animation: orderUpdateGlow 4s ease-out;
-  position: relative;
-  z-index: 1;
-}
-
-.order-updated.update-driver_assigned {
-  border-left: 4px solid #3b82f6 !important;
-  background: linear-gradient(90deg, #dbeafe, transparent) !important;
-}
-
-.order-updated.update-picked_up {
-  border-left: 4px solid #8b5cf6 !important;
-  background: linear-gradient(90deg, #e9d5ff, transparent) !important;
-}
-
-.order-updated.update-delivered {
-  border-left: 4px solid #10b981 !important;
-  background: linear-gradient(90deg, #d1fae5, transparent) !important;
-}
-
-.order-updated.update-proof_uploaded {
-  border-left: 4px solid #f59e0b !important;
-  background: linear-gradient(90deg, #fef3c7, transparent) !important;
-}
-
+/* Animaciones de tiempo real - mantener del original */
 @keyframes orderUpdateGlow {
   0% {
     transform: scale(1.02);
@@ -2231,685 +1909,48 @@ onBeforeUnmount(() => {
   }
 }
 
-/* Indicador de tiempo real en el header */
-.real-time-status {
-  position: fixed;
-  top: 80px;
-  right: 20px;
-  background: linear-gradient(135deg, #10b981, #059669);
-  color: white;
-  padding: 8px 16px;
-  border-radius: 20px;
-  font-size: 12px;
-  font-weight: 600;
-  z-index: 1000;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
-  cursor: pointer;
-  transition: all 0.3s ease;
-  user-select: none;
+.order-updated {
+  animation: orderUpdateGlow 4s ease-out;
 }
 
-.real-time-status:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 16px rgba(16, 185, 129, 0.5);
+/* Clases de actualización por tipo */
+.order-updated.update-driver_assigned {
+  @apply border-l-4 border-l-blue-500 bg-gradient-to-r from-blue-100 to-transparent;
 }
 
-.real-time-status.disabled {
-  background: linear-gradient(135deg, #6b7280, #4b5563);
-  box-shadow: 0 4px 12px rgba(107, 114, 128, 0.4);
+.order-updated.update-picked_up {
+  @apply border-l-4 border-l-purple-500 bg-gradient-to-r from-purple-100 to-transparent;
 }
 
-.real-time-status.disabled:hover {
-  box-shadow: 0 6px 16px rgba(107, 114, 128, 0.5);
+.order-updated.update-delivered {
+  @apply border-l-4 border-l-emerald-500 bg-gradient-to-r from-emerald-100 to-transparent;
 }
 
-.pulse-indicator {
+.order-updated.update-proof_uploaded {
+  @apply border-l-4 border-l-amber-500 bg-gradient-to-r from-amber-100 to-transparent;
+}
+
+/* Scroll suave para contenedores */
+.overflow-y-auto {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 #f1f5f9;
+}
+
+.overflow-y-auto::-webkit-scrollbar {
   width: 8px;
-  height: 8px;
-  background: white;
-  border-radius: 50%;
-  animation: realtimePulse 2s infinite;
 }
 
-.real-time-status.disabled .pulse-indicator {
-  animation: none;
-  opacity: 0.6;
-}
-
-@keyframes realtimePulse {
-  0%, 100% { 
-    opacity: 1; 
-    transform: scale(1); 
-  }
-  50% { 
-    opacity: 0.4; 
-    transform: scale(1.2); 
-  }
-}
-
-.real-time-stats {
-  font-size: 10px;
-  opacity: 0.9;
-  margin-left: 4px;
-}
-
-/* Notificaciones flotantes de actualización */
-.order-notification {
-  position: fixed;
-  top: 120px;
-  right: 20px;
-  background: white;
-  border: 1px solid #e5e7eb;
-  border-radius: 12px;
-  padding: 12px 16px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
-  z-index: 1001;
-  max-width: 300px;
-  animation: slideInFromRight 0.4s ease-out;
-}
-
-.order-notification.driver-assigned {
-  border-left: 4px solid #3b82f6;
-}
-
-.order-notification.picked-up {
-  border-left: 4px solid #8b5cf6;
-}
-
-.order-notification.delivered {
-  border-left: 4px solid #10b981;
-}
-
-.order-notification.proof-uploaded {
-  border-left: 4px solid #f59e0b;
-}
-
-@keyframes slideInFromRight {
-  from {
-    transform: translateX(100%);
-    opacity: 0;
-  }
-  to {
-    transform: translateX(0);
-    opacity: 1;
-  }
-}
-
-.notification-content {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.notification-icon {
-  font-size: 20px;
-  flex-shrink: 0;
-}
-
-.notification-text {
-  flex: 1;
-}
-
-.notification-title {
-  font-weight: 600;
-  color: #1f2937;
-  font-size: 14px;
-  margin-bottom: 2px;
-}
-
-.notification-message {
-  color: #6b7280;
-  font-size: 12px;
-  line-height: 1.3;
-}
-
-.notification-time {
-  color: #9ca3af;
-  font-size: 10px;
-  margin-top: 4px;
-}
-
-/* Mejoras para modales cuando se actualizan */
-.modal-updating {
-  position: relative;
-}
-
-.modal-updating::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 3px;
-  background: linear-gradient(90deg, #3b82f6, #8b5cf6, #10b981);
-  background-size: 200% 100%;
-  animation: modalUpdateProgress 2s ease-in-out;
-  z-index: 1;
-}
-
-@keyframes modalUpdateProgress {
-  0% {
-    background-position: 200% 0;
-  }
-  100% {
-    background-position: -200% 0;
-  }
-}
-
-/* Estados de carga mejorados */
-.updating-indicator {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 4px 12px;
-  background: #f3f4f6;
-  border-radius: 16px;
-  font-size: 12px;
-  color: #6b7280;
-  font-weight: 500;
-}
-
-.updating-spinner {
-  width: 12px;
-  height: 12px;
-  border: 2px solid #e5e7eb;
-  border-top: 2px solid #3b82f6;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-}
-
-/* Responsive design para indicadores */
-@media (max-width: 768px) {
-  .real-time-status {
-    top: 60px;
-    right: 12px;
-    padding: 6px 12px;
-    font-size: 11px;
-  }
-  
-  .order-notification {
-    top: 100px;
-    right: 12px;
-    max-width: 280px;
-    padding: 10px 12px;
-  }
-  
-  .notification-title {
-    font-size: 13px;
-  }
-  
-  .notification-message {
-    font-size: 11px;
-  }
-}
-
-@media (max-width: 480px) {
-  .real-time-status {
-    position: relative;
-    top: auto;
-    right: auto;
-    margin: 8px 0;
-    align-self: flex-start;
-  }
-  
-  .order-notification {
-    top: 80px;
-    right: 8px;
-    left: 8px;
-    max-width: none;
-  }
-}
-
-/* Accesibilidad */
-.real-time-status:focus-visible {
-  outline: 2px solid #3b82f6;
-  outline-offset: 2px;
-}
-
-.order-updated:focus-within {
-  outline: 2px solid #3b82f6;
-  outline-offset: -2px;
-}
-
-/* Modo de contraste alto */
-@media (prefers-contrast: high) {
-  .order-updated {
-    border-width: 3px !important;
-  }
-  
-  .real-time-status {
-    border: 2px solid white;
-  }
-}
-/* Estilos para modal de crear pedido */
-.create-order-form {
-  max-height: 70vh;
-  overflow-y: auto;
-  padding: 20px;
-}
-
-.form-section {
-  margin-bottom: 24px;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  padding: 20px;
-}
-
-.form-section h4 {
-  margin: 0 0 16px 0;
-  color: #1f2937;
-  font-size: 16px;
-  font-weight: 600;
-}
-
-.form-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
-}
-
-.form-group {
-  display: flex;
-  flex-direction: column;
-}
-
-.form-group.full-width {
-  grid-column: 1 / -1;
-}
-
-.form-group label {
-  margin-bottom: 6px;
-  font-weight: 500;
-  color: #374151;
-  font-size: 14px;
-}
-
-.form-group label.required::after {
-  content: ' *';
-  color: #ef4444;
-}
-
-.form-group input,
-.form-group textarea {
-  padding: 10px 12px;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
-  font-size: 14px;
-  width: 100%;
-  box-sizing: border-box;
-}
-
-.form-group input:focus,
-.form-group textarea:focus {
-  outline: none;
-  border-color: #6366f1;
-  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.1);
-}
-.help-text {
-  font-size: 12px;
-  color: #6b7280;
-  margin-top: 4px;
-  font-style: italic;
-}
-
-.form-group input:focus + .help-text,
-.form-group textarea:focus + .help-text {
-  color: #3b82f6;
-}
-.modal-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 12px;
-  margin-top: 24px;
-  padding-top: 20px;
-  border-top: 1px solid #e5e7eb;
-}
-
-.btn-cancel {
-  background: #f3f4f6;
-  color: #374151;
-  border: 1px solid #d1d5db;
-  padding: 10px 20px;
-  border-radius: 6px;
-  font-weight: 500;
-  cursor: pointer;
-}
-
-.btn-cancel:hover {
-  background: #e5e7eb;
-}
-
-.btn-save {
-  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
-  color: white;
-  border: none;
-  padding: 10px 20px;
-  border-radius: 6px;
-  font-weight: 500;
-  cursor: pointer;
-}
-
-.btn-save:hover:not(:disabled) {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
-}
-
-.btn-save:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-  transform: none;
-}
-
-@media (max-width: 768px) {
-  .form-grid {
-    grid-template-columns: 1fr;
-  }
-  
-  .modal-actions {
-    flex-direction: column;
-  }
-  
-  .btn-cancel,
-  .btn-save {
-    width: 100%;
-  }
-}
-
-/* ✅ NUEVOS: Estilos para modal de etiquetas */
-.modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-  padding: 20px;
-}
-
-.modal-large {
-  background: white;
-  border-radius: 12px;
-  width: 95vw;
-  max-width: 800px;
-  max-height: 90vh;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  box-shadow: 0 20px 40px rgba(0,0,0,0.3);
-}
-
-.modal-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 20px;
-  border-bottom: 2px solid #f1f5f9;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-}
-
-.modal-header h3 {
-  margin: 0;
-  font-size: 1.5rem;
-}
-
-.modal-subtitle {
-  margin: 0;
-  font-size: 0.9rem;
-  opacity: 0.9;
-}
-
-.modal-close {
-  background: rgba(255,255,255,0.2);
-  border: none;
-  font-size: 2rem;
-  cursor: pointer;
-  color: white;
-  width: 40px;
-  height: 40px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  transition: all 0.3s ease;
-}
-
-.modal-close:hover {
-  background: rgba(255,255,255,0.3);
-}
-
-.modal-content {
-  flex: 1;
-  overflow: auto;
-  padding: 20px;
-}
-/* ✅ ESTILOS CORREGIDOS PARA MODAL DE ETIQUETAS */
-.labels-preview-container {
-  max-height: 70vh;
-  display: flex;
-  flex-direction: column;
-}
-
-.preview-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  padding-bottom: 20px;
-  border-bottom: 2px solid #e5e7eb;
-  margin-bottom: 20px;
-}
-
-.preview-info h4 {
-  margin: 0 0 4px 0;
-  color: #1f2937;
-  font-size: 18px;
-  font-weight: 600;
-}
-
-.preview-info p {
-  margin: 0;
-  color: #6b7280;
-  font-size: 14px;
-}
-
-.preview-actions {
-  display: flex;
-  gap: 12px;
-  flex-shrink: 0;
-}
-
-.btn {
-  padding: 10px 20px;
-  border: none;
-  border-radius: 8px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  font-size: 14px;
-}
-
-.btn-primary {
-  background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
-  color: white;
-}
-
-.btn-primary:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
-}
-
-.btn-secondary {
-  background: #f3f4f6;
-  color: #374151;
-  border: 1px solid #d1d5db;
-}
-
-.btn-secondary:hover {
-  background: #e5e7eb;
-}
-
-/* ✅ Grid de etiquetas mejorado */
-.labels-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
-  gap: 16px;
-  max-height: 50vh;
-  overflow-y: auto;
-  padding: 8px;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  background: #f9fafb;
-}
-
-.label-preview-card {
-  background: white;
-  border: 1px solid #d1d5db;
-  border-radius: 8px;
-  padding: 16px;
-  transition: all 0.2s ease;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.label-preview-card:hover {
-  border-color: #3b82f6;
-  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.1);
-}
-
-.label-mini-preview {
-  flex: 1;
-  border: 1px solid #e5e7eb;
-  border-radius: 6px;
-  padding: 12px;
-  background: #fafafa;
-  font-size: 12px;
-}
-
-.label-header-mini {
-  text-align: center;
-  border-bottom: 1px solid #d1d5db;
-  padding-bottom: 8px;
-  margin-bottom: 8px;
-}
-
-.company-name-mini {
-  font-weight: bold;
-  font-size: 14px;
-  color: #1f2937;
-}
-
-.envigo-code-mini {
-  font-size: 16px;
-  font-weight: bold;
-  color: #dc2626;
-  margin-top: 4px;
-  padding: 4px 8px;
-  background: #fef2f2;
+.overflow-y-auto::-webkit-scrollbar-track {
+  background: #f1f5f9;
   border-radius: 4px;
-  display: inline-block;
 }
 
-.label-content-mini {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+.overflow-y-auto::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
 }
 
-.label-info-item {
-  font-size: 11px;
-  line-height: 1.3;
-  color: #374151;
-}
-
-.label-info-item strong {
-  color: #1f2937;
-  display: inline-block;
-  width: 50px;
-  font-weight: 600;
-}
-
-.btn-single-print {
-  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
-  color: white;
-  border: none;
-  padding: 8px 12px;
-  border-radius: 6px;
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.btn-single-print:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.3);
-}
-
-/* ✅ Responsive design mejorado */
-@media (max-width: 768px) {
-  .labels-grid {
-    grid-template-columns: 1fr;
-    max-height: 40vh;
-  }
-  
-  .preview-header {
-    flex-direction: column;
-    gap: 16px;
-    align-items: stretch;
-  }
-  
-  .preview-actions {
-    justify-content: stretch;
-  }
-  
-  .btn {
-    flex: 1;
-  }
-}
-
-@media (max-width: 480px) {
-  .label-preview-card {
-    padding: 12px;
-  }
-  
-  .label-mini-preview {
-    padding: 8px;
-    font-size: 11px;
-  }
-  
-  .btn-single-print {
-    padding: 6px 10px;
-    font-size: 11px;
-  }
-}
-
-/* ✅ Estados de carga */
-.labels-grid:empty::after {
-  content: 'No hay etiquetas para mostrar';
-  display: block;
-  text-align: center;
-  color: #6b7280;
-  font-style: italic;
-  padding: 40px;
-  grid-column: 1 / -1;
-}
-
-/* ✅ Accesibilidad */
-.btn:focus-visible {
-  outline: 2px solid #3b82f6;
-  outline-offset: 2px;
-}
-
-.label-preview-card:focus-within {
-  border-color: #3b82f6;
-  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+.overflow-y-auto::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
 }
 </style>
