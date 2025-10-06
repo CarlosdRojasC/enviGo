@@ -1,116 +1,127 @@
 <template>
-  <div class="tracking-container">
+  <div class="max-w-3xl mx-auto p-5 font-sans">
     
     <!-- Header del tracking -->
-    <div v-if="tracking" class="tracking-header">
-      <div class="tracking-title">
-        <h2>📍 Seguimiento de Pedido</h2>
-        <span class="order-number">#{{ tracking.order_number }}</span>
+    <div v-if="tracking" class="flex justify-between items-center mb-8 p-5 bg-gradient-to-br from-indigo-600 to-purple-700 text-white rounded-2xl">
+      <div>
+        <h2 class="m-0 mb-1 text-2xl">📍 Seguimiento de Pedido</h2>
+        <span class="text-base opacity-90 font-medium">#{{ tracking.order_number }}</span>
       </div>
       
-      <div class="tracking-status">
-        <span class="status-badge" :class="tracking.current_status">
+      <div>
+        <span :class="[
+          'px-4 py-2 rounded-full text-sm font-semibold',
+          'bg-white/20 backdrop-blur-md'
+        ]">
           {{ getStatusIcon(tracking.current_status) }} {{ getStatusName(tracking.current_status) }}
         </span>
       </div>
     </div>
 
-    <div v-if="loadingTracking" class="loading-state">
-      <div class="loading-spinner"></div>
-      <p>Cargando información de seguimiento...</p>
+    <!-- Loading State -->
+    <div v-if="loadingTracking" class="text-center py-15 px-5 text-gray-500">
+      <div class="w-10 h-10 border-4 border-gray-200 border-t-indigo-600 rounded-full animate-spin mx-auto mb-4"></div>
+      <p class="m-0">Cargando información de seguimiento...</p>
     </div>
     
-    <div v-else-if="!tracking" class="error-state">
-      <div class="error-icon">⚠️</div>
-      <h3>No se pudo cargar el seguimiento</h3>
-      <p>Inténtalo nuevamente en unos momentos.</p>
-      <button @click="fetchTracking" class="retry-btn">🔄 Reintentar</button>
+    <!-- Error State -->
+    <div v-else-if="!tracking" class="text-center py-15 px-5 text-gray-500">
+      <div class="text-5xl mb-4">⚠️</div>
+      <h3 class="m-0 mb-3 text-gray-700 text-xl font-semibold">No se pudo cargar el seguimiento</h3>
+      <p class="m-0 mb-4">Inténtalo nuevamente en unos momentos.</p>
+      <button @click="fetchTracking" class="bg-indigo-600 text-white border-none px-5 py-2.5 rounded-lg cursor-pointer hover:bg-indigo-700 transition-colors">
+        🔄 Reintentar
+      </button>
     </div>
     
-    <div v-else class="tracking-content">
+    <!-- Tracking Content -->
+    <div v-else class="space-y-8">
       
-      <!-- TRACKING EN VIVO - APARECE SIEMPRE QUE HAYA URL (independiente del estado) -->
-      <div v-if="hasTrackingUrl" class="live-tracking-section">
-        <div class="live-tracking-card">
-          <div class="live-tracking-header">
-            <span class="live-icon">🔴</span>
-            <h3>Seguimiento en Vivo</h3>
-          </div>
-          <p>Rastrea tu pedido en tiempo real con nuestra tecnología GPS</p>
+      <!-- TRACKING EN VIVO -->
+      <div v-if="hasTrackingUrl">
+        <div class="relative bg-gradient-to-br from-sky-50 to-blue-100 border-2 border-sky-500 rounded-2xl p-6 text-center overflow-hidden">
+          <!-- Shimmer effect -->
+          <div class="absolute -top-1/2 -left-1/2 w-[200%] h-[200%] bg-gradient-to-br from-transparent via-sky-500/10 to-transparent animate-[shimmer_3s_infinite]"></div>
           
-          <a 
-            :href="getTrackingUrl" 
-            target="_blank" 
-            class="live-tracking-btn"
-            @click="trackLiveClick">
-            📍 Ver Ubicación en Tiempo Real
-          </a>
+          <div class="relative z-10">
+            <div class="flex items-center justify-center gap-2 mb-3">
+              <span class="text-base animate-pulse">🔴</span>
+              <h3 class="m-0 text-sky-900 text-xl font-semibold">Seguimiento en Vivo</h3>
+            </div>
+            <p class="text-sky-700 my-3">Rastrea tu pedido en tiempo real con nuestra tecnología GPS</p>
+            
+            <a 
+              :href="getTrackingUrl" 
+              target="_blank" 
+              @click="trackLiveClick"
+              class="inline-block bg-gradient-to-br from-sky-500 to-sky-600 text-white no-underline px-7 py-3.5 rounded-xl font-semibold text-base transition-all shadow-lg shadow-sky-500/30 hover:from-sky-600 hover:to-sky-700 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-sky-500/40 active:translate-y-0"
+            >
+              📍 Ver Ubicación en Tiempo Real
+            </a>
+          </div>
         </div>
       </div>
 
-      <!-- PRUEBA DE ENTREGA - SOLO para pedidos entregados -->
-<div 
-  v-if="(tracking.current_status === 'delivered' || tracking.current_status === 'invoiced') 
-         && hasProofOfDelivery" 
-  class="proof-section"
->        <div class="section-header">
-          <h3>📸 Prueba de Entrega</h3>
+      <!-- PRUEBA DE ENTREGA -->
+      <div v-if="(tracking.current_status === 'delivered' || tracking.current_status === 'invoiced') && hasProofOfDelivery">
+        <div class="mb-4">
+          <h3 class="m-0 text-gray-800 text-lg font-semibold">📸 Prueba de Entrega</h3>
         </div>
-        <div class="proof-card">
-          <div class="proof-summary">
-            <span class="proof-icon">✅</span>
-            <div class="proof-info">
-              <div class="proof-title">Entrega Confirmada</div>
-              <div class="proof-description">
-                Tu pedido fue entregado exitosamente 
-                {{ formatDate(tracking.delivery_date) }}
+        <div class="bg-gradient-to-br from-emerald-50 to-green-100 border-2 border-emerald-500 rounded-2xl p-5 flex justify-between items-center">
+          <div class="flex items-center gap-4">
+            <div class="text-[32px] flex items-center justify-center w-15 h-15 bg-emerald-500/10 rounded-full">✅</div>
+            <div>
+              <div class="text-lg font-semibold text-emerald-900 mb-1">Entrega Confirmada</div>
+              <div class="text-emerald-700 text-sm">
+                Tu pedido fue entregado exitosamente {{ formatDate(tracking.delivery_date) }}
               </div>
             </div>
           </div>
-          <button @click="showFullProofModal" class="proof-details-btn">
+          <button 
+            @click="showFullProofModal" 
+            class="bg-emerald-600 text-white border-none px-5 py-3 rounded-xl cursor-pointer font-semibold text-sm transition-all hover:bg-emerald-700 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-emerald-600/30"
+          >
             📋 Ver Prueba Completa
           </button>
         </div>
       </div>
 
-      <!-- INFORMACIÓN DEL CONDUCTOR - Corregida y limpia -->
-      <div v-if="hasDriverInfo" class="driver-section">
-        <div class="section-header">
-          <h3>👨‍💼 Tu Conductor</h3>
+      <!-- INFORMACIÓN DEL CONDUCTOR -->
+      <div v-if="hasDriverInfo">
+        <div class="mb-4">
+          <h3 class="m-0 text-gray-800 text-lg font-semibold">👨‍💼 Tu Conductor</h3>
         </div>
-        <div class="driver-card">
-          <div class="driver-avatar">
+        <div class="flex items-center gap-4 p-5 bg-white border border-gray-200 rounded-xl shadow-sm">
+          <div class="w-15 h-15 bg-gradient-to-br from-emerald-500 to-emerald-600 text-white rounded-full flex items-center justify-center font-bold text-lg flex-shrink-0">
             {{ getDriverInitials(driverStatus.name) }}
           </div>
-          <div class="driver-info">
-            <div class="driver-name">{{ driverStatus.name }}</div>
-            <div class="driver-phone" v-if="driverStatus.phone">
-              📞 {{ driverStatus.phone }}
-            </div>
-            <div class="driver-status" :class="getDriverStatusClass(driverStatus.status)">
-              <div class="status-indicator" :class="getDriverStatusClass(driverStatus.status)"></div>
-              <span class="status-text">{{ getDriverStatusText(driverStatus.status) }}</span>
-              <div v-if="loadingDriverStatus" class="status-loading">
-                <div class="mini-spinner"></div>
+          <div class="flex-1">
+            <div class="text-lg font-semibold text-gray-800 mb-1">{{ driverStatus.name }}</div>
+            <div v-if="driverStatus.phone" class="text-sm text-gray-600 mb-2">📞 {{ driverStatus.phone }}</div>
+            <div :class="['flex items-center gap-2 text-sm mb-2', getDriverStatusClass(driverStatus.status)]">
+              <div :class="['w-2 h-2 rounded-full flex-shrink-0', getDriverStatusClass(driverStatus.status)]"></div>
+              <span>{{ getDriverStatusText(driverStatus.status) }}</span>
+              <div v-if="loadingDriverStatus" class="flex items-center ml-2">
+                <div class="w-3 h-3 border-2 border-gray-200 border-t-indigo-600 rounded-full animate-spin"></div>
               </div>
             </div>
-            <div v-if="driverStatus.status === 'offline' && driverStatus.lastSeen" class="last-seen">
+            <div v-if="driverStatus.status === 'offline' && driverStatus.lastSeen" class="text-xs text-gray-400 mb-2">
               Visto por última vez: {{ formatLastSeen(driverStatus.lastSeen) }}
             </div>
-            <div class="driver-actions">
+            <div class="flex gap-2">
               <button 
                 v-if="driverStatus.phone" 
                 @click="callDriver" 
-                class="action-btn call-btn"
                 title="Llamar al conductor"
+                class="w-8 h-8 border-none rounded-md cursor-pointer flex items-center justify-center text-sm bg-emerald-600 text-white transition-all hover:bg-emerald-700 hover:scale-110"
               >
                 📞
               </button>
               <button 
                 @click="refreshDriverStatus" 
-                class="action-btn refresh-btn"
                 :disabled="loadingDriverStatus"
                 title="Actualizar estado"
+                class="w-8 h-8 border-none rounded-md cursor-pointer flex items-center justify-center text-sm bg-gray-100 text-gray-600 transition-all hover:bg-gray-200 hover:scale-110 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 🔄
               </button>
@@ -120,25 +131,33 @@
       </div>
 
       <!-- Timeline de eventos -->
-      <div class="timeline-section">
-        <div class="section-header">
-          <h3>📋 Historial del Pedido</h3>
+      <div>
+        <div class="mb-4">
+          <h3 class="m-0 text-gray-800 text-lg font-semibold">📋 Historial del Pedido</h3>
         </div>
-        <div class="timeline">
+        <div class="relative pl-8">
+          <!-- Línea vertical -->
+          <div class="absolute left-4 top-0 bottom-0 w-0.5 bg-gray-200"></div>
+          
           <div 
             v-for="(event, index) in tracking.timeline" 
             :key="index"
-            class="timeline-item"
-            :class="event.status">
-            
-            <div class="timeline-marker">
-              <span class="timeline-icon">{{ event.icon }}</span>
+            class="relative mb-6 last:mb-0"
+          >
+            <div :class="[
+              'absolute -left-5.5 w-8 h-8 rounded-full flex items-center justify-center text-sm',
+              event.status === 'completed' ? 'bg-emerald-600 text-white' :
+              event.status === 'current' ? 'bg-indigo-600 text-white animate-pulse' :
+              event.status === 'cancelled' ? 'bg-red-500 text-white' :
+              'bg-gray-100 border-2 border-gray-300 text-gray-600'
+            ]">
+              <span>{{ event.icon }}</span>
             </div>
             
-            <div class="timeline-content">
-              <div class="timeline-title">{{ event.title }}</div>
-              <div class="timeline-description">{{ event.description }}</div>
-              <div v-if="event.timestamp" class="timeline-time">
+            <div class="bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
+              <div class="font-semibold text-gray-800 mb-1">{{ event.title }}</div>
+              <div class="text-gray-600 mb-2 text-sm">{{ event.description }}</div>
+              <div v-if="event.timestamp" class="text-xs text-gray-400">
                 {{ formatEventTime(event.timestamp) }}
               </div>
             </div>
@@ -147,33 +166,33 @@
       </div>
 
       <!-- Información de entrega -->
-      <div class="delivery-info-section">
-        <div class="section-header">
-          <h3>🏠 Información de Entrega</h3>
+      <div>
+        <div class="mb-4">
+          <h3 class="m-0 text-gray-800 text-lg font-semibold">🏠 Información de Entrega</h3>
         </div>
         
-        <div class="delivery-cards">
-          <div class="delivery-card">
-            <div class="card-header">
-              <span class="card-icon">📍</span>
-              <h4>Dirección de Entrega</h4>
+        <div class="grid grid-cols-[repeat(auto-fit,minmax(300px,1fr))] gap-4">
+          <div class="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
+            <div class="flex items-center gap-2 mb-3">
+              <span class="text-base">📍</span>
+              <h4 class="m-0 text-gray-800 text-sm font-semibold">Dirección de Entrega</h4>
             </div>
-            <div class="card-content">
-              <div class="address">{{ tracking.delivery_address }}</div>
-              <div v-if="tracking.delivery_location" class="coordinates">
+            <div>
+              <div class="text-gray-700 mb-1">{{ tracking.delivery_address }}</div>
+              <div v-if="tracking.delivery_location" class="text-xs text-gray-600">
                 📍 {{ tracking.delivery_location.formatted_address }}
               </div>
             </div>
           </div>
           
-          <div v-if="tracking.pickup_address" class="delivery-card">
-            <div class="card-header">
-              <span class="card-icon">🏪</span>
-              <h4>Punto de Recogida</h4>
+          <div v-if="tracking.pickup_address" class="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
+            <div class="flex items-center gap-2 mb-3">
+              <span class="text-base">🏪</span>
+              <h4 class="m-0 text-gray-800 text-sm font-semibold">Punto de Recogida</h4>
             </div>
-            <div class="card-content">
-              <div class="address">{{ tracking.pickup_address }}</div>
-              <div v-if="tracking.company && tracking.company.name" class="company-name">
+            <div>
+              <div class="text-gray-700 mb-1">{{ tracking.pickup_address }}</div>
+              <div v-if="tracking.company && tracking.company.name" class="text-xs text-gray-600">
                 {{ tracking.company.name }}
               </div>
             </div>
@@ -182,85 +201,100 @@
       </div>
 
       <!-- Detalles del pedido -->
-      <div class="order-details-section">
-        <div class="section-header">
-          <h3>📦 Detalles del Pedido</h3>
+      <div>
+        <div class="mb-4">
+          <h3 class="m-0 text-gray-800 text-lg font-semibold">📦 Detalles del Pedido</h3>
         </div>
         
-        <div class="details-grid">
-          <div class="detail-item">
-            <span class="detail-label">Cliente:</span>
-            <span class="detail-value">{{ tracking.customer_name }}</span>
+        <div class="grid grid-cols-[repeat(auto-fit,minmax(250px,1fr))] gap-4 mb-5">
+          <div class="flex justify-between items-center p-3 px-4 bg-white border border-gray-200 rounded-lg">
+            <span class="font-medium text-gray-600">Cliente:</span>
+            <span class="font-semibold text-gray-800">{{ tracking.customer_name }}</span>
           </div>
           
-          <div class="detail-item">
-            <span class="detail-label">Fecha del Pedido:</span>
-            <span class="detail-value">{{ formatDate(tracking.order_date) }}</span>
+          <div class="flex justify-between items-center p-3 px-4 bg-white border border-gray-200 rounded-lg">
+            <span class="font-medium text-gray-600">Fecha del Pedido:</span>
+            <span class="font-semibold text-gray-800">{{ formatDate(tracking.order_date) }}</span>
           </div>
           
-          <div v-if="tracking.delivery_date" class="detail-item">
-            <span class="detail-label">Fecha de Entrega:</span>
-            <span class="detail-value">{{ formatDate(tracking.delivery_date) }}</span>
+          <div v-if="tracking.delivery_date" class="flex justify-between items-center p-3 px-4 bg-white border border-gray-200 rounded-lg">
+            <span class="font-medium text-gray-600">Fecha de Entrega:</span>
+            <span class="font-semibold text-gray-800">{{ formatDate(tracking.delivery_date) }}</span>
           </div>
           
-          <div v-if="tracking.estimated_delivery" class="detail-item">
-            <span class="detail-label">Entrega Estimada:</span>
-            <span class="detail-value">{{ formatDate(tracking.estimated_delivery) }}</span>
+          <div v-if="tracking.estimated_delivery" class="flex justify-between items-center p-3 px-4 bg-white border border-gray-200 rounded-lg">
+            <span class="font-medium text-gray-600">Entrega Estimada:</span>
+            <span class="font-semibold text-gray-800">{{ formatDate(tracking.estimated_delivery) }}</span>
           </div>
           
-          <div class="detail-item">
-            <span class="detail-label">Total:</span>
-            <span class="detail-value amount">${{ formatCurrency(tracking.total_amount) }}</span>
+          <div class="flex justify-between items-center p-3 px-4 bg-white border border-gray-200 rounded-lg">
+            <span class="font-medium text-gray-600">Total:</span>
+            <span class="font-semibold text-emerald-700 text-base">${{ formatCurrency(tracking.total_amount) }}</span>
           </div>
           
-          <div class="detail-item">
-            <span class="detail-label">Costo de Envío:</span>
-            <span class="detail-value">${{ formatCurrency(tracking.shipping_cost) }}</span>
+          <div class="flex justify-between items-center p-3 px-4 bg-white border border-gray-200 rounded-lg">
+            <span class="font-medium text-gray-600">Costo de Envío:</span>
+            <span class="font-semibold text-gray-800">${{ formatCurrency(tracking.shipping_cost) }}</span>
           </div>
         </div>
         
-        <div v-if="tracking.notes" class="order-notes">
-          <div class="notes-header">
-            <span class="notes-icon">📝</span>
-            <span class="notes-title">Notas del Pedido</span>
+        <div v-if="tracking.notes" class="bg-amber-50 border border-amber-300 rounded-lg p-4">
+          <div class="flex items-center gap-2 mb-2">
+            <span>📝</span>
+            <span class="font-semibold text-amber-900">Notas del Pedido</span>
           </div>
-          <div class="notes-content">{{ tracking.notes }}</div>
+          <div class="text-amber-900 leading-relaxed">{{ tracking.notes }}</div>
         </div>
       </div>
 
       <!-- Soporte -->
-      <div class="support-section">
-        <div class="section-header">
-          <h3>💬 ¿Necesitas Ayuda?</h3>
+      <div>
+        <div class="mb-4">
+          <h3 class="m-0 text-gray-800 text-lg font-semibold">💬 ¿Necesitas Ayuda?</h3>
         </div>
         
-        <div class="support-options">
-          <button @click="contactSupport" class="support-btn">
+        <div class="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-3">
+          <button 
+            @click="contactSupport" 
+            class="bg-white border-2 border-gray-200 text-gray-700 px-4 py-3 rounded-lg cursor-pointer font-medium transition-all hover:border-indigo-600 hover:bg-slate-50 hover:-translate-y-px"
+          >
             📧 Contactar Soporte
           </button>
           
-          <button v-if="tracking.company && tracking.company.phone" @click="callCompany" class="support-btn">
+          <button 
+            v-if="tracking.company && tracking.company.phone" 
+            @click="callCompany" 
+            class="bg-white border-2 border-gray-200 text-gray-700 px-4 py-3 rounded-lg cursor-pointer font-medium transition-all hover:border-indigo-600 hover:bg-slate-50 hover:-translate-y-px"
+          >
             📞 Llamar a {{ tracking.company.name }}
           </button>
           
-          <button @click="reportIssue" class="support-btn">
+          <button 
+            @click="reportIssue" 
+            class="bg-white border-2 border-gray-200 text-gray-700 px-4 py-3 rounded-lg cursor-pointer font-medium transition-all hover:border-indigo-600 hover:bg-slate-50 hover:-translate-y-px"
+          >
             ⚠️ Reportar Problema
           </button>
         </div>
       </div>
 
-      <!-- Footer con última actualización -->
-      <div class="tracking-footer">
-        <div class="last-updated">
+      <!-- Footer -->
+      <div class="flex justify-between items-center p-4 bg-gray-50 rounded-lg border border-gray-200">
+        <div class="text-xs text-gray-600">
           Última actualización: {{ formatDate(lastUpdated, true) }}
         </div>
-        <button @click="refreshTracking" class="refresh-btn" :disabled="refreshing">
+        <button 
+          @click="refreshTracking" 
+          :disabled="refreshing"
+          class="bg-indigo-600 text-white border-none px-4 py-2 rounded-md cursor-pointer text-xs transition-colors hover:bg-purple-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
+        >
           {{ refreshing ? '🔄' : '🔄' }} {{ refreshing ? 'Actualizando...' : 'Actualizar' }}
         </button>
       </div>
     </div>
   </div>
 </template>
+
 
 <script setup>
 import { ref, onMounted, onUnmounted, computed } from 'vue';
@@ -780,315 +814,18 @@ defineExpose({
 </script>
 
 <style scoped>
-.tracking-container {
-  max-width: 800px;
-  margin: 0 auto;
-  padding: 20px;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-}
-
-/* Header */
-.tracking-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 30px;
-  padding: 20px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  border-radius: 16px;
-}
-
-.tracking-title h2 {
-  margin: 0 0 4px 0;
-  font-size: 24px;
-}
-
-.order-number {
-  font-size: 16px;
-  opacity: 0.9;
-  font-weight: 500;
-}
-
-.status-badge {
-  padding: 8px 16px;
-  border-radius: 20px;
-  font-size: 14px;
-  font-weight: 600;
-  background: rgba(255, 255, 255, 0.2);
-  backdrop-filter: blur(10px);
-}
-
-/* Estados de carga */
-.loading-state,
-.error-state {
-  text-align: center;
-  padding: 60px 20px;
-  color: #6b7280;
-}
-
-.loading-spinner {
-  width: 40px;
-  height: 40px;
-  border: 4px solid #f3f4f6;
-  border-top: 4px solid #6366f1;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-  margin: 0 auto 16px;
-}
-
-@keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
-
-.error-icon {
-  font-size: 48px;
-  margin-bottom: 16px;
-}
-
-.retry-btn {
-  background: #6366f1;
-  color: white;
-  border: none;
-  padding: 10px 20px;
-  border-radius: 8px;
-  cursor: pointer;
-  margin-top: 16px;
-}
-
-/* Secciones */
-.section-header {
-  margin-bottom: 16px;
-}
-
-.section-header h3 {
-  margin: 0;
-  color: #1f2937;
-  font-size: 18px;
-  font-weight: 600;
-}
-
-/* Tracking en vivo */
-.live-tracking-section {
-  margin-bottom: 30px;
-}
-
-.live-tracking-card {
-  background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
-  border: 2px solid #0ea5e9;
-  border-radius: 16px;
-  padding: 24px;
-  text-align: center;
-  position: relative;
-  overflow: hidden;
-}
-
-.live-tracking-card::before {
-  content: '';
-  position: absolute;
-  top: -50%;
-  left: -50%;
-  width: 200%;
-  height: 200%;
-  background: linear-gradient(45deg, transparent, rgba(14, 165, 233, 0.1), transparent);
-  animation: shimmer 3s infinite;
-}
-
+/* Animación shimmer para tracking en vivo */
 @keyframes shimmer {
   0% { transform: translateX(-100%) translateY(-100%) rotate(45deg); }
   100% { transform: translateX(100%) translateY(100%) rotate(45deg); }
 }
 
-.live-tracking-header {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  margin-bottom: 12px;
-  position: relative;
-  z-index: 1;
-}
-
-.live-icon {
-  animation: pulse 2s infinite;
-  font-size: 16px;
-}
-
-@keyframes pulse {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.7; transform: scale(1.1); }
-}
-
-.live-tracking-card h3 {
-  margin: 0;
-  color: #0369a1;
-  font-size: 20px;
-  position: relative;
-  z-index: 1;
-}
-
-.live-tracking-card p {
-  color: #0284c7;
-  margin: 12px 0 20px;
-  position: relative;
-  z-index: 1;
-}
-
-.live-tracking-btn {
-  display: inline-block;
-  background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
-  color: white;
-  text-decoration: none;
-  padding: 14px 28px;
-  border-radius: 12px;
-  font-weight: 600;
-  font-size: 16px;
-  transition: all 0.3s ease;
-  position: relative;
-  z-index: 1;
-  box-shadow: 0 4px 15px rgba(14, 165, 233, 0.3);
-}
-
-.live-tracking-btn:hover {
-  background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
-  transform: translateY(-2px);
-  box-shadow: 0 8px 25px rgba(14, 165, 233, 0.4);
-}
-
-.live-tracking-btn:active {
-  transform: translateY(0);
-}
-
-/* Prueba de entrega */
-.proof-section {
-  margin-bottom: 30px;
-}
-
-.proof-card {
-  background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
-  border: 2px solid #10b981;
-  border-radius: 16px;
-  padding: 20px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.proof-summary {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-.proof-icon {
-  font-size: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 60px;
-  height: 60px;
-  background: rgba(16, 185, 129, 0.1);
-  border-radius: 50%;
-}
-
-.proof-title {
-  font-size: 18px;
-  font-weight: 600;
-  color: #065f46;
-  margin-bottom: 4px;
-}
-
-.proof-description {
-  color: #047857;
-  font-size: 14px;
-}
-
-.proof-details-btn {
-  background: #10b981;
-  color: white;
-  border: none;
-  padding: 12px 20px;
-  border-radius: 12px;
-  cursor: pointer;
-  font-weight: 600;
-  font-size: 14px;
-  transition: all 0.2s ease;
-}
-
-.proof-details-btn:hover {
-  background: #059669;
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
-}
-
-/* Conductor - ESTILOS CORREGIDOS */
-.driver-section {
-  margin-bottom: 30px;
-}
-
-.driver-card {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 20px;
-  background: white;
-  border: 1px solid #e5e7eb;
-  border-radius: 12px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-}
-
-.driver-avatar {
-  width: 60px;
-  height: 60px;
-  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-  color: white;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 700;
-  font-size: 18px;
-  flex-shrink: 0;
-}
-
-.driver-info {
-  flex: 1;
-}
-
-.driver-name {
-  font-size: 18px;
-  font-weight: 600;
-  color: #1f2937;
-  margin-bottom: 4px;
-}
-
-.driver-phone {
-  font-size: 14px;
-  color: #6b7280;
-  margin-bottom: 8px;
-}
-
-.driver-status {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 14px;
-  margin-bottom: 8px;
-}
-
-.status-indicator {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-
-.status-online .status-indicator { background: #10b981; }
-.status-offline .status-indicator { background: #ef4444; }
-.status-busy .status-indicator { background: #f59e0b; }
-.status-driving .status-indicator { background: #3b82f6; }
-.status-unknown .status-indicator { background: #6b7280; }
+/* Estados del conductor - solo colores de indicador */
+.status-online .w-2 { background: #10b981; }
+.status-offline .w-2 { background: #ef4444; }
+.status-busy .w-2 { background: #f59e0b; }
+.status-driving .w-2 { background: #3b82f6; }
+.status-unknown .w-2 { background: #6b7280; }
 
 .status-online { color: #059669; }
 .status-offline { color: #dc2626; }
@@ -1096,381 +833,38 @@ defineExpose({
 .status-driving { color: #2563eb; }
 .status-unknown { color: #6b7280; }
 
-.last-seen {
-  font-size: 12px;
-  color: #9ca3af;
-  margin-bottom: 8px;
-}
-
-.driver-actions {
-  display: flex;
-  gap: 8px;
-}
-
-.action-btn {
-  width: 32px;
-  height: 32px;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 14px;
-  transition: all 0.2s ease;
-}
-
-.call-btn {
-  background: #10b981;
-  color: white;
-}
-
-.call-btn:hover {
-  background: #059669;
-  transform: scale(1.1);
-}
-
-.refresh-btn {
-  background: #f3f4f6;
-  color: #6b7280;
-}
-
-.refresh-btn:hover:not(:disabled) {
-  background: #e5e7eb;
-  transform: scale(1.1);
-}
-
-.refresh-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.status-loading {
-  display: flex;
-  align-items: center;
-  margin-left: 8px;
-}
-
-.mini-spinner {
-  width: 12px;
-  height: 12px;
-  border: 2px solid #f3f4f6;
-  border-top: 2px solid #6366f1;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-}
-
-/* Timeline */
-.timeline-section {
-  margin-bottom: 30px;
-}
-
-.timeline {
-  position: relative;
-  padding-left: 30px;
-}
-
-.timeline::before {
-  content: '';
-  position: absolute;
-  left: 15px;
-  top: 0;
-  bottom: 0;
-  width: 2px;
-  background: #e5e7eb;
-}
-
-.timeline-item {
-  position: relative;
-  margin-bottom: 24px;
-}
-
-.timeline-marker {
-  position: absolute;
-  left: -22px;
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 14px;
-}
-
-.timeline-item.completed .timeline-marker {
-  background: #10b981;
-  color: white;
-}
-
-.timeline-item.current .timeline-marker {
-  background: #6366f1;
-  color: white;
-  animation: pulse 2s infinite;
-}
-
-.timeline-item.pending .timeline-marker {
-  background: #f3f4f6;
-  border: 2px solid #d1d5db;
-  color: #6b7280;
-}
-
-.timeline-item.cancelled .timeline-marker {
-  background: #ef4444;
-  color: white;
-}
-
-.timeline-content {
-  background: white;
-  padding: 16px;
-  border-radius: 8px;
-  border: 1px solid #e5e7eb;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-}
-
-.timeline-title {
-  font-weight: 600;
-  color: #1f2937;
-  margin-bottom: 4px;
-}
-
-.timeline-description {
-  color: #6b7280;
-  margin-bottom: 8px;
-}
-
-.timeline-time {
-  font-size: 12px;
-  color: #9ca3af;
-}
-
-/* Información de entrega */
-.delivery-info-section {
-  margin-bottom: 30px;
-}
-
-.delivery-cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 16px;
-}
-
-.delivery-card {
-  background: white;
-  border: 1px solid #e5e7eb;
-  border-radius: 12px;
-  padding: 20px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-}
-
-.card-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 12px;
-}
-
-.card-icon {
-  font-size: 16px;
-}
-
-.card-header h4 {
-  margin: 0;
-  color: #1f2937;
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.address {
-  color: #374151;
-  margin-bottom: 4px;
-}
-
-.coordinates,
-.company-name {
-  font-size: 12px;
-  color: #6b7280;
-}
-
-/* Detalles del pedido */
-.order-details-section {
-  margin-bottom: 30px;
-}
-
-.details-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-  gap: 16px;
-  margin-bottom: 20px;
-}
-
-.detail-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 12px 16px;
-  background: white;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-}
-
-.detail-label {
-  font-weight: 500;
-  color: #6b7280;
-}
-
-.detail-value {
-  font-weight: 600;
-  color: #1f2937;
-}
-
-.detail-value.amount {
-  color: #059669;
-  font-size: 16px;
-}
-
-.order-notes {
-  background: #fffbeb;
-  border: 1px solid #fed7aa;
-  border-radius: 8px;
-  padding: 16px;
-}
-
-.notes-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
-}
-
-.notes-title {
-  font-weight: 600;
-  color: #92400e;
-}
-
-.notes-content {
-  color: #92400e;
-  line-height: 1.5;
-}
-
-/* Soporte */
-.support-section {
-  margin-bottom: 30px;
-}
-
-.support-options {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 12px;
-}
-
-.support-btn {
-  background: white;
-  border: 2px solid #e5e7eb;
-  color: #374151;
-  padding: 12px 16px;
-  border-radius: 8px;
-  cursor: pointer;
-  font-weight: 500;
-  transition: all 0.2s ease;
-}
-
-.support-btn:hover {
-  border-color: #6366f1;
-  background: #f8fafc;
-  transform: translateY(-1px);
-}
-
-/* Footer */
-.tracking-footer {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 16px;
-  background: #f9fafb;
-  border-radius: 8px;
-  border: 1px solid #e5e7eb;
-}
-
-.last-updated {
-  font-size: 12px;
-  color: #6b7280;
-}
-
-.refresh-btn {
-  background: #6366f1;
-  color: white;
-  border: none;
-  padding: 8px 16px;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 12px;
-  transition: background 0.2s ease;
-}
-
-.refresh-btn:hover:not(:disabled) {
-  background: #5b21b6;
-}
-
-.refresh-btn:disabled {
-  background: #d1d5db;
-  cursor: not-allowed;
-}
-
 /* Responsive */
 @media (max-width: 768px) {
-  .tracking-container {
-    padding: 16px;
+  .max-w-3xl {
+    padding: 1rem;
   }
   
-  .tracking-header {
+  .flex.justify-between.items-center.mb-8 {
     flex-direction: column;
     align-items: flex-start;
-    gap: 12px;
+    gap: 0.75rem;
   }
   
-  .proof-card {
+  .bg-gradient-to-br.from-emerald-50 {
     flex-direction: column;
-    gap: 16px;
+    gap: 1rem;
     text-align: center;
   }
   
-  .proof-summary {
+  .flex.items-center.gap-4.p-5 {
     flex-direction: column;
     text-align: center;
-    gap: 12px;
+    gap: 0.75rem;
   }
   
-  .driver-card {
-    flex-direction: column;
-    text-align: center;
-    gap: 12px;
-  }
-  
-  .driver-actions {
-    justify-content: center;
-  }
-  
-  .delivery-cards {
+  .grid {
     grid-template-columns: 1fr;
   }
   
-  .details-grid {
-    grid-template-columns: 1fr;
-  }
-  
-  .support-options {
-    grid-template-columns: 1fr;
-  }
-  
-  .tracking-footer {
+  .flex.justify-between.items-center.p-4 {
     flex-direction: column;
-    gap: 12px;
+    gap: 0.75rem;
     text-align: center;
-  }
-  
-  .live-tracking-btn {
-    padding: 12px 24px;
-    font-size: 14px;
   }
 }
 </style>

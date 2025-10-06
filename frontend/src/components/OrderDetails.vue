@@ -1,120 +1,153 @@
 <template>
-  <div v-if="order" class="order-details">
-    <div class="detail-grid">
-      <div class="detail-item full-width section-header">
-        <h4>Información del Cliente</h4>
-      </div>
-      <div class="detail-item">
-        <span class="label">Cliente:</span>
-        <span class="value">{{ order.customer_name }}</span>
-      </div>
-      <div class="detail-item">
-        <span class="label">Email:</span>
-        <span class="value">{{ order.customer_email || 'No disponible' }}</span>
-      </div>
-       <div class="detail-item">
-        <span class="label">Teléfono:</span>
-        <span class="value">{{ order.customer_phone || 'No disponible' }}</span>
-      </div>
-      <div class="detail-item">
-        <span class="label">Documento:</span>
-        <span class="value">{{ order.customer_document || 'No disponible' }}</span>
+  <div v-if="order" class="text-sm">
+    <div class="grid grid-cols-2 gap-4">
+      <!-- Header: Información del Cliente -->
+      <div class="col-span-2 bg-indigo-50 border border-indigo-200 px-3 py-2 rounded-md">
+        <h4 class="m-0 text-indigo-900 text-sm font-semibold">Información del Cliente</h4>
       </div>
       
-      <!-- Dirección separada en campos específicos -->
-      <div class="detail-item full-width section-header">
-        <h4>Dirección de Envío</h4>
-      </div>
-      <div class="detail-item full-width">
-        <span class="label">Dirección:</span>
-        <span class="value">{{ order.shipping_address || 'No especificada' }}</span>
-      </div>
-      <div class="detail-item">
-  <span class="label">Comuna:</span>
-  <span class="value commune-highlight">{{ formatCommune(order.shipping_commune) }}</span>
-</div>
-      <div class="detail-item">
-        <span class="label">Región:</span>
-        <span class="value">{{ order.shipping_state || 'Región Metropolitana' }}</span>
-      </div>
-      <div class="detail-item">
-        <span class="label">Código Postal:</span>
-        <span class="value">{{ order.shipping_zip || 'No especificado' }}</span>
+      <div class="flex flex-col bg-gray-50 p-3 rounded-md border border-gray-200">
+        <span class="font-semibold text-gray-700 mb-1 text-xs">Cliente:</span>
+        <span class="text-gray-600">{{ order.customer_name }}</span>
       </div>
       
-      <div class="detail-item full-width section-header">
-        <h4>Detalles del Pedido</h4>
+      <div class="flex flex-col bg-gray-50 p-3 rounded-md border border-gray-200">
+        <span class="font-semibold text-gray-700 mb-1 text-xs">Email:</span>
+        <span class="text-gray-600">{{ order.customer_email || 'No disponible' }}</span>
       </div>
-       <div class="detail-item">
-        <span class="label">Canal de Venta:</span>
-        <span class="value">{{ order.channel_id?.channel_name }} ({{ order.channel_id?.channel_type }})</span>
+      
+      <div class="flex flex-col bg-gray-50 p-3 rounded-md border border-gray-200">
+        <span class="font-semibold text-gray-700 mb-1 text-xs">Teléfono:</span>
+        <span class="text-gray-600">{{ order.customer_phone || 'No disponible' }}</span>
       </div>
-       <div class="detail-item">
-        <span class="label">ID Externo:</span>
-        <span class="value">{{ order.external_order_id }}</span>
+      
+      <div class="flex flex-col bg-gray-50 p-3 rounded-md border border-gray-200">
+        <span class="font-semibold text-gray-700 mb-1 text-xs">Documento:</span>
+        <span class="text-gray-600">{{ order.customer_document || 'No disponible' }}</span>
       </div>
-       <div class="detail-item">
-        <span class="label">Monto Total:</span>
-        <span class="value">${{ formatCurrency(order.total_amount) }}</span>
+      
+      <!-- Header: Dirección de Envío -->
+      <div class="col-span-2 bg-indigo-50 border border-indigo-200 px-3 py-2 rounded-md">
+        <h4 class="m-0 text-indigo-900 text-sm font-semibold">Dirección de Envío</h4>
       </div>
-       <div class="detail-item">
-        <span class="label">Costo de Envío:</span>
-        <span class="value">${{ formatCurrency(order.shipping_cost) }}</span>
+      
+      <div class="col-span-2 flex flex-col bg-gray-50 p-3 rounded-md border border-gray-200">
+        <span class="font-semibold text-gray-700 mb-1 text-xs">Dirección:</span>
+        <span class="text-gray-600">{{ order.shipping_address || 'No especificada' }}</span>
       </div>
-      <div class="detail-item">
-        <span class="label">Fecha de Creación:</span>
-        <span class="value">{{ formatDate(order.order_date) }}</span>
+      
+      <div class="flex flex-col bg-gray-50 p-3 rounded-md border border-gray-200">
+        <span class="font-semibold text-gray-700 mb-1 text-xs">Comuna:</span>
+        <span class="bg-blue-100 px-2 py-1 rounded font-semibold text-blue-900">
+          {{ formatCommune(order.shipping_commune) }}
+        </span>
       </div>
-      <div v-if="order.delivery_date" class="detail-item">
-        <span class="label">Fecha de Entrega:</span>
-        <span class="value">{{ formatDate(order.delivery_date) }}</span>
+      
+      <div class="flex flex-col bg-gray-50 p-3 rounded-md border border-gray-200">
+        <span class="font-semibold text-gray-700 mb-1 text-xs">Región:</span>
+        <span class="text-gray-600">{{ order.shipping_state || 'Región Metropolitana' }}</span>
+      </div>
+      
+      <div class="flex flex-col bg-gray-50 p-3 rounded-md border border-gray-200">
+        <span class="font-semibold text-gray-700 mb-1 text-xs">Código Postal:</span>
+        <span class="text-gray-600">{{ order.shipping_zip || 'No especificado' }}</span>
+      </div>
+      
+      <!-- Header: Detalles del Pedido -->
+      <div class="col-span-2 bg-indigo-50 border border-indigo-200 px-3 py-2 rounded-md">
+        <h4 class="m-0 text-indigo-900 text-sm font-semibold">Detalles del Pedido</h4>
+      </div>
+      
+      <div class="flex flex-col bg-gray-50 p-3 rounded-md border border-gray-200">
+        <span class="font-semibold text-gray-700 mb-1 text-xs">Canal de Venta:</span>
+        <span class="text-gray-600">{{ order.channel_id?.channel_name }} ({{ order.channel_id?.channel_type }})</span>
+      </div>
+      
+      <div class="flex flex-col bg-gray-50 p-3 rounded-md border border-gray-200">
+        <span class="font-semibold text-gray-700 mb-1 text-xs">ID Externo:</span>
+        <span class="text-gray-600">{{ order.external_order_id }}</span>
+      </div>
+      
+      <div class="flex flex-col bg-gray-50 p-3 rounded-md border border-gray-200">
+        <span class="font-semibold text-gray-700 mb-1 text-xs">Monto Total:</span>
+        <span class="text-gray-600">${{ formatCurrency(order.total_amount) }}</span>
+      </div>
+      
+      <div class="flex flex-col bg-gray-50 p-3 rounded-md border border-gray-200">
+        <span class="font-semibold text-gray-700 mb-1 text-xs">Costo de Envío:</span>
+        <span class="text-gray-600">${{ formatCurrency(order.shipping_cost) }}</span>
+      </div>
+      
+      <div class="flex flex-col bg-gray-50 p-3 rounded-md border border-gray-200">
+        <span class="font-semibold text-gray-700 mb-1 text-xs">Fecha de Creación:</span>
+        <span class="text-gray-600">{{ formatDate(order.order_date) }}</span>
+      </div>
+      
+      <div v-if="order.delivery_date" class="flex flex-col bg-gray-50 p-3 rounded-md border border-gray-200">
+        <span class="font-semibold text-gray-700 mb-1 text-xs">Fecha de Entrega:</span>
+        <span class="text-gray-600">{{ formatDate(order.delivery_date) }}</span>
       </div>
 
-      <!-- NUEVO: Información de logística si está disponible -->
-      <div v-if="hasLogisticsInfo" class="detail-item full-width section-header">
-        <h4>Información de Logística</h4>
-      </div>
-      <div v-if="order.priority" class="detail-item">
-        <span class="label">Prioridad:</span>
-        <span class="value" :class="getPriorityClass(order.priority)">{{ order.priority }}</span>
-      </div>
-      <div v-if="order.serviceTime" class="detail-item">
-        <span class="label">Tiempo de Servicio:</span>
-        <span class="value">{{ order.serviceTime }} minutos</span>
-      </div>
-      <div v-if="order.timeWindowStart || order.timeWindowEnd" class="detail-item">
-        <span class="label">Ventana Horaria:</span>
-        <span class="value">{{ formatTimeWindow(order.timeWindowStart, order.timeWindowEnd) }}</span>
-      </div>
-      <div v-if="order.load1Packages" class="detail-item">
-        <span class="label">N° Paquetes:</span>
-        <span class="value">{{ order.load1Packages }}</span>
-      </div>
-      <div v-if="order.load2WeightKg" class="detail-item">
-        <span class="label">Peso Total:</span>
-        <span class="value">{{ order.load2WeightKg }} kg</span>
-      </div>
+      <!-- Información de Logística -->
+      <template v-if="hasLogisticsInfo">
+        <div class="col-span-2 bg-indigo-50 border border-indigo-200 px-3 py-2 rounded-md">
+          <h4 class="m-0 text-indigo-900 text-sm font-semibold">Información de Logística</h4>
+        </div>
+        
+        <div v-if="order.priority" class="flex flex-col bg-gray-50 p-3 rounded-md border border-gray-200">
+          <span class="font-semibold text-gray-700 mb-1 text-xs">Prioridad:</span>
+          <span :class="getPriorityClasses(order.priority)">{{ order.priority }}</span>
+        </div>
+        
+        <div v-if="order.serviceTime" class="flex flex-col bg-gray-50 p-3 rounded-md border border-gray-200">
+          <span class="font-semibold text-gray-700 mb-1 text-xs">Tiempo de Servicio:</span>
+          <span class="text-gray-600">{{ order.serviceTime }} minutos</span>
+        </div>
+        
+        <div v-if="order.timeWindowStart || order.timeWindowEnd" class="flex flex-col bg-gray-50 p-3 rounded-md border border-gray-200">
+          <span class="font-semibold text-gray-700 mb-1 text-xs">Ventana Horaria:</span>
+          <span class="text-gray-600">{{ formatTimeWindow(order.timeWindowStart, order.timeWindowEnd) }}</span>
+        </div>
+        
+        <div v-if="order.load1Packages" class="flex flex-col bg-gray-50 p-3 rounded-md border border-gray-200">
+          <span class="font-semibold text-gray-700 mb-1 text-xs">N° Paquetes:</span>
+          <span class="text-gray-600">{{ order.load1Packages }}</span>
+        </div>
+        
+        <div v-if="order.load2WeightKg" class="flex flex-col bg-gray-50 p-3 rounded-md border border-gray-200">
+          <span class="font-semibold text-gray-700 mb-1 text-xs">Peso Total:</span>
+          <span class="text-gray-600">{{ order.load2WeightKg }} kg</span>
+        </div>
+      </template>
 
-      <!-- NUEVO: Información de Shipday si está disponible -->
-      <div v-if="hasShipdayInfo" class="detail-item full-width section-header">
-        <h4>Estado en Shipday</h4>
-      </div>
-      <div v-if="order.shipday_order_id" class="detail-item">
-        <span class="label">ID en Shipday:</span>
-        <span class="value shipday-id">{{ order.shipday_order_id }}</span>
-      </div>
-      <div v-if="order.shipday_driver_id" class="detail-item">
-        <span class="label">Conductor Asignado:</span>
-        <span class="value driver-assigned">Nombre:🚚 {{ order.driver_info?.name || 'Conductor asignado' }}</span>
-      </div>
+      <!-- Información de Shipday -->
+      <template v-if="hasShipdayInfo">
+        <div class="col-span-2 bg-indigo-50 border border-indigo-200 px-3 py-2 rounded-md">
+          <h4 class="m-0 text-indigo-900 text-sm font-semibold">Estado en Shipday</h4>
+        </div>
+        
+        <div v-if="order.shipday_order_id" class="flex flex-col bg-gray-50 p-3 rounded-md border border-gray-200">
+          <span class="font-semibold text-gray-700 mb-1 text-xs">ID en Shipday:</span>
+          <span class="font-mono bg-gray-100 px-2 py-1 rounded text-[11px]">{{ order.shipday_order_id }}</span>
+        </div>
+        
+        <div v-if="order.shipday_driver_id" class="flex flex-col bg-gray-50 p-3 rounded-md border border-gray-200">
+          <span class="font-semibold text-gray-700 mb-1 text-xs">Conductor Asignado:</span>
+          <span class="bg-emerald-100 px-2 py-1 rounded font-semibold text-emerald-900">
+            🚚 {{ order.driver_info?.name || 'Conductor asignado' }}
+          </span>
+        </div>
+      </template>
 
-      <div class="detail-item full-width">
-        <span class="label">Notas:</span>
-        <span class="value">{{ order.notes || 'Sin notas.' }}</span>
+      <!-- Notas -->
+      <div class="col-span-2 flex flex-col bg-gray-50 p-3 rounded-md border border-gray-200">
+        <span class="font-semibold text-gray-700 mb-1 text-xs">Notas:</span>
+        <span class="text-gray-600">{{ order.notes || 'Sin notas.' }}</span>
       </div>
     </div>
   </div>
-  <div v-else class="loading-details">
+  
+  <div v-else class="text-center py-10 text-gray-500">
     Cargando detalles del pedido...
   </div>
 </template>
@@ -126,7 +159,6 @@ const props = defineProps({
   order: { type: Object, default: null }
 });
 
-// Computed para verificar si hay información adicional
 const hasLogisticsInfo = computed(() => {
   return props.order && (
     props.order.priority || 
@@ -163,26 +195,27 @@ function formatDate(dateStr) {
 function formatCommune(commune) {
   if (!commune) return 'No especificada'
   
-  // Si es array, unir con comas
   if (Array.isArray(commune)) {
     return commune.length > 0 ? commune.join(', ') : 'No especificada'
   }
   
-  // Si es string, devolver directamente
   if (typeof commune === 'string') {
     return commune.trim() || 'No especificada'
   }
   
-  // Si es otro tipo, convertir a string
   return String(commune) || 'No especificada'
 }
 
-function getPriorityClass(priority) {
-  switch(priority?.toLowerCase()) {
-    case 'alta': return 'priority-high';
-    case 'baja': return 'priority-low';
-    default: return 'priority-normal';
+function getPriorityClasses(priority) {
+  const priorityLower = priority?.toLowerCase();
+  
+  if (priorityLower === 'alta' || priorityLower === 'high') {
+    return 'bg-red-100 text-red-900 px-1.5 py-0.5 rounded font-semibold';
   }
+  if (priorityLower === 'baja' || priorityLower === 'low') {
+    return 'bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded';
+  }
+  return 'bg-blue-100 text-blue-900 px-1.5 py-0.5 rounded';
 }
 
 function formatTimeWindow(start, end) {
@@ -195,95 +228,14 @@ function formatTimeWindow(start, end) {
 </script>
 
 <style scoped>
-.order-details {
-  font-size: 14px;
-}
-.detail-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
-}
-.detail-item {
-  display: flex;
-  flex-direction: column;
-  background-color: #f9fafb;
-  padding: 12px;
-  border-radius: 6px;
-  border: 1px solid #e5e7eb;
-}
-.detail-item.full-width {
-  grid-column: 1 / -1;
-}
-.detail-item.section-header {
-    background-color: #eef2ff;
-    border-color: #c7d2fe;
-    padding: 8px 12px;
-}
-.section-header h4 {
-    margin: 0;
-    color: #4338ca;
-    font-size: 14px;
-}
-.label {
-  font-weight: 600;
-  color: #374151;
-  margin-bottom: 4px;
-  font-size: 12px;
-}
-.value {
-  color: #6b7280;
-}
-
-/* NUEVO: Estilos específicos para campos importantes */
-.commune-highlight {
-  background-color: #dbeafe;
-  padding: 4px 8px;
-  border-radius: 4px;
-  font-weight: 600;
-  color: #1e40af;
-}
-
-.shipday-id {
-  font-family: 'Courier New', monospace;
-  background-color: #f3f4f6;
-  padding: 4px 8px;
-  border-radius: 4px;
-  font-size: 11px;
-}
-
-.driver-assigned {
-  background-color: #d1fae5;
-  padding: 4px 8px;
-  border-radius: 4px;
-  font-weight: 600;
-  color: #065f46;
-}
-
-.priority-high {
-  background-color: #fee2e2;
-  color: #991b1b;
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-weight: 600;
-}
-
-.priority-low {
-  background-color: #f3f4f6;
-  color: #6b7280;
-  padding: 2px 6px;
-  border-radius: 4px;
-}
-
-.priority-normal {
-  background-color: #dbeafe;
-  color: #1e40af;
-  padding: 2px 6px;
-  border-radius: 4px;
-}
-
-.loading-details {
-  text-align: center;
-  padding: 40px;
-  color: #6b7280;
+/* Solo responsive overrides */
+@media (max-width: 768px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .col-span-2 {
+    grid-column: span 1;
+  }
 }
 </style>
