@@ -10,15 +10,23 @@ export function useOrdersSelection(orders) {
   /**
    * Orders that can be selected (not already assigned to Shipday)
    */
-const selectableOrders = computed(() => {
-  return orders.value; // Permite que "Seleccionar Todo" aplique a todos los pedidos visibles
-})
+  const selectableOrders = computed(() => {
+    // ✅ FIX: Validar que orders y orders.value existan antes de usar
+    if (!orders || !orders.value || !Array.isArray(orders.value)) {
+      return []
+    }
+    return orders.value // Permite que "Seleccionar Todo" aplique a todos los pedidos visibles
+  })
 
   /**
    * Check if all selectable orders are selected
    */
   const selectAllChecked = computed(() => {
     const selectable = selectableOrders.value
+    // ✅ FIX: Validar que haya elementos antes de usar length
+    if (!selectable || selectable.length === 0) {
+      return false
+    }
     return selectable.length > 0 && 
            selectable.every(order => selectedOrders.value.includes(order._id))
   })
@@ -28,6 +36,11 @@ const selectableOrders = computed(() => {
    */
   const selectAllIndeterminate = computed(() => {
     const selectable = selectableOrders.value
+    // ✅ FIX: Validar array antes de usarlo
+    if (!selectable || selectable.length === 0) {
+      return false
+    }
+    
     const selectedCount = selectable.filter(order => 
       selectedOrders.value.includes(order._id)
     ).length
@@ -39,20 +52,25 @@ const selectableOrders = computed(() => {
    * Count of selected orders
    */
   const selectedCount = computed(() => {
-    return selectedOrders.value.length
+    return selectedOrders.value?.length || 0
   })
 
   /**
    * Check if any orders are selected
    */
   const hasSelection = computed(() => {
-    return selectedOrders.value.length > 0
+    return (selectedOrders.value?.length || 0) > 0
   })
 
   /**
    * Get selected order objects (not just IDs)
    */
   const selectedOrderObjects = computed(() => {
+    // ✅ FIX: Validar orders antes de filtrar
+    if (!orders || !orders.value || !Array.isArray(orders.value)) {
+      return []
+    }
+    
     return orders.value.filter(order => 
       selectedOrders.value.includes(order._id)
     )
@@ -63,6 +81,17 @@ const selectableOrders = computed(() => {
    */
   const selectionStats = computed(() => {
     const selected = selectedOrderObjects.value
+    
+    // ✅ FIX: Manejar caso cuando no hay datos
+    if (!selected || selected.length === 0) {
+      return {
+        total: 0,
+        pending: 0,
+        processing: 0,
+        ready_for_pickup: 0,
+        totalValue: 0
+      }
+    }
     
     return {
       total: selected.length,
@@ -79,6 +108,12 @@ const selectableOrders = computed(() => {
    * Toggle selection of a single order
    */
   function toggleOrderSelection(order) {
+    // ✅ FIX: Validar que order exista
+    if (!order || !order._id) {
+      console.warn('⚠️ Cannot select invalid order')
+      return
+    }
+
     // Don't allow selection of orders already assigned to Shipday
     // if (order.shipday_order_id) {
     //   console.warn('⚠️ Cannot select order already assigned to Shipday:', order.order_number)
@@ -105,6 +140,12 @@ const selectableOrders = computed(() => {
    */
   function toggleSelectAll() {
     const selectable = selectableOrders.value
+    
+    // ✅ FIX: Validar que haya elementos seleccionables
+    if (!selectable || selectable.length === 0) {
+      console.warn('⚠️ No selectable orders available')
+      return
+    }
     
     if (selectAllChecked.value) {
       // Deselect all selectable orders from current page
@@ -141,6 +182,7 @@ const selectableOrders = computed(() => {
    * Check if specific order is selected
    */
   function isOrderSelected(order) {
+    if (!order || !order._id) return false
     return selectedOrders.value.includes(order._id)
   }
 
@@ -148,6 +190,12 @@ const selectableOrders = computed(() => {
    * Select specific orders by IDs
    */
   function selectOrders(orderIds) {
+    // ✅ FIX: Validar que orders exista
+    if (!orders || !orders.value || !Array.isArray(orders.value)) {
+      console.warn('⚠️ Cannot select orders: orders array is not available')
+      return
+    }
+
     const validIds = orderIds.filter(id => {
       const order = orders.value.find(o => o._id === id)
       return order && !order.shipday_order_id
@@ -254,6 +302,12 @@ const selectableOrders = computed(() => {
    * Clean up selection (remove invalid IDs)
    */
   function cleanupSelection() {
+    // ✅ FIX: Validar que orders exista
+    if (!orders || !orders.value || !Array.isArray(orders.value)) {
+      selectedOrders.value = []
+      return 0
+    }
+
     const validIds = selectedOrders.value.filter(id => {
       const order = orders.value.find(o => o._id === id)
       return order && !order.shipday_order_id
@@ -268,40 +322,49 @@ const selectableOrders = computed(() => {
     
     return removedCount
   }
-// Seleccionar por filtros
-function selectByFilters(filterCriteria) {
-  const matching = selectableOrders.value.filter(order => {
-    if (filterCriteria.status && order.status !== filterCriteria.status) return false
-    if (filterCriteria.commune && order.shipping_commune !== filterCriteria.commune) return false
-    if (filterCriteria.dateFrom && new Date(order.order_date) < new Date(filterCriteria.dateFrom)) return false
-    return true
-  })
-  
-  const newIds = matching.map(o => o._id)
-  selectOrders(newIds)
-  return matching.length
-}
 
-// Guardar/cargar selección
-function saveSelection(name) {
-  const selection = {
-    name,
-    ids: [...selectedOrders.value],
-    timestamp: Date.now()
+  /**
+   * Seleccionar por filtros
+   */
+  function selectByFilters(filterCriteria) {
+    const matching = selectableOrders.value.filter(order => {
+      if (filterCriteria.status && order.status !== filterCriteria.status) return false
+      if (filterCriteria.commune && order.shipping_commune !== filterCriteria.commune) return false
+      if (filterCriteria.dateFrom && new Date(order.order_date) < new Date(filterCriteria.dateFrom)) return false
+      return true
+    })
+    
+    const newIds = matching.map(o => o._id)
+    selectOrders(newIds)
+    return matching.length
   }
-  localStorage.setItem(`selection_${name}`, JSON.stringify(selection))
-  return selection
-}
 
-function loadSelection(name) {
-  const saved = localStorage.getItem(`selection_${name}`)
-  if (saved) {
-    const selection = JSON.parse(saved)
-    selectedOrders.value = selection.ids
+  /**
+   * Guardar selección
+   */
+  function saveSelection(name) {
+    const selection = {
+      name,
+      ids: [...selectedOrders.value],
+      timestamp: Date.now()
+    }
+    localStorage.setItem(`selection_${name}`, JSON.stringify(selection))
     return selection
   }
-  return null
-}
+
+  /**
+   * Cargar selección
+   */
+  function loadSelection(name) {
+    const saved = localStorage.getItem(`selection_${name}`)
+    if (saved) {
+      const selection = JSON.parse(saved)
+      selectedOrders.value = selection.ids
+      return selection
+    }
+    return null
+  }
+
   // ==================== RETURN ====================
   return {
     // State
