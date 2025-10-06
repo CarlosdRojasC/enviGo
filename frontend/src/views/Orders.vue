@@ -78,16 +78,14 @@
 
     <!-- Modal: Tracking -->
     <Modal v-model="showTrackingModal" :title="`🚚 Tracking - Pedido #${selectedTrackingOrder?.order_number}`" width="700px">
-      <OrderTracking 
-        ref="orderTrackingRef"
-        v-if="selectedTrackingOrder" 
-        :order-id="selectedTrackingOrder._id" 
-        :order-number="selectedTrackingOrder.order_number"
-        @support-contact="handleTrackingSupport"
-        @show-proof="handleShowProof"
-        @close="showTrackingModal = false"
-      />
-    </Modal>
+  <OrderTracking
+    v-if="selectedTrackingOrder"
+    :order="selectedTrackingOrder"
+    @support-contact="handleTrackingSupport"
+    @show-proof="handleShowProof"
+    @close="showTrackingModal = false"
+  />
+</Modal>
 
     <!-- Modal: Proof of Delivery -->
     <Modal v-model="showProofModal" :title="`📋 Prueba de Entrega - #${selectedProofOrder?.order_number}`" width="700px">
