@@ -347,7 +347,7 @@ router.get('/stats', authenticateToken, async (req, res) => {
       { 
         $or: [
           { $eq: ['$status', 'delivered'] },
-          { $eq: ['$status', 'facturado'] }
+          { $eq: ['$status', 'invoiced'] }
         ]
       }, 
       1, 
