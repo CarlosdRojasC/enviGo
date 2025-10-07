@@ -111,7 +111,7 @@
       @close-bulk-assign="handleCloseBulkAssignModal"
       @confirm-bulk-assignment="confirmBulkAssignment"
       @close-delivery-proof="closeDeliveryProofModal"
-  @confirm-delivery="handleConfirmDelivery"
+      @confirm-delivery="handleConfirmDelivery"
     />
 
     <!-- Notificaciones Toast (si no están globales) -->
@@ -290,6 +290,8 @@ const {
 // ==================== LOCAL STATE ====================
 const showNotification = ref(false)
 const isInitialLoad = ref(true)
+const communesLoaded = ref(false);
+
 // ==================== NUEVO STATE PARA CANALES ====================
 const availableChannels = ref([])
 const loadingChannels = ref(false)
@@ -1151,11 +1153,13 @@ onMounted(async () => {
     // ✅ CARGAR TODOS LOS DATOS NECESARIOS
     await Promise.all([
       fetchCompanies(),
-      fetchOrders()
     ])
-    
-    // ✅ CARGAR COMUNAS DESPUÉS DE LAS EMPRESAS
-    await fetchAvailableCommunes()
+    await fetchOrders();
+  
+  if (!communesLoaded.value) {
+    await fetchAvailableCommunes();
+    communesLoaded.value = true;
+  }
     
     // ✅ CARGAR CANALES PARA TODAS LAS EMPRESAS (admin)
     if (auth.isAdmin) {

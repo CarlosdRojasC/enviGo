@@ -537,6 +537,7 @@ const orderTrackingRef = ref(null)
 const showManifestModal = ref(false);
 const currentManifestId = ref(null);
 const printManifest = ref(false);
+const communesLoaded = ref(false);
 // ==================== NUEVO STATE PARA CANALES ====================
 const availableChannels = ref([])
 const loadingChannels = ref(false)
@@ -850,14 +851,6 @@ async function handleCreateOrderSubmit() {
   }
 }
 
-function handleSearchEvent(newSearchTerm) {
-  applySearch(newSearchTerm);
-}
-
-// Función que se llamará desde el evento @filter-change de OrdersFilters
-function handleFilterChangeEvent(key, value) {
-  handleFilterChange(key, value);
-}
 
 function toggleAutoRefresh() {
   autoRefreshEnabled.value = !autoRefreshEnabled.value
@@ -1788,9 +1781,13 @@ onMounted(async () => {
   try {
     // 1. Cargamos ÚNICAMENTE la lista de pedidos.
     // El backend ya debería saber qué pedidos mostrar basado en el token del usuario.
-    await fetchOrders();
+      await fetchOrders();
+  
+  if (!communesLoaded.value) {
+    await fetchAvailableCommunes();
+    communesLoaded.value = true;
+  }
     lastUpdate.value = Date.now();
-await fetchAvailableCommunes();
     // 2. Configuramos los listeners de tiempo real.
     // No dependen de que los canales o comunas estén cargados.
     window.addEventListener('orderUpdated', handleOrderUpdate);

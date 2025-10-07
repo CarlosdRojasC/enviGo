@@ -1,21 +1,38 @@
-// composables/useOrdersFilters.js - VERSIÓN COMPLETA CORREGIDA
+// composables/useOrdersFilters.js - OPTIMIZADO CON DEBOUNCE Y CACHE
 import { ref, computed, watch } from 'vue'
 import { useToast } from 'vue-toastification'
 import { apiService } from '../services/api'
 import { logger } from '../services/logger.service'
 
+// ✅ HELPER PARA DEBOUNCE (sin necesidad de lodash)
+function debounce(fn, delay) {
+  let timeoutId
+  return function(...args) {
+    clearTimeout(timeoutId)
+    timeoutId = setTimeout(() => fn.apply(this, args), delay)
+  }
+}
+
 export function useOrdersFilters(orders, fetchOrders, options = {}) {
   const toast = useToast()
+  
+  // ==================== CONFIGURACIÓN ====================
+  const CONFIG = {
+    SEARCH_DEBOUNCE: 800,        // 800ms para búsqueda
+    FILTER_DEBOUNCE: 500,        // 500ms para filtros normales
+    CACHE_DURATION: 30000,       // 30 segundos
+    COMMUNES_CACHE_DURATION: 5 * 60 * 1000  // 5 minutos para comunas
+  }
   
   // ==================== STATE ====================
   const filters = ref({
     company_id: '',
     status: '',
-    shipping_commune: [], // Array para múltiples comunas
+    shipping_commune: [],
     date_from: '',
     date_to: '',
     search: '',
-    channel_id: '', // ✅ AGREGAR
+    channel_id: '',
     amount_min: '',
     amount_max: '',
     priority: '',
@@ -25,7 +42,6 @@ export function useOrdersFilters(orders, fetchOrders, options = {}) {
     has_tracking: ''
   })
 
-  // ✅ FILTROS AVANZADOS COMO REF SEPARADO
   const advancedFilters = ref({
     amount_min: '',
     amount_max: '',
@@ -38,25 +54,28 @@ export function useOrdersFilters(orders, fetchOrders, options = {}) {
     shipday_status: ''
   })
 
-  // ✅ UI DE FILTROS
   const filtersUI = ref({
     showAdvanced: false,
     activePreset: null,
     savedPresets: []
   })
 
-  // ✅ ESTADO PARA COMUNAS DISPONIBLES
   const availableCommunes = ref([])
   const loadingCommunes = ref(false)
+  
+  // ✅ NUEVO: Cache para comunas
+  const communesCache = ref({
+    data: [],
+    timestamp: null,
+    companyId: null
+  })
 
-  // Search debounce
-  let searchTimeout
+  // ✅ NUEVO: Cache para filtros aplicados
+  const filtersCache = new Map()
+  const lastAppliedFilters = ref(null)
 
   // ==================== COMPUTED ====================
   
-  /**
-   * Count active filters
-   */
   const activeFiltersCount = computed(() => {
     return Object.values(filters.value).filter(value => 
       value !== '' && 
@@ -66,16 +85,10 @@ export function useOrdersFilters(orders, fetchOrders, options = {}) {
     ).length
   })
 
-  /**
-   * Check if has active filters
-   */
   const hasActiveFilters = computed(() => {
     return activeFiltersCount.value > 0
   })
 
-  /**
-   * ✅ PRESETS DE FILTROS
-   */
   const filterPresets = computed(() => [
     {
       id: 'pending',
@@ -110,9 +123,6 @@ export function useOrdersFilters(orders, fetchOrders, options = {}) {
     }
   ])
 
-  /**
-   * All filters combined (for export)
-   */
   const allFilters = computed(() => {
     return { ...filters.value, ...advancedFilters.value }
   })
@@ -134,10 +144,23 @@ export function useOrdersFilters(orders, fetchOrders, options = {}) {
   // ==================== METHODS ====================
 
   /**
-   * ✅ CARGAR COMUNAS DISPONIBLES
+   * ✅ CARGAR COMUNAS CON CACHE
    */
   async function fetchAvailableCommunes(companyId = null) {
     try {
+      // ✅ VERIFICAR CACHE PRIMERO
+      const now = Date.now()
+      const cacheValid = 
+        communesCache.value.timestamp &&
+        (now - communesCache.value.timestamp < CONFIG.COMMUNES_CACHE_DURATION) &&
+        communesCache.value.companyId === companyId
+
+      if (cacheValid && communesCache.value.data.length > 0) {
+        logger.dev('📦 Using cached communes data')
+        availableCommunes.value = communesCache.value.data
+        return
+      }
+
       loadingCommunes.value = true
       logger.dev('🏘️ Fetching available communes for company:', companyId)
       
@@ -152,7 +175,15 @@ export function useOrdersFilters(orders, fetchOrders, options = {}) {
       
       if (response.data && response.data.communes) {
         availableCommunes.value = response.data.communes
-        logger.success('✅ Communes loaded:', availableCommunes.value.length)
+        
+        // ✅ GUARDAR EN CACHE
+        communesCache.value = {
+          data: response.data.communes,
+          timestamp: Date.now(),
+          companyId: companyId
+        }
+        
+        logger.success('✅ Communes loaded and cached:', availableCommunes.value.length)
       } else {
         availableCommunes.value = []
         logger.warn('⚠️ No communes data received:', response.data)
@@ -162,7 +193,6 @@ export function useOrdersFilters(orders, fetchOrders, options = {}) {
       logger.error('❌ Error fetching communes:', error)
       availableCommunes.value = []
       
-      // Mostrar toast solo si es un error crítico
       if (error.response?.status === 401) {
         toast.error('Error de autenticación al cargar comunas')
       }
@@ -172,12 +202,65 @@ export function useOrdersFilters(orders, fetchOrders, options = {}) {
   }
 
   /**
-   * ✅ HANDLE FILTER CHANGE CON VALIDACIÓN
+   * ✅ APPLY FILTERS CON CACHE Y DEDUPLICACIÓN
+   */
+  function applyFiltersInternal() {
+    logger.debug('🎯 Applying filters:', filters.value)
+    
+    const cleanFilters = {}
+    
+    Object.entries(filters.value).forEach(([key, value]) => {
+      if (key === 'shipping_commune') {
+        if (Array.isArray(value) && value.length > 0) {
+          cleanFilters[key] = value.join(',')
+        }
+      } else if (value !== '' && value !== null && value !== undefined) {
+        cleanFilters[key] = value
+      }
+    })
+    
+    // ✅ VERIFICAR SI LOS FILTROS CAMBIARON
+    const filtersKey = JSON.stringify(cleanFilters)
+    const lastFiltersKey = JSON.stringify(lastAppliedFilters.value || {})
+    
+    if (filtersKey === lastFiltersKey) {
+      logger.dev('⏭️ Filters unchanged, skipping request')
+      return
+    }
+    
+    // ✅ VERIFICAR CACHE
+    const cached = filtersCache.get(filtersKey)
+    if (cached && (Date.now() - cached.timestamp < CONFIG.CACHE_DURATION)) {
+      logger.dev('📦 Using cached filter results')
+      // No hacer request, los datos ya están en orders.value
+      return
+    }
+    
+    logger.debug('📡 Sending filters to backend:', cleanFilters)
+    lastAppliedFilters.value = cleanFilters
+    
+    // Llamar fetchOrders con los filtros limpios
+    if (fetchOrders) {
+      fetchOrders(cleanFilters).then(() => {
+        // ✅ GUARDAR EN CACHE DESPUÉS DEL REQUEST
+        filtersCache.set(filtersKey, {
+          timestamp: Date.now()
+        })
+      })
+    }
+  }
+
+  // ✅ CREAR VERSIONES DEBOUNCED
+  const debouncedApplyFilters = debounce(applyFiltersInternal, CONFIG.FILTER_DEBOUNCE)
+  const debouncedApplyFiltersSearch = debounce(applyFiltersInternal, CONFIG.SEARCH_DEBOUNCE)
+
+  /**
+   * ✅ HANDLE FILTER CHANGE CON DEBOUNCE INTELIGENTE
    */
   const handleFilterChange = async (key, value) => {
-    logger.dev(`🔄 handleFilterChange: ${key} = ${value} (tipo: ${typeof value})`)
+    logger.dev(`🔄 handleFilterChange: ${key} = ${value}`)
     
-    // ✅ VALIDAR ObjectIds antes de aplicar
+    // ✅ VALIDAR ObjectIds
     if ((key === 'company_id' || key === 'channel_id') && value && value !== '') {
       const objectIdRegex = /^[0-9a-fA-F]{24}$/
       if (!objectIdRegex.test(value)) {
@@ -201,53 +284,30 @@ export function useOrdersFilters(orders, fetchOrders, options = {}) {
       filters.value[key] = cleanValue
     }
     
-    // ✅ SI CAMBIA LA EMPRESA, RECARGAR COMUNAS
+    // ✅ SI CAMBIA LA EMPRESA, RECARGAR COMUNAS (sin debounce, pero con cache)
     if (key === 'company_id') {
       logger.dev('🏢 Company filter changed, reloading communes...')
       await fetchAvailableCommunes(cleanValue || null)
     }
     
-    // ✅ DEBUG
     logger.debug('🧹 Filtros después del cambio:', filters.value)
     
-    // ✅ APLICAR FILTROS
-    applyFilters()
-  }
-
-  /**
-   * Apply filters with debounce for search
-   */
-  function applyFilters() {
-    logger.debug('🎯 Applying filters:', filters.value)
-    
-    const cleanFilters = {}
-    
-    Object.entries(filters.value).forEach(([key, value]) => {
-      if (key === 'shipping_commune') {
-        // Convertir array de comunas en string separado por comas
-        if (Array.isArray(value) && value.length > 0) {
-          cleanFilters[key] = value.join(',')
-        }
-      } else if (value !== '' && value !== null && value !== undefined) {
-        cleanFilters[key] = value
-      }
-    })
-    
-    logger.debug('📡 Sending filters to backend:', cleanFilters)
-    
-    // Llamar fetchOrders con los filtros limpios
-    if (fetchOrders) {
-      fetchOrders(cleanFilters)
+    // ✅ APLICAR DEBOUNCE SEGÚN EL TIPO DE FILTRO
+    if (key === 'search') {
+      // Búsqueda tiene más delay
+      debouncedApplyFiltersSearch()
+    } else {
+      // Filtros normales tienen menos delay
+      debouncedApplyFilters()
     }
   }
 
   /**
-   * ✅ RESET FILTERS MEJORADO
+   * ✅ RESET FILTERS
    */
   const resetFilters = async () => {
     logger.dev('🧹 Limpiando todos los filtros...')
     
-    // Limpiar filtros básicos
     Object.keys(filters.value).forEach(key => {
       if (Array.isArray(filters.value[key])) {
         filters.value[key] = []
@@ -256,14 +316,18 @@ export function useOrdersFilters(orders, fetchOrders, options = {}) {
       }
     })
     
-    // Limpiar filtros avanzados
     Object.keys(advancedFilters.value).forEach(key => {
       advancedFilters.value[key] = ''
     })
     
     logger.dev('✅ Filtros limpiados:', filters.value)
     
-    applyFilters()
+    // ✅ LIMPIAR CACHE
+    filtersCache.clear()
+    lastAppliedFilters.value = null
+    
+    // Aplicar inmediatamente sin debounce al resetear
+    applyFiltersInternal()
     toast.success('Filtros limpiados correctamente')
   }
 
@@ -273,45 +337,39 @@ export function useOrdersFilters(orders, fetchOrders, options = {}) {
   const setFilter = (key, value) => {
     if (key in filters.value) {
       filters.value[key] = value
-      applyFilters()
+      
+      // ✅ APLICAR CON DEBOUNCE
+      if (key === 'search') {
+        debouncedApplyFiltersSearch()
+      } else {
+        debouncedApplyFilters()
+      }
     }
   }
 
-  /**
-   * Get individual filter
-   */
   const getFilter = (key) => {
     return filters.value[key]
   }
 
-  /**
-   * Export current filters
-   */
   const exportFilters = () => {
     return { ...filters.value }
   }
 
-  /**
-   * ✅ TOGGLE FILTROS AVANZADOS
-   */
   function toggleAdvancedFilters() {
     filtersUI.value.showAdvanced = !filtersUI.value.showAdvanced
     logger.debug('🔧 Advanced filters toggled:', filtersUI.value.showAdvanced)
   }
 
   /**
-   * ✅ UPDATE ADVANCED FILTER
+   * ✅ UPDATE ADVANCED FILTER CON DEBOUNCE
    */
   function updateAdvancedFilter(key, value) {
     if (key in advancedFilters.value) {
       advancedFilters.value[key] = value
-      applyFilters()
+      debouncedApplyFilters() // ✅ CON DEBOUNCE
     }
   }
 
-  /**
-   * ✅ APPLY PRESET
-   */
   function applyPreset(presetId) {
     const preset = filterPresets.value.find(p => p.id === presetId)
     if (!preset) return
@@ -319,7 +377,13 @@ export function useOrdersFilters(orders, fetchOrders, options = {}) {
     logger.dev('🎯 Applying preset:', preset.name)
     
     // Resetear filtros
-    resetFilters()
+    Object.keys(filters.value).forEach(key => {
+      if (Array.isArray(filters.value[key])) {
+        filters.value[key] = []
+      } else {
+        filters.value[key] = ''
+      }
+    })
     
     // Aplicar filtros del preset
     Object.entries(preset.filters).forEach(([key, value]) => {
@@ -331,20 +395,16 @@ export function useOrdersFilters(orders, fetchOrders, options = {}) {
       }
     })
     
-    // Marcar preset como activo
     filtersUI.value.activePreset = presetId
     
-    applyFilters()
+    // ✅ APLICAR INMEDIATAMENTE SIN DEBOUNCE PARA PRESETS
+    applyFiltersInternal()
     
-    // Limpiar preset activo después de 3 segundos
     setTimeout(() => {
       filtersUI.value.activePreset = null
     }, 3000)
   }
 
-  /**
-   * Validate date range
-   */
   function validateDateRange() {
     if (filters.value.date_from && filters.value.date_to) {
       const fromDate = new Date(filters.value.date_from)
@@ -361,7 +421,7 @@ export function useOrdersFilters(orders, fetchOrders, options = {}) {
   // ==================== FUNCIONES PARA MÚLTIPLES COMUNAS ====================
 
   /**
-   * ✅ Agregar comuna al filtro
+   * ✅ Agregar comuna con debounce
    */
   function addCommune(commune) {
     logger.dev('🏘️ Agregando comuna:', commune)
@@ -369,14 +429,14 @@ export function useOrdersFilters(orders, fetchOrders, options = {}) {
     if (!filters.value.shipping_commune.includes(commune)) {
       filters.value.shipping_commune.push(commune)
       logger.debug('✅ Comunas actuales:', filters.value.shipping_commune)
-      applyFilters()
+      debouncedApplyFilters() // ✅ CON DEBOUNCE
     } else {
       logger.debug('⚠️ Comuna ya existe:', commune)
     }
   }
 
   /**
-   * ✅ Remover comuna del filtro
+   * ✅ Remover comuna con debounce
    */
   function removeCommune(communeToRemove) {
     logger.dev('❌ Removiendo comuna:', communeToRemove)
@@ -386,12 +446,9 @@ export function useOrdersFilters(orders, fetchOrders, options = {}) {
     )
     
     logger.debug('📊 Comunas restantes:', filters.value.shipping_commune)
-    applyFilters()
+    debouncedApplyFilters() // ✅ CON DEBOUNCE
   }
 
-  /**
-   * Toggle comuna (agregar si no está, remover si está)
-   */
   function toggleCommune(commune) {
     const index = filters.value.shipping_commune.indexOf(commune)
     if (index === -1) {
@@ -403,17 +460,9 @@ export function useOrdersFilters(orders, fetchOrders, options = {}) {
 
   // ==================== WATCHERS ====================
   
-  // Watch for company change to refresh communes
-  watch(
-    () => filters.value.company_id,
-    (newCompanyId) => {
-      if (newCompanyId) {
-        logger.dev('🏢 Company filter changed, refreshing communes')
-        fetchAvailableCommunes(newCompanyId)
-      }
-    }
-  )
-
+  // ✅ ELIMINAR WATCHER QUE DUPLICABA REQUESTS
+  // El handleFilterChange ya maneja el cambio de company_id
+  
   // Validate date range when dates change
   watch(
     [() => filters.value.date_from, () => filters.value.date_to],
@@ -424,39 +473,57 @@ export function useOrdersFilters(orders, fetchOrders, options = {}) {
     }
   )
 
+  // ==================== CLEANUP ====================
+  
+  /**
+   * ✅ FUNCIÓN PARA LIMPIAR CACHE VIEJO
+   */
+  function cleanupCache() {
+    const now = Date.now()
+    
+    for (const [key, value] of filtersCache.entries()) {
+      if (now - value.timestamp > CONFIG.CACHE_DURATION) {
+        filtersCache.delete(key)
+      }
+    }
+  }
+  
+  // Limpiar cache cada minuto
+  setInterval(cleanupCache, 60000)
+
   // ==================== RETURN ====================
   return {
-    // ✅ STATE
+    // STATE
     filters,
-    advancedFilters,      // ✅ AGREGAR
-    filtersUI,           // ✅ AGREGAR
+    advancedFilters,
+    filtersUI,
     availableCommunes,
     loadingCommunes,
     
-    // ✅ COMPUTED
+    // COMPUTED
     activeFiltersCount,
     hasActiveFilters,
-    filterPresets,       // ✅ AGREGAR
-    allFilters,         // ✅ AGREGAR
+    filterPresets,
+    allFilters,
     
-    // ✅ METHODS PRINCIPALES
+    // METHODS PRINCIPALES
     handleFilterChange,
     resetFilters,
     setFilter,
     getFilter,
     exportFilters,
     
-    // ✅ FUNCIONES AUXILIARES
+    // FUNCIONES AUXILIARES
     fetchAvailableCommunes,
     validateDateRange,
-    applyFilters,
+    applyFilters: debouncedApplyFilters, // ✅ EXPONER VERSIÓN DEBOUNCED
     
-    // ✅ PRESETS Y UI
-    toggleAdvancedFilters,  // ✅ AGREGAR
-    updateAdvancedFilter,   // ✅ AGREGAR
-    applyPreset,           // ✅ AGREGAR
+    // PRESETS Y UI
+    toggleAdvancedFilters,
+    updateAdvancedFilter,
+    applyPreset,
     
-    // ✅ FUNCIONES PARA COMUNAS
+    // FUNCIONES PARA COMUNAS
     addCommune,
     removeCommune,
     toggleCommune

@@ -397,16 +397,18 @@ const hasProofOfDelivery = computed(() => {
 const hasDriverInfo = computed(() => {
   return !!(driverStatus.value.name && driverStatus.value.name !== 'Conductor');
 });
+const REFRESH_INTERVAL = 3 * 60 * 1000; // 3 minutos
+
 
 onMounted(() => {
   fetchTracking();
   
   // Auto-refresh cada 30 segundos si el pedido está en tránsito
   refreshInterval = setInterval(() => {
-    if (tracking.value && ['processing', 'shipped'].includes(tracking.value.current_status)) {
-      refreshTracking();
-    }
-  }, 30000);
+  if (tracking.value && ['processing', 'shipped'].includes(tracking.value.current_status)) {
+    refreshTracking();
+  }
+  }, REFRESH_INTERVAL);
 });
 
 onUnmounted(() => {
