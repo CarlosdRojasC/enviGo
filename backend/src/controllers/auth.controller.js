@@ -1,4 +1,4 @@
-// backend/src/controllers/auth.controller.js - ESTRUCTURA CORREGIDA
+// backend/src/controllers/auth.controller.js (versión refactorizada)
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
@@ -6,63 +6,73 @@ const nodemailer = require('nodemailer');
 const User = require('../models/User');
 const Company = require('../models/Company');
 const { ERRORS, ROLES } = require('../config/constants');
+const logger = require('../utils/logger'); // 🔥 nuevo: logger centralizado
+
+// Helpers de respuesta unificada
+const success = (res, message, data = {}, code = 200) =>
+  res.status(code).json({
+    success: true,
+    message,
+    data,
+    timestamp: new Date().toISOString(),
+  });
+
+const fail = (res, error, code = 500, extra = {}) =>
+  res.status(code).json({
+    success: false,
+    error,
+    ...extra,
+    timestamp: new Date().toISOString(),
+  });
 
 class AuthController {
-  // Login mejorado
-  login = async(req, res) => {
+  // 🔐 LOGIN
+  login = async (req, res) => {
     try {
       const { email, password, remember_me = false } = req.body;
       const clientIP = req.ip || req.connection.remoteAddress;
 
       const user = await User.findOne({ email }).populate('company_id');
-if (!user) {
-  this.logFailedAttempt(email, clientIP, 'USER_NOT_FOUND');
-  return res.status(401).json({ error: ERRORS.INVALID_CREDENTIALS });
-}
+      if (!user) {
+        this.logFailedAttempt(email, clientIP, 'USER_NOT_FOUND');
+        return fail(res, ERRORS.INVALID_CREDENTIALS, 401);
+      }
 
-// 🔥 NUEVA VALIDACIÓN: Verificar si el usuario está desactivado
-if (!user.is_active) {
-  this.logFailedAttempt(email, clientIP, 'USER_DISABLED');
-  return res.status(403).json({ 
-    error: 'Tu cuenta ha sido desactivada. Contacta al administrador.',
-    code: 'USER_DISABLED' 
-  });
-}
+      if (!user.is_active) {
+        this.logFailedAttempt(email, clientIP, 'USER_DISABLED');
+        return fail(res, 'Cuenta desactivada. Contacta al administrador.', 403);
+      }
 
-      // Verificar si la cuenta está bloqueada
       if (user.locked_until && user.locked_until > new Date()) {
-        const lockTimeRemaining = Math.ceil((user.locked_until - new Date()) / 1000 / 60);
-        return res.status(423).json({ 
-          error: 'Cuenta bloqueada',
-          details: `Intentalo de nuevo en ${lockTimeRemaining} minutos`,
-          locked_until: user.locked_until
+        const mins = Math.ceil((user.locked_until - new Date()) / 60000);
+        return fail(res, 'Cuenta bloqueada temporalmente', 423, {
+          locked_until: user.locked_until,
+          wait_minutes: mins,
         });
       }
 
       const validPassword = await bcrypt.compare(password, user.password_hash);
       if (!validPassword) {
         await this.handleFailedLogin(user, clientIP);
-        return res.status(401).json({ error: ERRORS.INVALID_CREDENTIALS });
+        return fail(res, ERRORS.INVALID_CREDENTIALS, 401);
       }
 
-      // Login exitoso - resetear contadores de fallo
       await this.handleSuccessfulLogin(user, clientIP);
 
-      // Generar token
-      const tokenExpiry = remember_me ? '30d' : (process.env.JWT_EXPIRE || '7d');
+      const tokenExpiry = remember_me ? '30d' : process.env.JWT_EXPIRE || '7d';
       const token = jwt.sign(
-        { 
-          id: user._id, 
-          email: user.email, 
-          role: user.role, 
+        {
+          id: user._id,
+          email: user.email,
+          role: user.role,
           company_id: user.company_id?._id || null,
-          session_id: crypto.randomUUID()
+          session_id: crypto.randomUUID(),
         },
         process.env.JWT_SECRET,
         { expiresIn: tokenExpiry }
       );
 
-      res.json({
+      success(res, 'Inicio de sesión exitoso', {
         token,
         expires_in: tokenExpiry,
         user: {
@@ -73,37 +83,32 @@ if (!user.is_active) {
           company: user.company_id,
           permissions: this.getUserPermissions(user.role),
           last_login: user.last_login,
-          requires_password_change: user.password_change_required || false
+          requires_password_change: user.password_change_required || false,
         },
       });
     } catch (error) {
-      console.error('Error en login:', error);
-      res.status(500).json({ error: ERRORS.SERVER_ERROR });
+      logger.error({ msg: 'Error en login', error });
+      fail(res, ERRORS.SERVER_ERROR, 500);
     }
-  }
+  };
 
-  // Registro de usuario
-  register = async(req, res) => {
+  // 🧾 REGISTRO
+  register = async (req, res) => {
     try {
       const { email, password, full_name, company_id, role = ROLES.COMPANY_EMPLOYEE } = req.body;
 
-      if (!Object.values(ROLES).includes(role)) {
-        return res.status(400).json({ error: 'Rol no válido' });
-      }
+      if (!Object.values(ROLES).includes(role))
+        return fail(res, 'Rol no válido', 400);
 
       if (role !== ROLES.ADMIN) {
-        if (!company_id) {
-          return res.status(400).json({ error: 'Se requiere empresa para este rol' });
-        }
+        if (!company_id) return fail(res, 'Se requiere empresa', 400);
 
         const company = await Company.findById(company_id);
-        if (!company || !company.is_active) {
-          return res.status(400).json({ error: 'Empresa no válida' });
-        }
+        if (!company || !company.is_active)
+          return fail(res, 'Empresa no válida', 400);
       }
 
       const password_hash = await bcrypt.hash(password, 10);
-
       const newUser = new User({
         email,
         password_hash,
@@ -114,107 +119,85 @@ if (!user.is_active) {
 
       await newUser.save();
 
-      res.status(201).json({
-        message: 'Usuario creado exitosamente',
-        user: {
-          id: newUser._id,
-          email: newUser.email,
-          full_name: newUser.full_name,
-          role: newUser.role,
-          company_id: newUser.company_id
-        },
-      });
+      success(res, 'Usuario creado exitosamente', {
+        id: newUser._id,
+        email: newUser.email,
+        full_name: newUser.full_name,
+        role: newUser.role,
+        company_id: newUser.company_id,
+      }, 201);
     } catch (error) {
-      console.error('Error en registro:', error);
-      
-      if (error.code === 11000) {
-        return res.status(400).json({ error: 'El email ya está registrado' });
-      }
-      
-      res.status(500).json({ error: ERRORS.SERVER_ERROR });
+      logger.error({ msg: 'Error en registro', error });
+      if (error.code === 11000)
+        return fail(res, 'El email ya está registrado', 400);
+      fail(res, ERRORS.SERVER_ERROR, 500);
     }
-  }
+  };
 
-  // Obtener perfil
-  getProfile = async(req, res) =>  {
+  // 👤 PERFIL
+  getProfile = async (req, res) => {
     try {
-      const userId = req.user.id;
+      const user = await User.findById(req.user.id).populate('company_id');
+      if (!user) return fail(res, 'Usuario no encontrado', 404);
 
-      const user = await User.findById(userId).populate('company_id');
-      if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
-
-      res.json({
+      success(res, 'Perfil cargado correctamente', {
         id: user._id,
         email: user.email,
         full_name: user.full_name,
         role: user.role,
-        last_login: user.last_login,
         company: user.company_id,
+        last_login: user.last_login,
       });
     } catch (error) {
-      console.error('Error obteniendo perfil:', error);
-      res.status(500).json({ error: ERRORS.SERVER_ERROR });
+      logger.error({ msg: 'Error obteniendo perfil', error });
+      fail(res, ERRORS.SERVER_ERROR);
     }
-  }
+  };
 
-  // Solicitar reset de contraseña
-requestPasswordReset = async (req, res) => {
-    
+  // 🔁 PASSWORD RESET REQUEST
+  requestPasswordReset = async (req, res) => {
     try {
       const { email } = req.body;
-
       const user = await User.findOne({ email, is_active: true });
-      if (!user) {
-        return res.json({ 
-          message: 'Si el email existe, recibirás instrucciones para resetear tu contraseña' 
-        });
-      }
+
+      if (!user)
+        return success(res, 'Si el email existe, recibirás instrucciones');
 
       const resetToken = crypto.randomBytes(32).toString('hex');
-      const resetTokenHash = crypto.createHash('sha256').update(resetToken).digest('hex');
+      const resetHash = crypto.createHash('sha256').update(resetToken).digest('hex');
 
-      user.password_reset_token = resetTokenHash;
-      user.password_reset_expires = new Date(Date.now() + 60 * 60 * 1000);
+      user.password_reset_token = resetHash;
+      user.password_reset_expires = new Date(Date.now() + 3600000);
       await user.save();
 
       await this.sendPasswordResetEmail(user.email, resetToken, user.full_name);
 
-      res.json({ 
-        message: 'Si el email existe, recibirás instrucciones para resetear tu contraseña' 
-      });
+      success(res, 'Instrucciones de restablecimiento enviadas si el email existe');
     } catch (error) {
-      console.error('Error en password reset request:', error);
-      res.status(500).json({ error: ERRORS.SERVER_ERROR });
+      logger.error({ msg: 'Error solicitando password reset', error });
+      fail(res, ERRORS.SERVER_ERROR);
     }
-  }
+  };
 
-  // Resetear contraseña con token
-  resetPassword = async(req, res) => {
+  // 🔒 PASSWORD RESET CONFIRMATION
+  resetPassword = async (req, res) => {
     try {
       const { token, new_password } = req.body;
+      if (!token || !new_password)
+        return fail(res, 'Token y nueva contraseña requeridos', 400);
 
-      if (!token || !new_password) {
-        return res.status(400).json({ error: 'Token y nueva contraseña son requeridos' });
-      }
-
-      const resetTokenHash = crypto.createHash('sha256').update(token).digest('hex');
-
+      const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
       const user = await User.findOne({
-        password_reset_token: resetTokenHash,
+        password_reset_token: tokenHash,
         password_reset_expires: { $gt: new Date() },
-        is_active: true
+        is_active: true,
       });
 
-      if (!user) {
-        return res.status(400).json({ error: 'Token inválido o expirado' });
-      }
+      if (!user) return fail(res, 'Token inválido o expirado', 400);
 
-      const isSamePassword = await bcrypt.compare(new_password, user.password_hash);
-      if (isSamePassword) {
-        return res.status(400).json({ 
-          error: 'La nueva contraseña debe ser diferente a la anterior' 
-        });
-      }
+      const samePassword = await bcrypt.compare(new_password, user.password_hash);
+      if (samePassword)
+        return fail(res, 'La nueva contraseña debe ser diferente', 400);
 
       user.password_hash = await bcrypt.hash(new_password, 12);
       user.password_reset_token = undefined;
@@ -225,80 +208,40 @@ requestPasswordReset = async (req, res) => {
       user.password_changed_at = new Date();
       await user.save();
 
-      res.json({ message: 'Contraseña actualizada exitosamente' });
+      success(res, 'Contraseña actualizada exitosamente');
     } catch (error) {
-      console.error('Error en password reset:', error);
-      res.status(500).json({ error: ERRORS.SERVER_ERROR });
+      logger.error({ msg: 'Error en password reset', error });
+      fail(res, ERRORS.SERVER_ERROR);
     }
-  }
+  };
 
-  // Cambiar contraseña
-  changePassword = async(req, res) => {
-    try {
-      const { current_password, new_password } = req.body;
-      const userId = req.user.id;
-
-      const user = await User.findById(userId);
-      if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
-
-      const validPassword = await bcrypt.compare(current_password, user.password_hash);
-      if (!validPassword) {
-        return res.status(401).json({ error: 'Contraseña actual incorrecta' });
-      }
-
-      const isSamePassword = await bcrypt.compare(new_password, user.password_hash);
-      if (isSamePassword) {
-        return res.status(400).json({ 
-          error: 'La nueva contraseña debe ser diferente a la actual' 
-        });
-      }
-
-      user.password_hash = await bcrypt.hash(new_password, 12);
-      user.password_change_required = false;
-      user.password_changed_at = new Date();
-      await user.save();
-
-      res.json({ message: 'Contraseña actualizada exitosamente' });
-    } catch (error) {
-      console.error('Error cambiando contraseña:', error);
-      res.status(500).json({ error: ERRORS.SERVER_ERROR });
-    }
-  }
-
-  // Verificar token
-  verifyToken = async(req, res) => {
+  // 🔑 VALIDAR TOKEN JWT
+  verifyToken = async (req, res) => {
     try {
       const user = await User.findById(req.user.id).populate('company_id');
-      if (!user || !user.is_active) {
-        return res.status(401).json({ error: 'Usuario inválido' });
-      }
+      if (!user || !user.is_active)
+        return fail(res, 'Usuario inválido o inactivo', 401);
 
-      res.json({
-        valid: true,
-        user: {
-          id: user._id,
-          email: user.email,
-          full_name: user.full_name,
-          role: user.role,
-          company: user.company_id,
-          permissions: this.getUserPermissions(user.role)
-        }
+      success(res, 'Token válido', {
+        id: user._id,
+        email: user.email,
+        full_name: user.full_name,
+        role: user.role,
+        company: user.company_id,
+        permissions: this.getUserPermissions(user.role),
       });
     } catch (error) {
-      console.error('Error verificando token:', error);
-      res.status(401).json({ error: 'Token inválido' });
+      logger.error({ msg: 'Error verificando token', error });
+      fail(res, 'Token inválido', 401);
     }
-  }
+  };
 
-  // ✅ MÉTODOS AUXILIARES - CORRECTAMENTE DENTRO DE LA CLASE
+  // ⚙️ HELPERS
   async handleFailedLogin(user, clientIP) {
     user.failed_login_attempts = (user.failed_login_attempts || 0) + 1;
     user.last_failed_login = new Date();
-
-    if (user.failed_login_attempts >= 5) {
+    if (user.failed_login_attempts >= 5)
       user.locked_until = new Date(Date.now() + 15 * 60 * 1000);
-    }
-
     await user.save();
     this.logFailedAttempt(user.email, clientIP, 'INVALID_PASSWORD');
   }
@@ -312,82 +255,53 @@ requestPasswordReset = async (req, res) => {
   }
 
   logFailedAttempt(email, ip, reason) {
-    console.warn(`Failed login attempt - Email: ${email}, IP: ${ip}, Reason: ${reason}, Time: ${new Date().toISOString()}`);
+    logger.warn({
+      msg: 'Intento de login fallido',
+      email,
+      ip,
+      reason,
+      time: new Date().toISOString(),
+    });
   }
 
   getUserPermissions(role) {
     const permissions = {
       admin: ['manage_companies', 'manage_users', 'view_all_orders', 'system_settings'],
       company_owner: ['manage_company_users', 'view_company_orders', 'company_settings'],
-      company_employee: ['view_orders', 'create_orders', 'view_reports']
+      company_employee: ['view_orders', 'create_orders', 'view_reports'],
     };
     return permissions[role] || [];
   }
-validateResetToken = async (req, res) => {
-  try {
-    const { token } = req.params;
 
-    // Hashea el token que viene del cliente para buscarlo en la BD
-    const resetTokenHash = crypto.createHash('sha256').update(token).digest('hex');
-
-    const user = await User.findOne({
-      password_reset_token: resetTokenHash,
-      password_reset_expires: { $gt: Date.now() } // Revisa que no haya expirado
-    });
-
-    // Si no se encuentra un usuario, el token es inválido o expiró
-    if (!user) {
-      return res.status(400).json({ error: 'Token inválido o expirado' });
-    }
-
-    // Si se encuentra, el token es válido
-    res.json({ message: 'Token válido' });
-
-  } catch (error) {
-    console.error('Error validando token:', error);
-    res.status(500).json({ error: 'Error del servidor' });
-  }
-}
-  sendPasswordResetEmail = async(email, token, fullName) => {
+  async sendPasswordResetEmail(email, token, fullName) {
     try {
-      // Si no tienes configurado SMTP, simplemente log por ahora
-
-       const transporter = nodemailer.createTransport({
-      service: 'gmail',
-      auth: {
-        user: process.env.EMAIL_USER,    // Ahora usas la variable correcta
-        pass: process.env.EMAIL_PASSWORD // Ahora usas la variable correcta
-      }
-    });
+      const transporter = nodemailer.createTransport({
+        service: 'gmail',
+        auth: {
+          user: process.env.EMAIL_USER,
+          pass: process.env.EMAIL_PASSWORD,
+        },
+      });
 
       const resetUrl = `${process.env.FRONTEND_URL}/reset-password?token=${token}`;
-
-      const mailOptions = {
+      await transporter.sendMail({
         from: `"enviGo" <${process.env.EMAIL_USER}>`,
         to: email,
-        subject: 'Restablecer tu contraseña de enviGo',
+        subject: 'Restablecer contraseña - enviGo',
         html: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <div style="font-family: Arial, sans-serif; max-width: 600px;">
             <h2>Hola ${fullName},</h2>
-            <p>Recibimos una solicitud para restablecer tu contraseña en enviGo.</p>
-            <p>Haz clic en el siguiente enlace para crear una nueva contraseña:</p>
-            <a href="${resetUrl}" style="background: #007bff; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block;">
-              Restablecer Contraseña
-            </a>
+            <p>Recibimos una solicitud para restablecer tu contraseña.</p>
+            <a href="${resetUrl}" style="background:#007bff;color:white;padding:10px 20px;border-radius:5px;text-decoration:none;">Restablecer contraseña</a>
             <p>Este enlace expirará en 1 hora.</p>
-            <p>Si no solicitaste este cambio, puedes ignorar este email.</p>
-            <hr>
-            <p><small>enviGo - Gestión Logística de Última Milla</small></p>
-          </div>
-        `
-      };
-
-      await transporter.sendMail(mailOptions);
-      console.log(`Password reset email sent to ${email}`);
+            <p>Si no solicitaste este cambio, ignora este correo.</p>
+          </div>`,
+      });
+      logger.info({ msg: `Email de reset enviado a ${email}` });
     } catch (error) {
-      console.error('Error sending password reset email:', error);
+      logger.error({ msg: 'Error enviando email de reset', error });
     }
   }
-} // ✅ CIERRE CORRECTO DE LA CLASE
+}
 
 module.exports = new AuthController();
