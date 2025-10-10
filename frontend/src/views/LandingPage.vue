@@ -157,11 +157,6 @@
         </div>
       </div>
     </section>
-
-  </div>
-  <!-- ==================== DASHBOARD PREVIEW ==================== -->
-<!-- Esta sección va DESPUÉS del Hero y ANTES de Precios -->
-
 <section class="py-16 bg-white">
   <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
     
@@ -1282,6 +1277,11 @@
 
   </div>
 </section>
+  </div>
+  <!-- ==================== DASHBOARD PREVIEW ==================== -->
+<!-- Esta sección va DESPUÉS del Hero y ANTES de Precios -->
+
+
 </template>
 
 <script setup>
