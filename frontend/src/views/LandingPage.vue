@@ -159,6 +159,155 @@
     </section>
 
   </div>
+  <!-- ==================== DASHBOARD PREVIEW ==================== -->
+<!-- Esta sección va DESPUÉS del Hero y ANTES de Precios -->
+
+<section class="py-16 bg-white">
+  <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+    
+    <!-- Título de la sección -->
+    <div class="text-center mb-12">
+      <h2 class="text-3xl font-bold text-gray-900 mb-4">
+        Tu centro de control logístico
+      </h2>
+      <p class="text-lg text-gray-600">
+        Gestiona todas tus entregas desde un solo dashboard en tiempo real
+      </p>
+    </div>
+
+    <!-- Dashboard Preview -->
+    <div class="relative">
+      
+      <!-- Browser Chrome (barra superior) -->
+      <div class="bg-gray-800 rounded-t-2xl p-3 flex items-center space-x-2">
+        <div class="flex space-x-2">
+          <div class="w-3 h-3 rounded-full bg-red-500"></div>
+          <div class="w-3 h-3 rounded-full bg-yellow-500"></div>
+          <div class="w-3 h-3 rounded-full bg-green-500"></div>
+        </div>
+        <div class="flex-1 bg-gray-700 rounded-md px-4 py-1 text-xs text-gray-400 text-center">
+          app.envigo.cl/dashboard
+        </div>
+      </div>
+
+      <!-- Dashboard Content -->
+      <div class="bg-white rounded-b-2xl shadow-2xl overflow-hidden border-x-4 border-b-4 border-gray-800">
+        
+        <!-- Header del Dashboard -->
+        <div class="bg-gradient-to-r from-lime-500 to-green-600 p-6 text-white">
+          <div class="flex items-center justify-between">
+            <div>
+              <h2 class="text-2xl font-bold mb-1">Dashboard Principal</h2>
+              <p class="text-lime-100 text-sm">Vista en tiempo real de tu operación</p>
+            </div>
+            <div class="bg-white/20 backdrop-blur-sm px-4 py-2 rounded-lg">
+              <div class="flex items-center space-x-2">
+                <div class="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+                <span class="text-sm font-semibold">En vivo</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Stats Cards Grid -->
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 p-6 bg-gray-50">
+          <div 
+            v-for="stat in dashboardStats" 
+            :key="stat.label"
+            class="bg-white rounded-xl p-4 shadow-md border border-gray-200 hover:shadow-lg transition-shadow"
+          >
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-2xl">{{ stat.icon }}</span>
+              <span :class="['text-xs font-semibold px-2 py-1 rounded-full', stat.changeClass]">
+                {{ stat.change }}
+              </span>
+            </div>
+            <div class="text-2xl font-bold text-gray-900 mb-1">{{ stat.value }}</div>
+            <div class="text-xs text-gray-600">{{ stat.label }}</div>
+          </div>
+        </div>
+
+        <!-- Orders Table -->
+        <div class="p-6">
+          <h3 class="text-lg font-bold text-gray-900 mb-4">Entregas en Curso</h3>
+          
+          <div class="bg-white border border-gray-200 rounded-lg overflow-hidden">
+            <table class="w-full text-sm">
+              <thead class="bg-gray-50 border-b border-gray-200">
+                <tr>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">ID</th>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Cliente</th>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase hidden md:table-cell">Conductor</th>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Estado</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-200">
+                <tr 
+                  v-for="order in sampleOrders" 
+                  :key="order.id" 
+                  class="hover:bg-gray-50 transition-colors"
+                >
+                  <td class="px-4 py-3 font-medium text-gray-900">#{{ order.id }}</td>
+                  <td class="px-4 py-3">
+                    <div class="font-medium text-gray-900">{{ order.customer }}</div>
+                    <div class="text-xs text-gray-500">{{ order.address }}</div>
+                  </td>
+                  <td class="px-4 py-3 text-gray-900 hidden md:table-cell">{{ order.driver }}</td>
+                  <td class="px-4 py-3">
+                    <span :class="['px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap', order.statusClass]">
+                      {{ order.status }}
+                    </span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Quick Actions (opcional) -->
+        <div class="p-6 bg-gray-50 border-t border-gray-200">
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <button class="flex items-center justify-center space-x-2 p-4 bg-white rounded-lg border border-gray-200 hover:border-lime-500 hover:shadow-md transition-all">
+              <span class="text-2xl">📦</span>
+              <span class="text-sm font-semibold text-gray-700">Nueva Orden</span>
+            </button>
+            <button class="flex items-center justify-center space-x-2 p-4 bg-white rounded-lg border border-gray-200 hover:border-lime-500 hover:shadow-md transition-all">
+              <span class="text-2xl">🚗</span>
+              <span class="text-sm font-semibold text-gray-700">Conductores</span>
+            </button>
+            <button class="flex items-center justify-center space-x-2 p-4 bg-white rounded-lg border border-gray-200 hover:border-lime-500 hover:shadow-md transition-all">
+              <span class="text-2xl">📊</span>
+              <span class="text-sm font-semibold text-gray-700">Reportes</span>
+            </button>
+            <button class="flex items-center justify-center space-x-2 p-4 bg-white rounded-lg border border-gray-200 hover:border-lime-500 hover:shadow-md transition-all">
+              <span class="text-2xl">⚙️</span>
+              <span class="text-sm font-semibold text-gray-700">Configuración</span>
+            </button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- CTA debajo del dashboard -->
+    <div class="text-center mt-8">
+      <p class="text-gray-600 mb-4">
+        ¿Quieres ver cómo funciona en tu negocio?
+      </p>
+      <a 
+        href="#contacto"
+        @click.prevent="scrollTo('contacto')"
+        class="inline-flex items-center space-x-2 px-6 py-3 bg-lime-500 text-white rounded-lg font-semibold hover:bg-lime-600 transition-all shadow-md hover:shadow-lg"
+      >
+        <span>Solicitar Información</span>
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+        </svg>
+      </a>
+    </div>
+
+  </div>
+</section>
   <!-- ==================== SECCIÓN DE PRECIOS ==================== -->
 <section id="precios" class="py-20 bg-white border-t border-gray-100">
   <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
