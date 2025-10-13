@@ -735,15 +735,15 @@ static mapOrderStatus(mlOrder) {
   // 🚚 Prioridad al estado de shipping (envío)
   if (mlOrder.shipping?.status) {
     const statusMap = {
-      'pending': 'pendiente',          // pedido creado pero no despachado
-      'handling': 'pendiente',         // preparando envío
-      'ready_to_ship': 'pendiente',    // listo para despacho
-      'shipped': 'en_transito',        // despachado
-      'in_transit': 'en_transito',     // en camino
-      'out_for_delivery': 'en_transito', // en reparto
-      'delivered': 'entregado',        // completado
-      'not_delivered': 'fallido',      // intento de entrega fallido
-      'cancelled': 'cancelado'         // cancelado
+      'pending': 'pending',              // ✅ pedido creado pero no despachado
+      'handling': 'ready_for_pickup',    // ✅ preparando envío
+      'ready_to_ship': 'ready_for_pickup', // ✅ listo para despacho
+      'shipped': 'shipped',              // ✅ despachado
+      'in_transit': 'shipped',           // ✅ en camino
+      'out_for_delivery': 'out_for_delivery', // ✅ en reparto
+      'delivered': 'delivered',          // ✅ completado
+      'not_delivered': 'cancelled',      // ✅ intento de entrega fallido
+      'cancelled': 'cancelled'           // ✅ cancelado
     };
 
     const mappedStatus = statusMap[mlOrder.shipping.status];
@@ -756,13 +756,13 @@ static mapOrderStatus(mlOrder) {
   // 🧾 Si no hay estado de envío, usamos el estado de la orden
   if (mlOrder.status) {
     const generalStatusMap = {
-      'confirmed': 'pendiente',
-      'payment_required': 'pendiente',
-      'payment_in_process': 'pendiente',
-      'paid': 'pendiente',
-      'cancelled': 'cancelado',
-      'invalid': 'cancelado',
-      'delivered': 'entregado'
+      'confirmed': 'pending',     // ✅
+      'payment_required': 'pending', // ✅
+      'payment_in_process': 'pending', // ✅
+      'paid': 'pending',          // ✅
+      'cancelled': 'cancelled',   // ✅
+      'invalid': 'cancelled',     // ✅
+      'delivered': 'delivered'    // ✅
     };
 
     const mappedStatus = generalStatusMap[mlOrder.status];
@@ -772,8 +772,8 @@ static mapOrderStatus(mlOrder) {
     }
   }
 
-  console.log(`⚠️ [ML Status] No se pudo mapear el status, usando 'pendiente' por defecto`);
-  return 'pendiente';
+  console.log(`⚠️ [ML Status] No se pudo mapear el status, usando 'pending' por defecto`);
+  return 'pending'; // ✅ En inglés
 }
 
   static async syncOrders(channelId, options = {}) {
