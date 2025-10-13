@@ -543,6 +543,26 @@ function isOrderSelected(order) {
   return props.selectedOrders.includes(order._id)
 }
 
+function handleRefresh() {
+  console.log('🔄 Refresh button clicked')
+  emit('refresh')
+}
+
+function handleBulkExport() {
+  if (props.selectedOrders.length === 0) {
+    toast.warning('Selecciona pedidos para exportar')
+    return
+  }
+  console.log('📤 Bulk export button clicked:', props.selectedOrders.length)
+  emit('bulk-export')
+}
+
+function handleReports() {
+  console.log('📊 Reports button clicked')
+  toast.info('Función de reportes en desarrollo')
+  emit('reports')
+}
+
 /**
  * Get company name by ID or object
  */
