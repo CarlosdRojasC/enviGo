@@ -57,6 +57,10 @@
       :selected-orders="selectedOrders"
       :select-all-checked="selectAllChecked"
       :select-all-indeterminate="selectAllIndeterminate"
+      @refresh="refreshOrders"
+  @bulk-assign="handleOpenBulkAssignModal"
+  @bulk-export="handleBulkExport"
+  @reports="handleReports"
       @delete-order="deleteOrder"
       @select-order="toggleOrderSelection"
       @select-all="toggleSelectAll"
@@ -783,6 +787,12 @@ function handleBulkExport() {
   logger.process(`[AdminOrders] 📤 Exporting ${selectedOrders.value.length} orders`)
   const orderIds = selectedOrders.value
   exportOrders({ order_ids: orderIds })
+}
+
+function handleReports() {
+  console.log('📊 Reports button clicked')
+  toast.info('Función de reportes en desarrollo')
+  emit('reports')
 }
 
 /**

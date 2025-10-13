@@ -5,7 +5,7 @@
       <div class="flex flex-wrap items-center justify-between gap-3">
         <div class="flex flex-wrap gap-2">
           <button
-            @click="$emit('refresh')"
+            @click="handleRefresh"
             class="flex items-center gap-2 px-4 py-2 text-sm font-medium border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
           >
             <span class="material-icons text-base">refresh</span>
@@ -14,7 +14,7 @@
 
           <button
             v-if="selectedOrders.length > 0"
-            @click="$emit('bulk-assign')"
+            @click="handleBulkAssign"
             class="flex items-center gap-2 px-4 py-2 text-sm font-medium border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
           >
             <span class="material-icons text-base">person_add</span>
@@ -22,6 +22,7 @@
           </button>
 
           <button
+            @click="handleReports"
             class="flex items-center gap-2 px-4 py-2 text-sm font-medium border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
           >
             <span class="material-icons text-base">assessment</span>
@@ -31,11 +32,12 @@
 
         <div class="flex gap-2">
           <button
-            @click="$emit('bulk-export')"
-            class="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors"
+            @click="handleBulkExport"
+            :disabled="selectedOrders.length === 0"
+            class="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-green-600 hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
           >
             <span class="material-icons text-base">file_download</span>
-            <span>Exportar</span>
+            <span>Exportar {{ selectedOrders.length > 0 ? `(${selectedOrders.length})` : '' }}</span>
           </button>
         </div>
       </div>
@@ -482,7 +484,8 @@ const emit = defineEmits([
   'page-size-change',
   'refresh',
   'bulk-assign',
-  'bulk-export'
+  'bulk-export',
+  'reports'
 ])
 
 // ==================== COMPOSABLES ====================
