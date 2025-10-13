@@ -521,30 +521,24 @@ static async processWebhook(channelId, webhookData) {
     }
 
     // 5️⃣ Verificar si no está entregado
-    const isNotDelivered = await this.isOrderNotDelivered(mlOrder, accessToken);
-    if (!isNotDelivered) {
-      console.log(`⏭️ [ML Webhook] Pedido ${mlOrder.id} (envío ${shippingId}) ya entregado, no se procesa`);
-      return true;
-    }
+const currentStatus = this.mapOrderStatus(mlOrder);
+console.log(`🚚 [ML Webhook] Estado recibido desde ML: ${currentStatus}`);
 
-    // 6️⃣ Buscar pedido existente por shipping.id (clave única)
-    const existingOrder = await Order.findOne({
-      channel_id: channelId,
-      external_order_id: shippingId
-    });
+const existingOrder = await Order.findOne({
+  channel_id: channelId,
+  external_order_id: shippingId
+});
 
-    if (existingOrder) {
-      // 🔄 Actualizar pedido existente
-      existingOrder.status = this.mapOrderStatus(mlOrder);
-      existingOrder.raw_data = mlOrder;
-      existingOrder.total_amount = mlOrder.total_amount || existingOrder.total_amount;
-      await existingOrder.save();
-      console.log(`🔄 [ML Webhook] Pedido existente con envío ${shippingId} actualizado`);
-    } else {
-      // ➕ Crear nuevo pedido con shipping.id como identificador
-      await this.createOrderFromApiData(mlOrder, channel, accessToken, shippingId);
-      console.log(`➕ [ML Webhook] Nuevo pedido creado con envío ${shippingId}`);
-    }
+if (existingOrder) {
+  existingOrder.status = currentStatus;
+  existingOrder.raw_data = mlOrder;
+  existingOrder.total_amount = mlOrder.total_amount || existingOrder.total_amount;
+  await existingOrder.save();
+  console.log(`🔄 [ML Webhook] Estado actualizado a '${currentStatus}' para envío ${shippingId}`);
+} else {
+  await this.createOrderFromApiData(mlOrder, channel, accessToken, shippingId);
+  console.log(`➕ [ML Webhook] Pedido nuevo creado con envío ${shippingId} (${currentStatus})`);
+}
 
     return true;
 
@@ -735,50 +729,53 @@ static async getShippingLabel(orderId, channelId) {
   /**
    * Mapea los estados de Mercado Libre a los estados del sistema
    */
-  static mapOrderStatus(mlOrder) {
-    console.log(`🔍 [ML Status] Procesando order: ${mlOrder.id}, status: ${mlOrder.status}, shipping: ${JSON.stringify(mlOrder.shipping?.status)}`);
-    
-    // Estados de shipping (prioridad)
-    if (mlOrder.shipping?.status) {
-      const statusMap = {
-        'pending': 'pending',
-        'handling': 'ready_for_pickup',
-        'ready_to_ship': 'pending',
-        'shipped': 'shipped',
-        'out_for_delivery': 'out_for_delivery',
-        'delivered': 'delivered',
-        'not_delivered': 'cancelled',
-        'cancelled': 'cancelled',
-      };
-      
-      const mappedStatus = statusMap[mlOrder.shipping.status];
-      if (mappedStatus) {
-        console.log(`📦 [ML Status] Shipping status ${mlOrder.shipping.status} -> ${mappedStatus}`);
-        return mappedStatus;
-      }
+static mapOrderStatus(mlOrder) {
+  console.log(`🔍 [ML Status] Procesando order: ${mlOrder.id}, status: ${mlOrder.status}, shipping: ${mlOrder.shipping?.status}`);
+
+  // 🚚 Prioridad al estado de shipping (envío)
+  if (mlOrder.shipping?.status) {
+    const statusMap = {
+      'pending': 'pendiente',          // pedido creado pero no despachado
+      'handling': 'pendiente',         // preparando envío
+      'ready_to_ship': 'pendiente',    // listo para despacho
+      'shipped': 'en_transito',        // despachado
+      'in_transit': 'en_transito',     // en camino
+      'out_for_delivery': 'en_transito', // en reparto
+      'delivered': 'entregado',        // completado
+      'not_delivered': 'fallido',      // intento de entrega fallido
+      'cancelled': 'cancelado'         // cancelado
+    };
+
+    const mappedStatus = statusMap[mlOrder.shipping.status];
+    if (mappedStatus) {
+      console.log(`📦 [ML Status] Shipping status ${mlOrder.shipping.status} -> ${mappedStatus}`);
+      return mappedStatus;
     }
-    
-    // Estados generales del pedido
-    if (mlOrder.status) {
-      const generalStatusMap = {
-        'confirmed': 'pending',
-        'payment_required': 'pending',
-        'payment_in_process': 'pending',
-        'paid': 'pending',
-        'cancelled': 'cancelled',
-        'invalid': 'cancelled',
-      };
-      
-      const mappedStatus = generalStatusMap[mlOrder.status];
-      if (mappedStatus) {
-        console.log(`📦 [ML Status] General status ${mlOrder.status} -> ${mappedStatus}`);
-        return mappedStatus;
-      }
-    }
-    
-    console.log(`⚠️ [ML Status] No se pudo mapear el status, usando 'pending' por defecto`);
-    return 'pending';
   }
+
+  // 🧾 Si no hay estado de envío, usamos el estado de la orden
+  if (mlOrder.status) {
+    const generalStatusMap = {
+      'confirmed': 'pendiente',
+      'payment_required': 'pendiente',
+      'payment_in_process': 'pendiente',
+      'paid': 'pendiente',
+      'cancelled': 'cancelado',
+      'invalid': 'cancelado',
+      'delivered': 'entregado'
+    };
+
+    const mappedStatus = generalStatusMap[mlOrder.status];
+    if (mappedStatus) {
+      console.log(`📦 [ML Status] General status ${mlOrder.status} -> ${mappedStatus}`);
+      return mappedStatus;
+    }
+  }
+
+  console.log(`⚠️ [ML Status] No se pudo mapear el status, usando 'pendiente' por defecto`);
+  return 'pendiente';
+}
+
   static async syncOrders(channelId, options = {}) {
   console.log('⚠️ [ML Service] syncOrders llamado - redirigiendo a syncInitialOrders');
   
