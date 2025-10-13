@@ -478,7 +478,7 @@ static async processWebhook(channelId, webhookData) {
     } else if (webhookData.topic === 'shipments') {
       shippingId = webhookData.resource.split('/').pop();
       console.log(`[ML Webhook] Notificación de envío ${shippingId} recibida. Buscando order_id...`);
-      
+
       try {
         const shipmentResponse = await axios.get(`${this.API_BASE_URL}/shipments/${shippingId}`, {
           headers: { 'Authorization': `Bearer ${accessToken}` },
@@ -520,25 +520,37 @@ static async processWebhook(channelId, webhookData) {
       return true;
     }
 
-    // 5️⃣ Verificar si no está entregado
-const currentStatus = this.mapOrderStatus(mlOrder);
-console.log(`🚚 [ML Webhook] Estado recibido desde ML: ${currentStatus}`);
+    // 5️⃣ Actualizar estado según ML
+    const currentStatus = this.mapOrderStatus(mlOrder);
+    console.log(`🚚 [ML Webhook] Estado recibido desde ML: ${currentStatus}`);
 
-const existingOrder = await Order.findOne({
-  channel_id: channelId,
-  external_order_id: shippingId
-});
+    const existingOrder = await Order.findOne({
+      channel_id: channelId,
+      external_order_id: shippingId
+    });
 
-if (existingOrder) {
-  existingOrder.status = currentStatus;
-  existingOrder.raw_data = mlOrder;
-  existingOrder.total_amount = mlOrder.total_amount || existingOrder.total_amount;
-  await existingOrder.save();
-  console.log(`🔄 [ML Webhook] Estado actualizado a '${currentStatus}' para envío ${shippingId}`);
-} else {
-  await this.createOrderFromApiData(mlOrder, channel, accessToken, shippingId);
-  console.log(`➕ [ML Webhook] Pedido nuevo creado con envío ${shippingId} (${currentStatus})`);
-}
+    if (existingOrder) {
+      // 🔍 Mostrar el cambio de estado si aplica
+      if (existingOrder.status !== currentStatus) {
+        console.log(
+          `🔁 [ML Webhook] Estado actualizado para envío ${shippingId}: ` +
+          `${existingOrder.status || 'sin_estado'} ➡️ ${currentStatus}`
+        );
+      } else {
+        console.log(
+          `⚖️ [ML Webhook] Estado sin cambios (${currentStatus}) para envío ${shippingId}`
+        );
+      }
+
+      existingOrder.status = currentStatus;
+      existingOrder.raw_data = mlOrder;
+      existingOrder.total_amount = mlOrder.total_amount || existingOrder.total_amount;
+      await existingOrder.save();
+      console.log(`💾 [ML Webhook] Pedido actualizado con estado '${currentStatus}' para envío ${shippingId}`);
+    } else {
+      await this.createOrderFromApiData(mlOrder, channel, accessToken, shippingId);
+      console.log(`➕ [ML Webhook] Pedido nuevo creado con envío ${shippingId} (${currentStatus})`);
+    }
 
     return true;
 
