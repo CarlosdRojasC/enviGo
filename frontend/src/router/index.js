@@ -208,6 +208,26 @@ const routes = [
     component: () => import('../views/MercadoLibreCallback.vue'),
     meta: { requiresAuth: true }
   },
+  {
+    path: '/integration-success',
+    name: 'IntegrationSuccess',
+    component: () => import('../views/IntegrationSuccess.vue'),
+    meta: { 
+      requiresAuth: false, // No requiere auth porque viene de callback externo
+      title: 'Integración Exitosa'
+    }
+  },
+
+  // 🆕 Página de error de integración
+  {
+    path: '/integration-error',
+    name: 'IntegrationError',
+    component: () => import('../views/IntegrationError.vue'),
+    meta: { 
+      requiresAuth: false, // No requiere auth porque viene de callback externo
+      title: 'Error en Integración'
+    }
+  },
 
   // Redirigir cualquier ruta no encontrada
   { 
