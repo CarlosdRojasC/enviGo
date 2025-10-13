@@ -482,38 +482,66 @@ async getById(req, res) {
 
 async exportOrders(req, res) {
   try {
-    const { date_from, date_to, company_id, status, shipping_commune } = req.query;
+    const { date_from, date_to, company_id, status, shipping_commune, order_ids } = req.query;
 
-    console.log('📤 Exportando pedidos con filtros:', { date_from, date_to, company_id, status, shipping_commune });
+    console.log('📤 Exportando pedidos con filtros:', { 
+      date_from, date_to, company_id, status, shipping_commune, order_ids 
+    });
 
     const filters = {};
 
-    // Filtros de rol y empresa
+    // ✅ NUEVO: Si se proporcionan order_ids específicos
+    if (order_ids) {
+      let orderIdsArray;
+      
+      // Convertir a array (puede venir como string JSON o array)
+      if (typeof order_ids === 'string') {
+        try {
+          orderIdsArray = JSON.parse(order_ids);
+        } catch {
+          orderIdsArray = order_ids.includes(',') ? order_ids.split(',') : [order_ids];
+        }
+      } else if (Array.isArray(order_ids)) {
+        orderIdsArray = order_ids;
+      } else {
+        orderIdsArray = [order_ids];
+      }
+
+      // Filtrar solo IDs válidos
+      const validIds = orderIdsArray.filter(id => mongoose.Types.ObjectId.isValid(id));
+      
+      if (validIds.length === 0) {
+        return res.status(400).json({ 
+          error: 'No se proporcionaron IDs de pedidos válidos' 
+        });
+      }
+
+      console.log(`🎯 Exportando ${validIds.length} pedidos específicos`);
+      filters._id = { $in: validIds.map(id => new mongoose.Types.ObjectId(id)) };
+    }
+
+    // Filtros de seguridad por rol
     if (req.user.role !== 'admin') {
       filters.company_id = req.user.company_id;
-    } else if (company_id) {
+    } else if (company_id && !order_ids) {
       filters.company_id = company_id;
     }
 
-    // Filtro por estado
-    if (status) {
-      filters.status = status;
-    }
-
-    // Filtro por comuna
-    if (shipping_commune) {
-      if (Array.isArray(shipping_commune)) {
-        filters.shipping_commune = { $in: shipping_commune };
-      } else {
-        filters.shipping_commune = shipping_commune;
+    // Filtros adicionales (solo si NO hay order_ids específicos)
+    if (!order_ids) {
+      if (status) filters.status = status;
+      
+      if (shipping_commune) {
+        filters.shipping_commune = Array.isArray(shipping_commune) 
+          ? { $in: shipping_commune } 
+          : shipping_commune;
       }
-    }
-
-    // Filtro por fechas
-    if (date_from || date_to) {
-      filters.order_date = {};
-      if (date_from) filters.order_date.$gte = new Date(date_from);
-      if (date_to) filters.order_date.$lte = new Date(date_to);
+      
+      if (date_from || date_to) {
+        filters.order_date = {};
+        if (date_from) filters.order_date.$gte = new Date(date_from);
+        if (date_to) filters.order_date.$lte = new Date(date_to);
+      }
     }
 
     const orders = await Order.find(filters)
@@ -524,7 +552,7 @@ async exportOrders(req, res) {
 
     if (orders.length === 0) {
       return res.status(404).json({ 
-        error: 'No se encontraron pedidos para exportar con los filtros aplicados' 
+        error: 'No se encontraron pedidos para exportar' 
       });
     }
 
@@ -533,16 +561,12 @@ async exportOrders(req, res) {
     const excelBuffer = await ExcelService.generateOrdersExport(orders);
 
     const timestamp = new Date().toISOString().split('T')[0];
-    const filename = `pedidos_export_${timestamp}.xlsx`;
+    const filename = order_ids 
+      ? `pedidos_seleccionados_${timestamp}.xlsx`
+      : `pedidos_export_${timestamp}.xlsx`;
 
-    res.setHeader(
-      'Content-Type',
-      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-    );
-    res.setHeader(
-      'Content-Disposition',
-      `attachment; filename=${filename}`
-    );
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
 
     res.send(excelBuffer);
     
