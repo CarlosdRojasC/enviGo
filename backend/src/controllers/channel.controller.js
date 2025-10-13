@@ -524,7 +524,7 @@ async syncOrders(req, res) {
             await channel.save();
             
             // Actualizar log
-            syncLog.status = 'completed';
+            syncLog.status = 'success';
             syncLog.completed_at = new Date();
             syncLog.orders_synced = 0;
             syncLog.sync_message = 'Webhook ya configurado, no se requiere sincronización';
