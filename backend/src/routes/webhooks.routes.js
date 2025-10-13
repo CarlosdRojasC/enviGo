@@ -37,33 +37,88 @@ router.get('/mercadolibre/callback', async (req, res) => {
   try {
     const { code, state, error: oauthError } = req.query;
     
+    // Manejo de errores de OAuth
     if (oauthError) {
       console.log(`❌ [ML Callback] Error OAuth recibido: ${oauthError}`);
-      return res.redirect(`${process.env.FRONTEND_URL}/channels?error=oauth_denied&details=${oauthError}`);
+      
+      // Redirigir a página de error más amigable
+      return res.redirect(
+        `${process.env.FRONTEND_URL}/integration-error?` +
+        `platform=mercadolibre&` +
+        `error=${encodeURIComponent(oauthError)}&` +
+        `message=${encodeURIComponent('El usuario canceló o rechazó la autorización')}`
+      );
     }
     
+    // Validar parámetros requeridos
     if (!code || !state) {
       console.log('❌ [ML Callback] Faltan parámetros');
-      return res.redirect(`${process.env.FRONTEND_URL}/channels?error=missing_params`);
+      return res.redirect(
+        `${process.env.FRONTEND_URL}/integration-error?` +
+        `platform=mercadolibre&` +
+        `error=missing_params&` +
+        `message=${encodeURIComponent('Faltan parámetros en la autorización')}`
+      );
     }
     
     console.log(`🔄 [ML Callback] Procesando - Code: ${code.substring(0, 10)}..., State: ${state}`);
     
-    // ✅ VERIFICAR QUE EL SERVICIO SE CARGÓ
-    console.log('🔍 [ML Callback] MercadoLibreService cargado:', !!MercadoLibreService);
-    console.log('🔍 [ML Callback] Método exchangeCodeForTokens disponible:', typeof MercadoLibreService.exchangeCodeForTokens);
-    
-    // ✅ LLAMAR AL MÉTODO CON LOG
+    // Intercambiar código por tokens
     console.log('🚀 [ML Callback] Llamando a exchangeCodeForTokens...');
     const channel = await MercadoLibreService.exchangeCodeForTokens(code, state);
     
     console.log(`✅ [ML Callback] Autorización exitosa para: ${channel.channel_name}`);
-    res.redirect(`${process.env.FRONTEND_URL}/channels?success=ml_connected&channel_name=${encodeURIComponent(channel.channel_name)}`);
+    
+    // 🎯 NUEVO: Redirigir a página de éxito dedicada
+    res.redirect(
+      `${process.env.FRONTEND_URL}/integration-success?` +
+      `platform=mercadolibre&` +
+      `channel_name=${encodeURIComponent(channel.channel_name)}&` +
+      `channel_id=${channel._id}&` +
+      `timestamp=${Date.now()}`
+    );
+    
+    // 🔔 IMPORTANTE: Iniciar sincronización inicial en segundo plano (no bloqueante)
+    // Esto trae todos los pedidos pendientes de los últimos 7 días
+    setImmediate(async () => {
+      try {
+        console.log('🔄 [ML Callback] Iniciando sincronización inicial en background...');
+        console.log('📦 [ML Callback] Se importarán pedidos Flex de los últimos 7 días');
+        
+        const result = await MercadoLibreService.syncInitialOrders(channel._id);
+        
+        console.log('✅ [ML Callback] Sincronización inicial completada:', {
+          sincronizados: result.syncedCount,
+          omitidos: result.skippedCount,
+          errores: result.errorCount
+        });
+      } catch (syncError) {
+        console.error('⚠️ [ML Callback] Error en sincronización inicial:', syncError.message);
+        // Marcar error pero no bloquear el callback
+        try {
+          const channelToUpdate = await Channel.findById(channel._id);
+          if (channelToUpdate) {
+            channelToUpdate.sync_status = 'error';
+            channelToUpdate.last_sync_error = `Error en sync inicial: ${syncError.message}`;
+            await channelToUpdate.save();
+          }
+        } catch (updateError) {
+          console.error('❌ [ML Callback] No se pudo actualizar estado de error:', updateError);
+        }
+      }
+    });
     
   } catch (error) {
     console.error('❌ [ML Callback] Error procesando:', error.message);
     console.error('❌ [ML Callback] Stack trace:', error.stack);
-    res.redirect(`${process.env.FRONTEND_URL}/channels?error=validation_failed&details=${encodeURIComponent(error.message)}`);
+    
+    // Redirigir a página de error con detalles
+    res.redirect(
+      `${process.env.FRONTEND_URL}/integration-error?` +
+      `platform=mercadolibre&` +
+      `error=validation_failed&` +
+      `message=${encodeURIComponent(error.message || 'Error validando la autorización')}`
+    );
   }
 });
 
