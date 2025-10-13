@@ -335,7 +335,7 @@
               <div class="font-semibold text-gray-900">Zona Centro</div>
               <div class="text-sm text-gray-600">Santiago Centro, Providencia, Ñuñoa</div>
             </div>
-            <div class="text-2xl font-bold text-lime-600">$2.990</div>
+            <div class="text-2xl font-bold text-lime-600">$2.500</div>
           </div>
           
           <!-- Zona Oriente -->
@@ -344,7 +344,7 @@
               <div class="font-semibold text-gray-900">Zona Oriente</div>
               <div class="text-sm text-gray-600">Las Condes, Vitacura, Lo Barnechea</div>
             </div>
-            <div class="text-2xl font-bold text-lime-600">$3.490</div>
+            <div class="text-2xl font-bold text-lime-600">$2.500</div>
           </div>
           
           <!-- Zona Sur/Poniente -->
@@ -353,7 +353,7 @@
               <div class="font-semibold text-gray-900">Zona Sur/Poniente</div>
               <div class="text-sm text-gray-600">Maipú, La Florida, Puente Alto</div>
             </div>
-            <div class="text-2xl font-bold text-lime-600">$3.990</div>
+            <div class="text-2xl font-bold text-lime-600">$2.500</div>
           </div>
         </div>
 
