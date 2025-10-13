@@ -71,7 +71,7 @@ router.get('/mercadolibre/callback', async (req, res) => {
     
     // 🎯 NUEVO: Redirigir a página de éxito dedicada
     res.redirect(
-      `${process.env.FRONTEND_URL}/integration-success?` +
+      `${process.env.FRONTEND_ENVIGO}/integration-success?` +
       `platform=mercadolibre&` +
       `channel_name=${encodeURIComponent(channel.channel_name)}&` +
       `channel_id=${channel._id}&` +
@@ -114,7 +114,7 @@ router.get('/mercadolibre/callback', async (req, res) => {
     
     // Redirigir a página de error con detalles
     res.redirect(
-      `${process.env.FRONTEND_URL}/integration-error?` +
+      `${process.env.FRONTEND_ENVIGO}/integration-error?` +
       `platform=mercadolibre&` +
       `error=validation_failed&` +
       `message=${encodeURIComponent(error.message || 'Error validando la autorización')}`
