@@ -260,22 +260,31 @@ static async syncInitialOrders(channelId) {
           continue;
         }
 
-        console.log(`✅ [ML Initial Sync] Procesando pedido Flex válido ${fullOrder.id}`);
+        // ✅ NUEVO: Usar shipping.id como identificador único
+        const shippingId = fullOrder.shipping?.id?.toString();
+        if (!shippingId) {
+          console.log(`⚠️ [ML Initial Sync] Pedido ${fullOrder.id} sin shipping.id, se omite`);
+          skippedCount++;
+          continue;
+        }
+
+        console.log(`✅ [ML Initial Sync] Procesando pedido con envío ${shippingId}`);
 
         const existingOrder = await Order.findOne({
-          external_order_id: fullOrder.id.toString(),
-          channel_id: channel._id
+          channel_id: channel._id,
+          external_order_id: shippingId
         });
 
         if (!existingOrder) {
-          await this.createOrderFromApiData(fullOrder, channel, accessToken);
-          console.log(`➕ [ML Initial Sync] Pedido ${fullOrder.id} creado`);
+          await this.createOrderFromApiData(fullOrder, channel, accessToken, shippingId);
+          console.log(`➕ [ML Initial Sync] Pedido con envío ${shippingId} creado`);
           syncedCount++;
         } else {
-          console.log(`⏭️ [ML Initial Sync] Pedido ${fullOrder.id} ya existe`);
+          console.log(`⏭️ [ML Initial Sync] Pedido con envío ${shippingId} ya existe`);
           skippedCount++;
         }
         
+        // Pequeña pausa para evitar rate limit
         await new Promise(resolve => setTimeout(resolve, 500));
         
       } catch (error) {
@@ -314,6 +323,7 @@ static async syncInitialOrders(channelId) {
     throw error;
   }
 }
+
 
   /**
    * ✅ NUEVO: Verifica si un pedido NO ha sido entregado
@@ -445,109 +455,105 @@ static async syncInitialOrders(channelId) {
   /**
    * ✅ WEBHOOK OPTIMIZADO - SOLO PROCESA PEDIDOS FLEX, NO TRAE LOS YA ENTREGADOS
    */
- static async processWebhook(channelId, webhookData) {
-    try {
-      // ✅ 1. AÑADIMOS 'shipments' A LOS TOPICS VÁLIDOS
-      const acceptedTopics = ['orders', 'orders_v2', 'shipments'];
-      if (!acceptedTopics.includes(webhookData.topic)) {
-        console.log(`[ML Webhook] Notificación ignorada (Topic: ${webhookData.topic}).`);
-        return true;
-      }
-
-      const channel = await Channel.findById(channelId);
-      if (!channel) throw new Error(`[ML Webhook] Canal con ID ${channelId} no encontrado.`);
-
-      const accessToken = await this.getAccessToken(channel);
-      let orderId;
-
-      // ✅ 2. LÓGICA PARA EXTRAER EL ID DEL PEDIDO SEGÚN EL TOPIC
-      if (webhookData.topic.includes('orders')) {
-        orderId = webhookData.resource.split('/').pop();
-        console.log(`[ML Webhook] Notificación de pedido recibida para order_id: ${orderId}`);
-      } else if (webhookData.topic === 'shipments') {
-        const shipmentId = webhookData.resource.split('/').pop();
-        console.log(`[ML Webhook] Notificación de envío ${shipmentId} recibida. Obteniendo order_id...`);
-        
-        try {
-          // Hacemos una llamada a la API para obtener los datos del envío y extraer el order_id
-          const shipmentResponse = await axios.get(`${this.API_BASE_URL}/shipments/${shipmentId}`, {
-            headers: { 'Authorization': `Bearer ${accessToken}` },
-          });
-          
-          orderId = shipmentResponse.data.order_id;
-
-          if (!orderId) {
-            console.log(`[ML Webhook] No se encontró un order_id para el envío ${shipmentId}. Se omite.`);
-            return true;
-          }
-          console.log(`[ML Webhook] Envío ${shipmentId} corresponde al pedido ${orderId}. Procediendo a verificar.`);
-
-        } catch (shipmentError) {
-          console.error(`[ML Webhook] Error al obtener datos del envío ${shipmentId}:`, shipmentError.message);
-          return false; // Error al procesar, no continuar
-        }
-      }
-
-      // ✅ 3. EL RESTO DEL FLUJO CONTINÚA IGUAL, AHORA CON EL orderId CORRECTO
-      // A partir de aquí, el flujo es el mismo para ambos webhooks.
-      // Se obtienen los detalles completos del pedido.
-      const orderResponse = await axios.get(`${this.API_BASE_URL}/orders/${orderId}`, {
-        headers: { 'Authorization': `Bearer ${accessToken}` },
-      });
-      const mlOrder = orderResponse.data;
-
-      console.log(`📦 [ML Webhook] Procesando pedido ${mlOrder.id} (originado por topic: ${webhookData.topic})`);
-
-      // 4. VERIFICAR SI ES FLEX
-      const isFlex = await this.isFlexOrder(mlOrder, accessToken);
-
-      if (!isFlex) {
-        console.log(`⏭️ [ML Webhook] Pedido ${mlOrder.id} no es Flex, omitiendo...`);
-        // Ojo: Si llega un webhook de 'shipments', es casi seguro que 'isFlex' será true.
-        // Esta validación se mantiene como una capa de seguridad.
-        return true;
-      }
-
-      console.log(`✅ [ML Webhook] Pedido ${mlOrder.id} ES FLEX, procesando...`);
-
-      // 5. VERIFICAR SI EL PEDIDO YA FUE ENTREGADO
-      const isNotDelivered = await this.isOrderNotDelivered(mlOrder, accessToken);
-
-      if (!isNotDelivered) {
-        console.log(`⏭️ [ML Webhook] Pedido ${mlOrder.id} ya entregado, no se procesa`);
-        return true;
-      }
-      const uniqueOrderId = mlOrder.pack_id || mlOrder.id;
-    
-      console.log(`🔍 [ML Webhook] Buscando pedido con ID único: ${uniqueOrderId}`);
-
-      // 6. BUSCAR SI EL PEDIDO YA EXISTE EN NUESTRO SISTEMA
-      const existingOrder = await Order.findOne({ 
-        channel_id: channelId, 
-        external_order_id: mlOrder.id.toString() 
-      });
-
-      if (existingOrder) {
-        // SI EXISTE Y NO ESTÁ ENTREGADO, LO ACTUALIZAMOS
-        existingOrder.status = this.mapOrderStatus(mlOrder);
-        existingOrder.raw_data = mlOrder;
-        if (mlOrder.pack_id) {
-        existingOrder.total_amount = mlOrder.total_amount;
-        }
-       await existingOrder.save();
-      console.log(`🔄 [ML Webhook] Pedido existente ${uniqueOrderId} actualizado`);
-    } else {
-      // Crear nuevo pedido usando pack_id como external_order_id si existe
-      await this.createOrderFromApiData(mlOrder, channel, accessToken, uniqueOrderId);
-      console.log(`➕ [ML Webhook] Nuevo pedido Flex ${uniqueOrderId} creado`);
-    }
-
+static async processWebhook(channelId, webhookData) {
+  try {
+    // 1️⃣ Aceptamos solo los topics relevantes
+    const acceptedTopics = ['orders', 'orders_v2', 'shipments'];
+    if (!acceptedTopics.includes(webhookData.topic)) {
+      console.log(`[ML Webhook] Notificación ignorada (Topic: ${webhookData.topic}).`);
       return true;
-    } catch (error) {
-      console.error(`❌ [ML Service] Error en processWebhook para recurso ${webhookData.resource}:`, error.message);
-      return false;
     }
+
+    const channel = await Channel.findById(channelId);
+    if (!channel) throw new Error(`[ML Webhook] Canal con ID ${channelId} no encontrado.`);
+
+    const accessToken = await this.getAccessToken(channel);
+    let orderId = null;
+    let shippingId = null;
+
+    // 2️⃣ Obtener order_id y shipping_id según el tipo de evento
+    if (webhookData.topic.includes('orders')) {
+      orderId = webhookData.resource.split('/').pop();
+      console.log(`[ML Webhook] Notificación de pedido recibida para order_id: ${orderId}`);
+    } else if (webhookData.topic === 'shipments') {
+      shippingId = webhookData.resource.split('/').pop();
+      console.log(`[ML Webhook] Notificación de envío ${shippingId} recibida. Buscando order_id...`);
+      
+      try {
+        const shipmentResponse = await axios.get(`${this.API_BASE_URL}/shipments/${shippingId}`, {
+          headers: { 'Authorization': `Bearer ${accessToken}` },
+        });
+        orderId = shipmentResponse.data.order_id;
+        if (!orderId) {
+          console.log(`[ML Webhook] No se encontró un order_id para el envío ${shippingId}. Se omite.`);
+          return true;
+        }
+        console.log(`[ML Webhook] Envío ${shippingId} corresponde al pedido ${orderId}.`);
+      } catch (shipmentError) {
+        console.error(`[ML Webhook] Error obteniendo datos del envío ${shippingId}:`, shipmentError.message);
+        return false;
+      }
+    }
+
+    // 3️⃣ Obtener los detalles completos del pedido
+    const orderResponse = await axios.get(`${this.API_BASE_URL}/orders/${orderId}`, {
+      headers: { 'Authorization': `Bearer ${accessToken}` },
+    });
+    const mlOrder = orderResponse.data;
+
+    // Si el webhook venía desde "orders", ahora obtenemos shipping.id desde el pedido
+    if (!shippingId && mlOrder.shipping?.id) {
+      shippingId = mlOrder.shipping.id.toString();
+    }
+
+    if (!shippingId) {
+      console.log(`⚠️ [ML Webhook] Pedido ${mlOrder.id} sin shipping.id. Se omite.`);
+      return true;
+    }
+
+    console.log(`📦 [ML Webhook] Procesando pedido ${mlOrder.id} (Envío ${shippingId})`);
+
+    // 4️⃣ Verificar si es Flex
+    const isFlex = await this.isFlexOrder(mlOrder, accessToken);
+    if (!isFlex) {
+      console.log(`⏭️ [ML Webhook] Pedido ${mlOrder.id} no es Flex, omitiendo...`);
+      return true;
+    }
+
+    // 5️⃣ Verificar si no está entregado
+    const isNotDelivered = await this.isOrderNotDelivered(mlOrder, accessToken);
+    if (!isNotDelivered) {
+      console.log(`⏭️ [ML Webhook] Pedido ${mlOrder.id} (envío ${shippingId}) ya entregado, no se procesa`);
+      return true;
+    }
+
+    // 6️⃣ Buscar pedido existente por shipping.id (clave única)
+    const existingOrder = await Order.findOne({
+      channel_id: channelId,
+      external_order_id: shippingId
+    });
+
+    if (existingOrder) {
+      // 🔄 Actualizar pedido existente
+      existingOrder.status = this.mapOrderStatus(mlOrder);
+      existingOrder.raw_data = mlOrder;
+      existingOrder.total_amount = mlOrder.total_amount || existingOrder.total_amount;
+      await existingOrder.save();
+      console.log(`🔄 [ML Webhook] Pedido existente con envío ${shippingId} actualizado`);
+    } else {
+      // ➕ Crear nuevo pedido con shipping.id como identificador
+      await this.createOrderFromApiData(mlOrder, channel, accessToken, shippingId);
+      console.log(`➕ [ML Webhook] Nuevo pedido creado con envío ${shippingId}`);
+    }
+
+    return true;
+
+  } catch (error) {
+    console.error(`❌ [ML Service] Error en processWebhook (${webhookData.topic}):`, error.message);
+    return false;
   }
+}
+
 
   /**
    * Helper para crear la orden en la base de datos
@@ -555,12 +561,18 @@ static async syncInitialOrders(channelId) {
 static async createOrderFromApiData(fullOrder, channel, accessToken) {
   const shippingInfo = await this.getShippingInfo(fullOrder, accessToken);
 
-  // ✅ Usar pack_id como identificador principal (si existe)
-  const uniqueOrderId = fullOrder.pack_id 
-  ? fullOrder.pack_id.toString()  // 👈 solo el número de pack_id
-  : fullOrder.id.toString();
+  // ✅ Usar shipping.id como identificador principal (mismo que el QR de la etiqueta)
+  const shippingId = fullOrder.shipping?.id?.toString();
 
-  // ✅ Calcular monto total sumando ítems (por seguridad)
+  // 🚨 Fallback: si no hay shipping.id (casos raros)
+  const uniqueOrderId = shippingId || fullOrder.id?.toString() || fullOrder.pack_id?.toString();
+
+  if (!uniqueOrderId) {
+    console.warn(`⚠️ [ML Order] Pedido ${fullOrder.id} sin identificador válido (sin shipping.id, order.id o pack_id). Se omite.`);
+    return null;
+  }
+
+  // ✅ Calcular monto total sumando ítems
   const items = (fullOrder.order_items || []).map(i => ({
     title: i.item.title,
     quantity: i.quantity,
@@ -571,27 +583,32 @@ static async createOrderFromApiData(fullOrder, channel, accessToken) {
 
   const totalAmount = items.reduce((sum, it) => sum + it.subtotal, 0);
 
-  // ✅ Verificar si ya existe un pedido con este pack_id
+  // ✅ Verificar si ya existe un pedido con este shipping.id
   let order = await Order.findOne({
     channel_id: channel._id,
     external_order_id: uniqueOrderId
   });
 
   if (order) {
-    console.log(`🔄 [ML Order] Actualizando pedido existente ${uniqueOrderId}`);
+    console.log(`🔄 [ML Order] Actualizando pedido existente con envío ${uniqueOrderId}`);
     order.total_amount = totalAmount;
     order.items = items;
     order.status = this.mapOrderStatus(fullOrder);
     order.raw_data = fullOrder;
+    order.shipping_address = shippingInfo.address;
+    order.shipping_city = shippingInfo.city;
+    order.shipping_state = shippingInfo.state;
+    order.shipping_zip = shippingInfo.zip_code;
+    order.customer_phone = shippingInfo.phone;
     await order.save();
     return order;
   }
 
-  // ✅ Si no existe, crear nuevo pedido
+  // ✅ Si no existe, crear nuevo pedido usando shipping.id como clave
   const newOrderData = {
     company_id: channel.company_id,
     channel_id: channel._id,
-    external_order_id: uniqueOrderId,
+    external_order_id: uniqueOrderId,  // 👈 shipping.id como identificador principal
     order_number: uniqueOrderId,
     customer_name: `${fullOrder.buyer.first_name} ${fullOrder.buyer.last_name}`.trim(),
     customer_email: fullOrder.buyer.email,
@@ -607,15 +624,16 @@ static async createOrderFromApiData(fullOrder, channel, accessToken) {
     currency: fullOrder.currency_id,
     status: this.mapOrderStatus(fullOrder),
     order_date: new Date(fullOrder.date_created),
-    items, // 👈 ahora guardamos todos los ítems
+    items,
     raw_data: fullOrder,
-    notes: `Comprador: ${fullOrder.buyer.nickname} | Pack ID: ${fullOrder.pack_id || 'N/A'} | Original Order: ${fullOrder.id}`,
+    notes: `Comprador: ${fullOrder.buyer.nickname} | Envío ID: ${shippingId || 'N/A'} | Orden Original: ${fullOrder.id} | Pack: ${fullOrder.pack_id || 'N/A'}`,
   };
 
   const newOrder = await new Order(newOrderData).save();
-  console.log(`➕ [ML Order] Pedido nuevo creado con ID ${uniqueOrderId}`);
+  console.log(`➕ [ML Order] Pedido nuevo creado con envío ${uniqueOrderId}`);
   return newOrder;
 }
+
 
   /**
    * Obtiene la información de envío detallada
