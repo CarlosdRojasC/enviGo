@@ -43,7 +43,7 @@ router.get('/mercadolibre/callback', async (req, res) => {
       
       // Redirigir a página de error más amigable
       return res.redirect(
-        `${process.env.FRONTEND_URL}/integration-error?` +
+        `${process.env.FRONTEND_ENVIGO}/integration-error?` +
         `platform=mercadolibre&` +
         `error=${encodeURIComponent(oauthError)}&` +
         `message=${encodeURIComponent('El usuario canceló o rechazó la autorización')}`
@@ -54,7 +54,7 @@ router.get('/mercadolibre/callback', async (req, res) => {
     if (!code || !state) {
       console.log('❌ [ML Callback] Faltan parámetros');
       return res.redirect(
-        `${process.env.FRONTEND_URL}/integration-error?` +
+        `${process.env.FRONTEND_ENVIGO}/integration-error?` +
         `platform=mercadolibre&` +
         `error=missing_params&` +
         `message=${encodeURIComponent('Faltan parámetros en la autorización')}`
