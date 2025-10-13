@@ -553,93 +553,196 @@ static async syncInitialOrders(channelId) {
    * Helper para crear la orden en la base de datos
    */
 static async createOrderFromApiData(fullOrder, channel, accessToken) {
-  const shippingInfo = await this.getShippingInfo(fullOrder, accessToken);
-
-  // ✅ Usar pack_id como identificador principal (si existe)
-  const uniqueOrderId = fullOrder.pack_id 
-  ? fullOrder.pack_id.toString()  // 👈 solo el número de pack_id
-  : fullOrder.id.toString();
-
-  // ✅ Calcular monto total sumando ítems (por seguridad)
-  const items = (fullOrder.order_items || []).map(i => ({
-    title: i.item.title,
-    quantity: i.quantity,
-    price: i.unit_price,
-    subtotal: i.full_unit_price * i.quantity || (i.unit_price * i.quantity),
-    currency: fullOrder.currency_id
-  }));
-
-  const totalAmount = items.reduce((sum, it) => sum + it.subtotal, 0);
-
-  // ✅ Verificar si ya existe un pedido con este pack_id
-  let order = await Order.findOne({
-    channel_id: channel._id,
-    external_order_id: uniqueOrderId
-  });
-
-  if (order) {
-    console.log(`🔄 [ML Order] Actualizando pedido existente ${uniqueOrderId}`);
-    order.total_amount = totalAmount;
-    order.items = items;
-    order.status = this.mapOrderStatus(fullOrder);
-    order.raw_data = fullOrder;
-    await order.save();
-    return order;
+  try {
+    console.log(`📦 [ML Create] Procesando orden ${fullOrder.id}`);
+    
+    // ✅ USAR SHIPPING_ID COMO IDENTIFICADOR ÚNICO
+    // En ML Flex, shipping.id es el número de envío que agrupa todos los productos
+    const shippingId = fullOrder.shipping?.id;
+    
+    if (!shippingId) {
+      console.error(`❌ [ML Create] Orden ${fullOrder.id} no tiene shipping_id, omitiendo`);
+      return null;
+    }
+    
+    // El ID único para nuestro sistema será el shipping_id
+    const uniqueOrderId = shippingId.toString();
+    
+    console.log(`🔍 [ML Create] Usando shipping_id como ID único: ${uniqueOrderId}`);
+    
+    // ✅ VERIFICAR SI YA EXISTE UN PEDIDO CON ESTE SHIPPING_ID
+    let order = await Order.findOne({
+      channel_id: channel._id,
+      external_order_id: uniqueOrderId
+    });
+    
+    if (order) {
+      console.log(`🔄 [ML Create] Pedido con shipping_id ${uniqueOrderId} ya existe, actualizando...`);
+      
+      // Actualizar con los datos más recientes
+      const shippingInfo = await this.getShippingInfo(fullOrder, accessToken);
+      
+      order.status = this.mapOrderStatus(fullOrder);
+      order.total_amount = fullOrder.total_amount;
+      order.shipping_cost = fullOrder.shipping?.cost || 0;
+      order.shipping_address = shippingInfo.address;
+      order.shipping_commune = shippingInfo.city;
+      order.shipping_city = shippingInfo.city;
+      order.shipping_state = shippingInfo.state;
+      order.shipping_zip = shippingInfo.zip_code;
+      order.customer_phone = shippingInfo.phone;
+      order.raw_data = fullOrder;
+      order.updated_at = new Date();
+      
+      await order.save();
+      return order;
+    }
+    
+    // ✅ SI NO EXISTE, CREAR NUEVO PEDIDO
+    console.log(`➕ [ML Create] Creando nuevo pedido con shipping_id ${uniqueOrderId}`);
+    
+    const shippingInfo = await this.getShippingInfo(fullOrder, accessToken);
+    
+    // Procesar items (todos los productos de este envío)
+    const items = (fullOrder.order_items || []).map(item => ({
+      title: item.item?.title || 'Producto ML',
+      quantity: item.quantity || 1,
+      price: item.unit_price || 0,
+      subtotal: (item.full_unit_price || item.unit_price) * (item.quantity || 1),
+      currency: fullOrder.currency_id,
+      item_id: item.item?.id
+    }));
+    
+    const newOrderData = {
+      company_id: channel.company_id,
+      channel_id: channel._id,
+      
+      // ✅ USAR SHIPPING_ID COMO EXTERNAL_ORDER_ID
+      external_order_id: uniqueOrderId,
+      
+      // ✅ USAR SHIPPING_ID COMO ORDER_NUMBER (número de envío visible)
+      order_number: `ML-${uniqueOrderId}`,
+      
+      // Información del cliente
+      customer_name: `${fullOrder.buyer.first_name || ''} ${fullOrder.buyer.last_name || ''}`.trim() || fullOrder.buyer.nickname,
+      customer_email: fullOrder.buyer.email || '',
+      customer_phone: shippingInfo.phone || '',
+      customer_document: fullOrder.buyer.billing_info?.doc_number || '',
+      
+      // Información de envío
+      shipping_address: shippingInfo.address,
+      shipping_commune: shippingInfo.city,
+      shipping_city: shippingInfo.city,
+      shipping_state: shippingInfo.state,
+      shipping_zip: shippingInfo.zip_code,
+      
+      // Montos
+      total_amount: fullOrder.total_amount,
+      shipping_cost: fullOrder.shipping?.cost || 0,
+      currency: fullOrder.currency_id,
+      
+      // Estado y fechas
+      status: this.mapOrderStatus(fullOrder),
+      order_date: new Date(fullOrder.date_created),
+      
+      // Items y metadata
+      items: items,
+      items_count: items.reduce((sum, item) => sum + item.quantity, 0),
+      
+      // Guardar datos completos para referencia
+      raw_data: fullOrder,
+      
+      // Notas con información útil
+      notes: [
+        `Comprador: ${fullOrder.buyer.nickname}`,
+        `Orden ML: ${fullOrder.id}`,
+        `Shipping ID: ${shippingId}`,
+        `Pack ID: ${fullOrder.pack_id || 'N/A'}`
+      ].join(' | '),
+      
+      // Metadata adicional para MercadoLibre
+      ml_info: {
+        order_id: fullOrder.id,
+        shipping_id: shippingId,
+        pack_id: fullOrder.pack_id,
+        logistics_type: fullOrder.shipping?.logistics_type
+      }
+    };
+    
+    const newOrder = await new Order(newOrderData).save();
+    console.log(`✅ [ML Create] Pedido creado exitosamente: ${newOrder.order_number}`);
+    
+    return newOrder;
+    
+  } catch (error) {
+    console.error(`❌ [ML Create] Error creando pedido desde orden ${fullOrder.id}:`, error.message);
+    throw error;
   }
-
-  // ✅ Si no existe, crear nuevo pedido
-  const newOrderData = {
-    company_id: channel.company_id,
-    channel_id: channel._id,
-    external_order_id: uniqueOrderId,
-    order_number: uniqueOrderId,
-    customer_name: `${fullOrder.buyer.first_name} ${fullOrder.buyer.last_name}`.trim(),
-    customer_email: fullOrder.buyer.email,
-    customer_phone: shippingInfo.phone,
-    customer_document: fullOrder.buyer.billing_info?.doc_number || '',
-    shipping_address: shippingInfo.address,
-    shipping_commune: shippingInfo.city,
-    shipping_city: shippingInfo.city,
-    shipping_state: shippingInfo.state,
-    shipping_zip: shippingInfo.zip_code,
-    total_amount: totalAmount,
-    shipping_cost: fullOrder.shipping?.cost || 0,
-    currency: fullOrder.currency_id,
-    status: this.mapOrderStatus(fullOrder),
-    order_date: new Date(fullOrder.date_created),
-    items, // 👈 ahora guardamos todos los ítems
-    raw_data: fullOrder,
-    notes: `Comprador: ${fullOrder.buyer.nickname} | Pack ID: ${fullOrder.pack_id || 'N/A'} | Original Order: ${fullOrder.id}`,
-  };
-
-  const newOrder = await new Order(newOrderData).save();
-  console.log(`➕ [ML Order] Pedido nuevo creado con ID ${uniqueOrderId}`);
-  return newOrder;
 }
 
-  /**
-   * Obtiene la información de envío detallada
-   */
-  static async getShippingInfo(order, accessToken) {
-    if (!order.shipping?.id) return { address: 'Sin información de envío' };
-    
-    try {
-      const { data: shipping } = await axios.get(`${this.API_BASE_URL}/shipments/${order.shipping.id}`, {
-        headers: { 'Authorization': `Bearer ${accessToken}` },
-      });
-      const addr = shipping.receiver_address;
-      return {
-        address: `${addr.street_name} ${addr.street_number}, ${addr.comment || ''}`.replace(/, $/, '').trim(),
-        city: addr.city.name,
-        state: addr.state.name,
-        zip_code: addr.zip_code,
-        phone: addr.receiver_phone,
-      };
-    } catch (error) {
-      console.error(`[ML Service] No se pudo obtener info de envío para ${order.id}:`, error.message);
-      return { address: 'Error al obtener dirección' };
-    }
+/**
+ * Obtiene la información de envío detallada
+ */
+static async getShippingInfo(order, accessToken) {
+  if (!order.shipping?.id) {
+    console.warn(`⚠️ [ML Shipping] Orden ${order.id} no tiene shipping.id`);
+    return { 
+      address: 'Sin información de envío',
+      city: 'Desconocido',
+      state: 'Desconocido',
+      zip_code: '',
+      phone: ''
+    };
   }
+  
+  try {
+    const { data: shipping } = await axios.get(
+      `${this.API_BASE_URL}/shipments/${order.shipping.id}`, 
+      {
+        headers: { 'Authorization': `Bearer ${accessToken}` },
+        timeout: 15000
+      }
+    );
+    
+    const addr = shipping.receiver_address || {};
+    
+    return {
+      address: [
+        addr.street_name,
+        addr.street_number,
+        addr.comment
+      ].filter(Boolean).join(' ').trim() || 'Dirección no especificada',
+      
+      city: addr.city?.name || 'Desconocido',
+      state: addr.state?.name || 'Desconocido',
+      zip_code: addr.zip_code || '',
+      phone: addr.receiver_phone || shipping.receiver_phone || ''
+    };
+    
+  } catch (error) {
+    console.error(`❌ [ML Shipping] Error obteniendo info de envío para orden ${order.id}:`, error.message);
+    
+    // Fallback: intentar extraer datos básicos de la orden misma
+    if (order.shipping?.receiver_address) {
+      const addr = order.shipping.receiver_address;
+      return {
+        address: [addr.street_name, addr.street_number, addr.comment].filter(Boolean).join(' '),
+        city: addr.city?.name || 'Desconocido',
+        state: addr.state?.name || 'Desconocido',
+        zip_code: addr.zip_code || '',
+        phone: addr.receiver_phone || ''
+      };
+    }
+    
+    return { 
+      address: 'Error al obtener dirección',
+      city: 'Desconocido',
+      state: 'Desconocido',
+      zip_code: '',
+      phone: ''
+    };
+  }
+}
 static async getShippingLabel(orderId, channelId) {
   console.log('🟢 [ML Service] Iniciando getShippingLabel');
   console.log('➡️ Recibido:', { orderId, channelId });

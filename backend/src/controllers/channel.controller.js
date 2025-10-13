@@ -444,7 +444,6 @@ if (channel.channel_type === CHANNEL_TYPES.SHOPIFY) {
 
   // Sincronizar pedidos de un canal - MEJORADO PARA MANEJAR RESULTADOS DETALLADOS
 async syncOrders(req, res) {
-  
   try {
     const { id } = req.params;
     const { date_from, date_to } = req.body;
@@ -464,6 +463,17 @@ async syncOrders(req, res) {
 
     console.log(`🚀 Iniciando sincronización para canal ${channel.channel_name}`);
 
+    // ✅ VERIFICAR SI YA HAY UNA SYNC EN PROGRESO
+    if (channel.sync_status === 'syncing') {
+      console.log(`⚠️ [Sync] Canal ${channel.channel_name} ya tiene una sincronización en progreso`);
+      return res.status(409).json({
+        success: false,
+        error: 'Sincronización en progreso',
+        message: `El canal ${channel.channel_name} ya tiene una sincronización en curso. Por favor espera a que termine.`,
+        sync_status: 'syncing'
+      });
+    }
+
     // Crear registro de sincronización
     const syncLog = new SyncLog({
       channel_id: id,
@@ -480,65 +490,88 @@ async syncOrders(req, res) {
     let syncResult = null;
 
     try {
-       console.log('🔍 [Controller Debug] Channel type:', {
-    original: channel.channel_type,
-    toLowerCase: channel.channel_type.toLowerCase(),
-    constants: {
-      SHOPIFY: CHANNEL_TYPES.SHOPIFY,
-      WOOCOMMERCE: CHANNEL_TYPES.WOOCOMMERCE,
-      MERCADOLIBRE: CHANNEL_TYPES.MERCADOLIBRE,
-      JUMPSELLER: CHANNEL_TYPES.JUMPSELLER
-    }
-  });
+      console.log('🔍 [Controller Debug] Channel type:', {
+        original: channel.channel_type,
+        toLowerCase: channel.channel_type.toLowerCase(),
+        constants: {
+          SHOPIFY: CHANNEL_TYPES.SHOPIFY,
+          WOOCOMMERCE: CHANNEL_TYPES.WOOCOMMERCE,
+          MERCADOLIBRE: CHANNEL_TYPES.MERCADOLIBRE,
+          JUMPSELLER: CHANNEL_TYPES.JUMPSELLER
+        }
+      });
+      
       switch (channel.channel_type.toLowerCase()) {
         case CHANNEL_TYPES.SHOPIFY:
-      console.log('📦 [Controller] Ejecutando sincronización Shopify');
-      syncResult = await ShopifyService.syncOrders(channel, date_from, date_to);
-      break;
-      
-    case CHANNEL_TYPES.WOOCOMMERCE:
-      console.log('🛒 [Controller] Ejecutando sincronización WooCommerce');
-      syncResult = await WooCommerceService.syncOrders(channel, date_from, date_to);
-      break;
-      
-    case CHANNEL_TYPES.MERCADOLIBRE:
-      console.log('🏪 [Controller] Verificando estado de MercadoLibre');
-      
-      // ✅ VERIFICAR SI YA SE HIZO LA SINCRONIZACIÓN INICIAL
-      if (channel.settings?.initial_sync_completed) {
-        console.log('ℹ️ [ML] Canal ya inicializado - Webhook activo');
+          console.log('📦 [Controller] Ejecutando sincronización Shopify');
+          syncResult = await ShopifyService.syncOrders(channel, date_from, date_to);
+          break;
         
-        // Actualizar solo la fecha de última verificación
-        channel.last_sync_at = new Date();
-        await channel.save();
+        case CHANNEL_TYPES.WOOCOMMERCE:
+          console.log('🛒 [Controller] Ejecutando sincronización WooCommerce');
+          syncResult = await WooCommerceService.syncOrders(channel, date_from, date_to);
+          break;
         
-        return res.json({ 
-          success: true,
-          message: 'Canal de MercadoLibre funcionando correctamente',
-          details: 'Los pedidos nuevos llegan automáticamente por webhook. No se requiere sincronización manual.',
-          orders_imported: 0,
-          webhook_enabled: true,
-          initial_sync_completed: true,
-          last_sync: new Date(),
-          note: 'El webhook procesa pedidos Flex en tiempo real'
-        });
-      }
-      
-      // ✅ SI ES PRIMERA VEZ, HACER SINCRONIZACIÓN INICIAL
-      console.log('🔄 [ML] Ejecutando sincronización inicial por única vez');
-      syncResult = await MercadoLibreService.syncInitialOrders(channel._id);
-      
-      // Marcar como completada la sincronización inicial
-      if (syncResult.success) {
-        console.log('✅ [ML] Sincronización inicial completada - Webhook ahora activo');
-      }
-  break;
-      
-    case CHANNEL_TYPES.JUMPSELLER:
-    case 'jumpseller': // ✅ AGREGAR TAMBIÉN EL VALOR LITERAL
-      console.log('🚀 [Controller] Ejecutando sincronización Jumpseller');
-      syncResult = await JumpsellerService.syncOrders(channel, date_from, date_to);
-      break;
+        case CHANNEL_TYPES.MERCADOLIBRE:
+          console.log('🏪 [Controller] Verificando estado de MercadoLibre');
+          
+          // ✅ VERIFICAR SI YA SE HIZO LA SINCRONIZACIÓN INICIAL
+          if (channel.settings?.initial_sync_completed) {
+            console.log('ℹ️ [ML] Canal ya inicializado - Webhook activo');
+            
+            // Actualizar solo la fecha de última verificación
+            channel.last_sync_at = new Date();
+            await channel.save();
+            
+            // Actualizar log
+            syncLog.status = 'completed';
+            syncLog.completed_at = new Date();
+            syncLog.orders_synced = 0;
+            syncLog.sync_message = 'Webhook ya configurado, no se requiere sincronización';
+            await syncLog.save();
+            
+            return res.json({ 
+              success: true,
+              message: 'Canal de MercadoLibre funcionando correctamente',
+              details: 'Los pedidos nuevos llegan automáticamente por webhook. No se requiere sincronización manual.',
+              orders_imported: 0,
+              webhook_enabled: true,
+              initial_sync_completed: true,
+              last_sync: new Date(),
+              sync_id: syncLog._id,
+              note: 'El webhook procesa pedidos Flex en tiempo real'
+            });
+          }
+          
+          // ✅ SI ES PRIMERA VEZ, HACER SINCRONIZACIÓN INICIAL
+          console.log('🔄 [ML] Ejecutando sincronización inicial por única vez');
+          
+          // Marcar como sincronizando
+          channel.sync_status = 'syncing';
+          await channel.save();
+          
+          try {
+            syncResult = await MercadoLibreService.syncInitialOrders(channel._id);
+            
+            // Marcar como completada
+            if (syncResult.success) {
+              console.log('✅ [ML] Sincronización inicial completada - Webhook ahora activo');
+            }
+          } catch (mlError) {
+            // Si falla, resetear el estado
+            channel.sync_status = 'error';
+            channel.last_sync_error = mlError.message;
+            await channel.save();
+            throw mlError;
+          }
+          break;
+        
+        case CHANNEL_TYPES.JUMPSELLER:
+        case 'jumpseller':
+          console.log('🚀 [Controller] Ejecutando sincronización Jumpseller');
+          syncResult = await JumpsellerService.syncOrders(channel, date_from, date_to);
+          break;
+          
         default:
           throw new Error(`Sincronización no implementada para: "${channel.channel_type}"`);
       }
@@ -563,7 +596,7 @@ async syncOrders(req, res) {
 
       const ordersImported = typeof syncResult === 'number' ? 
         syncResult : 
-        (syncResult?.imported || syncResult?.orders_synced || 0);
+        (syncResult?.syncedCount || syncResult?.imported || syncResult?.orders_synced || 0);
 
       console.log(`✅ Sincronización completada: ${ordersImported} pedidos`);
 

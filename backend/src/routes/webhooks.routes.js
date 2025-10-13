@@ -40,13 +40,10 @@ router.get('/mercadolibre/callback', async (req, res) => {
     // Manejo de errores de OAuth
     if (oauthError) {
       console.log(`❌ [ML Callback] Error OAuth recibido: ${oauthError}`);
-      
-      // Redirigir a página de error más amigable
       return res.redirect(
-        `${process.env.FRONTEND_URL}/integration-error?` +
-        `platform=mercadolibre&` +
-        `error=${encodeURIComponent(oauthError)}&` +
-        `message=${encodeURIComponent('El usuario canceló o rechazó la autorización')}`
+        `${process.env.FRONTEND_URL}/app/channels?` +
+        `error=oauth_denied&` +
+        `details=${encodeURIComponent(oauthError)}`
       );
     }
     
@@ -54,10 +51,8 @@ router.get('/mercadolibre/callback', async (req, res) => {
     if (!code || !state) {
       console.log('❌ [ML Callback] Faltan parámetros');
       return res.redirect(
-        `${process.env.FRONTEND_URL}/integration-error?` +
-        `platform=mercadolibre&` +
-        `error=missing_params&` +
-        `message=${encodeURIComponent('Faltan parámetros en la autorización')}`
+        `${process.env.FRONTEND_URL}/app/channels?` +
+        `error=missing_params`
       );
     }
     
@@ -69,17 +64,35 @@ router.get('/mercadolibre/callback', async (req, res) => {
     
     console.log(`✅ [ML Callback] Autorización exitosa para: ${channel.channel_name}`);
     
-    // 🎯 NUEVO: Redirigir a página de éxito dedicada
+    // Redirigir al usuario INMEDIATAMENTE
     res.redirect(
-      `${process.env.FRONTEND_URL}/integration-success?` +
-      `platform=mercadolibre&` +
+      `${process.env.FRONTEND_URL}/app/channels?` +
+      `success=ml_connected&` +
       `channel_name=${encodeURIComponent(channel.channel_name)}&` +
-      `channel_id=${channel._id}&` +
-      `timestamp=${Date.now()}`
+      `channel_id=${channel._id}`
     );
     
-    // 🔔 IMPORTANTE: Iniciar sincronización inicial en segundo plano (no bloqueante)
-    // Esto trae todos los pedidos pendientes de los últimos 7 días
+    // ✅ PREVENIR EJECUCIONES DUPLICADAS
+    const channelIdStr = channel._id.toString();
+    
+    // Verificar si ya hay una sync en progreso para este canal
+    if (syncInProgress.has(channelIdStr)) {
+      const startedAt = syncInProgress.get(channelIdStr);
+      const elapsed = Date.now() - startedAt;
+      
+      // Si la sync anterior empezó hace menos de 2 minutos, skip
+      if (elapsed < 120000) { // 2 minutos
+        console.log(`⚠️ [ML Callback] Sync ya en progreso para canal ${channelIdStr} (${Math.round(elapsed/1000)}s)`);
+        return;
+      } else {
+        // Si pasaron más de 2 minutos, puede ser un timeout, permitir reintentar
+        console.log(`⚠️ [ML Callback] Sync anterior parece timeout, permitiendo nueva ejecución`);
+      }
+    }
+    
+    // 🔔 SINCRONIZACIÓN INICIAL EN BACKGROUND
+    syncInProgress.set(channelIdStr, Date.now());
+    
     setImmediate(async () => {
       try {
         console.log('🔄 [ML Callback] Iniciando sincronización inicial en background...');
@@ -87,37 +100,82 @@ router.get('/mercadolibre/callback', async (req, res) => {
         
         const result = await MercadoLibreService.syncInitialOrders(channel._id);
         
-        console.log('✅ [ML Callback] Sincronización inicial completada:', {
-          sincronizados: result.syncedCount,
-          omitidos: result.skippedCount,
-          errores: result.errorCount
-        });
+        // Verificar si realmente se sincronizó
+        if (result.success && result.syncedCount === 0 && result.message === 'Ya sincronizado') {
+          console.log('⏭️ [ML Callback] Canal ya estaba sincronizado previamente');
+        } else {
+          console.log('✅ [ML Callback] Sincronización inicial completada:', {
+            sincronizados: result.syncedCount,
+            omitidos: result.skippedCount,
+            errores: result.errorCount,
+            total: result.totalFound
+          });
+          
+          // Crear notificación de éxito si se importaron pedidos
+          if (result.syncedCount > 0) {
+            try {
+              const Notification = require('../models/Notification');
+              await Notification.create({
+                title: '✅ Sincronización Completada',
+                message: `Se importaron ${result.syncedCount} pedidos de ${channel.channel_name}`,
+                type: 'sync_completed',
+                link: '/app/orders',
+                channel: channel._id
+              });
+              console.log('📬 [ML Callback] Notificación de éxito creada');
+            } catch (notifError) {
+              console.error('⚠️ [ML Callback] Error creando notificación:', notifError.message);
+            }
+          }
+        }
+        
       } catch (syncError) {
-        console.error('⚠️ [ML Callback] Error en sincronización inicial:', syncError.message);
-        // Marcar error pero no bloquear el callback
+        console.error('❌ [ML Callback] Error en sincronización inicial:', syncError.message);
+        console.error('Stack:', syncError.stack);
+        
+        // Marcar error en el canal
         try {
+          const Channel = require('../models/Channel');
           const channelToUpdate = await Channel.findById(channel._id);
           if (channelToUpdate) {
             channelToUpdate.sync_status = 'error';
             channelToUpdate.last_sync_error = `Error en sync inicial: ${syncError.message}`;
             await channelToUpdate.save();
+            console.log('⚠️ [ML Callback] Canal marcado con error');
           }
         } catch (updateError) {
-          console.error('❌ [ML Callback] No se pudo actualizar estado de error:', updateError);
+          console.error('❌ [ML Callback] No se pudo actualizar estado de error:', updateError.message);
         }
+        
+        // Crear notificación de error
+        try {
+          const Notification = require('../models/Notification');
+          await Notification.create({
+            title: '⚠️ Error en Sincronización',
+            message: `No se pudieron importar pedidos de ${channel.channel_name}. Intenta sincronizar manualmente.`,
+            type: 'sync_error',
+            link: '/app/channels',
+            channel: channel._id
+          });
+        } catch (notifError) {
+          console.error('⚠️ [ML Callback] Error creando notificación de error:', notifError.message);
+        }
+        
+      } finally {
+        // ✅ SIEMPRE LIBERAR EL LOCK
+        syncInProgress.delete(channelIdStr);
+        console.log(`✅ [ML Callback] Sync finalizada para canal ${channelIdStr}, lock liberado`);
       }
     });
     
   } catch (error) {
-    console.error('❌ [ML Callback] Error procesando:', error.message);
+    console.error('❌ [ML Callback] Error procesando callback:', error.message);
     console.error('❌ [ML Callback] Stack trace:', error.stack);
     
-    // Redirigir a página de error con detalles
     res.redirect(
-      `${process.env.FRONTEND_URL}/integration-error?` +
-      `platform=mercadolibre&` +
+      `${process.env.FRONTEND_URL}/app/channels?` +
       `error=validation_failed&` +
-      `message=${encodeURIComponent(error.message || 'Error validando la autorización')}`
+      `details=${encodeURIComponent(error.message)}`
     );
   }
 });
