@@ -365,67 +365,88 @@ static async syncInitialOrders(channelId) {
     return true;
   }
 
-  /**
-   * ✅ FUNCIÓN DE DETECCIÓN FLEX MEJORADA
-   */
-  static async isFlexOrder(mlOrder, accessToken) {
-    console.log(`🔍 [ML Flex Check] Analizando pedido ${mlOrder.id} para Flex:`);
+
+/**
+ * ✅ FUNCIÓN CORREGIDA DE DETECCIÓN FLEX
+ * Detecta pedidos MercadoLibre Flex de múltiples formas
+ */
+static async isFlexOrder(mlOrder, accessToken) {
+  console.log(`🔍 [ML Flex Check] Analizando pedido ${mlOrder.id} para Flex`);
+  console.log(`🔍 [ML Debug] Tags del pedido:`, mlOrder.tags);
+  
+  // ✅ MÉTODO 1: Verificar por combinación de tags (D2C + Pack Order = FLEX)
+  if (mlOrder.tags && Array.isArray(mlOrder.tags)) {
+    const hasDtoC = mlOrder.tags.some(tag => tag.toLowerCase() === 'd2c');
+    const hasPackOrder = mlOrder.tags.some(tag => tag.toLowerCase() === 'pack_order');
     
-    // MÉTODO 1: Verificar por tags del pedido
-    if (mlOrder.tags && Array.isArray(mlOrder.tags)) {
-      const flexTags = ['self_service', 'flex', 'self_service_in'];
-      const hasFlexTag = mlOrder.tags.some(tag => 
-        flexTags.includes(tag.toLowerCase())
-      );
+    // Si tiene ambos tags, es Flex
+    if (hasDtoC && hasPackOrder) {
+      console.log(`✅ [ML Flex Check] Pedido ${mlOrder.id} es Flex (tags: d2c + pack_order)`);
+      return true;
+    }
+    
+    // También verificar tags explícitos de Flex
+    const flexTags = ['self_service', 'flex', 'self_service_in'];
+    const hasFlexTag = mlOrder.tags.some(tag => 
+      flexTags.includes(tag.toLowerCase())
+    );
+    
+    if (hasFlexTag) {
+      console.log(`✅ [ML Flex Check] Pedido ${mlOrder.id} es Flex (tag directo)`, mlOrder.tags);
+      return true;
+    }
+  }
+
+  // ✅ MÉTODO 2: Consultar el shipment para verificar logistic_type
+  if (mlOrder.shipping?.id) {
+    try {
+      console.log(`🔍 [ML Flex Check] Consultando shipment ${mlOrder.shipping.id}...`);
       
-      if (hasFlexTag) {
-        console.log(`✅ [ML Flex Check] Pedido ${mlOrder.id} es Flex (tags)`, mlOrder.tags);
+      const shipmentResponse = await axios.get(`${this.API_BASE_URL}/shipments/${mlOrder.shipping.id}`, {
+        headers: { 'Authorization': `Bearer ${accessToken}` },
+        timeout: 15000
+      });
+
+      const shipment = shipmentResponse.data;
+      
+      console.log(`🔍 [ML Debug] Shipment logistic_type:`, shipment.logistic_type);
+      console.log(`🔍 [ML Debug] Shipment service_id:`, shipment.service_id);
+      
+      // Verificar logistic_type = "self_service"
+      if (shipment.logistic_type === 'self_service') {
+        console.log(`✅ [ML Flex Check] Pedido ${mlOrder.id} es Flex (logistic_type = self_service)`);
         return true;
       }
-    }
 
-    // MÉTODO 2: Consultar el shipment
-    if (mlOrder.shipping?.id) {
-      try {
-        const shipmentResponse = await axios.get(`${this.API_BASE_URL}/shipments/${mlOrder.shipping.id}`, {
-          headers: { 'Authorization': `Bearer ${accessToken}` },
-          timeout: 15000
-        });
-
-        const shipment = shipmentResponse.data;
+      // Verificar sender_address.types
+      if (shipment.sender_address?.types && Array.isArray(shipment.sender_address.types)) {
+        const hasFlexType = shipment.sender_address.types.some(type => 
+          type.includes('self_service_partner') || type.includes('self_service')
+        );
         
-        // Verificar logistic_type = "self_service"
-        if (shipment.logistic_type === 'self_service') {
-          console.log(`✅ [ML Flex Check] Pedido ${mlOrder.id} es Flex (logistic_type = self_service)`);
+        if (hasFlexType) {
+          console.log(`✅ [ML Flex Check] Pedido ${mlOrder.id} es Flex (sender_address.types)`, shipment.sender_address.types);
           return true;
         }
-
-        // Verificar sender_address.types
-        if (shipment.sender_address?.types && Array.isArray(shipment.sender_address.types)) {
-          const hasFlexType = shipment.sender_address.types.some(type => 
-            type.includes('self_service_partner') || type.includes('self_service')
-          );
-          
-          if (hasFlexType) {
-            console.log(`✅ [ML Flex Check] Pedido ${mlOrder.id} es Flex (sender_address.types)`, shipment.sender_address.types);
-            return true;
-          }
-        }
-
-        // Verificar service_id específico de Flex
-        if (shipment.service_id === 3826008) {
-          console.log(`✅ [ML Flex Check] Pedido ${mlOrder.id} es Flex (service_id = 3826008)`);
-          return true;
-        }
-
-      } catch (error) {
-        console.error(`❌ [ML Flex Check] Error consultando shipment ${mlOrder.shipping.id}:`, error.message);
       }
-    }
 
-    console.log(`❌ [ML Flex Check] Pedido ${mlOrder.id} NO es Flex`);
-    return false;
+      // Verificar service_id específico de Flex (varía por país)
+      const flexServiceIds = [3826008, 3826009]; // Agregar más IDs según sea necesario
+      if (flexServiceIds.includes(shipment.service_id)) {
+        console.log(`✅ [ML Flex Check] Pedido ${mlOrder.id} es Flex (service_id = ${shipment.service_id})`);
+        return true;
+      }
+
+    } catch (error) {
+      console.error(`❌ [ML Flex Check] Error consultando shipment ${mlOrder.shipping.id}:`, error.message);
+      // Si no pudimos consultar el shipment pero tenía tags de d2c+pack_order, 
+      // ya lo habríamos detectado arriba
+    }
   }
+
+  console.log(`❌ [ML Flex Check] Pedido ${mlOrder.id} NO es Flex`);
+  return false;
+}
 
   static async getValidAccessToken(channel) {
     console.log('🔑 [ML Auth] Verificando access token...');
