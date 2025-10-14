@@ -34,7 +34,7 @@ router.post('/', async (req, res) => {
 
     // Email para el equipo de enviGo
     const adminEmail = await resend.emails.send({
-      from: 'enviGo <onboarding@resend.dev>', // Cambiar por tu dominio verificado
+      from: 'enviGo <no-reply@envigo.cl>', // Cambiar por tu dominio verificado
       to: [process.env.CONTACT_EMAIL || 'contacto@envigo.cl'],
       subject: `🚀 Nuevo Lead - ${company}`,
       html: `
@@ -95,7 +95,7 @@ router.post('/', async (req, res) => {
 
     // Email de confirmación para el cliente
     const clientEmail = await resend.emails.send({
-      from: 'enviGo <onboarding@resend.dev>', // Cambiar por tu dominio verificado
+      from: 'enviGo <no-reply@envigo.cl>', // Cambiar por tu dominio verificado
       to: [email],
       subject: '✅ Hemos recibido tu solicitud - enviGo',
       html: `
@@ -138,7 +138,7 @@ router.post('/', async (req, res) => {
             </ul>
 
             <div style="text-align: center; margin: 35px 0;">
-              <a href="${process.env.FRONTEND_URL || 'https://www.envigo.cl'}" style="display: inline-block; padding: 15px 35px; background: #84cc16; color: white; text-decoration: none; border-radius: 10px; font-weight: 600; font-size: 16px;">
+              <a href="${process.env.FRONTEND_ENVIGO || 'https://www.envigo.cl'}" style="display: inline-block; padding: 15px 35px; background: #84cc16; color: white; text-decoration: none; border-radius: 10px; font-weight: 600; font-size: 16px;">
                 Visitar enviGo
               </a>
             </div>
