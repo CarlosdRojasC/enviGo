@@ -334,16 +334,39 @@
           </div>
           
           <div class="mt-4">
-            <label class="block text-sm font-medium text-gray-700 mb-2">URL de la Tienda:</label>
-            <input 
-              v-model="channelData.store_url" 
-              type="text" 
-              required 
-              :placeholder="getUrlPlaceholder(channelData.channel_type)"
-              class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-            >
-            <p class="mt-1 text-xs text-gray-500">{{ getUrlHelp(channelData.channel_type) }}</p>
-          </div>
+  <!-- Para MercadoLibre: Select de países -->
+  <div v-if="channelData.channel_type === 'mercadolibre'">
+    <label class="block text-sm font-medium text-gray-700 mb-2">País de MercadoLibre:</label>
+    <select 
+      v-model="channelData.store_url"
+      required
+      class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+    >
+      <option value="">Selecciona tu país</option>
+      <option value="https://mercadolibre.cl">🇨🇱 Chile</option>
+      <option value="https://mercadolibre.com.ar">🇦🇷 Argentina</option>
+      <option value="https://mercadolibre.com.mx">🇲🇽 México</option>
+      <option value="https://mercadolivre.com.br">🇧🇷 Brasil</option>
+      <option value="https://mercadolibre.com.co">🇨🇴 Colombia</option>
+      <option value="https://mercadolibre.com.pe">🇵🇪 Perú</option>
+      <option value="https://mercadolibre.com.uy">🇺🇾 Uruguay</option>
+    </select>
+    <p class="mt-1 text-xs text-gray-500">Selecciona el país donde tienes tu cuenta de MercadoLibre</p>
+  </div>
+
+  <!-- Para otros canales: Input de texto -->
+  <div v-else>
+    <label class="block text-sm font-medium text-gray-700 mb-2">URL de la Tienda:</label>
+    <input 
+      v-model="channelData.store_url"
+      type="url"
+      required
+      :placeholder="getUrlPlaceholder(channelData.channel_type)"
+      class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+    >
+    <p class="mt-1 text-xs text-gray-500">{{ getUrlHelp(channelData.channel_type) }}</p>
+  </div>
+</div>
           
           <div v-if="!requiresOAuth(channelData.channel_type) && channelData.channel_type !== 'general_store'" class="space-y-4 mt-4">
             <div>
