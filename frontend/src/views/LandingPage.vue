@@ -847,7 +847,7 @@
 
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
-
+import { apiService } from '../services/api'
 // ==================== STATE ====================
 const mobileMenuOpen = ref(false)
 const openFaq = ref(null)
@@ -896,17 +896,10 @@ const handleSubmit = async () => {
   try {
     isSubmitting.value = true
     
-    const response = await fetch('/api/contact', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(contactForm.value)
-    })
+    // 👇 Usar el servicio de API
+    const response = await apiService.contact.send(contactForm.value)
 
-    const data = await response.json()
-
-    if (response.ok && data.success) {
+    if (response.data.success) {
       alert('✅ ¡Gracias! Hemos recibido tu solicitud. Te contactaremos en las próximas 24 horas.')
       
       // Limpiar formulario
@@ -917,8 +910,6 @@ const handleSubmit = async () => {
         phone: '',
         monthlyOrders: '',
       }
-    } else {
-      throw new Error(data.error || 'Error al enviar el formulario')
     }
     
   } catch (error) {

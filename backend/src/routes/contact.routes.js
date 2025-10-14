@@ -138,7 +138,7 @@ router.post('/', async (req, res) => {
             </ul>
 
             <div style="text-align: center; margin: 35px 0;">
-              <a href="${process.env.FRONTEND_URL || 'https://envigo.cl'}" style="display: inline-block; padding: 15px 35px; background: #84cc16; color: white; text-decoration: none; border-radius: 10px; font-weight: 600; font-size: 16px;">
+              <a href="${process.env.FRONTEND_URL || 'https://www.envigo.cl'}" style="display: inline-block; padding: 15px 35px; background: #84cc16; color: white; text-decoration: none; border-radius: 10px; font-weight: 600; font-size: 16px;">
                 Visitar enviGo
               </a>
             </div>
@@ -149,7 +149,7 @@ router.post('/', async (req, res) => {
               </p>
               <p style="font-size: 14px; color: #1f2937; margin: 0; line-height: 1.8;">
                 📧 <a href="mailto:contacto@envigo.cl" style="color: #3b82f6; text-decoration: none; font-weight: 500;">contacto@envigo.cl</a><br>
-                📞 <a href="tel:+56912345678" style="color: #3b82f6; text-decoration: none; font-weight: 500;">+56 9 1234 5678</a>
+                📞 <a href="tel:+56986147420" style="color: #3b82f6; text-decoration: none; font-weight: 500;">+56 9 8614 7420</a>
               </p>
             </div>
           </div>

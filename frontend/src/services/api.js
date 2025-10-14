@@ -1000,7 +1000,9 @@ const scanner = {
     return api.get(endpoint)
   }
 }
-
+const contact = {
+  send: (contactData) => api.post('/contact', contactData)
+}
 // ACTUALIZAR la exportación para incluir shipday
 // Exportar todos los servicios
 export const apiService = {
@@ -1022,7 +1024,8 @@ export const apiService = {
   jumpseller,
   labels,
   pickups,
-  collections
+  collections,
+  contact
 }
 
 // Exportar instancia de axios para casos especiales
