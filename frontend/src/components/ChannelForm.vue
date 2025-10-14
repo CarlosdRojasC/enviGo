@@ -50,16 +50,39 @@
           </div>
 
           <div class="form-group">
-            <label class="form-label required">URL de la Tienda (Con HTTPS)</label>
-            <input 
-              v-model="formData.store_url" 
-              type="url" 
-              class="form-input"
-              :placeholder="getUrlPlaceholder(formData.channel_type)"
-              required
-            />
-            <small class="form-help">{{ getUrlHelp(formData.channel_type) }}</small>
-          </div>
+  <!-- Para MercadoLibre: Select de países -->
+  <div v-if="formData.channel_type === 'mercadolibre'">
+    <label class="form-label required">País de MercadoLibre</label>
+    <select 
+      v-model="formData.store_url" 
+      class="form-select"
+      required
+    >
+      <option value="">Selecciona tu país</option>
+      <option value="https://mercadolibre.cl">🇨🇱 Chile</option>
+      <option value="https://mercadolibre.com.ar">🇦🇷 Argentina</option>
+      <option value="https://mercadolibre.com.mx">🇲🇽 México</option>
+      <option value="https://mercadolivre.com.br">🇧🇷 Brasil</option>
+      <option value="https://mercadolibre.com.co">🇨🇴 Colombia</option>
+      <option value="https://mercadolibre.com.pe">🇵🇪 Perú</option>
+      <option value="https://mercadolibre.com.uy">🇺🇾 Uruguay</option>
+    </select>
+    <small class="form-help">Selecciona el país donde tienes tu cuenta de MercadoLibre</small>
+  </div>
+
+  <!-- Para otros canales: Input de texto -->
+  <div v-else>
+    <label class="form-label required">URL de la Tienda (Con HTTPS)</label>
+    <input 
+      v-model="formData.store_url" 
+      type="url" 
+      class="form-input"
+      :placeholder="getUrlPlaceholder(formData.channel_type)"
+      required
+    />
+    <small class="form-help">{{ getUrlHelp(formData.channel_type) }}</small>
+  </div>
+</div>
         </div>
 
         <!-- Credenciales específicas por tipo -->
@@ -330,13 +353,21 @@ const validateFormData = computed(() => {
   }
   
   // Validaciones específicas por tipo de canal
-  if (formData.value.channel_type === 'mercadolibre') {
-    // Validar que sea una URL de MercadoLibre válida
-    const mlUrlPattern = /^https?:\/\/(www\.)?(mercadolibre|mercadolivre)\.(com|com\.ar|com\.mx|cl|com\.co|com\.pe|com\.uy|com\.ve|com\.br)/i;
-    
-    if (!mlUrlPattern.test(formData.value.store_url)) {
-      errors.push('La URL debe ser un sitio válido de MercadoLibre (ej: https://mercadolibre.com.mx)');
-    }
+if (formData.value.channel_type === 'mercadolibre') {
+  // Para ML, validar que sea una URL válida del select
+  const validMLUrls = [
+    'https://mercadolibre.cl',
+    'https://mercadolibre.com.ar',
+    'https://mercadolibre.com.mx',
+    'https://mercadolivre.com.br',
+    'https://mercadolibre.com.co',
+    'https://mercadolibre.com.pe',
+    'https://mercadolibre.com.uy'
+  ];
+  
+  if (!validMLUrls.includes(formData.value.store_url)) {
+    errors.push('Debes seleccionar un país de MercadoLibre válido');
+  }
     
     // Para ML no necesitamos validar credenciales
   } else {
@@ -367,7 +398,6 @@ function getUrlPlaceholder(type) {
   const placeholders = {
     shopify: 'https://mi-tienda.myshopify.com',
     woocommerce: 'https://mi-tienda.com',
-    mercadolibre: 'https://mercadolibre.cl (o .com.ar, .cl, etc.)'
   }
   return placeholders[type] || 'https://mi-tienda.com'
 }
@@ -376,7 +406,6 @@ function getUrlHelp(type) {
   const helps = {
     shopify: 'URL completa de tu tienda Shopify',
     woocommerce: 'URL base de tu sitio WordPress con WooCommerce',
-    mercadolibre: 'URL del sitio de MercadoLibre de tu país'
   }
   return helps[type] || 'URL de tu tienda online'
 }
