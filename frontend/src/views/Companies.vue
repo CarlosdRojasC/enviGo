@@ -50,7 +50,7 @@
         <div class="flex items-center justify-between">
           <div>
             <p class="text-sm text-gray-500">Pedidos del Mes</p>
-            <p class="text-3xl font-bold text-blue-600">{{ formatNumber(totalOrders) }}</p>
+            <p class="text-3xl font-bold text-blue-600">{{ formatNumber(totalMonthlyOrders) }}</p>
           </div>
           <div class="bg-blue-100 p-3 rounded-full">
             <span class="material-icons text-blue-600">local_shipping</span>
@@ -722,13 +722,14 @@ export default {
     })
 
     const totalMonthlyOrders = computed(() => {
-      return companies.value.reduce((sum, c) => sum + (c.orders_this_month || 0), 0)
-    })
+  return companies.value.reduce((sum, c) => sum + (c.orders_this_month || c.monthlyOrders || 0), 0)
+})
 
     const totalRevenue = computed(() => {
-      // Usar monthly_revenue del backend
-      return companies.value.reduce((sum, c) => sum + (c.monthly_revenue || 0), 0)
-    })
+  // Usa revenue o monthlyRevenue del backend
+  return companies.value.reduce((sum, c) => sum + (c.revenue || c.monthlyRevenue || 0), 0)
+})
+
 
     const filteredCompanies = computed(() => {
       let result = [...companies.value]
@@ -1058,9 +1059,12 @@ export default {
     }
 
     const calculateMonthlyRevenue = (company) => {
-      // Usar monthly_revenue del backend si existe, si no calcular
-      return company.monthly_revenue || ((company.orders_this_month || 0) * (company.price_per_order || 0))
-    }
+  return (
+    company.revenue ||
+    company.monthlyRevenue ||
+    ((company.orders_this_month || company.monthlyOrders || 0) * (company.price_per_order || 0))
+  )
+}
 
     const getBaseRevenue = (company) => {
       return company.monthly_revenue || 0
