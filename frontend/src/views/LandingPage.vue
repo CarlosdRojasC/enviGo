@@ -826,7 +826,7 @@
               </li>
               <li class="flex items-center gap-2">
                 <span>📞</span>
-                <a href="tel:+56912345678" class="hover:text-lime-400 transition-colors">+56 9 1234 5678</a>
+                <a href="tel:+56986147420" class="hover:text-lime-400 transition-colors">+56 9 8614 7420</a>
               </li>
               <li class="flex items-center gap-2">
                 <span>📍</span>
