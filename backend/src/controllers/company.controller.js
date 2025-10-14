@@ -7,37 +7,76 @@ const Channel = require('../models/Channel'); // si no existe, crea uno básico
 
 class CompanyController {
   // Listar todas las empresas (admin)
-  async getAll(req, res) {
-    try {
-      if (req.user.role !== 'admin') {
-        return res.status(403).json({ error: ERRORS.FORBIDDEN });
-      }
-
-      // Traer todas las empresas
-      const companies = await Company.find({}).lean();
-
-      // Para cada empresa obtenemos los conteos (channels activos, orders y usuarios activos)
-      const companiesWithCounts = await Promise.all(
-        companies.map(async (company) => {
-          const channels_count = await Channel.countDocuments({ company_id: company._id, is_active: true });
-          const orders_count = await Order.countDocuments({ company_id: company._id });
-          const users_count = await User.countDocuments({ company_id: company._id, is_active: true });
-
-          return {
-            ...company,
-            channels_count,
-            orders_count,
-            users_count
-          };
-        })
-      );
-
-      res.json(companiesWithCounts);
-    } catch (error) {
-      console.error('Error obteniendo empresas:', error);
-      res.status(500).json({ error: ERRORS.SERVER_ERROR });
+async getAll(req, res) {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ error: ERRORS.FORBIDDEN });
     }
+
+    console.log('🏢 BACKEND: Cargando empresas con métricas mensuales...');
+
+    // Traer todas las empresas base
+    const companies = await Company.find({}).lean();
+
+    // Fecha de inicio y fin de mes actual
+    const now = new Date();
+    const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const nextMonthStart = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+
+    // Agregación: pedidos del mes y revenue por empresa
+    const monthlyStats = await Order.aggregate([
+      {
+        $match: {
+          order_date: { $gte: thisMonthStart, $lt: nextMonthStart },
+          status: { $in: ['delivered', 'invoiced'] }
+        }
+      },
+      {
+        $group: {
+          _id: '$company_id',
+          orders_this_month: { $sum: 1 },
+          revenue: { $sum: { $ifNull: ['$delivery_cost', 2500] } }
+        }
+      }
+    ]);
+
+    // Convertir la agregación a un mapa rápido
+    const statsMap = {};
+    monthlyStats.forEach(stat => {
+      statsMap[stat._id.toString()] = {
+        orders_this_month: stat.orders_this_month,
+        revenue: stat.revenue
+      };
+    });
+
+    // Calcular conteos y fusionar métricas
+    const companiesWithCounts = await Promise.all(
+      companies.map(async (company) => {
+        const channels_count = await Channel.countDocuments({ company_id: company._id, is_active: true });
+        const orders_count = await Order.countDocuments({ company_id: company._id });
+        const users_count = await User.countDocuments({ company_id: company._id, is_active: true });
+
+        const metrics = statsMap[company._id.toString()] || { orders_this_month: 0, revenue: 0 };
+
+        return {
+          ...company,
+          channels_count,
+          orders_count,
+          users_count,
+          orders_this_month: metrics.orders_this_month,
+          monthlyRevenue: metrics.revenue,
+          revenue: metrics.revenue // alias por compatibilidad frontend
+        };
+      })
+    );
+
+    console.log(`✅ BACKEND: ${companiesWithCounts.length} empresas retornadas con métricas`);
+    res.json(companiesWithCounts);
+  } catch (error) {
+    console.error('❌ Error obteniendo empresas con métricas:', error);
+    res.status(500).json({ error: ERRORS.SERVER_ERROR });
   }
+}
 
   // Obtener una empresa específica
   async getById(req, res) {
