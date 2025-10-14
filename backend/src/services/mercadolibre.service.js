@@ -567,36 +567,32 @@ static async processWebhook(channelId, webhookData) {
 static async createOrderFromApiData(fullOrder, channel, accessToken) {
   const shippingInfo = await this.getShippingInfo(fullOrder, accessToken);
 
-  // ✅ Usar shipping.id como identificador principal (mismo que el QR de la etiqueta)
+  // 🆕 Identificadores claros
+  const orderId = fullOrder.id?.toString();
+  const packId = fullOrder.pack_id?.toString();
   const shippingId = fullOrder.shipping?.id?.toString();
 
-  // 🚨 Fallback: si no hay shipping.id (casos raros)
-  const uniqueOrderId = shippingId || fullOrder.id?.toString() || fullOrder.pack_id?.toString();
-
-  if (!uniqueOrderId) {
-    console.warn(`⚠️ [ML Order] Pedido ${fullOrder.id} sin identificador válido (sin shipping.id, order.id o pack_id). Se omite.`);
+  // ✅ El external_order_id será el order_id o pack_id (prioridad a order_id)
+  const externalOrderId = orderId || packId;
+  if (!externalOrderId) {
+    console.warn(`⚠️ [ML Order] Pedido ${fullOrder.id} sin order_id ni pack_id, se omite.`);
     return null;
   }
 
-  // ✅ Calcular monto total sumando ítems
+  // 🧾 Datos de ítems y totales
   const items = (fullOrder.order_items || []).map(i => ({
     title: i.item.title,
     quantity: i.quantity,
     price: i.unit_price,
     subtotal: i.full_unit_price * i.quantity || (i.unit_price * i.quantity),
-    currency: fullOrder.currency_id
+    currency: fullOrder.currency_id,
   }));
-
   const totalAmount = items.reduce((sum, it) => sum + it.subtotal, 0);
 
-  // ✅ Verificar si ya existe un pedido con este shipping.id
-  let order = await Order.findOne({
-    channel_id: channel._id,
-    external_order_id: uniqueOrderId
-  });
-
+  // 🚀 Buscar o crear pedido
+  let order = await Order.findOne({ channel_id: channel._id, external_order_id: externalOrderId });
   if (order) {
-    console.log(`🔄 [ML Order] Actualizando pedido existente con envío ${uniqueOrderId}`);
+    console.log(`🔄 [ML Order] Actualizando pedido existente con order_id ${externalOrderId}`);
     order.total_amount = totalAmount;
     order.items = items;
     order.status = this.mapOrderStatus(fullOrder);
@@ -606,22 +602,23 @@ static async createOrderFromApiData(fullOrder, channel, accessToken) {
     order.shipping_state = shippingInfo.state;
     order.shipping_zip = shippingInfo.zip_code;
     order.customer_phone = shippingInfo.phone;
+    order.ml_shipping_id = shippingId; // 🆕 guardamos shipping_id para mostrarlo en la tabla
     await order.save();
     return order;
   }
 
-  // ✅ Si no existe, crear nuevo pedido usando shipping.id como clave
-  const newOrderData = {
+  // 🆕 Crear pedido nuevo
+  const newOrder = new Order({
     company_id: channel.company_id,
     channel_id: channel._id,
-    external_order_id: uniqueOrderId,  // 👈 shipping.id como identificador principal
-    order_number: uniqueOrderId,
+    external_order_id: externalOrderId, // 👈 será order_id o pack_id
+    ml_shipping_id: shippingId,         // 👈 campo auxiliar visible
+    order_number: shippingId || externalOrderId,
     customer_name: `${fullOrder.buyer.first_name} ${fullOrder.buyer.last_name}`.trim(),
     customer_email: fullOrder.buyer.email,
     customer_phone: shippingInfo.phone,
     customer_document: fullOrder.buyer.billing_info?.doc_number || '',
     shipping_address: shippingInfo.address,
-    shipping_commune: shippingInfo.city,
     shipping_city: shippingInfo.city,
     shipping_state: shippingInfo.state,
     shipping_zip: shippingInfo.zip_code,
@@ -633,12 +630,13 @@ static async createOrderFromApiData(fullOrder, channel, accessToken) {
     items,
     raw_data: fullOrder,
     notes: `Comprador: ${fullOrder.buyer.nickname} | Envío ID: ${shippingId || 'N/A'} | Orden Original: ${fullOrder.id} | Pack: ${fullOrder.pack_id || 'N/A'}`,
-  };
+  });
 
-  const newOrder = await new Order(newOrderData).save();
-  console.log(`➕ [ML Order] Pedido nuevo creado con envío ${uniqueOrderId}`);
+  await newOrder.save();
+  console.log(`🆕 [ML Order] Pedido nuevo creado con order_id ${externalOrderId} (shipping ${shippingId})`);
   return newOrder;
 }
+
 
 
   /**
@@ -664,58 +662,34 @@ static async createOrderFromApiData(fullOrder, channel, accessToken) {
       return { address: 'Error al obtener dirección' };
     }
   }
-static async getShippingLabel(orderId, channelId) {
+static async getShippingLabel(externalOrderId, channelId) {
   console.log('🟢 [ML Service] Iniciando getShippingLabel');
-  console.log('➡️ Recibido:', { orderId, channelId });
-
-  // 1️⃣ Buscar el canal
   const channel = await Channel.findById(channelId);
-  if (!channel) {
-    throw new Error(`Canal ${channelId} no encontrado en BD`);
-  }
-  console.log('✅ Canal encontrado:', { name: channel.name, _id: channel._id });
+  if (!channel) throw new Error(`Canal ${channelId} no encontrado`);
 
-  // 2️⃣ Obtener access token válido
   const accessToken = await this.getAccessToken(channel);
-  console.log('🔑 Token obtenido OK (longitud):', accessToken.length);
 
-  // 3️⃣ Consultar la orden en ML para obtener el shipmentId
-  console.log(`📡 Consultando ML /orders/${orderId}`);
-  let orderResponse;
   try {
-    orderResponse = await axios.get(
-      `${this.API_BASE_URL}/orders/${orderId}`,
+    // 🚀 Consultar la orden para obtener el shipmentId correcto
+    const orderResponse = await axios.get(
+      `${this.API_BASE_URL}/orders/${externalOrderId}`,
       { headers: { Authorization: `Bearer ${accessToken}` } }
     );
-  } catch (err) {
-    console.error('❌ Error consultando orden en ML:', err.response?.data || err.message);
-    throw new Error(`ML no reconoce la orden ${orderId}: ${JSON.stringify(err.response?.data)}`);
-  }
 
-  console.log('📦 Respuesta de ML /orders:', {
-    id: orderResponse.data.id,
-    status: orderResponse.data.status,
-    shipping: orderResponse.data.shipping
-  });
+    const shipmentId = orderResponse.data.shipping?.id;
+    if (!shipmentId) throw new Error(`⚠️ No se encontró shipment para la orden ${externalOrderId}`);
 
-  const shipmentId = orderResponse.data.shipping?.id;
-  if (!shipmentId) {
-    throw new Error(`⚠️ No se encontró shipment para la orden ${orderId}`);
-  }
-  console.log('✅ shipmentId obtenido:', shipmentId);
-
-  // 4️⃣ Pedir la etiqueta PDF usando el shipmentId
-  try {
-    console.log(`📡 Solicitando etiqueta ML /shipments/${shipmentId}/labels`);
+    console.log(`📦 [ML Service] Etiqueta solicitada para shipment ${shipmentId}`);
     return await axios({
       method: 'GET',
       url: `${this.API_BASE_URL}/shipments/${shipmentId}/labels`,
       headers: { Authorization: `Bearer ${accessToken}` },
-      responseType: 'stream'
+      responseType: 'stream',
     });
+
   } catch (err) {
-    console.error('❌ Error obteniendo etiqueta de shipment:', err.response?.data || err.message);
-    throw new Error(`ML no devolvió la etiqueta para shipment ${shipmentId}: ${JSON.stringify(err.response?.data)}`);
+    console.error('❌ [ML Service] Error obteniendo etiqueta:', err.response?.data || err.message);
+    throw new Error(`ML no devolvió la etiqueta: ${JSON.stringify(err.response?.data)}`);
   }
 }
 
