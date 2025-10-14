@@ -440,11 +440,6 @@ async function handleLogout() {
   try {
     await auth.logout()
     
-    // Limpiar todos los caches
-    notificationsCache.clear()
-    statsCache.clear()
-    searchCache.clear()
-    
     router.push('/login')
     toast.success('Sesión cerrada correctamente')
   } catch (error) {
