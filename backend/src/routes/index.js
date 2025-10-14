@@ -26,6 +26,7 @@ const pickupRoutes = require('./pickup.routes');
 const driverScannerRoutes = require('./driver-scanner.routes');
 const collectionRoutes = require('./collection.routes');
 const sessionsRoutes = require('./sessions.routes');
+const contactRoutes = require('./contact.routes');
 
 // ==================== USAR RUTAS MODULARES ====================
 // Rutas de autenticación (login, registro, perfil, etc.)
@@ -67,6 +68,7 @@ router.use('/pickups', pickupRoutes);
 
 router.use('/driver-scanner', driverScannerRoutes);
 router.use('/collections', collectionRoutes);
+router.use('/contact', contactRoutes);
 
 
 module.exports = router;

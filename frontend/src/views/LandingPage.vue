@@ -140,7 +140,7 @@
 
       <!-- Stat 4 -->
       <div class="text-center bg-gradient-to-br from-orange-50 to-yellow-50 rounded-2xl p-8 border-2 border-orange-200 hover:shadow-xl transition-all">
-        <div class="text-5xl font-extrabold text-orange-600 mb-3">&lt;2h</div>
+        <div class="text-5xl font-extrabold text-orange-600 mb-3">&lt;6h</div>
         <div class="text-sm font-semibold text-gray-700 uppercase tracking-wide">Tiempo Promedio</div>
         <div class="text-xs text-gray-500 mt-2">Desde retiro hasta entrega</div>
       </div>
@@ -151,7 +151,6 @@
       <div class="flex items-center gap-3 bg-gray-50 px-6 py-4 rounded-xl border border-gray-200">
         <span class="text-3xl">🛡️</span>
         <div class="text-left">
-          <div class="font-bold text-gray-900">Partner Oficial</div>
           <div class="text-sm text-gray-600">Mercado Libre Flex</div>
         </div>
       </div>
@@ -189,7 +188,6 @@
               <div class="w-16 h-16 bg-yellow-400 rounded-2xl flex items-center justify-center text-3xl shadow-lg">🏪</div>
               <div>
                 <h3 class="text-2xl font-bold text-gray-900">Mercado Libre Flex</h3>
-                <p class="text-yellow-700 font-semibold">Partner Oficial</p>
               </div>
             </div>
             <p class="text-gray-700 mb-6 leading-relaxed">
@@ -598,7 +596,7 @@
           v-show="openFaq === 2"
           class="px-8 pb-6 text-gray-600 leading-relaxed"
         >
-          Por ahora, nuestro servicio opera de <strong>lunes a viernes</strong> en horario hábil (9:00 - 19:00). Los pedidos del viernes se entregan ese mismo día. Estamos evaluando ampliar a sábados según la demanda de nuestros clientes.
+          Por ahora, nuestro servicio opera de <strong>lunes a sábado</strong> en horario de 9:00 - 21:00. Los pedidos del sábado se entregan ese mismo día. Estamos evaluando ampliar a domingos según la demanda de nuestros clientes.
         </div>
       </div>
 
@@ -648,7 +646,7 @@
           v-show="openFaq === 4"
           class="px-8 pb-6 text-gray-600 leading-relaxed"
         >
-          Nuestro conductor <strong>contacta al cliente antes de llegar</strong> mediante llamada o WhatsApp. Si no está, intentamos coordinar un horario alternativo el mismo día. En caso de no poder entregar, se coordina la entrega para el siguiente día hábil <strong>sin costo adicional</strong> (primer reintento incluido).
+          Nuestro conductor <strong>contacta al cliente antes de llegar</strong> mediante llamada o WhatsApp. Si no está, intentamos coordinar un horario para el día siguiente. En caso de no poder entregar, se coordina la entrega para el siguiente día hábil <strong>sin costo adicional</strong> (primer reintento incluido).
         </div>
       </div>
 
@@ -698,7 +696,7 @@
           v-show="openFaq === 6"
           class="px-8 pb-6 text-gray-600 leading-relaxed"
         >
-          El <strong>primer intento está incluido</strong> en el precio de $2.500. Si se requiere un segundo intento porque el cliente no coordinó o no estaba disponible, se cobra $1.500 adicionales. Por eso es importante que tus clientes estén atentos al tracking GPS y a las notificaciones.
+          El <strong>primer y segundo intento están incluido</strong> en el precio de $2.500. Si se requiere un segundo intento porque el cliente no coordinó o no estaba disponible, se cobra $1.500 adicionales. Por eso es importante que tus clientes estén atentos al tracking GPS y a las notificaciones.
         </div>
       </div>
 
@@ -786,9 +784,9 @@
               <span>✉️</span>
               <span>contacto@envigo.cl</span>
             </a>
-            <a href="tel:+56912345678" class="px-6 py-3 bg-white/10 backdrop-blur-sm text-white rounded-xl font-semibold border-2 border-white/30 hover:bg-white/20 transition-all flex items-center space-x-2">
+            <a href="tel:+56986147420" class="px-6 py-3 bg-white/10 backdrop-blur-sm text-white rounded-xl font-semibold border-2 border-white/30 hover:bg-white/20 transition-all flex items-center space-x-2">
               <span>📞</span>
-              <span>+56 9 1234 5678</span>
+              <span>+56 9 8614 7420</span>
             </a>
           </div>
         </div>
@@ -853,6 +851,7 @@ import { ref, onMounted, onUnmounted } from 'vue'
 // ==================== STATE ====================
 const mobileMenuOpen = ref(false)
 const openFaq = ref(null)
+const isSubmitting = ref(false)
 
 
 // ==================== CONTACT FORM ====================
@@ -892,29 +891,41 @@ const mobileScrollTo = (elementId) => {
 
 // Manejar envío del formulario
 const handleSubmit = async () => {
+  if (isSubmitting.value) return
+  
   try {
-    console.log('Formulario enviado:', contactForm.value)
+    isSubmitting.value = true
     
-    // Aquí integrar con tu backend
-    // const response = await fetch('/api/contact', {
-    //   method: 'POST',
-    //   headers: { 'Content-Type': 'application/json' },
-    //   body: JSON.stringify(contactForm.value)
-    // })
-    
-    alert('¡Gracias! Hemos recibido tu solicitud. Te contactaremos pronto.')
-    
-    // Limpiar formulario
-    contactForm.value = {
-      name: '',
-      email: '',
-      company: '',
-      phone: '',
-      monthlyOrders: '',
+    const response = await fetch('/api/contact', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(contactForm.value)
+    })
+
+    const data = await response.json()
+
+    if (response.ok && data.success) {
+      alert('✅ ¡Gracias! Hemos recibido tu solicitud. Te contactaremos en las próximas 24 horas.')
+      
+      // Limpiar formulario
+      contactForm.value = {
+        name: '',
+        email: '',
+        company: '',
+        phone: '',
+        monthlyOrders: '',
+      }
+    } else {
+      throw new Error(data.error || 'Error al enviar el formulario')
     }
+    
   } catch (error) {
-    console.error('Error:', error)
-    alert('Hubo un error. Por favor intenta nuevamente.')
+    console.error('❌ Error:', error)
+    alert('❌ Hubo un error al enviar el formulario. Por favor intenta nuevamente.')
+  } finally {
+    isSubmitting.value = false
   }
 }
 
