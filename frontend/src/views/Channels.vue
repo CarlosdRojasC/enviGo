@@ -1,64 +1,91 @@
 <template>
-  <div class="channels-page">
-    <!-- Header con estadísticas y acciones -->
-    <div class="page-header">
-      <div class="header-content">
-        <div class="title-section">
-          <h1 class="page-title">
-            <span class="title-icon">📡</span>
+  <div class="min-h-screen bg-gray-50 p-6">
+    <!-- ========== HEADER ========== -->
+    <div class="mb-8">
+      <div class="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-6 mb-6">
+        <!-- Título -->
+        <div>
+          <h1 class="text-3xl font-bold text-gray-900 flex items-center gap-3">
+            <span class="text-4xl">📡</span>
             {{ isAdmin ? 'Canales de Venta (Admin)' : 'Mis Canales de Venta' }}
           </h1>
-          <p class="page-subtitle">
+          <p class="mt-2 text-gray-600">
             {{ isAdmin 
               ? 'Gestiona las integraciones de todas las empresas' 
               : 'Gestiona tus integraciones con plataformas de e-commerce' 
             }}
           </p>
         </div>
-        
-        <!-- Estadísticas rápidas -->
-        <div class="quick-stats">
-          <div class="stat-card">
-            <div class="stat-icon">🔗</div>
-            <div class="stat-content">
-              <div class="stat-number">{{ channels.length }}</div>
-              <div class="stat-label">Canales Activos</div>
+
+        <!-- Botones -->
+        <div class="flex gap-3">
+          <button
+            @click="refreshChannels"
+            :disabled="isRefreshing"
+            class="inline-flex items-center px-4 py-2 bg-white border border-gray-300 rounded-lg shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 transition-colors"
+          >
+            <span class="text-lg mr-2 transition-transform" :class="{ 'animate-spin': isRefreshing }">{{ isRefreshing ? '⏳' : '🔄' }}</span>
+            {{ isRefreshing ? 'Actualizando...' : 'Actualizar' }}
+          </button>
+          
+          <button
+            v-if="canAddChannel"
+            @click="openAddChannelModal"
+            class="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg shadow-sm hover:bg-blue-700 transition-colors"
+          >
+            <span class="text-lg mr-2">+</span>
+            Agregar Canal
+          </button>
+        </div>
+      </div>
+
+      <!-- Estadísticas -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <div class="flex items-center gap-4">
+            <div class="flex-shrink-0 w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center text-2xl">🔗</div>
+            <div>
+              <p class="text-2xl font-bold text-gray-900">{{ channels.length }}</p>
+              <p class="text-sm text-gray-600">Canales Activos</p>
             </div>
           </div>
-          <div class="stat-card">
-            <div class="stat-icon">📦</div>
-            <div class="stat-content">
-              <div class="stat-number">{{ totalOrders }}</div>
-              <div class="stat-label">Pedidos Totales</div>
+        </div>
+
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <div class="flex items-center gap-4">
+            <div class="flex-shrink-0 w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center text-2xl">📦</div>
+            <div>
+              <p class="text-2xl font-bold text-gray-900">{{ totalOrders }}</p>
+              <p class="text-sm text-gray-600">Pedidos Totales</p>
             </div>
           </div>
-          <div class="stat-card">
-            <div class="stat-icon">💰</div>
-            <div class="stat-content">
-              <div class="stat-number">${{ formatCurrency(totalRevenue) }}</div>
-              <div class="stat-label">Ingresos Totales</div>
+        </div>
+
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <div class="flex items-center gap-4">
+            <div class="flex-shrink-0 w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center text-2xl">💰</div>
+            <div>
+              <p class="text-2xl font-bold text-gray-900">${{ formatCurrency(totalRevenue) }}</p>
+              <p class="text-sm text-gray-600">Ingresos Totales</p>
             </div>
           </div>
         </div>
       </div>
 
-      <!-- Filtros y acciones -->
-      <div class="header-actions">
-        <div class="filters-section">
-          <!-- Filtro por empresa (solo admin) -->
-          <div v-if="isAdmin" class="filter-group">
-            <label class="filter-label">Empresa:</label>
-            <select v-model="selectedCompanyId" @change="fetchChannels" class="filter-select">
+      <!-- Filtros -->
+      <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div v-if="isAdmin">
+            <label class="block text-sm font-medium text-gray-700 mb-2">Empresa</label>
+            <select v-model="selectedCompanyId" @change="fetchChannels" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
               <option value="">Todas las empresas</option>
-              <option v-for="company in companies" :key="company._id" :value="company._id">
-                {{ company.name }}
-              </option>
+              <option v-for="company in companies" :key="company._id" :value="company._id">{{ company.name }}</option>
             </select>
           </div>
-          
-          <div class="filter-group">
-            <label class="filter-label">Tipo:</label>
-            <select v-model="filterType" class="filter-select">
+
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">Tipo</label>
+            <select v-model="filterType" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
               <option value="">Todos los tipos</option>
               <option value="shopify">Shopify</option>
               <option value="woocommerce">WooCommerce</option>
@@ -67,10 +94,10 @@
               <option value="jumpseller">Jumpseller</option>
             </select>
           </div>
-          
-          <div class="filter-group">
-            <label class="filter-label">Estado:</label>
-            <select v-model="filterStatus" class="filter-select">
+
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">Estado</label>
+            <select v-model="filterStatus" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
               <option value="">Todos</option>
               <option value="active">Activos</option>
               <option value="sync_issues">Con problemas</option>
@@ -78,177 +105,213 @@
             </select>
           </div>
 
-          <button @click="refreshChannels" class="refresh-btn" :disabled="isRefreshing">
-            <span class="btn-icon">{{ isRefreshing ? '⏳' : '🔄' }}</span>
-            {{ isRefreshing ? 'Actualizando...' : 'Actualizar' }}
-          </button>
+          <div class="flex items-end">
+            <button
+              v-if="filterType || filterStatus || selectedCompanyId"
+              @click="clearFilters"
+              class="w-full px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm font-medium"
+            >
+              🔄 Limpiar Filtros
+            </button>
+          </div>
         </div>
-
-        <button 
-          v-if="canAddChannel" 
-          @click="openAddChannelModal" 
-          class="add-channel-btn primary"
-        >
-          <span class="btn-icon">+</span>
-          Agregar Canal
-        </button>
       </div>
     </div>
 
-    <!-- Loading state -->
-    <div v-if="loading" class="loading-container">
-      <div class="loading-spinner"></div>
-      <p>Cargando canales...</p>
+    <!-- ========== LOADING ========== -->
+    <div v-if="loading" class="flex items-center justify-center py-12">
+      <div class="flex flex-col items-center gap-3">
+        <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+        <p class="text-gray-600">Cargando canales...</p>
+      </div>
     </div>
-    <!-- Contenido principal -->
-    <div v-else class="channels-container">
-      <!-- Vista de grid -->
-      <div class="channels-grid">
-        <div 
-          v-for="channel in filteredChannels" 
-          :key="channel._id" 
-          class="channel-card"
-          :class="getChannelCardClass(channel)"
-        >
-          <!-- Header del canal -->
-          <div class="channel-header">
-            <div class="channel-info">
-              <div class="channel-type-badge" :class="channel.channel_type">
+
+    <!-- ========== EMPTY STATE ========== -->
+    <div v-else-if="filteredChannels.length === 0" class="text-center py-12">
+      <div class="inline-flex items-center justify-center w-20 h-20 bg-gray-100 rounded-full mb-4">
+        <span class="text-4xl">📡</span>
+      </div>
+      <h3 class="text-xl font-semibold text-gray-900 mb-2">
+        {{ channels.length === 0 ? 'No hay canales configurados' : 'No hay canales que coincidan' }}
+      </h3>
+      <p class="text-gray-600 mb-6 max-w-md mx-auto">
+        {{ channels.length === 0 
+          ? 'Conecta tu primera plataforma de e-commerce para comenzar a sincronizar pedidos automáticamente.'
+          : 'Intenta ajustar los filtros para ver más canales.'
+        }}
+      </p>
+      <button
+        v-if="canAddChannel && channels.length === 0"
+        @click="openAddChannelModal"
+        class="inline-flex items-center px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+      >
+        <span class="text-lg mr-2">+</span>
+        Agregar Primer Canal
+      </button>
+      <button
+        v-else-if="channels.length > 0"
+        @click="clearFilters"
+        class="inline-flex items-center px-6 py-3 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors font-medium"
+      >
+        <span class="text-lg mr-2">🔄</span>
+        Limpiar Filtros
+      </button>
+    </div>
+
+    <!-- ========== GRID DE CANALES ========== -->
+    <div v-else class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+      <div
+        v-for="channel in filteredChannels"
+        :key="channel._id"
+        class="bg-white rounded-xl shadow-sm hover:shadow-lg transition-all duration-300 border-2 overflow-hidden group"
+        :class="{
+          'border-green-500': getChannelStatus(channel) === 'active',
+          'border-yellow-500': getChannelStatus(channel) === 'sync_issues',
+          'border-red-500': getChannelStatus(channel) === 'needs_sync'
+        }"
+      >
+        <!-- Header -->
+        <div class="p-6 border-b border-gray-100">
+          <div class="flex items-start justify-between mb-4">
+            <div class="flex items-center gap-3">
+              <div class="flex-shrink-0 w-12 h-12 bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg flex items-center justify-center text-2xl">
                 {{ getChannelIcon(channel.channel_type) }}
-                {{ getChannelTypeName(channel.channel_type) }}
               </div>
-              <h3 class="channel-name">{{ channel.channel_name }}</h3>
-              <p class="channel-url">{{ channel.store_url }}</p>
-              <!-- Empresa (solo para admin) -->
-              <p v-if="isAdmin && channel.company_name" class="channel-company">
-                🏢 {{ channel.company_name }}
-              </p>
+              <div>
+                <h3 class="text-lg font-semibold text-gray-900 group-hover:text-blue-600 transition-colors">
+                  {{ channel.channel_name }}
+                </h3>
+                <p class="text-sm text-gray-500">{{ getChannelTypeName(channel.channel_type) }}</p>
+              </div>
             </div>
-            
-            <div class="channel-status">
-              <div class="status-indicator" :class="getChannelStatus(channel)"></div>
-              <span class="status-text">{{ getChannelStatusText(channel) }}</span>
-            </div>
-          </div>
 
-          <!-- Métricas del canal -->
-          <div class="channel-metrics">
-            <div class="metric">
-              <span class="metric-label">Pedidos</span>
-              <span class="metric-value">{{ channel.total_orders || 0 }}</span>
-            </div>
-            <div class="metric">
-              <span class="metric-label">Último pedido</span>
-              <span class="metric-value">{{ formatDate(channel.last_order_date) }}</span>
-            </div>
-            <div class="metric">
-              <span class="metric-label">Ingresos</span>
-              <span class="metric-value">${{ formatCurrency(channel.total_revenue || 0) }}</span>
-            </div>
-          </div>
-
-          <!-- Información de sincronización -->
-          <div class="sync-info">
-            <div class="sync-status" :class="getSyncStatusClass(channel)">
-              <span class="sync-icon">{{ getSyncIcon(channel) }}</span>
-              <span class="sync-text">{{ getSyncStatusText(channel) }}</span>
-            </div>
-            <div class="sync-details">
-              <small>Última sync: {{ formatDate(channel.last_sync_at) }}</small>
-            </div>
-          </div>
-
-          <!-- Acciones del canal -->
-          <div class="channel-actions">
-            <button 
-              @click="syncChannel(channel._id)" 
-              :disabled="syncingChannels.includes(channel._id)"
-              class="action-btn sync"
-              :title="'Sincronizar pedidos de ' + channel.channel_name"
+            <span
+              class="px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap"
+              :class="{
+                'bg-green-100 text-green-700': getChannelStatus(channel) === 'active',
+                'bg-yellow-100 text-yellow-700': getChannelStatus(channel) === 'sync_issues',
+                'bg-red-100 text-red-700': getChannelStatus(channel) === 'needs_sync'
+              }"
             >
-              <span class="btn-icon">{{ syncingChannels.includes(channel._id) ? '⏳' : '🔄' }}</span>
+              {{ getChannelStatusText(channel) }}
+            </span>
+          </div>
+
+          <div v-if="isAdmin && channel.company_name" class="mt-2">
+            <span class="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-medium bg-purple-100 text-purple-700">
+              🏢 {{ channel.company_name }}
+            </span>
+          </div>
+        </div>
+
+        <!-- Body -->
+        <div class="p-6 space-y-4">
+          <div class="flex items-start gap-2">
+            <svg class="w-5 h-5 text-gray-400 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+            </svg>
+            <div class="flex-1 min-w-0">
+              <p class="text-xs text-gray-500 mb-1">URL de la tienda</p>
+              <a :href="channel.store_url" target="_blank" class="text-sm text-blue-600 hover:text-blue-800 truncate block hover:underline">
+                {{ channel.store_url }}
+              </a>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-3 gap-3 pt-3 border-t border-gray-100">
+            <div class="text-center">
+              <p class="text-xs text-gray-500 mb-1">Pedidos</p>
+              <p class="text-lg font-semibold text-gray-900">{{ channel.total_orders || 0 }}</p>
+            </div>
+            <div class="text-center">
+              <p class="text-xs text-gray-500 mb-1">Ingresos</p>
+              <p class="text-sm font-semibold text-gray-900">${{ formatCurrency(channel.total_revenue || 0) }}</p>
+            </div>
+            <div class="text-center">
+              <p class="text-xs text-gray-500 mb-1">Último</p>
+              <p class="text-xs font-medium text-gray-900">{{ formatDate(channel.last_order_date) }}</p>
+            </div>
+          </div>
+
+          <div class="pt-3 border-t border-gray-100">
+            <div class="flex items-center gap-2">
+              <span class="text-lg">{{ getSyncIcon(channel) }}</span>
+              <div>
+                <p class="text-xs text-gray-500">Última sincronización</p>
+                <p class="text-sm font-medium text-gray-900">{{ formatDate(channel.last_sync_at) }}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="px-6 py-4 bg-gray-50 border-t border-gray-100">
+          <div class="space-y-2">
+            <button
+              @click="syncChannel(channel._id)"
+              :disabled="syncingChannels.includes(channel._id)"
+              class="w-full inline-flex items-center justify-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              <span class="text-lg mr-2" :class="{ 'animate-spin': syncingChannels.includes(channel._id) }">
+                {{ syncingChannels.includes(channel._id) ? '⏳' : '🔄' }}
+              </span>
               {{ syncingChannels.includes(channel._id) ? 'Sincronizando...' : 'Sincronizar' }}
             </button>
-            
-            <!-- Botón de autorización para canales OAuth sin token -->
-            <button
-              v-if="requiresOAuth(channel.channel_type) && !channel.api_key"
-              @click="authorizeOAuthChannel(channel)"
-              class="action-btn details"
-              :title="'Autorizar este canal con ' + getChannelTypeName(channel.channel_type)"
-            >
-              <span class="btn-icon">🔗</span>
-              Autorizar
-            </button>
-            
-            <button 
-              @click="showChannelDetails(channel)" 
-              class="action-btn details"
-              :title="'Ver detalles de ' + channel.channel_name"
-            >
-              <span class="btn-icon">📊</span>
-              Detalles
-            </button>
-            
-            <button 
-              @click="confirmDeleteChannel(channel)" 
-              class="action-btn delete"
-              :title="'Eliminar ' + channel.channel_name"
-            >
-              <span class="btn-icon">🗑️</span>
-              Eliminar
-            </button>
+
+            <div class="grid grid-cols-2 gap-2">
+              <button
+                v-if="requiresOAuth(channel.channel_type) && !channel.api_key"
+                @click="authorizeOAuthChannel(channel)"
+                class="inline-flex items-center justify-center px-3 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 transition-colors"
+              >
+                <span class="text-lg mr-1">🔗</span>
+                Autorizar
+              </button>
+
+              <button
+                @click="showChannelDetails(channel)"
+                class="inline-flex items-center justify-center px-3 py-2 bg-gray-600 text-white text-sm font-medium rounded-lg hover:bg-gray-700 transition-colors"
+                :class="{ 'col-span-2': !(requiresOAuth(channel.channel_type) && !channel.api_key) }"
+              >
+                <span class="text-lg mr-1">📊</span>
+                Detalles
+              </button>
+
+              <button
+                @click="confirmDeleteChannel(channel)"
+                class="inline-flex items-center justify-center px-3 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 transition-colors"
+                :class="{ 'col-span-2': !(requiresOAuth(channel.channel_type) && !channel.api_key) }"
+              >
+                <span class="text-lg mr-1">🗑️</span>
+                Eliminar
+              </button>
+            </div>
           </div>
         </div>
-
-        <!-- Card para agregar nuevo canal -->
-        <div v-if="canAddChannel && filteredChannels.length > 0" class="add-channel-card">
-          <button @click="openAddChannelModal" class="add-channel-placeholder">
-            <div class="placeholder-icon">+</div>
-            <div class="placeholder-text">
-              <h4>Agregar Nuevo Canal</h4>
-              <p>Conecta otra plataforma de e-commerce</p>
-            </div>
-          </button>
-        </div>
       </div>
-      <!-- Estado vacío -->
-      <div v-if="filteredChannels.length === 0 && !loading" class="empty-state">
-        <div class="empty-icon">📡</div>
-        <h3 class="empty-title">
-          {{ channels.length === 0 ? 'No hay canales configurados' : 'No hay canales que coincidan con los filtros' }}
-        </h3>
-        <p class="empty-description">
-          {{ channels.length === 0 
-            ? 'Conecta tu primera plataforma de e-commerce para comenzar a sincronizar pedidos automáticamente.'
-            : 'Intenta ajustar los filtros para ver más canales.'
-          }}
-        </p>
-        <button 
-          v-if="canAddChannel && channels.length === 0" 
-          @click="openAddChannelModal" 
-          class="empty-action-btn"
-        >
-          <span class="btn-icon">+</span>
-          Agregar Primer Canal
-        </button>
-        <button 
-          v-else-if="channels.length > 0"
-          @click="clearFilters" 
-          class="empty-action-btn secondary"
-        >
-          <span class="btn-icon">🔄</span>
-          Limpiar Filtros
-        </button>
+
+      <!-- Card Agregar -->
+      <div
+        v-if="canAddChannel && filteredChannels.length > 0"
+        @click="openAddChannelModal"
+        class="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl border-2 border-dashed border-blue-300 hover:border-blue-400 transition-all cursor-pointer group"
+      >
+        <div class="h-full flex flex-col items-center justify-center p-8 text-center min-h-[400px]">
+          <div class="w-16 h-16 bg-blue-200 rounded-full flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+            <span class="text-3xl">+</span>
+          </div>
+          <h4 class="text-lg font-semibold text-blue-900 mb-2">Agregar Nuevo Canal</h4>
+          <p class="text-sm text-blue-700">Conecta otra plataforma de e-commerce</p>
+        </div>
       </div>
     </div>
 
-    <!-- Modal para agregar canal -->
+    <!-- ========== MODALES ========== -->
     <Modal v-model="showAddChannelModal" title="Agregar Nuevo Canal" width="500px">
-      <form @submit.prevent="addChannel">
-        <div class="form-group">
-          <label>Tipo de Canal:</label>
-          <select v-model="channelData.channel_type" required>
+      <form @submit.prevent="addChannel" class="space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-2">Tipo de Canal:</label>
+          <select v-model="channelData.channel_type" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
             <option value="" disabled>Seleccionar...</option>
             <option value="shopify">Shopify</option>
             <option value="woocommerce">WooCommerce</option>
@@ -259,117 +322,113 @@
         </div>
         
         <div v-if="channelData.channel_type">
-          <div class="form-group">
-            <label>Nombre del Canal:</label>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">Nombre del Canal:</label>
             <input 
               v-model="channelData.channel_name" 
               type="text" 
               required 
               :placeholder="getChannelNamePlaceholder(channelData.channel_type)"
+              class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
             >
           </div>
           
-          <div class="form-group">
-            <label>URL de la Tienda:</label>
+          <div class="mt-4">
+            <label class="block text-sm font-medium text-gray-700 mb-2">URL de la Tienda:</label>
             <input 
               v-model="channelData.store_url" 
               type="text" 
               required 
               :placeholder="getUrlPlaceholder(channelData.channel_type)"
+              class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
             >
-            <small class="form-help">{{ getUrlHelp(channelData.channel_type) }}</small>
+            <p class="mt-1 text-xs text-gray-500">{{ getUrlHelp(channelData.channel_type) }}</p>
           </div>
           
-          <!-- ✅ CAMPOS CONDICIONALES: Solo para Shopify y WooCommerce -->
-          <div v-if="!requiresOAuth(channelData.channel_type) && channelData.channel_type !== 'general_store'">
-            <div class="form-group">
-              <label>{{ getApiKeyLabel(channelData.channel_type) }}</label>
+          <div v-if="!requiresOAuth(channelData.channel_type) && channelData.channel_type !== 'general_store'" class="space-y-4 mt-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-2">{{ getApiKeyLabel(channelData.channel_type) }}</label>
               <input 
                 v-model="channelData.api_key" 
                 type="text" 
                 required
                 :placeholder="getApiKeyPlaceholder(channelData.channel_type)"
+                class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
               >
             </div>
             
-            <div class="form-group">
-              <label>{{ getApiSecretLabel(channelData.channel_type) }}</label>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-2">{{ getApiSecretLabel(channelData.channel_type) }}</label>
               <input 
                 v-model="channelData.api_secret" 
                 type="password" 
                 required
                 :placeholder="getApiSecretPlaceholder(channelData.channel_type)"
+                class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
               >
             </div>
           </div>
           
-          <!-- ✅ INFO ESPECIAL PARA OAUTH (MercadoLibre y Jumpseller) -->
-          <div v-if="requiresOAuth(channelData.channel_type)" class="oauth-info">
-            <div class="info-box">
-              <div class="info-icon">🔐</div>
-              <div class="info-content">
-                <h4>Autenticación OAuth 2.0</h4>
-                <p>{{ getOAuthDescription(channelData.channel_type) }}</p>
-                <ul>
+          <div v-if="requiresOAuth(channelData.channel_type)" class="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+            <div class="flex gap-3">
+              <span class="text-2xl">🔐</span>
+              <div>
+                <h4 class="font-semibold text-blue-900 mb-2">Autenticación OAuth 2.0</h4>
+                <p class="text-sm text-blue-800 mb-3">{{ getOAuthDescription(channelData.channel_type) }}</p>
+                <ul class="text-sm text-blue-700 space-y-1">
                   <li v-for="step in getOAuthSteps(channelData.channel_type)" :key="step">{{ step }}</li>
                 </ul>
               </div>
             </div>
           </div>
           
-          <!-- Selector de empresa para admin -->
-          <div v-if="isAdmin" class="form-group">
-            <label>Empresa:</label>
-            <select v-model="channelData.company_id" required>
+          <div v-if="isAdmin" class="mt-4">
+            <label class="block text-sm font-medium text-gray-700 mb-2">Empresa:</label>
+            <select v-model="channelData.company_id" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
               <option value="" disabled>Seleccionar empresa...</option>
-              <option v-for="company in companies" :key="company._id" :value="company._id">
-                {{ company.name }}
-              </option>
+              <option v-for="company in companies" :key="company._id" :value="company._id">{{ company.name }}</option>
             </select>
           </div>
         </div>
         
-        <div class="modal-actions">
-          <button type="button" @click="showAddChannelModal = false" class="btn-cancel">
+        <div class="flex justify-end gap-3 mt-6 pt-4 border-t">
+          <button type="button" @click="showAddChannelModal = false" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors">
             Cancelar
           </button>
           <button 
             type="submit" 
             :disabled="addingChannel || !isFormValid" 
-            class="btn-save"
-            :class="{ 'btn-oauth': requiresOAuth(channelData.channel_type) }"
+            class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
           >
             {{ getButtonText() }}
           </button>
         </div>
       </form>
     </Modal>
-    <!-- Modal de detalles simplificado -->
-    <!-- Modal de detalles completo -->
-<Modal v-model="showChannelDetailsModal" :title="`Detalles de ${selectedChannel?.channel_name}`" width="900px">
-  <ChannelDetails 
-    v-if="selectedChannel" 
-    :channel="selectedChannel"
-    @sync="handleChannelSync"
-    @edit="handleChannelEdit"
-    @refresh="refreshChannels"
-  />
-</Modal>
 
-    <!-- Modal de confirmación de eliminación -->
+    <Modal v-model="showChannelDetailsModal" :title="`Detalles de ${selectedChannel?.channel_name}`" width="900px">
+      <ChannelDetails 
+        v-if="selectedChannel" 
+        :channel="selectedChannel"
+        @sync="handleChannelSync"
+        @edit="handleChannelEdit"
+        @refresh="refreshChannels"
+      />
+    </Modal>
+
     <Modal v-model="showDeleteModal" title="Confirmar Eliminación" width="400px">
-      <div class="delete-confirmation">
-        <div class="warning-icon">⚠️</div>
-        <h3>¿Estás seguro?</h3>
-        <p>
+      <div class="text-center py-4">
+        <div class="text-6xl mb-4">⚠️</div>
+        <h3 class="text-lg font-semibold text-gray-900 mb-2">¿Estás seguro?</h3>
+        <p class="text-gray-600 mb-6">
           Esta acción eliminará permanentemente el canal 
           <strong>{{ channelToDelete?.channel_name }}</strong>.
         </p>
-        <div class="modal-actions">
-          <button @click="showDeleteModal = false" class="btn-cancel">
+        <div class="flex justify-center gap-3">
+          <button @click="showDeleteModal = false" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors">
             Cancelar
           </button>
-          <button @click="confirmDelete" class="btn-danger" :disabled="deleting">
+          <button @click="confirmDelete" class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors" :disabled="deleting">
             {{ deleting ? 'Eliminando...' : 'Eliminar' }}
           </button>
         </div>
@@ -1057,921 +1116,11 @@ onMounted(async () => {
 })
 </script>
 <style scoped>
-.form-group {
-  margin-bottom: 16px;
-}
-
-.form-help {
-  font-size: 12px;
-  color: #666;
-  margin-top: 4px;
-  display: block;
-}
-
-.oauth-info {
-  margin: 16px 0;
-}
-
-.info-box {
-  background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
-  border: 1px solid #0ea5e9;
-  border-radius: 12px;
-  padding: 16px;
-  display: flex;
-  gap: 12px;
-  align-items: flex-start;
-}
-
-.info-icon {
-  font-size: 24px;
-  flex-shrink: 0;
-}
-
-.info-content h4 {
-  margin: 0 0 8px 0;
-  color: #0369a1;
-  font-size: 16px;
-}
-
-.info-content p {
-  margin: 0 0 12px 0;
-  color: #374151;
-  font-size: 14px;
-  line-height: 1.4;
-}
-
-.info-content ul {
-  margin: 0;
-  padding-left: 16px;
-  color: #374151;
-  font-size: 14px;
-}
-
-.info-content li {
-  margin-bottom: 4px;
-}
-
-.btn-oauth {
-  background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%) !important;
-  position: relative;
-  overflow: hidden;
-}
-
-.btn-oauth::before {
-  content: '🚀';
-  margin-right: 8px;
-}
-
-.channel-type-badge.jumpseller {
-  background: #f0fdf4;
-  color: #059669;
-}
-
-.modal-actions {
-  display: flex;
-  gap: 12px;
-  justify-content: flex-end;
-  margin-top: 24px;
-}
-
-.btn-save:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-/* Reutilizar los estilos de la versión anterior pero simplificados */
-.channels-page {
-  min-height: 100vh;
-  background: #f8fafc;
-  padding: 24px;
-}
-
-.page-header {
-  background: white;
-  border-radius: 16px;
-  padding: 32px;
-  margin-bottom: 24px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-  border: 1px solid #e5e7eb;
-}
-.header-content {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 24px;
-}
-
-.title-section {
-  flex: 1;
-}
-
-.page-title {
-  font-size: 32px;
-  font-weight: 700;
-  color: #1f2937;
-  margin: 0 0 8px 0;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.title-icon {
-  font-size: 36px;
-}
-
-.page-subtitle {
-  font-size: 16px;
-  color: #6b7280;
-  margin: 0;
-}
-
-.quick-stats {
-  display: flex;
-  gap: 20px;
-}
-
-.stat-card {
-  background: #f8fafc;
-  border: 1px solid #e5e7eb;
-  border-radius: 12px;
-  padding: 20px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-width: 140px;
-}
-
-.stat-icon {
-  font-size: 24px;
-  width: 48px;
-  height: 48px;
-  background: white;
-  border-radius: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-}
-
-.stat-content {
-  flex: 1;
-}
-
-.stat-number {
-  font-size: 24px;
-  font-weight: 700;
-  color: #1f2937;
-  line-height: 1;
-}
-
-.stat-label {
-  font-size: 12px;
-  color: #6b7280;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  margin-top: 4px;
-}
-
-.header-actions {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 20px;
-}
-
-.filters-section {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-.filter-group {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.filter-label {
-  font-size: 14px;
-  font-weight: 500;
-  color: #374151;
-  white-space: nowrap;
-}
-
-.filter-select {
-  padding: 8px 12px;
-  border: 1px solid #d1d5db;
-  border-radius: 8px;
-  font-size: 14px;
-  background: white;
-  min-width: 140px;
-}
-
-.refresh-btn {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 16px;
-  background: #f3f4f6;
-  border: 1px solid #d1d5db;
-  border-radius: 8px;
-  font-size: 14px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.refresh-btn:hover:not(:disabled) {
-  background: #e5e7eb;
-}
-
-.refresh-btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.add-channel-btn {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 12px 20px;
-  background: #3b82f6;
-  color: white;
-  border: none;
-  border-radius: 10px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s;
-  box-shadow: 0 2px 4px rgba(59, 130, 246, 0.2);
-}
-
-.add-channel-btn:hover {
-  background: #2563eb;
-  transform: translateY(-1px);
-  box-shadow: 0 4px 8px rgba(59, 130, 246, 0.3);
-}
-
-.btn-icon {
-  font-size: 16px;
-}
-.loading-container {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 80px 20px;
-  color: #6b7280;
-}
-
-.loading-spinner {
-  width: 40px;
-  height: 40px;
-  border: 4px solid #e5e7eb;
-  border-top-color: #3b82f6;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-  margin-bottom: 16px;
-}
-
 @keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
+  to { transform: rotate(360deg); }
 }
 
-.channels-container {
-  min-height: 400px;
-}
-
-.channels-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
-  gap: 24px;
-}
-
-/* ==================== CHANNEL CARDS ==================== */
-.channel-card {
-  background: white;
-  border: 2px solid #e5e7eb;
-  border-radius: 16px;
-  padding: 24px;
-  transition: all 0.3s ease;
-  position: relative;
-  overflow: hidden;
-}
-
-.channel-card::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 4px;
-  background: #e5e7eb;
-  transition: background 0.3s;
-}
-
-.channel-card.status-active {
-  border-color: #10b981;
-}
-
-.channel-card.status-active::before {
-  background: #10b981;
-}
-
-.channel-card.status-warning {
-  border-color: #f59e0b;
-}
-
-.channel-card.status-warning::before {
-  background: #f59e0b;
-}
-
-.channel-card.status-error {
-  border-color: #ef4444;
-}
-
-.channel-card.status-error::before {
-  background: #ef4444;
-}
-
-.channel-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
-}
-
-.channel-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 20px;
-}
-
-.channel-info {
-  flex: 1;
-}
-
-.channel-type-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
-  border-radius: 20px;
-  font-size: 12px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  margin-bottom: 8px;
-}
-
-.channel-type-badge.shopify {
-  background: #e0f2fe;
-  color: #0277bd;
-}
-
-.channel-type-badge.woocommerce {
-  background: #f3e5f5;
-  color: #7b1fa2;
-}
-
-.channel-type-badge.mercadolibre {
-  background: #fff3e0;
-  color: #ef6c00;
-}
-
-.channel-name {
-  font-size: 20px;
-  font-weight: 700;
-  color: #1f2937;
-  margin: 0 0 4px 0;
-  line-height: 1.2;
-}
-
-.channel-url {
-  font-size: 14px;
-  color: #6b7280;
-  margin: 0 0 4px 0;
-  word-break: break-all;
-}
-
-.channel-company {
-  font-size: 12px;
-  color: #8b5cf6;
-  margin: 0;
-  font-weight: 500;
-}
-.channel-status {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  background: #f9fafb;
-  border-radius: 20px;
-  border: 1px solid #e5e7eb;
-}
-
-.status-indicator {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #e5e7eb;
-}
-
-.status-indicator.active {
-  background: #10b981;
-}
-
-.status-indicator.sync_issues {
-  background: #f59e0b;
-}
-
-.status-indicator.needs_sync {
-  background: #ef4444;
-}
-
-.status-text {
-  font-size: 12px;
-  font-weight: 500;
-  color: #374151;
-}
-
-.channel-metrics {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 16px;
-  margin-bottom: 20px;
-  padding: 16px;
-  background: #f9fafb;
-  border-radius: 12px;
-}
-
-.metric {
-  text-align: center;
-}
-
-.metric-label {
-  display: block;
-  font-size: 12px;
-  color: #6b7280;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  margin-bottom: 4px;
-}
-
-.metric-value {
-  display: block;
-  font-size: 16px;
-  font-weight: 700;
-  color: #1f2937;
-}
-
-.sync-info {
-  margin-bottom: 20px;
-  padding: 12px;
-  border-radius: 8px;
-  background: #f9fafb;
-}
-
-.sync-status {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 4px;
-}
-
-.sync-status.active {
-  color: #059669;
-}
-
-.sync-status.sync_issues {
-  color: #d97706;
-}
-
-.sync-status.needs_sync {
-  color: #dc2626;
-}
-
-.sync-icon {
-  font-size: 14px;
-}
-
-.sync-text {
-  font-size: 14px;
-  font-weight: 500;
-}
-
-.sync-details {
-  font-size: 12px;
-  color: #6b7280;
-}
-
-.channel-actions {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.action-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 12px;
-  border: 1px solid #d1d5db;
-  border-radius: 8px;
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-  background: white;
-  color: #374151;
-  flex: 1;
-  justify-content: center;
-  min-width: 80px;
-}
-
-.action-btn:hover:not(:disabled) {
-  transform: translateY(-1px);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-}
-
-.action-btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.action-btn.sync {
-  border-color: #3b82f6;
-  color: #3b82f6;
-}
-
-.action-btn.sync:hover:not(:disabled) {
-  background: #3b82f6;
-  color: white;
-}
-
-.action-btn.details {
-  border-color: #6b7280;
-  color: #6b7280;
-}
-
-.action-btn.details:hover:not(:disabled) {
-  background: #6b7280;
-  color: white;
-}
-
-.action-btn.delete {
-  border-color: #ef4444;
-  color: #ef4444;
-}
-
-.action-btn.delete:hover:not(:disabled) {
-  background: #ef4444;
-  color: white;
-}
-/* ==================== ADD CHANNEL CARD ==================== */
-.add-channel-card {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.add-channel-placeholder {
-  width: 100%;
-  height: 100%;
-  min-height: 300px;
-  border: 2px dashed #d1d5db;
-  border-radius: 16px;
-  background: white;
-  cursor: pointer;
-  transition: all 0.3s;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 16px;
-  padding: 40px;
-}
-
-.add-channel-placeholder:hover {
-  border-color: #3b82f6;
-  background: #f8fafc;
-  transform: translateY(-2px);
-}
-
-.placeholder-icon {
-  font-size: 48px;
-  color: #9ca3af;
-  width: 80px;
-  height: 80px;
-  border: 2px dashed #d1d5db;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.3s;
-}
-
-.add-channel-placeholder:hover .placeholder-icon {
-  color: #3b82f6;
-  border-color: #3b82f6;
-  background: white;
-}
-
-.placeholder-text {
-  text-align: center;
-}
-
-.placeholder-text h4 {
-  font-size: 18px;
-  font-weight: 600;
-  color: #1f2937;
-  margin: 0 0 8px 0;
-}
-
-.placeholder-text p {
-  font-size: 14px;
-  color: #6b7280;
-  margin: 0;
-}
-
-/* ==================== EMPTY STATE ==================== */
-.empty-state {
-  text-align: center;
-  padding: 80px 20px;
-  background: white;
-  border-radius: 16px;
-  border: 2px dashed #d1d5db;
-}
-
-.empty-icon {
-  font-size: 64px;
-  margin-bottom: 24px;
-  opacity: 0.5;
-}
-
-.empty-title {
-  font-size: 24px;
-  font-weight: 600;
-  color: #1f2937;
-  margin: 0 0 12px 0;
-}
-
-.empty-description {
-  font-size: 16px;
-  color: #6b7280;
-  margin: 0 0 32px 0;
-  max-width: 500px;
-  margin-left: auto;
-  margin-right: auto;
-}
-
-.empty-action-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 12px 24px;
-  background: #3b82f6;
-  color: white;
-  border: none;
-  border-radius: 10px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s;
-  text-decoration: none;
-}
-
-.empty-action-btn:hover {
-  background: #2563eb;
-  transform: translateY(-1px);
-}
-
-.empty-action-btn.secondary {
-  background: #6b7280;
-}
-
-.empty-action-btn.secondary:hover {
-  background: #4b5563;
-}
-/* ==================== FORMULARIOS ==================== */
-.form-group {
-  margin-bottom: 16px;
-}
-
-.form-group label {
-  display: block;
-  font-size: 14px;
-  font-weight: 500;
-  color: #374151;
-  margin-bottom: 6px;
-}
-
-.form-group input,
-.form-group select {
-  width: 100%;
-  padding: 10px 12px;
-  border: 1px solid #d1d5db;
-  border-radius: 8px;
-  font-size: 14px;
-  transition: border-color 0.2s;
-  background: white;
-}
-
-.form-group input:focus,
-.form-group select:focus {
-  outline: none;
-  border-color: #3b82f6;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-}
-
-.modal-actions {
-  display: flex;
-  gap: 12px;
-  justify-content: flex-end;
-  margin-top: 24px;
-}
-
-.btn-cancel,
-.btn-save,
-.btn-sync,
-.btn-danger {
-  padding: 10px 20px;
-  border-radius: 8px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-  border: none;
-}
-
-.btn-cancel {
-  background: #f3f4f6;
-  color: #374151;
-  border: 1px solid #d1d5db;
-}
-
-.btn-cancel:hover {
-  background: #e5e7eb;
-}
-
-.btn-save,
-.btn-sync {
-  background: #3b82f6;
-  color: white;
-}
-
-.btn-save:hover:not(:disabled),
-.btn-sync:hover:not(:disabled) {
-  background: #2563eb;
-}
-
-.btn-danger {
-  background: #ef4444;
-  color: white;
-}
-
-.btn-danger:hover:not(:disabled) {
-  background: #dc2626;
-}
-
-.btn-save:disabled,
-.btn-sync:disabled,
-.btn-danger:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-/* ==================== DETALLES DEL CANAL ==================== */
-.channel-details-simple {
-  padding: 20px;
-}
-
-.details-section {
-  margin-bottom: 24px;
-}
-
-.details-section h4 {
-  font-size: 16px;
-  font-weight: 600;
-  color: #1f2937;
-  margin: 0 0 16px 0;
-  border-bottom: 1px solid #e5e7eb;
-  padding-bottom: 8px;
-}
-
-.detail-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 8px 0;
-  border-bottom: 1px solid #f3f4f6;
-}
-
-.detail-item:last-child {
-  border-bottom: none;
-}
-
-.detail-label {
-  font-size: 14px;
-  color: #6b7280;
-  font-weight: 500;
-}
-
-.detail-value {
-  font-size: 14px;
-  color: #1f2937;
-  font-weight: 500;
-}
-
-.details-actions {
-  text-align: center;
-}
-
-/* ==================== CONFIRMACIÓN DE ELIMINACIÓN ==================== */
-.delete-confirmation {
-  text-align: center;
-  padding: 20px;
-}
-
-.warning-icon {
-  font-size: 48px;
-  margin-bottom: 16px;
-}
-
-.delete-confirmation h3 {
-  font-size: 20px;
-  font-weight: 600;
-  color: #1f2937;
-  margin: 0 0 16px 0;
-}
-
-.delete-confirmation p {
-  color: #6b7280;
-  margin-bottom: 24px;
-  line-height: 1.5;
-}
-/* ==================== RESPONSIVE ==================== */
-@media (max-width: 1200px) {
-  .channels-grid {
-    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-  }
-  
-  .header-content {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 24px;
-  }
-  
-  .quick-stats {
-    justify-content: space-between;
-  }
-}
-
-@media (max-width: 768px) {
-  .channels-page {
-    padding: 16px;
-  }
-  
-  .page-header {
-    padding: 24px;
-  }
-  
-  .channels-grid {
-    grid-template-columns: 1fr;
-  }
-  
-  .header-actions {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 16px;
-  }
-  
-  .filters-section {
-    flex-wrap: wrap;
-    gap: 12px;
-  }
-  
-  .quick-stats {
-    flex-direction: column;
-    gap: 12px;
-  }
-  
-  .stat-card {
-    min-width: auto;
-  }
-  
-  .channel-metrics {
-    grid-template-columns: 1fr;
-    gap: 12px;
-  }
-  
-  .channel-actions {
-    flex-direction: column;
-  }
-  
-  .action-btn {
-    flex: none;
-    justify-content: flex-start;
-  }
-  
-  .modal-actions {
-    flex-direction: column;
-  }
+.animate-spin {
+  animation: spin 1s linear infinite;
 }
 </style>
