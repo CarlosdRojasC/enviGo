@@ -30,10 +30,12 @@ router.get('/dashboard', authenticateToken, async (req, res) => {
     let stats = {};
     const isAdmin = req.user.role === 'admin';
 
+    // ================================
+    // 👑 DASHBOARD ADMIN
+    // ================================
     if (isAdmin) {
-      // Dashboard para administrador
       console.log('👑 BACKEND: Generando stats para admin...');
-      
+
       const [companies, totalOrders, channels, users] = await Promise.all([
         Company.countDocuments({ is_active: true }),
         Order.countDocuments({}),
@@ -41,129 +43,125 @@ router.get('/dashboard', authenticateToken, async (req, res) => {
         User.countDocuments({ is_active: true })
       ]);
 
-      // Estadísticas de órdenes por estado
       const ordersByStatus = await Order.aggregate([
+        { $group: { _id: '$status', count: { $sum: 1 } } }
+      ]);
+
+      // Fechas Chile
+      const today = getChileToday();
+      const thisMonthStart = getChileThisMonthStart();
+      const nextMonthStart = new Date(thisMonthStart);
+      nextMonthStart.setMonth(nextMonthStart.getMonth() + 1);
+
+      console.log('📅 BACKEND: Fechas admin (Chile):', {
+        today: formatChileDate(today),
+        thisMonthStart: formatChileDate(thisMonthStart),
+        nextMonthStart: formatChileDate(nextMonthStart)
+      });
+
+      // Cálculos principales
+      const [ordersToday, ordersThisMonth, deliveredThisMonth] = await Promise.all([
+        Order.countDocuments({ order_date: { $gte: today } }),
+        Order.countDocuments({ order_date: { $gte: thisMonthStart, $lt: nextMonthStart } }),
+        Order.countDocuments({ 
+          order_date: { $gte: thisMonthStart, $lt: nextMonthStart }, 
+          status: 'delivered' 
+        })
+      ]);
+
+      const monthlyRevenueResult = await Order.aggregate([
+        {
+          $match: {
+            order_date: { $gte: thisMonthStart, $lt: nextMonthStart },
+            status: { $in: ['delivered', 'invoiced'] }
+          }
+        },
         {
           $group: {
-            _id: '$status',
+            _id: null,
+            totalRevenue: { 
+              $sum: { $ifNull: ['$delivery_cost', 2500] } 
+            },
             count: { $sum: 1 }
           }
         }
       ]);
 
-      // Estadísticas de tiempo para admin
-      const today = getChileToday();
-const thisMonthStart = getChileThisMonthStart();
+      const monthlyRevenue = monthlyRevenueResult[0]?.totalRevenue || 0;
+      const deliveredInvoicedCount = monthlyRevenueResult[0]?.count || 0;
 
-console.log('📅 BACKEND: Fechas de filtro (Chile):', {
-  today: formatChileDate(today),
-  thisMonthStart: formatChileDate(thisMonthStart)
-});
-      
-      const [ordersToday, ordersThisMonth, deliveredThisMonth] = await Promise.all([
-  Order.countDocuments({ order_date: { $gte: today } }),
-  Order.countDocuments({ order_date: { $gte: thisMonthStart } }),
-  Order.countDocuments({ 
-    order_date: { $gte: thisMonthStart },  // ✅ Solo del mes actual
-    status: 'delivered' 
-  })
-]);
+      const revenueByStatus = await Order.aggregate([
+        {
+          $match: {
+            order_date: { $gte: thisMonthStart, $lt: nextMonthStart },
+            status: { $in: ['delivered', 'invoiced'] }
+          }
+        },
+        {
+          $group: {
+            _id: '$status',
+            totalRevenue: { $sum: { $ifNull: ['$delivery_cost', 2500] } },
+            count: { $sum: 1 }
+          }
+        }
+      ]);
 
-const monthlyRevenueResult = await Order.aggregate([
-  {
-    $match: {
-      order_date: { $gte: thisMonthStart },
-      status: { $in: ['delivered', 'invoiced'] }
-    }
-  },
-  {
-    $group: {
-      _id: null,
-      totalRevenue: { 
-        $sum: { 
-          $ifNull: ['$delivery_cost', 2500] // Usar delivery_cost del pedido, o 2500 por defecto
-        } 
-      },
-      count: { $sum: 1 }
-    }
-  }
-]);
+      console.log('💰 BACKEND: Ingresos del mes calculados:', {
+        monthlyRevenue,
+        deliveredInvoicedCount,
+        breakdown: revenueByStatus
+      });
 
-const monthlyRevenue = monthlyRevenueResult[0]?.totalRevenue || 0;
-const deliveredInvoicedCount = monthlyRevenueResult[0]?.count || 0;
+      stats = {
+        // Métricas principales
+        companies,
+        totalOrders,
+        channels,
+        users,
 
-// También calcular desglose por estado
-const revenueByStatus = await Order.aggregate([
-  {
-    $match: {
-      order_date: { $gte: thisMonthStart },
-      status: { $in: ['delivered', 'invoiced'] }
-    }
-  },
-  {
-    $group: {
-      _id: '$status',
-      totalRevenue: { $sum: { $ifNull: ['$delivery_cost', 2500] } },
-      count: { $sum: 1 }
-    }
-  }
-]);
+        // Estructura compatible con frontend
+        orders: totalOrders,
+        ordersToday,
+        monthlyOrders: ordersThisMonth,
+        ordersByStatus: ordersByStatus.reduce((acc, item) => {
+          acc[item._id] = item.count;
+          return acc;
+        }, {}),
 
-console.log('💰 BACKEND: Ingresos del mes calculados:', {
-  monthlyRevenue,
-  deliveredInvoicedCount,
-  breakdown: revenueByStatus
-});
+        // ⭐ INGRESOS - Solo pedidos entregados y facturados
+        monthlyRevenue,
+        deliveredInvoicedCount,
 
-stats = {
-  // Métricas principales
-  companies,
-  totalOrders,
-  channels,
-  users,
-  
-  // Estructura compatible con frontend
-  orders: totalOrders,
-  ordersToday,
-  monthlyOrders: ordersThisMonth,
-  ordersByStatus: ordersByStatus.reduce((acc, item) => {
-    acc[item._id] = item.count;
-    return acc;
-  }, {}),
-  
-  // ⭐ INGRESOS - Solo pedidos entregados y facturados
-  monthlyRevenue,  // Total de ingresos del mes (delivered + invoiced)
-  deliveredInvoicedCount, // Cantidad de pedidos facturables
-  
-  // Desglose de ingresos por estado
-  revenueByStatus: revenueByStatus.reduce((acc, item) => {
-    acc[item._id] = {
-      revenue: item.totalRevenue,
-      count: item.count
-    };
-    return acc;
-  }, {}),
-  
-  // Costos estimados (para referencia, basado en TODOS los pedidos del mes)
-  estimatedMonthlyCost: ordersThisMonth * 2500,
-  pricePerOrder: 2500,
-  
-  // Meta información
-  role: 'admin',
-  calculatedAt: new Date()
-};
+        // Desglose por estado
+        revenueByStatus: revenueByStatus.reduce((acc, item) => {
+          acc[item._id] = {
+            revenue: item.totalRevenue,
+            count: item.count
+          };
+          return acc;
+        }, {}),
 
-console.log('✅ BACKEND: Stats admin generadas:', {
-  companies,
-  totalOrders,
-  ordersToday,
-  monthlyOrders: ordersThisMonth,
-  monthlyRevenue, // ⭐ Solo delivered + invoiced
-  deliveredInvoicedCount
-});
+        estimatedMonthlyCost: ordersThisMonth * 2500,
+        pricePerOrder: 2500,
 
+        // Meta
+        role: 'admin',
+        calculatedAt: new Date()
+      };
+
+      console.log('✅ BACKEND: Stats admin generadas:', {
+        companies,
+        totalOrders,
+        ordersToday,
+        monthlyOrders: ordersThisMonth,
+        monthlyRevenue,
+        deliveredInvoicedCount
+      });
+
+    // ================================
+    // 🏢 DASHBOARD EMPRESA
+    // ================================
     } else {
-      // Dashboard para empresa
       const companyId = req.user.company_id;
       console.log('🏢 BACKEND: Generando stats para empresa:', companyId);
 
@@ -177,53 +175,50 @@ console.log('✅ BACKEND: Stats admin generadas:', {
 
       const companyFilter = { company_id: new mongoose.Types.ObjectId(companyId) };
 
-      const [totalOrders, channels] = await Promise.all([
+      // Fechas Chile
+      const today = getChileToday();
+      const thisMonthStart = getChileThisMonthStart();
+      const nextMonthStart = new Date(thisMonthStart);
+      nextMonthStart.setMonth(nextMonthStart.getMonth() + 1);
+
+      console.log('📅 BACKEND: Fechas empresa (Chile):', {
+        today: formatChileDate(today),
+        thisMonthStart: formatChileDate(thisMonthStart),
+        nextMonthStart: formatChileDate(nextMonthStart)
+      });
+
+      // Conteos
+      const [totalOrders, channels, ordersToday, ordersThisMonth, deliveredTotal] = await Promise.all([
         Order.countDocuments(companyFilter),
-        Channel.countDocuments({ ...companyFilter, is_active: true })
+        Channel.countDocuments({ ...companyFilter, is_active: true }),
+        Order.countDocuments({ ...companyFilter, order_date: { $gte: today } }),
+        Order.countDocuments({ 
+          ...companyFilter, 
+          order_date: { $gte: thisMonthStart, $lt: nextMonthStart } 
+        }),
+        Order.countDocuments({ ...companyFilter, status: 'delivered' })
       ]);
 
-      // Estadísticas de órdenes por estado para la empresa
+      // Agrupación por estado
       const ordersByStatus = await Order.aggregate([
         { $match: companyFilter },
-        {
-          $group: {
-            _id: '$status',
-            count: { $sum: 1 }
-          }
-        }
+        { $group: { _id: '$status', count: { $sum: 1 } } }
       ]);
 
-      // Estadísticas de tiempo para empresa
-      const today = getChileToday();
-const thisMonthStart = getChileThisMonthStart();
-
-console.log('📅 BACKEND: Fechas empresa (Chile):', {
-  today: formatChileDate(today),
-  thisMonthStart: formatChileDate(thisMonthStart)
-});
-      
-      const [ordersToday, ordersThisMonth, deliveredTotal] = await Promise.all([
-        Order.countDocuments({ 
-          ...companyFilter,
-          order_date: { $gte: today } 
-        }),
-        Order.countDocuments({ 
-          ...companyFilter,
-          order_date: { $gte: thisMonthStart } 
-        }),
-        Order.countDocuments({ 
-          ...companyFilter,
-          status: 'delivered' 
-        })
-      ]);
-
-      // Obtener configuración de precios de la empresa
+      // Precio y revenue
       const company = await Company.findById(companyId).select('price_per_order');
       const pricePerOrder = company?.price_per_order || 2500;
-      const estimatedMonthlyCost = ordersThisMonth * pricePerOrder;
+      const monthlyRevenue = ordersThisMonth * pricePerOrder;
+      const estimatedMonthlyCost = monthlyRevenue;
+
+      console.log('📦 BACKEND: Datos empresa para revenue:', {
+        totalOrders,
+        ordersThisMonth,
+        pricePerOrder,
+        monthlyRevenue
+      });
 
       stats = {
-        // Métricas principales (estructura original)
         orders: totalOrders,
         channels,
         ordersByStatus: ordersByStatus.reduce((acc, item) => {
@@ -231,14 +226,13 @@ console.log('📅 BACKEND: Fechas empresa (Chile):', {
           return acc;
         }, {}),
         monthlyOrders: ordersThisMonth,
-        
-        // Métricas adicionales para frontend mejorado
         ordersToday,
         deliveredTotal,
+        orders_this_month: ordersThisMonth,
+        revenue: monthlyRevenue,
+        monthlyRevenue,
         estimatedMonthlyCost,
         pricePerOrder,
-        
-        // Meta información
         role: 'company',
         company_id: companyId,
         calculatedAt: new Date()
@@ -247,13 +241,15 @@ console.log('📅 BACKEND: Fechas empresa (Chile):', {
       console.log('✅ BACKEND: Stats empresa generadas:', {
         totalOrders,
         ordersToday,
-        monthlyOrders: ordersThisMonth,
-        deliveredTotal,
-        channels
+        ordersThisMonth,
+        monthlyRevenue,
+        deliveredTotal
       });
     }
 
-    // Respuesta unificada
+    // ================================
+    // 📨 RESPUESTA UNIFICADA
+    // ================================
     res.json({
       success: true,
       data: stats,
@@ -273,6 +269,7 @@ console.log('📅 BACKEND: Fechas empresa (Chile):', {
     });
   }
 });
+
 
 // Endpoint para trends (nuevo)
 router.get('/dashboard/trends', authenticateToken, async (req, res) => {
