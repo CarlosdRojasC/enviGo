@@ -598,6 +598,7 @@ static async createOrderFromApiData(fullOrder, channel, accessToken) {
     order.status = this.mapOrderStatus(fullOrder);
     order.raw_data = fullOrder;
     order.shipping_address = shippingInfo.address;
+    order.shipping_commune = shippingInfo.city;
     order.shipping_city = shippingInfo.city;
     order.shipping_state = shippingInfo.state;
     order.shipping_zip = shippingInfo.zip_code;
@@ -619,6 +620,7 @@ static async createOrderFromApiData(fullOrder, channel, accessToken) {
     customer_phone: shippingInfo.phone,
     customer_document: fullOrder.buyer.billing_info?.doc_number || '',
     shipping_address: shippingInfo.address,
+    shipping_commune: shippingInfo.city,
     shipping_city: shippingInfo.city,
     shipping_state: shippingInfo.state,
     shipping_zip: shippingInfo.zip_code,
