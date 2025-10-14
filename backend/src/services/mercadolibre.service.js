@@ -663,22 +663,16 @@ static async createOrderFromApiData(fullOrder, channel, accessToken) {
     }
   }
 static async getShippingLabel(externalOrderId, channelId) {
-  console.log('🟢 [ML Service] Iniciando getShippingLabel');
-  console.log('➡️ Parámetros recibidos:', { externalOrderId, channelId });
+  console.log('🟢 [ML Service] getShippingLabel iniciando', { externalOrderId, channelId });
 
-  // 1️⃣ Buscar el canal
   const channel = await Channel.findById(channelId);
   if (!channel) {
-    throw new Error(`❌ Canal ${channelId} no encontrado en la base de datos`);
+    throw new Error(`Canal ${channelId} no encontrado`);
   }
-  console.log('✅ Canal encontrado:', { name: channel.name, _id: channel._id });
 
-  // 2️⃣ Obtener access token válido
   const accessToken = await this.getAccessToken(channel);
-  console.log('🔑 Token obtenido OK');
 
-  // 3️⃣ Consultar la orden (o pack)
-  console.log(`📡 [ML Service] Consultando /orders/${externalOrderId}`);
+  // 1️⃣ Consultar orden / pack
   let orderResponse;
   try {
     orderResponse = await axios.get(
@@ -686,64 +680,88 @@ static async getShippingLabel(externalOrderId, channelId) {
       { headers: { Authorization: `Bearer ${accessToken}` } }
     );
   } catch (err) {
-    console.error('❌ Error consultando orden en ML:', err.response?.data || err.message);
-    throw new Error(`ML no reconoce la orden ${externalOrderId}: ${JSON.stringify(err.response?.data)}`);
+    console.error('Error consultando orden en ML:', err.response?.data || err.message);
+    throw new Error(`ML no reconoce la orden ${externalOrderId}`);
   }
-
   const orderData = orderResponse.data;
-  const shipmentId = orderData.shipping?.id;
   const packId = orderData.pack_id;
-  const logisticType = orderData.shipping?.logistic_type;
+  const shipmentId = orderData.shipping?.id;
 
-  console.log('📦 [ML Service] Datos obtenidos de ML:', {
-    id: orderData.id,
-    status: orderData.status,
-    packId,
-    shipmentId,
-    logisticType,
-  });
-
-  // 4️⃣ Detectar pedidos Flex (self_service)
-  if (logisticType === 'self_service') {
-    console.log('⚠️ [ML Service] Pedido Flex detectado. No hay etiqueta PDF disponible.');
-    throw new Error('Pedido Flex: no tiene etiqueta PDF disponible');
-  }
-
-  // 5️⃣ Si tiene pack_id, pedir la etiqueta del pack
+  // 2️⃣ Si pack_id existe, prefieres etiqueta de pack (si aplica)
   if (packId) {
-    console.log(`🟣 [ML Service] Orden pertenece a pack ${packId}. Solicitando etiqueta del pack...`);
+    console.log(`📦 Orden es parte de pack ${packId}, solicitando etiqueta de pack`);
     try {
       return await axios({
         method: 'GET',
         url: `${this.API_BASE_URL}/packs/${packId}/labels`,
         headers: { Authorization: `Bearer ${accessToken}` },
-        responseType: 'stream',
+        responseType: 'stream'
       });
     } catch (err) {
-      console.error(`❌ [ML Service] Error obteniendo etiqueta del pack ${packId}:`, err.response?.data || err.message);
-      throw new Error(`ML no devolvió la etiqueta del pack ${packId}: ${JSON.stringify(err.response?.data)}`);
+      console.error('Error con etiqueta de pack:', err.response?.data || err.message);
+      throw new Error(`No se pudo obtener etiqueta del pack ${packId}`);
     }
   }
 
-  // 6️⃣ Si no tiene pack_id, usar shipment
+  // 3️⃣ Validar que shipment_id exista
   if (!shipmentId) {
-    throw new Error(`⚠️ No se encontró shipment para la orden ${externalOrderId}`);
+    throw new Error(`No se encontró shipment para la orden ${externalOrderId}`);
   }
 
-  console.log(`📦 [ML Service] Solicitando etiqueta del shipment ${shipmentId}`);
+  // 4️⃣ Consultar el shipment con x-format-new para verificar estado / logística
+  let shipmentInfo;
   try {
+    shipmentInfo = await axios.get(
+      `${this.API_BASE_URL}/shipments/${shipmentId}`,
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'x-format-new': 'true'
+        }
+      }
+    );
+  } catch (err) {
+    console.error('Error consultando shipment:', err.response?.data || err.message);
+    throw new Error(`No se pudo consultar shipment ${shipmentId}`);
+  }
+
+  const s = shipmentInfo.data;
+  const { status, substatus, logistic } = s;
+  // logistic contiene { mode, type, … }
+  console.log('🔍 Datos shipment:', { status, substatus, logistic });
+
+  // 5️⃣ Validaciones de ME2: modo y tipo
+  if (logistic.mode !== 'me2') {
+    throw new Error(`Modo logístico inválido: ${logistic.mode}`);
+  }
+  // logistic.type puede ser drop_off, cross_docking, self_service, etc.
+  const logisticType = logistic.type;
+  // No permitir fulfillment
+  if (logisticType === 'fulfillment') {
+    throw new Error(`Envío en modalidad fulfillment: etiqueta no disponible`);
+  }
+
+  // 6️⃣ Verificar estado imprimible
+  if (status !== 'ready_to_ship' || substatus !== 'ready_to_print') {
+    throw new Error(`Estado no imprimible: status=${status}, substatus=${substatus}`);
+  }
+
+  // 7️⃣ Llamar al endpoint plural de etiquetas
+  try {
+    const url = `${this.API_BASE_URL}/shipment_labels?shipment_ids=${shipmentId}&response_type=pdf`;
+    console.log('📡 Solicitando label vía shipment_labels:', url);
     return await axios({
       method: 'GET',
-      url: `${this.API_BASE_URL}/shipments/${shipmentId}/labels`,
+      url,
       headers: { Authorization: `Bearer ${accessToken}` },
-      responseType: 'stream',
+      responseType: 'stream'
     });
   } catch (err) {
-    const msg = err.response?.data || err.message;
-    console.error(`❌ [ML Service] Error obteniendo etiqueta de shipment ${shipmentId}:`, msg);
-    throw new Error(`ML no devolvió la etiqueta para shipment ${shipmentId}: ${JSON.stringify(msg)}`);
+    console.error('Error obteniendo etiqueta PDF:', err.response?.data || err.message);
+    throw new Error(`No se pudo descargar la etiqueta PDF para shipment ${shipmentId}`);
   }
 }
+
 
   static async extractShippingAddressSimple(mlOrder) {
     if (!mlOrder.shipping) {
