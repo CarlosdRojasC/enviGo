@@ -109,7 +109,71 @@
         </div>
       </div>
     </section>
+<section class="py-20 bg-white border-t border-gray-100">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="text-center mb-12">
+      <h2 class="text-4xl md:text-5xl font-bold text-gray-900 mb-4">Números que Hablan</h2>
+      <p class="text-xl text-gray-600">Resultados reales de nuestro servicio</p>
+    </div>
 
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-8 max-w-6xl mx-auto">
+      <!-- Stat 1 -->
+      <div class="text-center bg-gradient-to-br from-lime-50 to-green-50 rounded-2xl p-8 border-2 border-lime-200 hover:shadow-xl transition-all">
+        <div class="text-5xl font-extrabold text-lime-600 mb-3">15,000+</div>
+        <div class="text-sm font-semibold text-gray-700 uppercase tracking-wide">Entregas Realizadas</div>
+        <div class="text-xs text-gray-500 mt-2">En los últimos 12 meses</div>
+      </div>
+
+      <!-- Stat 2 -->
+      <div class="text-center bg-gradient-to-br from-blue-50 to-cyan-50 rounded-2xl p-8 border-2 border-blue-200 hover:shadow-xl transition-all">
+        <div class="text-5xl font-extrabold text-blue-600 mb-3">98%</div>
+        <div class="text-sm font-semibold text-gray-700 uppercase tracking-wide">Tasa de Éxito</div>
+        <div class="text-xs text-gray-500 mt-2">Entregas completadas exitosamente</div>
+      </div>
+
+      <!-- Stat 3 -->
+      <div class="text-center bg-gradient-to-br from-purple-50 to-pink-50 rounded-2xl p-8 border-2 border-purple-200 hover:shadow-xl transition-all">
+        <div class="text-5xl font-extrabold text-purple-600 mb-3">4.8/5</div>
+        <div class="text-sm font-semibold text-gray-700 uppercase tracking-wide">Satisfacción</div>
+        <div class="text-xs text-gray-500 mt-2">Calificación promedio de clientes</div>
+      </div>
+
+      <!-- Stat 4 -->
+      <div class="text-center bg-gradient-to-br from-orange-50 to-yellow-50 rounded-2xl p-8 border-2 border-orange-200 hover:shadow-xl transition-all">
+        <div class="text-5xl font-extrabold text-orange-600 mb-3">&lt;2h</div>
+        <div class="text-sm font-semibold text-gray-700 uppercase tracking-wide">Tiempo Promedio</div>
+        <div class="text-xs text-gray-500 mt-2">Desde retiro hasta entrega</div>
+      </div>
+    </div>
+
+    <!-- Badge de confianza adicional -->
+    <div class="mt-12 flex flex-wrap justify-center gap-6">
+      <div class="flex items-center gap-3 bg-gray-50 px-6 py-4 rounded-xl border border-gray-200">
+        <span class="text-3xl">🛡️</span>
+        <div class="text-left">
+          <div class="font-bold text-gray-900">Partner Oficial</div>
+          <div class="text-sm text-gray-600">Mercado Libre Flex</div>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-3 bg-gray-50 px-6 py-4 rounded-xl border border-gray-200">
+        <span class="text-3xl">📱</span>
+        <div class="text-left">
+          <div class="font-bold text-gray-900">Soporte 7/7</div>
+          <div class="text-sm text-gray-600">Días a la semana</div>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-3 bg-gray-50 px-6 py-4 rounded-xl border border-gray-200">
+        <span class="text-3xl">🔒</span>
+        <div class="text-left">
+          <div class="font-bold text-gray-900">100% Seguro</div>
+          <div class="text-sm text-gray-600">Datos protegidos</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
     <!-- ========== SERVICIOS PRINCIPALES ========== -->
     <section id="servicios" class="py-20 bg-white">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -191,7 +255,159 @@
         </div>
       </div>
     </section>
+<!-- ========== COMPARACIÓN ANTES/DESPUÉS ========== -->
+<section class="py-20 bg-gradient-to-br from-gray-50 to-white">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="text-center mb-16">
+      <h2 class="text-4xl md:text-5xl font-bold text-gray-900 mb-4">El Cambio que Hace la Diferencia</h2>
+      <p class="text-xl text-gray-600">Compara tu logística actual con enviGo</p>
+    </div>
 
+    <div class="grid md:grid-cols-2 gap-8 max-w-6xl mx-auto">
+      
+      <!-- ANTES -->
+      <div class="bg-white rounded-3xl p-8 border-2 border-red-200 shadow-lg">
+        <div class="flex items-center gap-3 mb-6">
+          <div class="w-16 h-16 bg-red-100 rounded-2xl flex items-center justify-center text-3xl">❌</div>
+          <div>
+            <h3 class="text-2xl font-bold text-gray-900">ANTES</h3>
+            <p class="text-red-600 font-semibold">Logística Tradicional</p>
+          </div>
+        </div>
+
+        <ul class="space-y-4">
+          <li class="flex items-start gap-3 p-4 bg-red-50 rounded-xl">
+            <svg class="w-6 h-6 text-red-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+            <div>
+              <div class="font-semibold text-gray-900">Entregas lentas</div>
+              <div class="text-sm text-gray-600">2 a 5 días hábiles de espera</div>
+            </div>
+          </li>
+
+          <li class="flex items-start gap-3 p-4 bg-red-50 rounded-xl">
+            <svg class="w-6 h-6 text-red-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+            <div>
+              <div class="font-semibold text-gray-900">Sin visibilidad</div>
+              <div class="text-sm text-gray-600">Cliente pregunta "¿dónde está mi pedido?"</div>
+            </div>
+          </li>
+
+          <li class="flex items-start gap-3 p-4 bg-red-50 rounded-xl">
+            <svg class="w-6 h-6 text-red-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+            <div>
+              <div class="font-semibold text-gray-900">Reclamos constantes</div>
+              <div class="text-sm text-gray-600">"No recibí el pedido" sin pruebas</div>
+            </div>
+          </li>
+
+          <li class="flex items-start gap-3 p-4 bg-red-50 rounded-xl">
+            <svg class="w-6 h-6 text-red-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+            <div>
+              <div class="font-semibold text-gray-900">Gestión manual</div>
+              <div class="text-sm text-gray-600">Excel, WhatsApp, llamadas telefónicas</div>
+            </div>
+          </li>
+
+          <li class="flex items-start gap-3 p-4 bg-red-50 rounded-xl">
+            <svg class="w-6 h-6 text-red-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+            <div>
+              <div class="font-semibold text-gray-900">Costos variables</div>
+              <div class="text-sm text-gray-600">Tarifas distintas según zona y peso</div>
+            </div>
+          </li>
+        </ul>
+      </div>
+
+      <!-- DESPUÉS -->
+      <div class="bg-gradient-to-br from-lime-50 to-green-50 rounded-3xl p-8 border-2 border-lime-300 shadow-xl">
+        <div class="flex items-center gap-3 mb-6">
+          <div class="w-16 h-16 bg-lime-400 rounded-2xl flex items-center justify-center text-3xl shadow-lg">✅</div>
+          <div>
+            <h3 class="text-2xl font-bold text-gray-900">DESPUÉS</h3>
+            <p class="text-lime-700 font-semibold">Con enviGo</p>
+          </div>
+        </div>
+
+        <ul class="space-y-4">
+          <li class="flex items-start gap-3 p-4 bg-white rounded-xl border-2 border-lime-200">
+            <svg class="w-6 h-6 text-lime-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+            </svg>
+            <div>
+              <div class="font-semibold text-gray-900">Same-day garantizado</div>
+              <div class="text-sm text-gray-600">Entrega el mismo día en toda la RM</div>
+            </div>
+          </li>
+
+          <li class="flex items-start gap-3 p-4 bg-white rounded-xl border-2 border-lime-200">
+            <svg class="w-6 h-6 text-lime-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+            </svg>
+            <div>
+              <div class="font-semibold text-gray-900">Tracking GPS en vivo</div>
+              <div class="text-sm text-gray-600">Link con mapa actualizado cada 30 segundos</div>
+            </div>
+          </li>
+
+          <li class="flex items-start gap-3 p-4 bg-white rounded-xl border-2 border-lime-200">
+            <svg class="w-6 h-6 text-lime-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+            </svg>
+            <div>
+              <div class="font-semibold text-gray-900">Prueba digital = 0 reclamos</div>
+              <div class="text-sm text-gray-600">Foto + firma + GPS en cada entrega</div>
+            </div>
+          </li>
+
+          <li class="flex items-start gap-3 p-4 bg-white rounded-xl border-2 border-lime-200">
+            <svg class="w-6 h-6 text-lime-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+            </svg>
+            <div>
+              <div class="font-semibold text-gray-900">100% automatizado</div>
+              <div class="text-sm text-gray-600">Sincronización automática desde tu tienda</div>
+            </div>
+          </li>
+
+          <li class="flex items-start gap-3 p-4 bg-white rounded-xl border-2 border-lime-200">
+            <svg class="w-6 h-6 text-lime-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+            </svg>
+            <div>
+              <div class="font-semibold text-gray-900">Precio fijo transparente</div>
+              <div class="text-sm text-gray-600">$2.500 por entrega, todas las zonas</div>
+            </div>
+          </li>
+        </ul>
+      </div>
+
+    </div>
+
+    <!-- CTA -->
+    <div class="text-center mt-12">
+      <a 
+        href="#contacto" 
+        @click.prevent="scrollTo('contacto')" 
+        class="inline-flex items-center space-x-2 px-8 py-4 bg-lime-500 text-white rounded-xl font-bold text-lg hover:bg-lime-600 transition-all shadow-xl hover:shadow-2xl hover:scale-105"
+      >
+        <span>Hacer el Cambio Ahora</span>
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+        </svg>
+      </a>
+    </div>
+  </div>
+</section>
     <!-- ========== CÓMO FUNCIONA ========== -->
     <section id="como-funciona" class="py-20 bg-gradient-to-br from-gray-50 to-white">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -326,6 +542,184 @@
         </div>
       </div>
     </section>
+    <!-- ========== FAQ (PREGUNTAS FRECUENTES) ========== -->
+<section class="py-20 bg-gradient-to-br from-gray-50 to-white">
+  <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="text-center mb-16">
+      <h2 class="text-4xl md:text-5xl font-bold text-gray-900 mb-4">Preguntas Frecuentes</h2>
+      <p class="text-xl text-gray-600">Todo lo que necesitas saber sobre enviGo</p>
+    </div>
+
+    <div class="space-y-4">
+      
+      <!-- Pregunta 1 -->
+      <div class="bg-white rounded-2xl shadow-lg border-2 border-gray-200 overflow-hidden hover:border-lime-300 transition-all">
+        <button 
+          @click="toggleFaq(1)"
+          class="w-full px-8 py-6 flex items-center justify-between text-left hover:bg-gray-50 transition-colors"
+        >
+          <span class="text-lg font-bold text-gray-900 pr-8">¿Qué pasa si no tengo 4 paquetes diarios?</span>
+          <svg 
+            class="w-6 h-6 text-lime-500 flex-shrink-0 transition-transform"
+            :class="{ 'rotate-180': openFaq === 1 }"
+            fill="none" 
+            stroke="currentColor" 
+            viewBox="0 0 24 24"
+          >
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+        <div 
+          v-show="openFaq === 1"
+          class="px-8 pb-6 text-gray-600 leading-relaxed"
+        >
+          No hay problema. Si tienes <strong>menos de 4 paquetes</strong>, aplicamos un cargo único de <strong>$3.000 por retiro</strong>. El precio por entrega sigue siendo $2.500 por pedido. Igual puedes usar todos nuestros servicios: tracking GPS, prueba digital, dashboard, etc.
+        </div>
+      </div>
+
+      <!-- Pregunta 2 -->
+      <div class="bg-white rounded-2xl shadow-lg border-2 border-gray-200 overflow-hidden hover:border-lime-300 transition-all">
+        <button 
+          @click="toggleFaq(2)"
+          class="w-full px-8 py-6 flex items-center justify-between text-left hover:bg-gray-50 transition-colors"
+        >
+          <span class="text-lg font-bold text-gray-900 pr-8">¿Entregan los sábados y domingos?</span>
+          <svg 
+            class="w-6 h-6 text-lime-500 flex-shrink-0 transition-transform"
+            :class="{ 'rotate-180': openFaq === 2 }"
+            fill="none" 
+            stroke="currentColor" 
+            viewBox="0 0 24 24"
+          >
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+        <div 
+          v-show="openFaq === 2"
+          class="px-8 pb-6 text-gray-600 leading-relaxed"
+        >
+          Por ahora, nuestro servicio opera de <strong>lunes a viernes</strong> en horario hábil (9:00 - 19:00). Los pedidos del viernes se entregan ese mismo día. Estamos evaluando ampliar a sábados según la demanda de nuestros clientes.
+        </div>
+      </div>
+
+      <!-- Pregunta 3 -->
+      <div class="bg-white rounded-2xl shadow-lg border-2 border-gray-200 overflow-hidden hover:border-lime-300 transition-all">
+        <button 
+          @click="toggleFaq(3)"
+          class="w-full px-8 py-6 flex items-center justify-between text-left hover:bg-gray-50 transition-colors"
+        >
+          <span class="text-lg font-bold text-gray-900 pr-8">¿Cómo funciona la integración con Mercado Libre Flex?</span>
+          <svg 
+            class="w-6 h-6 text-lime-500 flex-shrink-0 transition-transform"
+            :class="{ 'rotate-180': openFaq === 3 }"
+            fill="none" 
+            stroke="currentColor" 
+            viewBox="0 0 24 24"
+          >
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+        <div 
+          v-show="openFaq === 3"
+          class="px-8 pb-6 text-gray-600 leading-relaxed"
+        >
+          Es muy simple: conectas tu cuenta de Mercado Libre con enviGo (toma 2 minutos). Nuestro sistema <strong>sincroniza automáticamente solo los pedidos Flex</strong> que requieren entrega. Tú solo preparas los paquetes y nosotros nos encargamos de todo: retiro, entrega, tracking y actualización del estado en ML.
+        </div>
+      </div>
+
+      <!-- Pregunta 4 -->
+      <div class="bg-white rounded-2xl shadow-lg border-2 border-gray-200 overflow-hidden hover:border-lime-300 transition-all">
+        <button 
+          @click="toggleFaq(4)"
+          class="w-full px-8 py-6 flex items-center justify-between text-left hover:bg-gray-50 transition-colors"
+        >
+          <span class="text-lg font-bold text-gray-900 pr-8">¿Qué pasa si el cliente no está en casa?</span>
+          <svg 
+            class="w-6 h-6 text-lime-500 flex-shrink-0 transition-transform"
+            :class="{ 'rotate-180': openFaq === 4 }"
+            fill="none" 
+            stroke="currentColor" 
+            viewBox="0 0 24 24"
+          >
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+        <div 
+          v-show="openFaq === 4"
+          class="px-8 pb-6 text-gray-600 leading-relaxed"
+        >
+          Nuestro conductor <strong>contacta al cliente antes de llegar</strong> mediante llamada o WhatsApp. Si no está, intentamos coordinar un horario alternativo el mismo día. En caso de no poder entregar, se coordina la entrega para el siguiente día hábil <strong>sin costo adicional</strong> (primer reintento incluido).
+        </div>
+      </div>
+
+      <!-- Pregunta 5 -->
+      <div class="bg-white rounded-2xl shadow-lg border-2 border-gray-200 overflow-hidden hover:border-lime-300 transition-all">
+        <button 
+          @click="toggleFaq(5)"
+          class="w-full px-8 py-6 flex items-center justify-between text-left hover:bg-gray-50 transition-colors"
+        >
+          <span class="text-lg font-bold text-gray-900 pr-8">¿Puedo cancelar el servicio cuando quiera?</span>
+          <svg 
+            class="w-6 h-6 text-lime-500 flex-shrink-0 transition-transform"
+            :class="{ 'rotate-180': openFaq === 5 }"
+            fill="none" 
+            stroke="currentColor" 
+            viewBox="0 0 24 24"
+          >
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+        <div 
+          v-show="openFaq === 5"
+          class="px-8 pb-6 text-gray-600 leading-relaxed"
+        >
+          <strong>Sí, totalmente.</strong> No tenemos contratos de permanencia. Funciona bajo demanda: solo pagas por las entregas que realizamos. Si decides pausar o cancelar el servicio, puedes hacerlo en cualquier momento sin penalizaciones ni costos adicionales.
+        </div>
+      </div>
+
+      <!-- Pregunta 6 -->
+      <div class="bg-white rounded-2xl shadow-lg border-2 border-gray-200 overflow-hidden hover:border-lime-300 transition-all">
+        <button 
+          @click="toggleFaq(6)"
+          class="w-full px-8 py-6 flex items-center justify-between text-left hover:bg-gray-50 transition-colors"
+        >
+          <span class="text-lg font-bold text-gray-900 pr-8">¿Cobran por intentos fallidos de entrega?</span>
+          <svg 
+            class="w-6 h-6 text-lime-500 flex-shrink-0 transition-transform"
+            :class="{ 'rotate-180': openFaq === 6 }"
+            fill="none" 
+            stroke="currentColor" 
+            viewBox="0 0 24 24"
+          >
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+        <div 
+          v-show="openFaq === 6"
+          class="px-8 pb-6 text-gray-600 leading-relaxed"
+        >
+          El <strong>primer intento está incluido</strong> en el precio de $2.500. Si se requiere un segundo intento porque el cliente no coordinó o no estaba disponible, se cobra $1.500 adicionales. Por eso es importante que tus clientes estén atentos al tracking GPS y a las notificaciones.
+        </div>
+      </div>
+
+    </div>
+
+    <!-- CTA al final del FAQ -->
+    <div class="text-center mt-12">
+      <p class="text-gray-600 mb-6 text-lg">¿Tienes más preguntas?</p>
+      <a 
+        href="#contacto" 
+        @click.prevent="scrollTo('contacto')" 
+        class="inline-flex items-center space-x-2 px-8 py-4 bg-lime-500 text-white rounded-xl font-bold text-lg hover:bg-lime-600 transition-all shadow-xl hover:shadow-2xl hover:scale-105"
+      >
+        <span>Contáctanos</span>
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+        </svg>
+      </a>
+    </div>
+  </div>
+</section>
 
     <!-- ========== CONTACTO ========== -->
     <section id="contacto" class="py-20 bg-gradient-to-br from-lime-500 to-green-600">
@@ -458,6 +852,8 @@ import { ref, onMounted, onUnmounted } from 'vue'
 
 // ==================== STATE ====================
 const mobileMenuOpen = ref(false)
+const openFaq = ref(null)
+
 
 // ==================== CONTACT FORM ====================
 const contactForm = ref({
@@ -477,6 +873,10 @@ const scrollTo = (elementId) => {
     element.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 }
+const toggleFaq = (id) => {
+  openFaq.value = openFaq.value === id ? null : id
+}
+
 
 // Toggle menú móvil
 const toggleMobileMenu = () => {
