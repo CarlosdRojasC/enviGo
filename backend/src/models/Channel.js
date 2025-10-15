@@ -94,7 +94,7 @@ const channelSchema = new mongoose.Schema({
   },
   sync_status: { 
     type: String,
-    enum: ['success', 'error', 'pending', 'never'],
+    enum: ['success', 'error', 'pending', 'never', 'syncing'],
     default: 'never'
   },
   last_sync_error: { 
