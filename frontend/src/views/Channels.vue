@@ -1016,7 +1016,37 @@ async function syncChannel(channelId) {
     syncingChannels.value = syncingChannels.value.filter(id => id !== channelId);
   }
 }
+async function resyncChannel(channelId) {
+  if (!confirm('¿Re-sincronizar los últimos 30 días de pedidos de MercadoLibre?\n\nEsto actualizará pedidos existentes y creará los que falten.')) {
+    return;
+  }
+  
+  // Evita dobles clics
+  if (syncingChannels.value.includes(channelId)) return;
+  syncingChannels.value.push(channelId);
+  
+  try {
+    // Llamar al endpoint de re-sincronización
+    const { data } = await apiService.post(`/channels/${channelId}/resync`, {
+      daysBack: 30
+    });
 
+    toast.success(data.message || 'Re-sincronización iniciada. Los pedidos aparecerán en unos momentos.');
+    
+    // Recargar canales después de un tiempo
+    setTimeout(async () => {
+      await fetchChannels();
+      toast.info('Canales actualizados');
+    }, 5000);
+    
+  } catch (error) {
+    console.error('Error en la re-sincronización:', error);
+    toast.error(error.response?.data?.error || 'Error al re-sincronizar pedidos');
+  
+  } finally {
+    syncingChannels.value = syncingChannels.value.filter(id => id !== channelId);
+  }
+}
 function confirmDeleteChannel(channel) {
   channelToDelete.value = channel
   showDeleteModal.value = true
