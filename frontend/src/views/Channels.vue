@@ -1026,11 +1026,23 @@ async function resyncChannel(channelId) {
   syncingChannels.value.push(channelId);
   
   try {
-    // Llamar al endpoint de re-sincronización
-    const { data } = await apiService.post(`/channels/${channelId}/resync`, {
-      daysBack: 30
+    // ✅ CORRECCIÓN: Usar fetch o axios directamente
+    const token = localStorage.getItem('token');
+    const response = await fetch(`/api/channels/${channelId}/resync`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({ daysBack: 30 })
     });
 
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Error al re-sincronizar');
+    }
+
+    const data = await response.json();
     toast.success(data.message || 'Re-sincronización iniciada. Los pedidos aparecerán en unos momentos.');
     
     // Recargar canales después de un tiempo
@@ -1041,7 +1053,7 @@ async function resyncChannel(channelId) {
     
   } catch (error) {
     console.error('Error en la re-sincronización:', error);
-    toast.error(error.response?.data?.error || 'Error al re-sincronizar pedidos');
+    toast.error(error.message || 'Error al re-sincronizar pedidos');
   
   } finally {
     syncingChannels.value = syncingChannels.value.filter(id => id !== channelId);
