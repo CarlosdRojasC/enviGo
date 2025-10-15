@@ -468,18 +468,20 @@ static async processWebhook(channelId, webhookData) {
     const accessToken = await this.getAccessToken(channel);
 
     let orderId = null;
+    let shippingId = null;
+
     if (webhookData.topic.includes('orders')) {
       orderId = webhookData.resource.split('/').pop();
     } else if (webhookData.topic === 'shipments') {
-      const shippingId = webhookData.resource.split('/').pop();
-      const { data: sh } = await axios.get(`${this.API_BASE_URL}/shipments/${shippingId}`, {
+      shippingId = webhookData.resource.split('/').pop();
+      const { data: shipmentData } = await axios.get(`${this.API_BASE_URL}/shipments/${shippingId}`, {
         headers: { Authorization: `Bearer ${accessToken}` }
       });
-      orderId = sh.order_id;
+      orderId = shipmentData.order_id;
     }
 
     if (!orderId) {
-      console.log(`[ML Webhook] No hay order_id. Omitido.`);
+      console.log(`[ML Webhook] No se encontró order_id válido en el evento. Omitido.`);
       return true;
     }
 
@@ -487,15 +489,20 @@ static async processWebhook(channelId, webhookData) {
       headers: { Authorization: `Bearer ${accessToken}` }
     });
 
-    // ✔️ Sólo Flex si así lo necesitas
+    console.log(`📬 [ML Webhook] Pedido recibido desde ML (order_id=${orderId})`);
+    console.dir(mlOrder, { depth: null, colors: true });
+
+    // ⚙️ Solo procesar FLEX
     const isFlex = await this.isFlexOrder(mlOrder, accessToken);
     if (!isFlex) {
-      console.log(`[ML Webhook] order=${orderId} no es Flex. Omitido.`);
+      console.log(`[ML Webhook] Pedido ${orderId} no es FLEX. Omitido.`);
       return true;
     }
 
-    // Consolidar por pack_id (fallback order_id)
+    // ✅ Crear o actualizar pedido con los nuevos campos
     await this.createOrderFromApiData(mlOrder, channel, accessToken);
+
+    console.log(`✅ [ML Webhook] Pedido procesado correctamente (order=${orderId}).`);
     return true;
 
   } catch (error) {
@@ -503,6 +510,7 @@ static async processWebhook(channelId, webhookData) {
     return false;
   }
 }
+
 
 
 
@@ -530,20 +538,23 @@ static _mergeItems(existingItems = [], incomingItems = []) {
 }
 
 static async createOrderFromApiData(fullOrder, channel, accessToken) {
-  const orderId   = fullOrder.id?.toString();
-  const packId    = fullOrder.pack_id?.toString();
-  const shippingId= fullOrder.shipping?.id?.toString();
+  const orderId = fullOrder.id?.toString();
+  const packId = fullOrder.pack_id?.toString();
+  const shippingId = fullOrder.shipping?.id?.toString();
 
-  // 🔑 Clave única: siempre pack si existe, si no order
-  const uniqueKey = packId || orderId;
-  if (!uniqueKey) {
-    console.warn(`⚠️ [ML Order] Pedido sin pack_id ni order_id (id=${orderId}). Se omite.`);
+  // 🔑 Estructura requerida
+  const externalOrderId = shippingId;
+  const orderNumber = packId || orderId;
+
+  if (!shippingId) {
+    console.warn(`⚠️ [ML Order] Pedido ${orderId} sin shipping_id, se omite.`);
     return null;
   }
 
-  console.log(`📦 [ML Order] Upsert por clave ${uniqueKey} (pack=${packId||'N/A'} | order=${orderId||'N/A'} | ship=${shippingId||'N/A'})`);
+  console.log(`📦 [ML Order] Creando/actualizando pedido (shipping=${shippingId}, pack=${packId || 'N/A'}, order=${orderId})`);
+  console.log('🧾 [ML DEBUG] fullOrder completo desde Mercado Libre:');
+  console.dir(fullOrder, { depth: null, colors: true });
 
-  // 🧾 Ítems que vienen en esta orden individual
   const incomingItems = (fullOrder.order_items || []).map(i => ({
     title: i.item.title,
     quantity: i.quantity,
@@ -552,48 +563,39 @@ static async createOrderFromApiData(fullOrder, channel, accessToken) {
     currency: fullOrder.currency_id,
   }));
 
-  // Buscar pedido consolidado por pack/order
+  const totalAmount = incomingItems.reduce((sum, it) => sum + (it.subtotal || 0), 0);
+  const shippingCost = fullOrder.shipping?.cost || 0;
+  const status = this.mapOrderStatus(fullOrder);
+
+  // 🔍 Buscar si ya existe por shipping_id
   let order = await Order.findOne({
     channel_id: channel._id,
-    external_order_id: uniqueKey
+    external_order_id: externalOrderId
   });
 
   if (order) {
-    console.log(`🔁 [ML Order] Consolidando en existing (external_order_id=${uniqueKey})`);
-    // Merge de ítems (sumar cantidades si mismo producto/precio)
-    const mergedItems = this._mergeItems(order.items || [], incomingItems);
-    const totalAmount = mergedItems.reduce((s, it) => s + (it.subtotal || 0), 0);
-
-    // Shipping cost: evitar duplicación (conservar el mayor o el ya existente)
-    const incomingShipCost = fullOrder.shipping?.cost || 0;
-    const shippingCost = Math.max(order.shipping_cost || 0, incomingShipCost || 0);
-
-    order.items = mergedItems;
+    console.log(`🔁 [ML Order] Pedido existente encontrado (shipping=${shippingId}), actualizando datos`);
+    order.items = incomingItems;
     order.total_amount = totalAmount;
     order.shipping_cost = shippingCost;
-    order.status = this.mapOrderStatus(fullOrder);
-    order.raw_data = [...(order.raw_data || []), fullOrder]; // historial
-    order.ml_shipping_id = order.ml_shipping_id || shippingId; // mantener 1er shipping
-    order.order_number = order.order_number || shippingId || uniqueKey;
+    order.status = status;
+    order.raw_data = [...(order.raw_data || []), fullOrder];
     order.updated_at = new Date();
-
     await order.save();
-    console.log(`💾 [ML Order] Consolidado: items=${mergedItems.length} total=${totalAmount} shipCost=${shippingCost}`);
+
+    console.log(`💾 [ML Order] Pedido actualizado. Total: ${totalAmount} | Envío: ${shippingCost}`);
     return order;
   }
 
-  // Si no existe, crear nuevo
+  // 📦 Crear nuevo pedido
   const shippingInfo = await this.getShippingInfo(fullOrder, accessToken);
-  const mergedItems = this._mergeItems([], incomingItems);
-  const totalAmount = mergedItems.reduce((s, it) => s + (it.subtotal || 0), 0);
-  const shippingCost = fullOrder.shipping?.cost || 0;
 
   const newOrder = new Order({
     company_id: channel.company_id,
     channel_id: channel._id,
-    external_order_id: uniqueKey,      // 👈 pack_id o order_id
-    ml_shipping_id: shippingId || null,
-    order_number: shippingId || uniqueKey,
+    external_order_id: externalOrderId, // 👈 shipping_id
+    order_number: orderNumber,          // 👈 pack_id o order_id
+    ml_shipping_id: shippingId,
     customer_name: `${fullOrder.buyer.first_name} ${fullOrder.buyer.last_name}`.trim(),
     customer_email: fullOrder.buyer.email,
     customer_phone: shippingInfo.phone,
@@ -606,17 +608,19 @@ static async createOrderFromApiData(fullOrder, channel, accessToken) {
     total_amount: totalAmount,
     shipping_cost: shippingCost,
     currency: fullOrder.currency_id,
-    status: this.mapOrderStatus(fullOrder),
+    status,
     order_date: new Date(fullOrder.date_created),
-    items: mergedItems,
+    items: incomingItems,
     raw_data: [fullOrder],
-    notes: `Consolidado ML | pack=${packId||'N/A'} | order=${orderId||'N/A'} | ship=${shippingId||'N/A'}`
+    notes: `Pedido Mercado Libre | pack=${packId || 'N/A'} | order=${orderId} | shipping=${shippingId}`
   });
 
   await newOrder.save();
-  console.log(`🆕 [ML Order] Creado (external_order_id=${uniqueKey}) items=${mergedItems.length} total=${totalAmount} shipCost=${shippingCost}`);
+  console.log(`✅ [ML Order] Pedido creado con éxito. external_order_id=${externalOrderId}, order_number=${orderNumber}`);
+  console.log(`💰 Total: ${totalAmount} | Envío: ${shippingCost}`);
   return newOrder;
 }
+
 
 
 
