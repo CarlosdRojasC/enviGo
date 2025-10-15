@@ -714,174 +714,152 @@ static async createOrderFromApiData(fullOrder, channel, accessToken) {
       return { address: 'Error al obtener dirección' };
     }
   }
-static async getShippingLabel(orderId, channelId) {
-  console.log('🟢 [ML Service] getShippingLabel iniciando', { orderId, channelId });
+static async getShippingLabel(externalOrderId, channelId) {
+  console.log('🟢 [ML Service] getShippingLabel iniciando', { externalOrderId, channelId });
   
   const channel = await Channel.findById(channelId);
   if (!channel) {
     throw new Error(`Canal ${channelId} no encontrado`);
   }
-  
+
   const accessToken = await this.getAccessToken(channel);
-  
-  // 1️⃣ Consultar orden / pack
-  let orderResponse;
+
+  // =====================================================
+  // 1️⃣ Determinar si el parámetro recibido es un shipping_id o un order_id
+  // =====================================================
+  let shipmentId = null;
+  let orderId = null;
+  let packId = null;
+
+  // 👉 Primero intentamos usarlo directamente como shipment
   try {
-    orderResponse = await axios.get(
-      `${this.API_BASE_URL}/orders/${orderId}`,
-      { headers: { Authorization: `Bearer ${accessToken}` } }
-    );
+    console.log(`🔍 Intentando usar ${externalOrderId} como shipment_id`);
+    const { data: shipment } = await axios.get(`${this.API_BASE_URL}/shipments/${externalOrderId}`, {
+      headers: { Authorization: `Bearer ${accessToken}` }
+    });
+
+    shipmentId = shipment.id;
+    orderId = shipment.order_id;
+    console.log(`📦 [ML Label] El ID ${externalOrderId} corresponde a un shipment (${shipmentId}) → order_id=${orderId}`);
   } catch (err) {
-    console.error('❌ Error consultando orden en ML:', err.response?.data || err.message);
-    throw new Error(`ML no reconoce la orden ${orderId}`);
-  }
-  
-  const orderData = orderResponse.data;
-  const packId = orderData.pack_id;
-  const shipmentId = orderData.shipping?.id;
-  
-  // 2️⃣ Si pack_id existe, preferir etiqueta de pack (si aplica)
-  if (packId) {
-    console.log(`📦 Orden es parte de pack ${packId}, solicitando etiqueta de pack`);
+    console.log(`⚠️ [ML Label] ${externalOrderId} no parece un shipment_id válido. Intentando como order_id...`);
     try {
-      return await axios({
+      const { data: order } = await axios.get(`${this.API_BASE_URL}/orders/${externalOrderId}`, {
+        headers: { Authorization: `Bearer ${accessToken}` }
+      });
+      orderId = order.id;
+      packId = order.pack_id;
+      shipmentId = order.shipping?.id;
+      console.log(`📦 [ML Label] El ID ${externalOrderId} corresponde a una orden (${orderId}) con shipment=${shipmentId}`);
+    } catch (err2) {
+      console.error('❌ [ML Label] No se pudo identificar el tipo de ID:', err2.response?.data || err2.message);
+      throw new Error(`No se encontró ningún envío ni orden con ID ${externalOrderId}`);
+    }
+  }
+
+  // =====================================================
+  // 2️⃣ Si el pedido pertenece a un pack, intentar la etiqueta del pack
+  // =====================================================
+  if (packId) {
+    console.log(`📦 [ML Label] Pedido pertenece al pack ${packId}, intentando obtener etiqueta del pack...`);
+    try {
+      const labelResponse = await axios({
         method: 'GET',
         url: `${this.API_BASE_URL}/packs/${packId}/labels`,
         headers: { Authorization: `Bearer ${accessToken}` },
         responseType: 'stream'
       });
+      console.log(`✅ [ML Label] Etiqueta del pack ${packId} obtenida correctamente`);
+      return labelResponse;
     } catch (err) {
-      console.error('⚠️ Error con etiqueta de pack:', err.response?.data || err.message);
-      console.log('🔄 Intentando con etiqueta de shipment individual...');
-      // No hacer throw aquí, continuar con el shipment individual
+      console.error('⚠️ [ML Label] Error al obtener etiqueta del pack:', err.response?.data || err.message);
+      console.log('🔁 Continuando con el shipment individual...');
     }
   }
-  
-  // 3️⃣ Validar que shipment_id exista
+
+  // =====================================================
+  // 3️⃣ Validar que tengamos un shipment_id válido
+  // =====================================================
   if (!shipmentId) {
-    throw new Error(`No se encontró shipment para la orden ${externalOrderId}`);
+    throw new Error(`No se encontró shipment_id asociado al pedido ${externalOrderId}`);
   }
-  
-  console.log(`📦 [ML Service] Solicitando etiqueta del shipment ${shipmentId}`);
-  
-  // 4️⃣ Consultar el shipment con x-format-new para verificar estado / logística
+
+  console.log(`📦 [ML Label] Solicitando etiqueta del shipment ${shipmentId}`);
+
+  // =====================================================
+  // 4️⃣ Consultar detalles del shipment
+  // =====================================================
   let shipmentInfo;
   try {
-    shipmentInfo = await axios.get(
-      `${this.API_BASE_URL}/shipments/${shipmentId}`,
-      {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          'x-format-new': 'true'
-        }
+    const { data } = await axios.get(`${this.API_BASE_URL}/shipments/${shipmentId}`, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'x-format-new': 'true'
       }
-    );
+    });
+    shipmentInfo = data;
   } catch (err) {
-    console.error('❌ Error consultando shipment:', err.response?.data || err.message);
-    throw new Error(`No se pudo consultar shipment ${shipmentId}`);
+    console.error('❌ [ML Label] Error consultando shipment:', err.response?.data || err.message);
+    throw new Error(`No se pudo consultar el envío ${shipmentId}`);
   }
-  
-  const s = shipmentInfo.data;
-  const { status, substatus, logistic } = s;
-  
-  // 🔍 CORRECCIÓN: Validar que logistic existe
+
+  const { status, substatus, logistic } = shipmentInfo;
   if (!logistic) {
-    console.error('❌ El shipment no tiene información de logística:', s);
+    console.error('❌ [ML Label] El shipment no tiene información de logística:', shipmentInfo);
     throw new Error(`Shipment ${shipmentId} no tiene información de logística`);
   }
-  
+
   const logisticMode = logistic.mode;
   const logisticType = logistic.type;
-  
-  console.log('🔍 Datos shipment:', { 
-    shipmentId,
-    status, 
-    substatus, 
-    logisticMode,
-    logisticType 
-  });
-  
-  // 5️⃣ Validaciones de ME2: modo y tipo
+  console.log('🔍 [ML Label] Detalle logístico:', { logisticMode, logisticType, status, substatus });
+
+  // =====================================================
+  // 5️⃣ Validaciones logísticas y de estado
+  // =====================================================
   if (logisticMode !== 'me2') {
-    throw new Error(
-      `Modo logístico inválido para obtener etiqueta: "${logisticMode}". Se requiere "me2"`
-    );
+    throw new Error(`Modo logístico inválido: "${logisticMode}". Solo se puede imprimir en modo "me2"`);
   }
-  
-  // Tipos que permiten imprimir etiqueta
+
   const tiposConEtiqueta = ['drop_off', 'xd_drop_off', 'cross_docking', 'self_service'];
-  
   if (logisticType === 'fulfillment') {
-    throw new Error(
-      `Envío en modalidad fulfillment: Mercado Libre imprime la etiqueta, no está disponible para el vendedor`
-    );
+    throw new Error(`El tipo "${logisticType}" (fulfillment) no permite imprimir etiquetas manualmente.`);
   }
-  
   if (!tiposConEtiqueta.includes(logisticType)) {
-    throw new Error(
-      `Tipo logístico "${logisticType}" no permite imprimir etiquetas. ` +
-      `Tipos válidos: ${tiposConEtiqueta.join(', ')}`
-    );
+    throw new Error(`Tipo logístico "${logisticType}" no permite etiquetas. Tipos válidos: ${tiposConEtiqueta.join(', ')}`);
   }
-  
-  // 6️⃣ Verificar estado imprimible
-  // CORRECCIÓN: También permitir substatus 'printed' (para reimpresión)
+
   const substatusValidos = ['ready_to_print', 'printed'];
-  
   if (status !== 'ready_to_ship') {
-    throw new Error(
-      `El envío no está listo para imprimir. ` +
-      `Estado actual: "${status}" (se requiere "ready_to_ship")`
-    );
+    throw new Error(`El envío ${shipmentId} no está listo para imprimir (status=${status})`);
   }
-  
   if (!substatusValidos.includes(substatus)) {
-    throw new Error(
-      `El envío no está listo para imprimir. ` +
-      `Subestado actual: "${substatus}" (se requiere: ${substatusValidos.join(' o ')})`
-    );
+    throw new Error(`El envío ${shipmentId} no está en subestado imprimible (substatus=${substatus})`);
   }
-  
-  // 7️⃣ Llamar al endpoint plural de etiquetas
+
+  // =====================================================
+  // 6️⃣ Descargar la etiqueta PDF
+  // =====================================================
   try {
     const url = `${this.API_BASE_URL}/shipment_labels?shipment_ids=${shipmentId}&response_type=pdf`;
-    console.log('📡 Solicitando label vía shipment_labels:', url);
-    
+    console.log('📡 [ML Label] Solicitando etiqueta PDF:', url);
+
     const labelResponse = await axios({
       method: 'GET',
       url,
       headers: { Authorization: `Bearer ${accessToken}` },
-      responseType: 'stream' // ✅ Correcto: stream para manejar el PDF
+      responseType: 'stream'
     });
-    
-    console.log(`✅ [ML Service] Etiqueta obtenida exitosamente para shipment ${shipmentId}`);
-    console.log(`📋 Tipo de logística: ${logisticType}`);
-    
+
+    console.log(`✅ [ML Label] Etiqueta PDF obtenida exitosamente para shipment ${shipmentId}`);
     return labelResponse;
-    
+
   } catch (err) {
-    // 🔍 CORRECCIÓN: Mejor manejo de errores
-    const errorMsg = err.response?.data || err.message;
-    console.error('❌ Error obteniendo etiqueta PDF:', errorMsg);
-    
-    // Si el error viene de la API de ML, intentar parsearlo
-    if (err.response?.status === 400) {
-      throw new Error(
-        `Mercado Libre rechazó la solicitud de etiqueta para shipment ${shipmentId}. ` +
-        `Verifica que el estado sea correcto (status: ${status}, substatus: ${substatus})`
-      );
-    } else if (err.response?.status === 404) {
-      throw new Error(
-        `No se encontró la etiqueta para shipment ${shipmentId}. ` +
-        `Puede que el envío no esté disponible o haya sido cancelado.`
-      );
-    }
-    
-    throw new Error(
-      `No se pudo descargar la etiqueta PDF para shipment ${shipmentId}: ${errorMsg}`
-    );
+    const msg = err.response?.data || err.message;
+    console.error('❌ [ML Label] Error descargando etiqueta:', msg);
+    throw new Error(`No se pudo obtener la etiqueta para shipment ${shipmentId}: ${msg}`);
   }
 }
+
 
 
   static async extractShippingAddressSimple(mlOrder) {
