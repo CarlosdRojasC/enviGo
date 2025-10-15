@@ -991,13 +991,29 @@ function showChannelDetails(channel) {
 async function syncChannel(channelId) {
   // Evita dobles clics
   if (syncingChannels.value.includes(channelId)) return;
+  
+  // ✅ NUEVO: Preguntar si quiere forzar re-sincronización
+  const channel = channels.value.find(c => c._id === channelId);
+  const isInitialSyncDone = channel?.settings?.initial_sync_completed;
+  
+  let forceResync = false;
+  
+  if (isInitialSyncDone && channel?.channel_type === 'mercadolibre') {
+    const confirmMsg = '¿Qué deseas hacer?\n\n' +
+                       'OK = Re-sincronizar últimos 30 días (traer pedidos de nuevo)\n' +
+                       'Cancelar = Sincronización normal (solo actualizar)';
+    forceResync = confirm(confirmMsg);
+  }
+  
   syncingChannels.value.push(channelId);
   
   try {
-    // Llamar al backend para sincronizar
+    // ✅ Agregar force:true si quiere re-sincronizar
     const { data } = await apiService.channels.syncOrders(channelId, {
       date_from: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
-      date_to: new Date().toISOString()
+      date_to: new Date().toISOString(),
+      force: forceResync,  // ✅ NUEVO parámetro
+      daysBack: 30         // ✅ NUEVO parámetro
     });
 
     // Actualizar el canal en la lista local
@@ -1006,7 +1022,18 @@ async function syncChannel(channelId) {
       channels.value[index] = { ...channels.value[index], ...data.channel };
     }
 
-    toast.success(data.message || 'Sincronización completada exitosamente.');
+    const message = forceResync 
+      ? 'Re-sincronización completada. Revisa tus pedidos.' 
+      : (data.message || 'Sincronización completada exitosamente.');
+    
+    toast.success(message);
+    
+    // ✅ Si fue re-sync, recargar después de un momento
+    if (forceResync) {
+      setTimeout(async () => {
+        await fetchChannels();
+      }, 3000);
+    }
     
   } catch (error) {
     console.error('Error en la sincronización:', error);
