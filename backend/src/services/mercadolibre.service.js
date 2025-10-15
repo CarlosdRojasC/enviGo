@@ -520,9 +520,9 @@ static async processWebhook(channelId, webhookData) {
       return true;
     }
 
-    // 5️⃣ Actualizar estado según ML
-    const currentStatus = this.mapOrderStatus(mlOrder);
-    console.log(`🚚 [ML Webhook] Estado recibido desde ML: ${currentStatus}`);
+    // 5️⃣ Calcular el nuevo estado según ML
+    const newStatus = this.mapOrderStatus(mlOrder);
+    console.log(`🚚 [ML Webhook] Estado recibido desde ML: ${newStatus}`);
 
     const existingOrder = await Order.findOne({
       channel_id: channelId,
@@ -530,26 +530,35 @@ static async processWebhook(channelId, webhookData) {
     });
 
     if (existingOrder) {
-      // 🔍 Mostrar el cambio de estado si aplica
-      if (existingOrder.status !== currentStatus) {
-        console.log(
-          `🔁 [ML Webhook] Estado actualizado para envío ${shippingId}: ` +
-          `${existingOrder.status || 'sin_estado'} ➡️ ${currentStatus}`
-        );
+      const currentStatus = existingOrder.status;
+      
+      // 🛡️ Estados finales que NO deben ser sobrescritos
+      const finalStatuses = ['delivered', 'cancelled'];
+      
+      // Solo actualizar el estado si NO es un estado final
+      if (!finalStatuses.includes(currentStatus)) {
+        if (currentStatus !== newStatus) {
+          console.log(
+            `🔁 [ML Webhook] Estado actualizado para envío ${shippingId}: ` +
+            `${currentStatus} ➡️ ${newStatus}`
+          );
+          existingOrder.status = newStatus;
+        } else {
+          console.log(`⚖️ [ML Webhook] Estado sin cambios (${currentStatus}) para envío ${shippingId}`);
+        }
       } else {
         console.log(
-          `⚖️ [ML Webhook] Estado sin cambios (${currentStatus}) para envío ${shippingId}`
+          `🔒 [ML Webhook] Estado final (${currentStatus}) NO se sobrescribe con ${newStatus} para envío ${shippingId}`
         );
       }
-
-      existingOrder.status = currentStatus;
+      
       existingOrder.raw_data = mlOrder;
       existingOrder.total_amount = mlOrder.total_amount || existingOrder.total_amount;
       await existingOrder.save();
-      console.log(`💾 [ML Webhook] Pedido actualizado con estado '${currentStatus}' para envío ${shippingId}`);
+      console.log(`💾 [ML Webhook] Pedido actualizado para envío ${shippingId}`);
     } else {
       await this.createOrderFromApiData(mlOrder, channel, accessToken, shippingId);
-      console.log(`➕ [ML Webhook] Pedido nuevo creado con envío ${shippingId} (${currentStatus})`);
+      console.log(`➕ [ML Webhook] Pedido nuevo creado con envío ${shippingId} (${newStatus})`);
     }
 
     return true;
@@ -602,12 +611,30 @@ static async createOrderFromApiData(fullOrder, channel, accessToken) {
 
   if (order) {
     console.log(`🔄 [ML Order] Actualizando pedido existente: ${order._id} (external: ${externalOrderId})`);
+    
+    const currentStatus = order.status;
+    const newStatus = this.mapOrderStatus(fullOrder);
+    
+    // 🛡️ Estados finales que NO deben ser sobrescritos
+    const finalStatuses = ['delivered', 'cancelled'];
+    
+    // Solo actualizar el estado si NO es un estado final
+    if (!finalStatuses.includes(currentStatus)) {
+      if (currentStatus !== newStatus) {
+        console.log(`📝 [ML Order] Actualizando estado: ${currentStatus} → ${newStatus}`);
+        order.status = newStatus;
+      } else {
+        console.log(`⚪ [ML Order] Estado sin cambios: ${currentStatus}`);
+      }
+    } else {
+      console.log(`🔒 [ML Order] Estado final detectado (${currentStatus}), NO se sobrescribe con ${newStatus}`);
+    }
+    
     order.total_amount = totalAmount;
     order.items = items;
-    order.status = this.mapOrderStatus(fullOrder);
     order.raw_data = fullOrder;
     order.shipping_address = shippingInfo.address;
-    order.shipping_commune = shippingInfo.city; // ← AGREGADO
+    order.shipping_commune = shippingInfo.city;
     order.shipping_city = shippingInfo.city;
     order.shipping_state = shippingInfo.state;
     order.shipping_zip = shippingInfo.zip_code;
@@ -638,7 +665,7 @@ static async createOrderFromApiData(fullOrder, channel, accessToken) {
     customer_phone: shippingInfo.phone,
     customer_document: fullOrder.buyer.billing_info?.doc_number || '',
     shipping_address: shippingInfo.address,
-    shipping_commune: shippingInfo.city, // ← AGREGADO
+    shipping_commune: shippingInfo.city,
     shipping_city: shippingInfo.city,
     shipping_state: shippingInfo.state,
     shipping_zip: shippingInfo.zip_code,
@@ -654,7 +681,7 @@ static async createOrderFromApiData(fullOrder, channel, accessToken) {
 
   try {
     await newOrder.save();
-    console.log(`✅ [ML Order] Pedido creado: ${newOrder._id} (external: ${externalOrderId}, shipping: ${shippingId})`);
+    console.log(`✅ [ML Order] Pedido creado: ${newOrder._id} (external: ${externalOrderId}, status: ${newOrder.status})`);
     return newOrder;
   } catch (error) {
     // 🛡️ Si falla por duplicado (race condition), buscar el existente
