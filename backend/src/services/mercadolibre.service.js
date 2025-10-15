@@ -378,91 +378,64 @@ static async syncInitialOrders(channelId) {
   /**
    * ✅ FUNCIÓN DE DETECCIÓN FLEX MEJORADA
    */
-static async isFlexOrder(mlOrder, accessToken) {
-  console.log(`🔍 [ML Flex Check] Analizando pedido ${mlOrder.id} para Flex:`);
-  
-  // MÉTODO 1: Verificar por tags del pedido
-  if (mlOrder.tags && Array.isArray(mlOrder.tags)) {
-    const flexTags = ['self_service', 'flex', 'self_service_in'];
-    const hasFlexTag = mlOrder.tags.some(tag => 
-      flexTags.includes(tag.toLowerCase())
-    );
+  static async isFlexOrder(mlOrder, accessToken) {
+    console.log(`🔍 [ML Flex Check] Analizando pedido ${mlOrder.id} para Flex:`);
     
-    if (hasFlexTag) {
-      console.log(`✅ [ML Flex Check] Pedido ${mlOrder.id} es Flex (tags)`, mlOrder.tags);
-      return true;
-    }
-  }
-
-  // MÉTODO 2: Consultar el shipment
-  if (mlOrder.shipping?.id) {
-    try {
-      const shipmentResponse = await axios.get(`${this.API_BASE_URL}/shipments/${mlOrder.shipping.id}`, {
-        headers: { 
-          'Authorization': `Bearer ${accessToken}`,
-          'x-format-new': 'true' // ← CRÍTICO para obtener formato completo
-        },
-        timeout: 15000
-      });
-
-      const shipment = shipmentResponse.data;
+    // MÉTODO 1: Verificar por tags del pedido
+    if (mlOrder.tags && Array.isArray(mlOrder.tags)) {
+      const flexTags = ['self_service', 'flex', 'self_service_in'];
+      const hasFlexTag = mlOrder.tags.some(tag => 
+        flexTags.includes(tag.toLowerCase())
+      );
       
-      // Verificar logistic_type = "self_service" (formato antiguo)
-      if (shipment.logistic_type === 'self_service') {
-        console.log(`✅ [ML Flex Check] Pedido ${mlOrder.id} es Flex (logistic_type = self_service)`);
+      if (hasFlexTag) {
+        console.log(`✅ [ML Flex Check] Pedido ${mlOrder.id} es Flex (tags)`, mlOrder.tags);
         return true;
       }
+    }
 
-      // Verificar logistic.type (formato nuevo)
-      if (shipment.logistic?.type === 'self_service') {
-        console.log(`✅ [ML Flex Check] Pedido ${mlOrder.id} es Flex (logistic.type = self_service)`);
-        return true;
-      }
+    // MÉTODO 2: Consultar el shipment
+    if (mlOrder.shipping?.id) {
+      try {
+        const shipmentResponse = await axios.get(`${this.API_BASE_URL}/shipments/${mlOrder.shipping.id}`, {
+          headers: { 'Authorization': `Bearer ${accessToken}` },
+          timeout: 15000
+        });
 
-      // Verificar sender_address.types
-      if (shipment.sender_address?.types && Array.isArray(shipment.sender_address.types)) {
-        const hasFlexType = shipment.sender_address.types.some(type => 
-          type.includes('self_service') || type.includes('flex')
-        );
+        const shipment = shipmentResponse.data;
         
-        if (hasFlexType) {
-          console.log(`✅ [ML Flex Check] Pedido ${mlOrder.id} es Flex (sender_address.types)`, shipment.sender_address.types);
+        // Verificar logistic_type = "self_service"
+        if (shipment.logistic_type === 'self_service') {
+          console.log(`✅ [ML Flex Check] Pedido ${mlOrder.id} es Flex (logistic_type = self_service)`);
           return true;
         }
-      }
 
-      // Verificar origin.shipping_address.types
-      if (shipment.origin?.shipping_address?.types && Array.isArray(shipment.origin.shipping_address.types)) {
-        const hasFlexType = shipment.origin.shipping_address.types.some(type => 
-          type.includes('self_service') || type.includes('flex')
-        );
-        
-        if (hasFlexType) {
-          console.log(`✅ [ML Flex Check] Pedido ${mlOrder.id} es Flex (origin.types)`, shipment.origin.shipping_address.types);
+        // Verificar sender_address.types
+        if (shipment.sender_address?.types && Array.isArray(shipment.sender_address.types)) {
+          const hasFlexType = shipment.sender_address.types.some(type => 
+            type.includes('self_service_partner') || type.includes('self_service')
+          );
+          
+          if (hasFlexType) {
+            console.log(`✅ [ML Flex Check] Pedido ${mlOrder.id} es Flex (sender_address.types)`, shipment.sender_address.types);
+            return true;
+          }
+        }
+
+        // Verificar service_id específico de Flex
+        if (shipment.service_id === 3826008) {
+          console.log(`✅ [ML Flex Check] Pedido ${mlOrder.id} es Flex (service_id = 3826008)`);
           return true;
         }
-      }
 
-      // Verificar service_id específico de Flex
-      const flexServiceIds = [
-        3826008,  // Flex Chile
-        136261,   // Flex Argentina
-        // Agregar más según necesites
-      ];
-      
-      if (flexServiceIds.includes(shipment.service_id)) {
-        console.log(`✅ [ML Flex Check] Pedido ${mlOrder.id} es Flex (service_id = ${shipment.service_id})`);
-        return true;
+      } catch (error) {
+        console.error(`❌ [ML Flex Check] Error consultando shipment ${mlOrder.shipping.id}:`, error.message);
       }
-
-    } catch (error) {
-      console.error(`❌ [ML Flex Check] Error consultando shipment ${mlOrder.shipping.id}:`, error.message);
     }
-  }
 
-  console.log(`❌ [ML Flex Check] Pedido ${mlOrder.id} NO es Flex`);
-  return false;
-}
+    console.log(`❌ [ML Flex Check] Pedido ${mlOrder.id} NO es Flex`);
+    return false;
+  }
 
   static async getValidAccessToken(channel) {
     console.log('🔑 [ML Auth] Verificando access token...');
@@ -547,9 +520,9 @@ static async processWebhook(channelId, webhookData) {
       return true;
     }
 
-    // 5️⃣ Calcular el nuevo estado según ML
-    const newStatus = this.mapOrderStatus(mlOrder);
-    console.log(`🚚 [ML Webhook] Estado recibido desde ML: ${newStatus}`);
+    // 5️⃣ Actualizar estado según ML
+    const currentStatus = this.mapOrderStatus(mlOrder);
+    console.log(`🚚 [ML Webhook] Estado recibido desde ML: ${currentStatus}`);
 
     const existingOrder = await Order.findOne({
       channel_id: channelId,
@@ -557,35 +530,26 @@ static async processWebhook(channelId, webhookData) {
     });
 
     if (existingOrder) {
-      const currentStatus = existingOrder.status;
-      
-      // 🛡️ Estados finales que NO deben ser sobrescritos
-      const finalStatuses = ['delivered', 'cancelled'];
-      
-      // Solo actualizar el estado si NO es un estado final
-      if (!finalStatuses.includes(currentStatus)) {
-        if (currentStatus !== newStatus) {
-          console.log(
-            `🔁 [ML Webhook] Estado actualizado para envío ${shippingId}: ` +
-            `${currentStatus} ➡️ ${newStatus}`
-          );
-          existingOrder.status = newStatus;
-        } else {
-          console.log(`⚖️ [ML Webhook] Estado sin cambios (${currentStatus}) para envío ${shippingId}`);
-        }
+      // 🔍 Mostrar el cambio de estado si aplica
+      if (existingOrder.status !== currentStatus) {
+        console.log(
+          `🔁 [ML Webhook] Estado actualizado para envío ${shippingId}: ` +
+          `${existingOrder.status || 'sin_estado'} ➡️ ${currentStatus}`
+        );
       } else {
         console.log(
-          `🔒 [ML Webhook] Estado final (${currentStatus}) NO se sobrescribe con ${newStatus} para envío ${shippingId}`
+          `⚖️ [ML Webhook] Estado sin cambios (${currentStatus}) para envío ${shippingId}`
         );
       }
-      
+
+      existingOrder.status = currentStatus;
       existingOrder.raw_data = mlOrder;
       existingOrder.total_amount = mlOrder.total_amount || existingOrder.total_amount;
       await existingOrder.save();
-      console.log(`💾 [ML Webhook] Pedido actualizado para envío ${shippingId}`);
+      console.log(`💾 [ML Webhook] Pedido actualizado con estado '${currentStatus}' para envío ${shippingId}`);
     } else {
       await this.createOrderFromApiData(mlOrder, channel, accessToken, shippingId);
-      console.log(`➕ [ML Webhook] Pedido nuevo creado con envío ${shippingId} (${newStatus})`);
+      console.log(`➕ [ML Webhook] Pedido nuevo creado con envío ${shippingId} (${currentStatus})`);
     }
 
     return true;
@@ -603,19 +567,17 @@ static async processWebhook(channelId, webhookData) {
 static async createOrderFromApiData(fullOrder, channel, accessToken) {
   const shippingInfo = await this.getShippingInfo(fullOrder, accessToken);
 
-  // 🆕 Identificadores claros
+  // 🆕 Identificadores principales
   const orderId = fullOrder.id?.toString();
   const packId = fullOrder.pack_id?.toString();
   const shippingId = fullOrder.shipping?.id?.toString();
 
-  // ✅ El external_order_id será el order_id o pack_id (prioridad a order_id)
-  const externalOrderId = orderId || packId;
-  if (!externalOrderId) {
-    console.warn(`⚠️ [ML Order] Pedido ${fullOrder.id} sin order_id ni pack_id, se omite.`);
+  if (!shippingId) {
+    console.warn(`⚠️ [ML Order] Pedido ${orderId} sin shipping_id, se omite.`);
     return null;
   }
 
-  // 🧾 Datos de ítems (sin calcular el total aquí)
+  // 🧾 Items y totales
   const items = (fullOrder.order_items || []).map(i => ({
     title: i.item.title,
     quantity: i.quantity,
@@ -623,47 +585,21 @@ static async createOrderFromApiData(fullOrder, channel, accessToken) {
     subtotal: i.full_unit_price * i.quantity || (i.unit_price * i.quantity),
     currency: fullOrder.currency_id,
   }));
+  const totalAmount = items.reduce((sum, it) => sum + it.subtotal, 0);
 
-  // 💰 IMPORTANTE: Usar el total_amount que viene de MercadoLibre
-  // Este ya incluye el precio total del pedido/pack completo
-  const totalAmount = fullOrder.total_amount || 0;
-  
-  console.log(`💰 [ML Order] Total del pedido ${externalOrderId}: ${totalAmount} ${fullOrder.currency_id}`);
-
-  // 🔍 MEJORADO: Buscar por múltiples criterios para evitar duplicados
+  // 🚀 Buscar pedido existente por shipping_id
   let order = await Order.findOne({
-    company_id: channel.company_id,
     channel_id: channel._id,
-    $or: [
-      { external_order_id: externalOrderId },
-      { external_order_id: orderId },
-      { ml_shipping_id: shippingId }
-    ]
+    ml_shipping_id: shippingId,
   });
 
   if (order) {
-    console.log(`🔄 [ML Order] Actualizando pedido existente: ${order._id} (external: ${externalOrderId})`);
-    
-    const currentStatus = order.status;
-    const newStatus = this.mapOrderStatus(fullOrder);
-    
-    // 🛡️ Estados finales que NO deben ser sobrescritos
-    const finalStatuses = ['delivered', 'cancelled'];
-    
-    // Solo actualizar el estado si NO es un estado final
-    if (!finalStatuses.includes(currentStatus)) {
-      if (currentStatus !== newStatus) {
-        console.log(`📝 [ML Order] Actualizando estado: ${currentStatus} → ${newStatus}`);
-        order.status = newStatus;
-      } else {
-        console.log(`⚪ [ML Order] Estado sin cambios: ${currentStatus}`);
-      }
-    } else {
-      console.log(`🔒 [ML Order] Estado final detectado (${currentStatus}), NO se sobrescribe con ${newStatus}`);
-    }
-    
-    order.total_amount = totalAmount; // ✅ Total desde ML
+    console.log(`🔁 [ML Order] Actualizando pedido existente para envío ${shippingId}`);
+
+    // Actualizar campos clave
+    order.total_amount = totalAmount;
     order.items = items;
+    order.status = this.mapOrderStatus(fullOrder);
     order.raw_data = fullOrder;
     order.shipping_address = shippingInfo.address;
     order.shipping_commune = shippingInfo.city;
@@ -671,27 +607,23 @@ static async createOrderFromApiData(fullOrder, channel, accessToken) {
     order.shipping_state = shippingInfo.state;
     order.shipping_zip = shippingInfo.zip_code;
     order.customer_phone = shippingInfo.phone;
-    order.ml_shipping_id = shippingId;
-    
-    // Actualizar external_order_id si cambió
-    if (order.external_order_id !== externalOrderId) {
-      console.log(`🔄 [ML Order] Actualizando external_order_id: ${order.external_order_id} → ${externalOrderId}`);
-      order.external_order_id = externalOrderId;
-    }
-    
+
+    // 🔄 Mantener consistencia de IDs
+    order.external_order_id = orderId || packId || order.external_order_id;
+    order.order_number = shippingId;
+    order.notes = `Actualizado desde ML | Orden ${orderId || 'N/A'} | Pack ${packId || 'N/A'}`;
+
     await order.save();
     return order;
   }
 
-  // 🆕 Crear pedido nuevo
-  console.log(`🆕 [ML Order] Creando pedido nuevo con order_id ${externalOrderId}`);
-  
+  // 🆕 Crear nuevo pedido (solo si no existe)
   const newOrder = new Order({
     company_id: channel.company_id,
     channel_id: channel._id,
-    external_order_id: externalOrderId,
+    external_order_id: orderId || packId || shippingId,
     ml_shipping_id: shippingId,
-    order_number: shippingId || externalOrderId,
+    order_number: shippingId,
     customer_name: `${fullOrder.buyer.first_name} ${fullOrder.buyer.last_name}`.trim(),
     customer_email: fullOrder.buyer.email,
     customer_phone: shippingInfo.phone,
@@ -701,33 +633,21 @@ static async createOrderFromApiData(fullOrder, channel, accessToken) {
     shipping_city: shippingInfo.city,
     shipping_state: shippingInfo.state,
     shipping_zip: shippingInfo.zip_code,
-    total_amount: totalAmount, // ✅ Total desde ML, no suma de items
+    total_amount: totalAmount,
     shipping_cost: fullOrder.shipping?.cost || 0,
     currency: fullOrder.currency_id,
     status: this.mapOrderStatus(fullOrder),
     order_date: new Date(fullOrder.date_created),
     items,
     raw_data: fullOrder,
-    notes: `Comprador: ${fullOrder.buyer.nickname} | Envío ID: ${shippingId || 'N/A'} | Orden Original: ${fullOrder.id} | Pack: ${fullOrder.pack_id || 'N/A'}`,
+    notes: `Nuevo pedido desde ML | Envío ${shippingId} | Orden ${orderId || 'N/A'} | Pack ${packId || 'N/A'}`,
   });
 
-  try {
-    await newOrder.save();
-    console.log(`✅ [ML Order] Pedido creado: ${newOrder._id} (external: ${externalOrderId}, total: ${totalAmount}, status: ${newOrder.status})`);
-    return newOrder;
-  } catch (error) {
-    // 🛡️ Si falla por duplicado (race condition), buscar el existente
-    if (error.code === 11000) {
-      console.warn(`⚠️ [ML Order] Duplicado detectado para ${externalOrderId}, buscando pedido existente...`);
-      return await Order.findOne({
-        company_id: channel.company_id,
-        channel_id: channel._id,
-        external_order_id: externalOrderId
-      });
-    }
-    throw error;
-  }
+  await newOrder.save();
+  console.log(`🆕 [ML Order] Pedido creado para envío ${shippingId}`);
+  return newOrder;
 }
+
 
 
 
@@ -993,27 +913,20 @@ static mapOrderStatus(mlOrder) {
   return 'pending'; // ✅ En inglés
 }
 
-static async syncOrders(channelId, options = {}) {
-  console.log('🔄 [ML Service] syncOrders llamado con options:', options);
+  static async syncOrders(channelId, options = {}) {
+  console.log('⚠️ [ML Service] syncOrders llamado - redirigiendo a syncInitialOrders');
   
   const channel = await Channel.findById(channelId);
   if (!channel) {
     throw new Error('Canal no encontrado');
   }
 
-  // ✅ Si se solicita forzar re-sincronización
-  if (options.force === true) {
-    console.log('🔄 [ML Service] Re-sincronización FORZADA solicitada');
-    return await this.resyncOrders(channelId, options);
-  }
-
-  // Si ya se hizo la sync inicial y NO se fuerza, no hacer nada
+  // Si ya se hizo la sync inicial, no hacer nada
   if (channel.settings?.initial_sync_completed) {
     console.log('⏭️ [ML Service] Canal ya inicializado, no se requiere sync');
-    console.log('💡 [ML Service] Para re-sincronizar, usa { force: true } en las opciones');
     return {
       success: true,
-      message: 'Canal ya sincronizado. Nuevos pedidos llegan por webhook. Usa force:true para re-sincronizar.',
+      message: 'Canal ya sincronizado. Nuevos pedidos llegan por webhook.',
       syncedCount: 0,
       errorCount: 0,
       skippedCount: 0,
@@ -1024,154 +937,6 @@ static async syncOrders(channelId, options = {}) {
   // Si no se ha hecho, ejecutar sync inicial
   console.log('🔄 [ML Service] Ejecutando sincronización inicial...');
   return await this.syncInitialOrders(channelId);
-}
-/**
- * ✅ RE-SINCRONIZACIÓN: Permite volver a sincronizar pedidos aunque ya se haya hecho la sync inicial
- * Útil cuando se eliminan pedidos y se quieren recuperar
- */
-static async resyncOrders(channelId, options = {}) {
-  console.log('🔄 [ML Resync] Iniciando RE-sincronización para canal:', channelId);
-  
-  const channel = await Channel.findById(channelId);
-  if (!channel) {
-    throw new Error('Canal no encontrado');
-  }
-
-  console.log(`🔄 [ML Resync] Re-sincronización para canal ${channel.channel_name}`);
-
-  // 📅 Configurar rango de fechas
-  const now = new Date();
-  const daysBack = options.daysBack || 30; // Por defecto 30 días
-  const dateFrom = new Date();
-  dateFrom.setDate(now.getDate() - daysBack);
-
-  console.log('📅 [ML Resync] Rango de fechas:', {
-    dateFrom: dateFrom.toISOString(),
-    dateTo: now.toISOString(),
-    daysBack
-  });
-
-  try {
-    const accessToken = await this.getAccessToken(channel);
-    
-    const apiUrl = `${this.API_BASE_URL}/orders/search`;
-    const params = {
-      seller: channel.settings.user_id,
-      'order.date_created.from': dateFrom.toISOString(),
-      'order.date_created.to': now.toISOString(),
-      sort: 'date_desc',
-      limit: 50
-    };
-
-    console.log('🌐 [ML Resync] Consultando pedidos con params:', params);
-
-    const response = await axios.get(apiUrl, {
-      headers: {
-        'Authorization': `Bearer ${accessToken}`,
-        'Accept': 'application/json'
-      },
-      params: params,
-      timeout: 30000
-    });
-
-    const orderIds = response.data.results || [];
-    let syncedCount = 0;
-    let updatedCount = 0;
-    let errorCount = 0;
-    let skippedCount = 0;
-
-    console.log(`📦 [ML Resync] Encontrados ${orderIds.length} pedidos en el rango de fechas`);
-
-    for (const basicOrder of orderIds) {
-      try {
-        console.log(`📦 [ML Resync] Procesando pedido ${basicOrder.id}...`);
-        
-        const fullOrderResponse = await axios.get(`${this.API_BASE_URL}/orders/${basicOrder.id}`, {
-          headers: { 'Authorization': `Bearer ${accessToken}` },
-          timeout: 15000
-        });
-
-        const fullOrder = fullOrderResponse.data;
-
-        // Verificar si es Flex
-        const isFlex = await this.isFlexOrder(fullOrder, accessToken);
-        
-        if (!isFlex) {
-          console.log(`⏭️ [ML Resync] Pedido ${fullOrder.id} omitido (no es Flex)`);
-          skippedCount++;
-          continue;
-        }
-
-        const shippingId = fullOrder.shipping?.id?.toString();
-        if (!shippingId) {
-          console.log(`⚠️ [ML Resync] Pedido ${fullOrder.id} sin shipping.id, se omite`);
-          skippedCount++;
-          continue;
-        }
-
-        console.log(`✅ [ML Resync] Procesando pedido Flex con envío ${shippingId}`);
-
-        // Verificar si ya existe
-        const existingOrder = await Order.findOne({
-          company_id: channel.company_id,
-          channel_id: channel._id,
-          $or: [
-            { external_order_id: fullOrder.id.toString() },
-            { external_order_id: fullOrder.pack_id?.toString() },
-            { ml_shipping_id: shippingId }
-          ]
-        });
-
-        if (existingOrder) {
-          // Actualizar pedido existente
-          await this.createOrderFromApiData(fullOrder, channel, accessToken);
-          console.log(`🔄 [ML Resync] Pedido con envío ${shippingId} actualizado`);
-          updatedCount++;
-        } else {
-          // Crear pedido nuevo
-          await this.createOrderFromApiData(fullOrder, channel, accessToken);
-          console.log(`➕ [ML Resync] Pedido con envío ${shippingId} creado`);
-          syncedCount++;
-        }
-        
-        // Pequeña pausa para evitar rate limit
-        await new Promise(resolve => setTimeout(resolve, 500));
-        
-      } catch (error) {
-        console.error(`❌ [ML Resync] Error procesando pedido ${basicOrder.id}:`, error.message);
-        errorCount++;
-      }
-    }
-
-    // Actualizar timestamp de última sincronización
-    channel.last_sync_at = new Date();
-    channel.sync_status = 'success';
-    await channel.save();
-
-    console.log(`✅ [ML Resync] Re-sincronización completada:`);
-    console.log(`   - ${syncedCount} pedidos nuevos creados`);
-    console.log(`   - ${updatedCount} pedidos actualizados`);
-    console.log(`   - ${skippedCount} pedidos omitidos`);
-    console.log(`   - ${errorCount} errores`);
-
-    return {
-      success: true,
-      syncedCount,
-      updatedCount,
-      errorCount,
-      skippedCount,
-      totalFound: orderIds.length
-    };
-
-  } catch (error) {
-    console.error('❌ [ML Resync] Error en re-sincronización:', error.message);
-    
-    channel.sync_status = 'error';
-    channel.last_sync_at = new Date();
-    await channel.save();
-    
-    throw error;
-  }
 }
 }
 
