@@ -474,42 +474,44 @@ static async processWebhook(channelId, webhookData) {
       orderId = webhookData.resource.split('/').pop();
     } else if (webhookData.topic === 'shipments') {
       shippingId = webhookData.resource.split('/').pop();
-      const { data: shipmentData } = await axios.get(`${this.API_BASE_URL}/shipments/${shippingId}`, {
+      const { data: shipment } = await axios.get(`${this.API_BASE_URL}/shipments/${shippingId}`, {
         headers: { Authorization: `Bearer ${accessToken}` }
       });
-      orderId = shipmentData.order_id;
+      orderId = shipment.order_id;
     }
 
     if (!orderId) {
-      console.log(`[ML Webhook] No se encontró order_id válido en el evento. Omitido.`);
+      console.log(`[ML Webhook] No se encontró order_id válido en el evento.`);
       return true;
     }
 
+    console.log(`📬 [ML Webhook] Obteniendo datos de orden ${orderId}`);
     const { data: mlOrder } = await axios.get(`${this.API_BASE_URL}/orders/${orderId}`, {
       headers: { Authorization: `Bearer ${accessToken}` }
     });
 
-    console.log(`📬 [ML Webhook] Pedido recibido desde ML (order_id=${orderId})`);
-    console.dir(mlOrder, { depth: null, colors: true });
+    // Log corto del pedido recibido
+    console.log(`📦 [ML Webhook] Orden recibida: ${mlOrder.id} | pack=${mlOrder.pack_id || 'N/A'} | shipping=${mlOrder.shipping?.id}`);
 
-    // ⚙️ Solo procesar FLEX
+    // Verificar si es FLEX (opcional)
     const isFlex = await this.isFlexOrder(mlOrder, accessToken);
     if (!isFlex) {
       console.log(`[ML Webhook] Pedido ${orderId} no es FLEX. Omitido.`);
       return true;
     }
 
-    // ✅ Crear o actualizar pedido con los nuevos campos
+    // Crear o actualizar en base a la orden y pack_id
     await this.createOrderFromApiData(mlOrder, channel, accessToken);
 
     console.log(`✅ [ML Webhook] Pedido procesado correctamente (order=${orderId}).`);
     return true;
 
   } catch (error) {
-    console.error(`❌ [ML Webhook] Error:`, error.message);
+    console.error(`❌ [ML Webhook] Error procesando evento:`, error.message);
     return false;
   }
 }
+
 
 
 
@@ -537,57 +539,118 @@ static _mergeItems(existingItems = [], incomingItems = []) {
   return Array.from(map.values());
 }
 
+/**
+ * ✅ Crea o actualiza pedidos desde datos de la API de Mercado Libre,
+ * con soporte para packs (agrupaciones de varias órdenes).
+ */
 static async createOrderFromApiData(fullOrder, channel, accessToken) {
   const orderId = fullOrder.id?.toString();
   const packId = fullOrder.pack_id?.toString();
   const shippingId = fullOrder.shipping?.id?.toString();
-
-  // 🔑 Estructura requerida
-  const externalOrderId = shippingId;
-  const orderNumber = packId || orderId;
 
   if (!shippingId) {
     console.warn(`⚠️ [ML Order] Pedido ${orderId} sin shipping_id, se omite.`);
     return null;
   }
 
-  console.log(`📦 [ML Order] Creando/actualizando pedido (shipping=${shippingId}, pack=${packId || 'N/A'}, order=${orderId})`);
-  console.log('🧾 [ML DEBUG] fullOrder completo desde Mercado Libre:');
-  console.dir(fullOrder, { depth: null, colors: true });
+  const externalOrderId = shippingId;      // 👈 Siempre el shipping_id
+  const orderNumber = packId || orderId;   // 👈 pack_id si existe, sino order_id
 
-  const incomingItems = (fullOrder.order_items || []).map(i => ({
-    title: i.item.title,
-    quantity: i.quantity,
-    price: i.unit_price,
-    subtotal: (i.unit_price || 0) * (i.quantity || 0),
-    currency: fullOrder.currency_id,
-  }));
+  console.log(`\n📦 [ML Order] Procesando pedido (order=${orderId}, pack=${packId || 'N/A'}, shipping=${shippingId})`);
+  console.log('🧾 [ML DEBUG] fullOrder base:');
+  console.dir(fullOrder, { depth: 3, colors: true });
 
-  const totalAmount = incomingItems.reduce((sum, it) => sum + (it.subtotal || 0), 0);
+  let allItems = [];
+
+  // =====================================================
+  // 🧩 Si el pedido pertenece a un pack, obtener todas sus órdenes
+  // =====================================================
+  if (packId) {
+    console.log(`🔗 [ML Pack] Pedido pertenece al pack ${packId}, obteniendo órdenes del pack...`);
+
+    try {
+      const { data: packData } = await axios.get(`${this.API_BASE_URL}/packs/${packId}`, {
+        headers: { Authorization: `Bearer ${accessToken}` }
+      });
+
+      const orderIds = (packData.orders || []).map(o => o.id.toString());
+      console.log(`📦 [ML Pack] El pack ${packId} contiene ${orderIds.length} órdenes:`, orderIds);
+
+      for (const oid of orderIds) {
+        try {
+          const { data: subOrder } = await axios.get(`${this.API_BASE_URL}/orders/${oid}`, {
+            headers: { Authorization: `Bearer ${accessToken}` }
+          });
+
+          const items = (subOrder.order_items || []).map(i => ({
+            title: i.item.title,
+            quantity: i.quantity,
+            price: i.unit_price,
+            subtotal: (i.unit_price || 0) * (i.quantity || 0),
+            currency: subOrder.currency_id,
+          }));
+
+          console.log(`🧩 [ML Pack] Orden ${oid} tiene ${items.length} ítems.`);
+          allItems.push(...items);
+
+        } catch (err) {
+          console.error(`⚠️ [ML Pack] Error obteniendo orden ${oid}:`, err.message);
+        }
+      }
+
+    } catch (err) {
+      console.error(`⚠️ [ML Pack] Error consultando pack ${packId}:`, err.message);
+      console.log('🔁 Usando los ítems de la orden base.');
+      allItems = (fullOrder.order_items || []).map(i => ({
+        title: i.item.title,
+        quantity: i.quantity,
+        price: i.unit_price,
+        subtotal: (i.unit_price || 0) * (i.quantity || 0),
+        currency: fullOrder.currency_id,
+      }));
+    }
+
+  } else {
+    // Si no hay pack, usar los ítems de la orden directamente
+    allItems = (fullOrder.order_items || []).map(i => ({
+      title: i.item.title,
+      quantity: i.quantity,
+      price: i.unit_price,
+      subtotal: (i.unit_price || 0) * (i.quantity || 0),
+      currency: fullOrder.currency_id,
+    }));
+  }
+
+  const totalAmount = allItems.reduce((sum, it) => sum + (it.subtotal || 0), 0);
   const shippingCost = fullOrder.shipping?.cost || 0;
   const status = this.mapOrderStatus(fullOrder);
 
-  // 🔍 Buscar si ya existe por shipping_id
+  console.log(`💰 [ML Totales] Productos: ${allItems.length} | Total: ${totalAmount} | Envío: ${shippingCost}`);
+
+  // =====================================================
+  // 🔍 Buscar si ya existe por shipping_id (external_order_id)
+  // =====================================================
   let order = await Order.findOne({
     channel_id: channel._id,
     external_order_id: externalOrderId
   });
 
   if (order) {
-    console.log(`🔁 [ML Order] Pedido existente encontrado (shipping=${shippingId}), actualizando datos`);
-    order.items = incomingItems;
+    console.log(`🔁 [ML Order] Pedido existente encontrado, actualizando...`);
+    order.items = allItems;
     order.total_amount = totalAmount;
     order.shipping_cost = shippingCost;
     order.status = status;
     order.raw_data = [...(order.raw_data || []), fullOrder];
     order.updated_at = new Date();
     await order.save();
-
-    console.log(`💾 [ML Order] Pedido actualizado. Total: ${totalAmount} | Envío: ${shippingCost}`);
+    console.log(`💾 [ML Order] Actualizado correctamente (shipping=${shippingId}).`);
     return order;
   }
 
-  // 📦 Crear nuevo pedido
+  // =====================================================
+  // 🆕 Crear nuevo pedido
+  // =====================================================
   const shippingInfo = await this.getShippingInfo(fullOrder, accessToken);
 
   const newOrder = new Order({
@@ -596,7 +659,7 @@ static async createOrderFromApiData(fullOrder, channel, accessToken) {
     external_order_id: externalOrderId, // 👈 shipping_id
     order_number: orderNumber,          // 👈 pack_id o order_id
     ml_shipping_id: shippingId,
-    customer_name: `${fullOrder.buyer.first_name} ${fullOrder.buyer.last_name}`.trim(),
+    customer_name: `${fullOrder.buyer.first_name || ''} ${fullOrder.buyer.last_name || ''}`.trim(),
     customer_email: fullOrder.buyer.email,
     customer_phone: shippingInfo.phone,
     customer_document: fullOrder.buyer.billing_info?.doc_number || '',
@@ -610,16 +673,16 @@ static async createOrderFromApiData(fullOrder, channel, accessToken) {
     currency: fullOrder.currency_id,
     status,
     order_date: new Date(fullOrder.date_created),
-    items: incomingItems,
+    items: allItems,
     raw_data: [fullOrder],
     notes: `Pedido Mercado Libre | pack=${packId || 'N/A'} | order=${orderId} | shipping=${shippingId}`
   });
 
   await newOrder.save();
-  console.log(`✅ [ML Order] Pedido creado con éxito. external_order_id=${externalOrderId}, order_number=${orderNumber}`);
-  console.log(`💰 Total: ${totalAmount} | Envío: ${shippingCost}`);
+  console.log(`✅ [ML Order] Pedido creado correctamente (shipping=${shippingId})`);
   return newOrder;
 }
+
 
 
 
@@ -651,8 +714,8 @@ static async createOrderFromApiData(fullOrder, channel, accessToken) {
       return { address: 'Error al obtener dirección' };
     }
   }
-static async getShippingLabel(externalOrderId, channelId) {
-  console.log('🟢 [ML Service] getShippingLabel iniciando', { externalOrderId, channelId });
+static async getShippingLabel(orderId, channelId) {
+  console.log('🟢 [ML Service] getShippingLabel iniciando', { orderId, channelId });
   
   const channel = await Channel.findById(channelId);
   if (!channel) {
@@ -665,12 +728,12 @@ static async getShippingLabel(externalOrderId, channelId) {
   let orderResponse;
   try {
     orderResponse = await axios.get(
-      `${this.API_BASE_URL}/orders/${externalOrderId}`,
+      `${this.API_BASE_URL}/orders/${orderId}`,
       { headers: { Authorization: `Bearer ${accessToken}` } }
     );
   } catch (err) {
     console.error('❌ Error consultando orden en ML:', err.response?.data || err.message);
-    throw new Error(`ML no reconoce la orden ${externalOrderId}`);
+    throw new Error(`ML no reconoce la orden ${orderId}`);
   }
   
   const orderData = orderResponse.data;
