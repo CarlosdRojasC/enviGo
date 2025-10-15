@@ -589,38 +589,56 @@ static async createOrderFromApiData(fullOrder, channel, accessToken) {
   }));
   const totalAmount = items.reduce((sum, it) => sum + it.subtotal, 0);
 
-  // 🚀 Buscar o crear pedido
-  let order = await Order.findOne({ channel_id: channel._id, external_order_id: externalOrderId });
+  // 🔍 MEJORADO: Buscar por múltiples criterios para evitar duplicados
+  let order = await Order.findOne({
+    company_id: channel.company_id,
+    channel_id: channel._id,
+    $or: [
+      { external_order_id: externalOrderId },
+      { external_order_id: orderId },
+      { ml_shipping_id: shippingId }
+    ]
+  });
+
   if (order) {
-    console.log(`🔄 [ML Order] Actualizando pedido existente con order_id ${externalOrderId}`);
+    console.log(`🔄 [ML Order] Actualizando pedido existente: ${order._id} (external: ${externalOrderId})`);
     order.total_amount = totalAmount;
     order.items = items;
     order.status = this.mapOrderStatus(fullOrder);
     order.raw_data = fullOrder;
     order.shipping_address = shippingInfo.address;
-    order.shipping_commune = shippingInfo.city;
+    order.shipping_commune = shippingInfo.city; // ← AGREGADO
     order.shipping_city = shippingInfo.city;
     order.shipping_state = shippingInfo.state;
     order.shipping_zip = shippingInfo.zip_code;
     order.customer_phone = shippingInfo.phone;
-    order.ml_shipping_id = shippingId; // 🆕 guardamos shipping_id para mostrarlo en la tabla
+    order.ml_shipping_id = shippingId;
+    
+    // Actualizar external_order_id si cambió
+    if (order.external_order_id !== externalOrderId) {
+      console.log(`🔄 [ML Order] Actualizando external_order_id: ${order.external_order_id} → ${externalOrderId}`);
+      order.external_order_id = externalOrderId;
+    }
+    
     await order.save();
     return order;
   }
 
   // 🆕 Crear pedido nuevo
+  console.log(`🆕 [ML Order] Creando pedido nuevo con order_id ${externalOrderId}`);
+  
   const newOrder = new Order({
     company_id: channel.company_id,
     channel_id: channel._id,
-    external_order_id: externalOrderId, // 👈 será order_id o pack_id
-    ml_shipping_id: shippingId,         // 👈 campo auxiliar visible
+    external_order_id: externalOrderId,
+    ml_shipping_id: shippingId,
     order_number: shippingId || externalOrderId,
     customer_name: `${fullOrder.buyer.first_name} ${fullOrder.buyer.last_name}`.trim(),
     customer_email: fullOrder.buyer.email,
     customer_phone: shippingInfo.phone,
     customer_document: fullOrder.buyer.billing_info?.doc_number || '',
     shipping_address: shippingInfo.address,
-    shipping_commune: shippingInfo.city,
+    shipping_commune: shippingInfo.city, // ← AGREGADO
     shipping_city: shippingInfo.city,
     shipping_state: shippingInfo.state,
     shipping_zip: shippingInfo.zip_code,
@@ -634,9 +652,22 @@ static async createOrderFromApiData(fullOrder, channel, accessToken) {
     notes: `Comprador: ${fullOrder.buyer.nickname} | Envío ID: ${shippingId || 'N/A'} | Orden Original: ${fullOrder.id} | Pack: ${fullOrder.pack_id || 'N/A'}`,
   });
 
-  await newOrder.save();
-  console.log(`🆕 [ML Order] Pedido nuevo creado con order_id ${externalOrderId} (shipping ${shippingId})`);
-  return newOrder;
+  try {
+    await newOrder.save();
+    console.log(`✅ [ML Order] Pedido creado: ${newOrder._id} (external: ${externalOrderId}, shipping: ${shippingId})`);
+    return newOrder;
+  } catch (error) {
+    // 🛡️ Si falla por duplicado (race condition), buscar el existente
+    if (error.code === 11000) {
+      console.warn(`⚠️ [ML Order] Duplicado detectado para ${externalOrderId}, buscando pedido existente...`);
+      return await Order.findOne({
+        company_id: channel.company_id,
+        channel_id: channel._id,
+        external_order_id: externalOrderId
+      });
+    }
+    throw error;
+  }
 }
 
 
