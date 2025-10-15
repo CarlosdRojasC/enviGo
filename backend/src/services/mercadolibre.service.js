@@ -588,7 +588,7 @@ static async createOrderFromApiData(fullOrder, channel, accessToken) {
     return null;
   }
 
-  // 🧾 Datos de ítems y totales
+  // 🧾 Datos de ítems (sin calcular el total aquí)
   const items = (fullOrder.order_items || []).map(i => ({
     title: i.item.title,
     quantity: i.quantity,
@@ -596,7 +596,12 @@ static async createOrderFromApiData(fullOrder, channel, accessToken) {
     subtotal: i.full_unit_price * i.quantity || (i.unit_price * i.quantity),
     currency: fullOrder.currency_id,
   }));
-  const totalAmount = items.reduce((sum, it) => sum + it.subtotal, 0);
+
+  // 💰 IMPORTANTE: Usar el total_amount que viene de MercadoLibre
+  // Este ya incluye el precio total del pedido/pack completo
+  const totalAmount = fullOrder.total_amount || 0;
+  
+  console.log(`💰 [ML Order] Total del pedido ${externalOrderId}: ${totalAmount} ${fullOrder.currency_id}`);
 
   // 🔍 MEJORADO: Buscar por múltiples criterios para evitar duplicados
   let order = await Order.findOne({
@@ -630,7 +635,7 @@ static async createOrderFromApiData(fullOrder, channel, accessToken) {
       console.log(`🔒 [ML Order] Estado final detectado (${currentStatus}), NO se sobrescribe con ${newStatus}`);
     }
     
-    order.total_amount = totalAmount;
+    order.total_amount = totalAmount; // ✅ Total desde ML
     order.items = items;
     order.raw_data = fullOrder;
     order.shipping_address = shippingInfo.address;
@@ -669,7 +674,7 @@ static async createOrderFromApiData(fullOrder, channel, accessToken) {
     shipping_city: shippingInfo.city,
     shipping_state: shippingInfo.state,
     shipping_zip: shippingInfo.zip_code,
-    total_amount: totalAmount,
+    total_amount: totalAmount, // ✅ Total desde ML, no suma de items
     shipping_cost: fullOrder.shipping?.cost || 0,
     currency: fullOrder.currency_id,
     status: this.mapOrderStatus(fullOrder),
@@ -681,7 +686,7 @@ static async createOrderFromApiData(fullOrder, channel, accessToken) {
 
   try {
     await newOrder.save();
-    console.log(`✅ [ML Order] Pedido creado: ${newOrder._id} (external: ${externalOrderId}, status: ${newOrder.status})`);
+    console.log(`✅ [ML Order] Pedido creado: ${newOrder._id} (external: ${externalOrderId}, total: ${totalAmount}, status: ${newOrder.status})`);
     return newOrder;
   } catch (error) {
     // 🛡️ Si falla por duplicado (race condition), buscar el existente
