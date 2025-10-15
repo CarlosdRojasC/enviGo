@@ -257,7 +257,17 @@
               </span>
               {{ syncingChannels.includes(channel._id) ? 'Sincronizando...' : 'Sincronizar' }}
             </button>
-
+    <button
+      v-if="channel.channel_type === 'mercadolibre'"
+      @click="resyncChannel(channel._id)"
+      :disabled="syncingChannels.includes(channel._id)"
+      class="w-full inline-flex items-center justify-center px-4 py-2 bg-purple-600 text-white text-sm font-medium rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+    >
+      <span class="text-lg mr-2" :class="{ 'animate-spin': syncingChannels.includes(channel._id) }">
+        {{ syncingChannels.includes(channel._id) ? '⏳' : '🔄' }}
+      </span>
+      {{ syncingChannels.includes(channel._id) ? 'Re-sincronizando...' : 'Re-sincronizar (30 días)' }}
+    </button>
             <div class="grid grid-cols-2 gap-2">
               <button
                 v-if="requiresOAuth(channel.channel_type) && !channel.api_key"

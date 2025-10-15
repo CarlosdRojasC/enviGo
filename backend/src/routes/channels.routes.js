@@ -57,4 +57,44 @@ router.post('/mercadolibre/authorize', authenticateToken, ChannelController.getM
 // Ruta para manejar el callback de Mercado Libre después de la autorización
 router.post('/mercadolibre/callback', authenticateToken, ChannelController.handleMLCallback);
 
+router.post('/channels/:channelId/resync', async (req, res) => {
+  try {
+    const { channelId } = req.params;
+    const { daysBack } = req.body; // Opcional: cuántos días hacia atrás sincronizar
+    
+    console.log(`🔄 [API] Solicitud de re-sincronización para canal ${channelId}`);
+    
+    const channel = await Channel.findById(channelId);
+    
+    if (!channel) {
+      return res.status(404).json({ error: 'Canal no encontrado' });
+    }
+    
+    if (channel.channel_type !== 'mercadolibre') {
+      return res.status(400).json({ error: 'Este canal no es de MercadoLibre' });
+    }
+    
+    // Iniciar re-sincronización en background
+    const MercadoLibreService = require('../services/mercadoLibreService');
+    
+    // Ejecutar en background
+    MercadoLibreService.resyncOrders(channelId, { daysBack: daysBack || 30 })
+      .then(result => {
+        console.log(`✅ [API] Re-sincronización completada para canal ${channelId}:`, result);
+      })
+      .catch(error => {
+        console.error(`❌ [API] Error en re-sincronización para canal ${channelId}:`, error.message);
+      });
+    
+    res.json({ 
+      success: true, 
+      message: 'Re-sincronización iniciada en segundo plano',
+      daysBack: daysBack || 30
+    });
+    
+  } catch (error) {
+    console.error('❌ [API] Error iniciando re-sincronización:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
 module.exports = router;

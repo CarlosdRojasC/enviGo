@@ -378,64 +378,91 @@ static async syncInitialOrders(channelId) {
   /**
    * ✅ FUNCIÓN DE DETECCIÓN FLEX MEJORADA
    */
-  static async isFlexOrder(mlOrder, accessToken) {
-    console.log(`🔍 [ML Flex Check] Analizando pedido ${mlOrder.id} para Flex:`);
+static async isFlexOrder(mlOrder, accessToken) {
+  console.log(`🔍 [ML Flex Check] Analizando pedido ${mlOrder.id} para Flex:`);
+  
+  // MÉTODO 1: Verificar por tags del pedido
+  if (mlOrder.tags && Array.isArray(mlOrder.tags)) {
+    const flexTags = ['self_service', 'flex', 'self_service_in'];
+    const hasFlexTag = mlOrder.tags.some(tag => 
+      flexTags.includes(tag.toLowerCase())
+    );
     
-    // MÉTODO 1: Verificar por tags del pedido
-    if (mlOrder.tags && Array.isArray(mlOrder.tags)) {
-      const flexTags = ['self_service', 'flex', 'self_service_in'];
-      const hasFlexTag = mlOrder.tags.some(tag => 
-        flexTags.includes(tag.toLowerCase())
-      );
+    if (hasFlexTag) {
+      console.log(`✅ [ML Flex Check] Pedido ${mlOrder.id} es Flex (tags)`, mlOrder.tags);
+      return true;
+    }
+  }
+
+  // MÉTODO 2: Consultar el shipment
+  if (mlOrder.shipping?.id) {
+    try {
+      const shipmentResponse = await axios.get(`${this.API_BASE_URL}/shipments/${mlOrder.shipping.id}`, {
+        headers: { 
+          'Authorization': `Bearer ${accessToken}`,
+          'x-format-new': 'true' // ← CRÍTICO para obtener formato completo
+        },
+        timeout: 15000
+      });
+
+      const shipment = shipmentResponse.data;
       
-      if (hasFlexTag) {
-        console.log(`✅ [ML Flex Check] Pedido ${mlOrder.id} es Flex (tags)`, mlOrder.tags);
+      // Verificar logistic_type = "self_service" (formato antiguo)
+      if (shipment.logistic_type === 'self_service') {
+        console.log(`✅ [ML Flex Check] Pedido ${mlOrder.id} es Flex (logistic_type = self_service)`);
         return true;
       }
-    }
 
-    // MÉTODO 2: Consultar el shipment
-    if (mlOrder.shipping?.id) {
-      try {
-        const shipmentResponse = await axios.get(`${this.API_BASE_URL}/shipments/${mlOrder.shipping.id}`, {
-          headers: { 'Authorization': `Bearer ${accessToken}` },
-          timeout: 15000
-        });
-
-        const shipment = shipmentResponse.data;
-        
-        // Verificar logistic_type = "self_service"
-        if (shipment.logistic_type === 'self_service') {
-          console.log(`✅ [ML Flex Check] Pedido ${mlOrder.id} es Flex (logistic_type = self_service)`);
-          return true;
-        }
-
-        // Verificar sender_address.types
-        if (shipment.sender_address?.types && Array.isArray(shipment.sender_address.types)) {
-          const hasFlexType = shipment.sender_address.types.some(type => 
-            type.includes('self_service_partner') || type.includes('self_service')
-          );
-          
-          if (hasFlexType) {
-            console.log(`✅ [ML Flex Check] Pedido ${mlOrder.id} es Flex (sender_address.types)`, shipment.sender_address.types);
-            return true;
-          }
-        }
-
-        // Verificar service_id específico de Flex
-        if (shipment.service_id === 3826008) {
-          console.log(`✅ [ML Flex Check] Pedido ${mlOrder.id} es Flex (service_id = 3826008)`);
-          return true;
-        }
-
-      } catch (error) {
-        console.error(`❌ [ML Flex Check] Error consultando shipment ${mlOrder.shipping.id}:`, error.message);
+      // Verificar logistic.type (formato nuevo)
+      if (shipment.logistic?.type === 'self_service') {
+        console.log(`✅ [ML Flex Check] Pedido ${mlOrder.id} es Flex (logistic.type = self_service)`);
+        return true;
       }
-    }
 
-    console.log(`❌ [ML Flex Check] Pedido ${mlOrder.id} NO es Flex`);
-    return false;
+      // Verificar sender_address.types
+      if (shipment.sender_address?.types && Array.isArray(shipment.sender_address.types)) {
+        const hasFlexType = shipment.sender_address.types.some(type => 
+          type.includes('self_service') || type.includes('flex')
+        );
+        
+        if (hasFlexType) {
+          console.log(`✅ [ML Flex Check] Pedido ${mlOrder.id} es Flex (sender_address.types)`, shipment.sender_address.types);
+          return true;
+        }
+      }
+
+      // Verificar origin.shipping_address.types
+      if (shipment.origin?.shipping_address?.types && Array.isArray(shipment.origin.shipping_address.types)) {
+        const hasFlexType = shipment.origin.shipping_address.types.some(type => 
+          type.includes('self_service') || type.includes('flex')
+        );
+        
+        if (hasFlexType) {
+          console.log(`✅ [ML Flex Check] Pedido ${mlOrder.id} es Flex (origin.types)`, shipment.origin.shipping_address.types);
+          return true;
+        }
+      }
+
+      // Verificar service_id específico de Flex
+      const flexServiceIds = [
+        3826008,  // Flex Chile
+        136261,   // Flex Argentina
+        // Agregar más según necesites
+      ];
+      
+      if (flexServiceIds.includes(shipment.service_id)) {
+        console.log(`✅ [ML Flex Check] Pedido ${mlOrder.id} es Flex (service_id = ${shipment.service_id})`);
+        return true;
+      }
+
+    } catch (error) {
+      console.error(`❌ [ML Flex Check] Error consultando shipment ${mlOrder.shipping.id}:`, error.message);
+    }
   }
+
+  console.log(`❌ [ML Flex Check] Pedido ${mlOrder.id} NO es Flex`);
+  return false;
+}
 
   static async getValidAccessToken(channel) {
     console.log('🔑 [ML Auth] Verificando access token...');
@@ -966,20 +993,27 @@ static mapOrderStatus(mlOrder) {
   return 'pending'; // ✅ En inglés
 }
 
-  static async syncOrders(channelId, options = {}) {
-  console.log('⚠️ [ML Service] syncOrders llamado - redirigiendo a syncInitialOrders');
+static async syncOrders(channelId, options = {}) {
+  console.log('🔄 [ML Service] syncOrders llamado con options:', options);
   
   const channel = await Channel.findById(channelId);
   if (!channel) {
     throw new Error('Canal no encontrado');
   }
 
-  // Si ya se hizo la sync inicial, no hacer nada
+  // ✅ Si se solicita forzar re-sincronización
+  if (options.force === true) {
+    console.log('🔄 [ML Service] Re-sincronización FORZADA solicitada');
+    return await this.resyncOrders(channelId, options);
+  }
+
+  // Si ya se hizo la sync inicial y NO se fuerza, no hacer nada
   if (channel.settings?.initial_sync_completed) {
     console.log('⏭️ [ML Service] Canal ya inicializado, no se requiere sync');
+    console.log('💡 [ML Service] Para re-sincronizar, usa { force: true } en las opciones');
     return {
       success: true,
-      message: 'Canal ya sincronizado. Nuevos pedidos llegan por webhook.',
+      message: 'Canal ya sincronizado. Nuevos pedidos llegan por webhook. Usa force:true para re-sincronizar.',
       syncedCount: 0,
       errorCount: 0,
       skippedCount: 0,
@@ -990,6 +1024,154 @@ static mapOrderStatus(mlOrder) {
   // Si no se ha hecho, ejecutar sync inicial
   console.log('🔄 [ML Service] Ejecutando sincronización inicial...');
   return await this.syncInitialOrders(channelId);
+}
+/**
+ * ✅ RE-SINCRONIZACIÓN: Permite volver a sincronizar pedidos aunque ya se haya hecho la sync inicial
+ * Útil cuando se eliminan pedidos y se quieren recuperar
+ */
+static async resyncOrders(channelId, options = {}) {
+  console.log('🔄 [ML Resync] Iniciando RE-sincronización para canal:', channelId);
+  
+  const channel = await Channel.findById(channelId);
+  if (!channel) {
+    throw new Error('Canal no encontrado');
+  }
+
+  console.log(`🔄 [ML Resync] Re-sincronización para canal ${channel.channel_name}`);
+
+  // 📅 Configurar rango de fechas
+  const now = new Date();
+  const daysBack = options.daysBack || 30; // Por defecto 30 días
+  const dateFrom = new Date();
+  dateFrom.setDate(now.getDate() - daysBack);
+
+  console.log('📅 [ML Resync] Rango de fechas:', {
+    dateFrom: dateFrom.toISOString(),
+    dateTo: now.toISOString(),
+    daysBack
+  });
+
+  try {
+    const accessToken = await this.getAccessToken(channel);
+    
+    const apiUrl = `${this.API_BASE_URL}/orders/search`;
+    const params = {
+      seller: channel.settings.user_id,
+      'order.date_created.from': dateFrom.toISOString(),
+      'order.date_created.to': now.toISOString(),
+      sort: 'date_desc',
+      limit: 50
+    };
+
+    console.log('🌐 [ML Resync] Consultando pedidos con params:', params);
+
+    const response = await axios.get(apiUrl, {
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Accept': 'application/json'
+      },
+      params: params,
+      timeout: 30000
+    });
+
+    const orderIds = response.data.results || [];
+    let syncedCount = 0;
+    let updatedCount = 0;
+    let errorCount = 0;
+    let skippedCount = 0;
+
+    console.log(`📦 [ML Resync] Encontrados ${orderIds.length} pedidos en el rango de fechas`);
+
+    for (const basicOrder of orderIds) {
+      try {
+        console.log(`📦 [ML Resync] Procesando pedido ${basicOrder.id}...`);
+        
+        const fullOrderResponse = await axios.get(`${this.API_BASE_URL}/orders/${basicOrder.id}`, {
+          headers: { 'Authorization': `Bearer ${accessToken}` },
+          timeout: 15000
+        });
+
+        const fullOrder = fullOrderResponse.data;
+
+        // Verificar si es Flex
+        const isFlex = await this.isFlexOrder(fullOrder, accessToken);
+        
+        if (!isFlex) {
+          console.log(`⏭️ [ML Resync] Pedido ${fullOrder.id} omitido (no es Flex)`);
+          skippedCount++;
+          continue;
+        }
+
+        const shippingId = fullOrder.shipping?.id?.toString();
+        if (!shippingId) {
+          console.log(`⚠️ [ML Resync] Pedido ${fullOrder.id} sin shipping.id, se omite`);
+          skippedCount++;
+          continue;
+        }
+
+        console.log(`✅ [ML Resync] Procesando pedido Flex con envío ${shippingId}`);
+
+        // Verificar si ya existe
+        const existingOrder = await Order.findOne({
+          company_id: channel.company_id,
+          channel_id: channel._id,
+          $or: [
+            { external_order_id: fullOrder.id.toString() },
+            { external_order_id: fullOrder.pack_id?.toString() },
+            { ml_shipping_id: shippingId }
+          ]
+        });
+
+        if (existingOrder) {
+          // Actualizar pedido existente
+          await this.createOrderFromApiData(fullOrder, channel, accessToken);
+          console.log(`🔄 [ML Resync] Pedido con envío ${shippingId} actualizado`);
+          updatedCount++;
+        } else {
+          // Crear pedido nuevo
+          await this.createOrderFromApiData(fullOrder, channel, accessToken);
+          console.log(`➕ [ML Resync] Pedido con envío ${shippingId} creado`);
+          syncedCount++;
+        }
+        
+        // Pequeña pausa para evitar rate limit
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+      } catch (error) {
+        console.error(`❌ [ML Resync] Error procesando pedido ${basicOrder.id}:`, error.message);
+        errorCount++;
+      }
+    }
+
+    // Actualizar timestamp de última sincronización
+    channel.last_sync_at = new Date();
+    channel.sync_status = 'success';
+    await channel.save();
+
+    console.log(`✅ [ML Resync] Re-sincronización completada:`);
+    console.log(`   - ${syncedCount} pedidos nuevos creados`);
+    console.log(`   - ${updatedCount} pedidos actualizados`);
+    console.log(`   - ${skippedCount} pedidos omitidos`);
+    console.log(`   - ${errorCount} errores`);
+
+    return {
+      success: true,
+      syncedCount,
+      updatedCount,
+      errorCount,
+      skippedCount,
+      totalFound: orderIds.length
+    };
+
+  } catch (error) {
+    console.error('❌ [ML Resync] Error en re-sincronización:', error.message);
+    
+    channel.sync_status = 'error';
+    channel.last_sync_at = new Date();
+    await channel.save();
+    
+    throw error;
+  }
 }
 }
 
