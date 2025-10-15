@@ -564,59 +564,52 @@ static async processWebhook(channelId, webhookData) {
    * Helper para crear la orden en la base de datos
    */
 static async createOrderFromApiData(fullOrder, channel, accessToken) {
-  const shippingInfo = await this.getShippingInfo(fullOrder, accessToken);
-
-  // 🆕 Identificadores principales
-  const orderId = fullOrder.id?.toString();
-  const packId = fullOrder.pack_id?.toString();
   const shippingId = fullOrder.shipping?.id?.toString();
-
   if (!shippingId) {
-    console.warn(`⚠️ [ML Order] Pedido ${orderId} sin shipping_id, se omite.`);
+    console.warn(`⚠️ [ML Order] Pedido ${fullOrder.id} sin shipping_id, se omite.`);
     return null;
   }
 
-  // 🧾 Items y totales
-  const items = (fullOrder.order_items || []).map(i => ({
+  // 🔍 Buscar si ya existe un pedido para este envío
+  let existingOrder = await Order.findOne({
+    channel_id: channel._id,
+    ml_shipping_id: shippingId
+  });
+
+  // 🧾 Consolidar ítems
+  const newItems = (fullOrder.order_items || []).map(i => ({
     title: i.item.title,
     quantity: i.quantity,
     price: i.unit_price,
-    subtotal: i.full_unit_price * i.quantity || (i.unit_price * i.quantity),
+    subtotal: i.unit_price * i.quantity,
     currency: fullOrder.currency_id,
   }));
-  const totalAmount = items.reduce((sum, it) => sum + it.subtotal, 0);
 
-  // 🚀 Buscar pedido existente por shipping_id
-  let order = await Order.findOne({
-    channel_id: channel._id,
-    ml_shipping_id: shippingId,
-  });
+  const totalAmount = newItems.reduce((sum, it) => sum + it.subtotal, 0);
 
-  if (order) {
-    console.log(`🔁 [ML Order] Actualizando pedido existente para envío ${shippingId}`);
+  // Si ya existe el pedido → agregamos los nuevos ítems
+  if (existingOrder) {
+    console.log(`🔁 [ML Order] Consolidando ítems en pedido existente (shipping ${shippingId})`);
 
-    // Actualizar campos clave
-    order.total_amount = totalAmount;
-    order.items = items;
-    order.status = this.mapOrderStatus(fullOrder);
-    order.raw_data = fullOrder;
-    order.shipping_address = shippingInfo.address;
-    order.shipping_commune = shippingInfo.city;
-    order.shipping_city = shippingInfo.city;
-    order.shipping_state = shippingInfo.state;
-    order.shipping_zip = shippingInfo.zip_code;
-    order.customer_phone = shippingInfo.phone;
+    const mergedItems = [...(existingOrder.items || []), ...newItems];
+    const updatedTotal = mergedItems.reduce((sum, it) => sum + it.subtotal, 0);
 
-    // 🔄 Mantener consistencia de IDs
-    order.external_order_id = orderId || packId || order.external_order_id;
-    order.order_number = shippingId;
-    order.notes = `Actualizado desde ML | Orden ${orderId || 'N/A'} | Pack ${packId || 'N/A'}`;
+    existingOrder.items = mergedItems;
+    existingOrder.total_amount = updatedTotal;
+    existingOrder.raw_data = fullOrder;
+    existingOrder.status = this.mapOrderStatus(fullOrder);
+    existingOrder.customer_phone = fullOrder.buyer?.phone?.number || existingOrder.customer_phone;
+    existingOrder.updated_at = new Date();
 
-    await order.save();
-    return order;
+    await existingOrder.save();
+    return existingOrder;
   }
 
-  // 🆕 Crear nuevo pedido (solo si no existe)
+  // 🚀 Si no existe, crear el nuevo pedido completo
+  const shippingInfo = await this.getShippingInfo(fullOrder, accessToken);
+  const orderId = fullOrder.id?.toString();
+  const packId = fullOrder.pack_id?.toString();
+
   const newOrder = new Order({
     company_id: channel.company_id,
     channel_id: channel._id,
@@ -637,15 +630,16 @@ static async createOrderFromApiData(fullOrder, channel, accessToken) {
     currency: fullOrder.currency_id,
     status: this.mapOrderStatus(fullOrder),
     order_date: new Date(fullOrder.date_created),
-    items,
-    raw_data: fullOrder,
-    notes: `Nuevo pedido desde ML | Envío ${shippingId} | Orden ${orderId || 'N/A'} | Pack ${packId || 'N/A'}`,
+    items: newItems,
+    raw_data: [fullOrder], // 🔍 mantener historial de órdenes consolidadas
+    notes: `Pedido consolidado desde ML | Envío ${shippingId} | Orden ${orderId} | Pack ${packId || 'N/A'}`
   });
 
   await newOrder.save();
-  console.log(`🆕 [ML Order] Pedido creado para envío ${shippingId}`);
+  console.log(`🆕 [ML Order] Pedido creado (envío ${shippingId}) con ${newItems.length} ítems`);
   return newOrder;
 }
+
 
 
 
