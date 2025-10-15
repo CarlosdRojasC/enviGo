@@ -429,48 +429,73 @@ async syncChannel(channel) {
       throw error;
     }
   }
-async syncChannelById(channelId) {
-    try {
-      console.log(`🔄 Sincronización forzada del canal ${channelId}...`);
-      
-      const channel = await Channel.findById(channelId).populate('company_id');
-      if (!channel) {
-        throw new Error(`Canal ${channelId} no encontrado`);
-      }
-
-      if (!channel.is_active) {
-        throw new Error(`El canal ${channel.channel_name} está inactivo y no puede ser sincronizado.`);
-      }
-
-      // ✅ VERIFICACIÓN DE SEGURIDAD: Evita syncs simultáneos
-      if (this.syncInProgress.has(channel._id.toString())) {
-        console.log(`⏭️ ${channel.channel_name} ya está sincronizando, la solicitud manual será omitida.`);
-        throw new Error(`El canal ${channel.channel_name} ya tiene una sincronización en curso.`);
-      }
-
-      // ✅ REUTILIZAR LA LÓGICA PRINCIPAL Y ROBUSTA DE SYNC
-      const result = await this.syncChannel(channel);
-
-      console.log(`✅ Sincronización forzada de ${channel.channel_name} completada.`);
-      
-      // Construir una respuesta consistente
-      return {
-        success: result.success,
-        channel_name: result.channel,
-        orders_synced: result.ordersImported,
-        duration_ms: result.duration,
-        message: result.success 
-          ? `${result.ordersImported} pedidos sincronizados exitosamente.`
-          : `Falló la sincronización. Revisa los logs.`
-      };
-
-    } catch (error) {
-      console.error(`❌ Error en la sincronización forzada del canal ${channelId}:`, error.message);
-      // El error ya fue manejado y logueado dentro de syncChannel,
-      // aquí solo lo relanzamos para que el controlador de la API lo capture.
-      throw error;
+async syncChannelById(channelId, options = {}) {
+  try {
+    console.log(`🔄 Sincronización ${options.force ? 'FORZADA' : 'normal'} del canal ${channelId}...`);
+    
+    const channel = await Channel.findById(channelId).populate('company_id');
+    if (!channel) {
+      throw new Error(`Canal ${channelId} no encontrado`);
     }
+
+    if (!channel.is_active) {
+      throw new Error(`El canal ${channel.channel_name} está inactivo y no puede ser sincronizado.`);
+    }
+
+    // ✅ VERIFICACIÓN DE SEGURIDAD: Evita syncs simultáneos
+    if (this.syncInProgress.has(channel._id.toString())) {
+      console.log(`⏭️ ${channel.channel_name} ya está sincronizando, la solicitud manual será omitida.`);
+      throw new Error(`El canal ${channel.channel_name} ya tiene una sincronización en curso.`);
+    }
+
+    // ✅ NUEVO: Si es force=true y es MercadoLibre, llamar a resyncOrders
+    if (options.force === true && channel.channel_type === 'mercadolibre') {
+      console.log(`🔄 Re-sincronización forzada de MercadoLibre (${options.daysBack || 30} días)...`);
+      
+      this.syncInProgress.add(channel._id.toString());
+      
+      try {
+        const MercadoLibreService = require('./mercadoLibreService');
+        const result = await MercadoLibreService.resyncOrders(channelId, {
+          daysBack: options.daysBack || 30
+        });
+        
+        console.log(`✅ Re-sincronización completada:`, result);
+        
+        return {
+          success: result.success,
+          channel_name: channel.channel_name,
+          orders_synced: result.syncedCount,
+          updated_count: result.updatedCount,
+          skipped_count: result.skippedCount,
+          message: `Re-sincronización completada: ${result.syncedCount} nuevos, ${result.updatedCount} actualizados, ${result.skippedCount} omitidos`
+        };
+        
+      } finally {
+        this.syncInProgress.delete(channel._id.toString());
+      }
+    }
+
+    // ✅ SINCRONIZACIÓN NORMAL: Reutilizar la lógica principal
+    const result = await this.syncChannel(channel);
+
+    console.log(`✅ Sincronización ${options.force ? 'forzada' : 'normal'} de ${channel.channel_name} completada.`);
+    
+    return {
+      success: result.success,
+      channel_name: result.channel,
+      orders_synced: result.ordersImported,
+      duration_ms: result.duration,
+      message: result.success 
+        ? `${result.ordersImported} pedidos sincronizados exitosamente.`
+        : `Falló la sincronización. Revisa los logs.`
+    };
+
+  } catch (error) {
+    console.error(`❌ Error en la sincronización del canal ${channelId}:`, error.message);
+    throw error;
   }
+}
 
     async updateChannelSyncStats(channel, success, ordersCount = 0, errorMessage = null) {
     try {
