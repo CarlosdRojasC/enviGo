@@ -282,7 +282,7 @@
 <script>
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
-import api from '@/services/api'
+import api from '../services/api'
 
 export default {
   name: 'DriverApp',
