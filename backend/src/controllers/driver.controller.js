@@ -10,37 +10,41 @@ class DriverController {
   /**
    * Obtiene la lista de todos los conductores. Solo para administradores.
    */
-  async getAllDrivers(req, res) {
-    try {
-      if (req.user.role !== 'admin') {
-        return res.status(403).json({ error: ERRORS.FORBIDDEN });
-      }
-      
-      console.log('🚗 Obteniendo conductores desde Shipday...');
-      
-      // Obtener conductores desde Shipday
-      const shipdayDrivers = await ShipdayService.getDrivers();
-      
-      // También obtener conductores locales si los tienes
-      const localDrivers = await User.find({ role: 'driver' })
-        .select('full_name email phone shipday_driver_id is_active');
-      
-      res.status(200).json({
+async getAllDrivers(req, res) {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'No autorizado' });
+    }
+
+    console.log('🚗 Obteniendo conductores locales desde MongoDB...');
+
+    // Buscar todos los conductores activos en tu base local
+    const drivers = await Driver.find({ is_active: true })
+      .select('_id full_name email phone company_id vehicle_type shipday_driver_id')
+      .sort({ full_name: 1 });
+
+    if (!drivers || drivers.length === 0) {
+      return res.status(200).json({
         success: true,
-        data: shipdayDrivers,
-        local_drivers: localDrivers,
-        total: shipdayDrivers?.length || 0,
-        timestamp: new Date().toISOString()
-      });
-      
-    } catch (error) {
-      console.error('❌ Error obteniendo conductores:', error);
-      res.status(500).json({ 
-        success: false,
-        error: error.message || ERRORS.SERVER_ERROR 
+        message: 'No se encontraron conductores registrados localmente',
+        data: [],
+        total: 0,
       });
     }
+
+    res.status(200).json({
+      success: true,
+      total: drivers.length,
+      data: drivers,
+    });
+  } catch (error) {
+    console.error('❌ Error al obtener conductores locales:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Error al obtener la lista de conductores',
+    });
   }
+}
 
   /**
    * Crear nuevo conductor
