@@ -10,6 +10,8 @@ import wsManager from './services/websocket.service'
 import './assets/css/variables.css'
 import './assets/css/toast-styles.css'
 import './assets/styles/tailwind.css'
+import 'leaflet/dist/leaflet.css'
+
 // ==================== CREAR APP ====================
 const app = createApp(App)
 
