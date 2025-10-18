@@ -1105,32 +1105,25 @@ async function optimizeAssignedOrders() {
     const driver = props.availableDrivers.find(d => d._id === props.bulkSelectedDriverId)
 
     const payload = {
-      // ✅ Dirección fija de bodega (punto de inicio)
-      startLocation: {
-        latitude: -33.4633,
-        longitude: -70.6045,
-        address: 'Zañartu 1897, Ñuñoa, Santiago'
-      },
-
-      // ✅ Dirección del conductor (si existe)
-      endLocation: {
-        latitude: driver?.home_latitude || -33.4633,
-        longitude: driver?.home_longitude || -70.6045,
-        address: driver?.home_address || 'Casa del Conductor'
-      },
-
-      orderIds: props.selectedOrders.map(o => o._id || o.id),
-      driverId: props.bulkSelectedDriverId,
-
-      // ✅ Asegurar que se envía company (para evitar el error de validación)
-      company: props.selectedOrders[0]?.company_id || props.selectedOrders[0]?.company || null,
-
-      preferences: {
-        avoidTolls: false,
-        avoidHighways: false,
-        prioritizeTime: true
-      }
-    }
+  startLocation: {
+    latitude: -33.4633,
+    longitude: -70.6045,
+    address: 'Zañartu 1897, Ñuñoa, Santiago'
+  },
+  endLocation: {
+    latitude: driver?.home_latitude || -33.4633,
+    longitude: driver?.home_longitude || -70.6045,
+    address: driver?.home_address || 'Casa del Conductor'
+  },
+  orderIds: props.selectedOrders.map(o => o._id || o.id),
+  driverId: props.bulkSelectedDriverId,
+  companyId: props.selectedOrders[0]?.company_id || props.selectedOrders[0]?.company || null, // 👈 cambio clave
+  preferences: {
+    avoidTolls: false,
+    avoidHighways: false,
+    prioritizeTime: true
+  }
+};
 
     console.log('🧭 Enviando payload a /routes/optimize:', payload)
     const response = await apiService.routes.optimize(payload)

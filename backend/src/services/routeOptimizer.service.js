@@ -13,10 +13,11 @@ class RouteOptimizerService {
    */
   async optimizeRoute(routeConfig) {
     try {
-      const { orderIds, driverId, companyId, createdBy, preferences = {}, startLocation, endLocation } = routeConfig;
+      const { orderIds, driverId, companyId, company, createdBy, preferences = {}, startLocation, endLocation } = routeConfig;
+const companyRef = companyId || company;
 
       // 1️⃣ Buscar pedidos válidos
-      const orders = await Order.find({ _id: { $in: orderIds }, company: companyId });
+      const orders = await Order.find({ _id: { $in: orderIds }, company: companyRef });
       if (!orders.length) throw new Error('No se encontraron pedidos válidos');
 
       // 2️⃣ Geocodificar direcciones
@@ -77,7 +78,7 @@ class RouteOptimizerService {
 
       // 7️⃣ Crear y asignar RoutePlan
       const routePlan = new RoutePlan({
-        company: companyId,
+        company: companyRef,
         driver: driverId,
         createdBy,
         startLocation,
