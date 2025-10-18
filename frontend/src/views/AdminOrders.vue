@@ -36,17 +36,22 @@
 
     <!-- Acciones masivas -->
     <AdminOrdersBulkActions
-      v-if="selectedOrders.length > 0"
-      :selected-count="selectedOrders.length"
-      :selected-orders="selectedOrderObjects"
-      :selection-summary="selectionSummary"
-      :companies="companies"
-      @bulk-assign="handleOpenBulkAssignModal"
-      @bulk-status-change="handleBulkStatusChange"
-      @bulk-export="handleBulkExport"
-      @bulk-print="handleBulkPrint"
-      @clear-selection="clearSelection"
-    />
+  v-if="selectedOrders.length > 0"
+  :selected-count="selectedOrders.length"
+  :selected-orders="selectedOrderObjects"
+  :selection-summary="selectionSummary"
+  :companies="companies"
+  :available-drivers="availableDrivers"
+  :bulk-driver-id="bulkDriverId"
+  :has-assigned-orders="hasAssignedOrders"
+  @bulk-assign="handleOpenBulkAssignModal"
+  @bulk-status-change="handleBulkStatusChange"
+  @bulk-export="handleBulkExport"
+  @bulk-print="handleBulkPrint"
+  @clear-selection="clearSelection"
+  @optimize-route="optimizeSelectedOrders"
+  @driver-selected="bulkDriverId = $event"
+/>
 
     <!-- Tabla principal -->
     <AdminOrdersTable
@@ -158,6 +163,27 @@ const route = useRoute()
 const router = useRouter()
 const toast = useToast()
 const auth = useAuthStore()
+const bulkDriverId = ref('')
+const showRouteOptimizer = ref(false)
+const routeOptimizationData = ref(null)
+const isOptimizing = ref(false)
+const optimizerForm = ref({
+  startLocation: {
+    address: '',
+    latitude: null,
+    longitude: null
+  },
+  endLocation: {
+    address: '',
+    latitude: null,
+    longitude: null
+  },
+  preferences: {
+    avoidTolls: false,
+    avoidHighways: false,
+    prioritizeTime: true
+  }
+})
 
 // ==================== COMPOSABLES ====================
 
@@ -373,7 +399,27 @@ const filteredCommunes = computed(() => {
     !currentSelection.includes(commune)
   ).sort()
 })
+// ==================== NUEVOS COMPUTED PARA RUTAS ====================
+// Agregar después de los computed existentes
 
+const hasAssignedOrders = computed(() => {
+  return selectedOrders.value.some(orderId => {
+    const order = orders.value.find(o => o._id === orderId)
+    return order && order.assigned_driver && order.status === 'assigned'
+  })
+})
+
+const selectedOrdersData = computed(() => {
+  return orders.value.filter(o => selectedOrders.value.includes(o._id))
+})
+
+const isOptimizerFormValid = computed(() => {
+  return optimizerForm.value.startLocation.latitude &&
+         optimizerForm.value.startLocation.longitude &&
+         optimizerForm.value.endLocation.latitude &&
+         optimizerForm.value.endLocation.longitude &&
+         routeOptimizationData.value?.orderIds?.length > 0
+})
 // ==================== WATCHERS ====================
 
 /**
@@ -1152,6 +1198,181 @@ async function loadChannelsManual() {
     channels.value = []
   }
 }
+// ==================== NUEVOS MÉTODOS PARA RUTAS ====================
+// Agregar después de los métodos existentes
+
+const bulkAssignDriver = async () => {
+  if (!bulkDriverId.value || selectedOrders.value.length === 0) return
+  
+  try {
+    loading.value = true
+    
+    // Asignar conductor a los pedidos seleccionados
+    await apiService.orders.bulkUpdateStatus({
+      orderIds: selectedOrders.value,
+      status: 'assigned',
+      assigned_driver: bulkDriverId.value
+    })
+    
+    // Recargar pedidos
+    await fetchOrders()
+    
+    toast.success(`${selectedOrders.value.length} pedidos asignados al conductor`)
+    
+    // Mostrar opción de optimización
+    setTimeout(() => {
+      if (confirm('¿Quieres optimizar una ruta con estos pedidos ahora?')) {
+        optimizeSelectedOrders()
+      }
+    }, 1000)
+    
+  } catch (error) {
+    console.error('Error asignando conductor:', error)
+    toast.error('Error al asignar conductor')
+  } finally {
+    loading.value = false
+  }
+}
+
+const optimizeSelectedOrders = async () => {
+  if (!bulkDriverId.value) {
+    toast.error('Selecciona un conductor primero')
+    return
+  }
+  
+  // Filtrar solo pedidos asignados
+  const assignedOrders = selectedOrdersData.value.filter(order => 
+    order.assigned_driver === bulkDriverId.value && order.status === 'assigned'
+  )
+  
+  if (assignedOrders.length === 0) {
+    toast.error('No hay pedidos asignados para optimizar')
+    return
+  }
+  
+  // Preparar datos para optimización
+  routeOptimizationData.value = {
+    orderIds: assignedOrders.map(o => o._id),
+    driverId: bulkDriverId.value,
+    orders: assignedOrders
+  }
+  
+  showRouteOptimizer.value = true
+}
+
+const clearSelection = () => {
+  selectedOrders.value = []
+  bulkDriverId.value = ''
+}
+
+const setDefaultLocations = () => {
+  // Ubicaciones de ejemplo en Santiago
+  optimizerForm.value.startLocation = {
+    address: 'Av. Providencia 1234, Providencia, Santiago',
+    latitude: -33.4569,
+    longitude: -70.6483
+  }
+  
+  optimizerForm.value.endLocation = {
+    address: 'Av. Las Condes 456, Las Condes, Santiago', 
+    latitude: -33.4172,
+    longitude: -70.5476
+  }
+  
+  toast.success('Ubicaciones de ejemplo configuradas')
+}
+
+const detectUserLocation = () => {
+  if (!navigator.geolocation) {
+    toast.error('Geolocalización no soportada en este navegador')
+    return
+  }
+  
+  navigator.geolocation.getCurrentPosition(
+    (position) => {
+      optimizerForm.value.startLocation = {
+        address: 'Mi ubicación actual',
+        latitude: position.coords.latitude,
+        longitude: position.coords.longitude
+      }
+      toast.success('Ubicación detectada como punto de inicio')
+    },
+    (error) => {
+      console.error('Error detecting location:', error)
+      toast.error('Error al detectar ubicación')
+    }
+  )
+}
+
+const executeRouteOptimization = async () => {
+  if (!isOptimizerFormValid.value) {
+    toast.error('Completa todos los campos requeridos')
+    return
+  }
+  
+  isOptimizing.value = true
+  
+  try {
+    const routeData = {
+      startLocation: optimizerForm.value.startLocation,
+      endLocation: optimizerForm.value.endLocation,
+      orderIds: routeOptimizationData.value.orderIds,
+      driverId: bulkDriverId.value,
+      preferences: optimizerForm.value.preferences
+    }
+    
+    console.log('🛣️ Enviando datos de optimización:', routeData)
+    
+    const response = await apiService.routes.optimize(routeData)
+    const result = response.data.data
+    
+    // Cerrar modal
+    showRouteOptimizer.value = false
+    
+    // Mostrar resultado
+    toast.success(`¡Ruta optimizada! ${result.summary.totalOrders} entregas, ${result.summary.totalDistance} km, ${result.summary.totalDuration} min`)
+    
+    // Limpiar selección
+    clearSelection()
+    
+    // Recargar pedidos
+    await fetchOrders()
+    
+    // Preguntar si quiere ver la ruta
+    setTimeout(() => {
+      if (confirm('¿Quieres ver los detalles de la ruta optimizada?')) {
+        // Redirigir a RouteManager o abrir modal de detalles
+        window.open(`/routes/${result.routePlan._id}`, '_blank')
+      }
+    }, 1000)
+    
+  } catch (error) {
+    console.error('Error optimizando ruta:', error)
+    toast.error('Error al optimizar la ruta: ' + (error.response?.data?.message || error.message))
+  } finally {
+    isOptimizing.value = false
+  }
+}
+
+const resetOptimizerForm = () => {
+  optimizerForm.value = {
+    startLocation: { address: '', latitude: null, longitude: null },
+    endLocation: { address: '', latitude: null, longitude: null },
+    preferences: {
+      avoidTolls: false,
+      avoidHighways: false,
+      prioritizeTime: true
+    }
+  }
+}
+defineExpose({
+  bulkAssignDriver,
+  optimizeSelectedOrders, 
+  setDefaultLocations,
+  detectUserLocation,
+  executeRouteOptimization,
+  resetOptimizerForm
+})
 
 // ==================== LIFECYCLE ====================
 

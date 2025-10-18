@@ -48,7 +48,38 @@
               {{ assignableCount }}
             </span>
           </button>
-
+<div class="flex flex-col gap-2">
+  <!-- Selector de Conductor -->
+  <select 
+    :value="bulkDriverId" 
+    @change="$emit('driver-selected', $event.target.value)"
+    class="px-3 py-2 border border-white/40 rounded-md bg-white/15 text-white text-sm font-medium placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-white/50"
+  >
+    <option value="" class="text-gray-900">Seleccionar conductor</option>
+    <option 
+      v-for="driver in availableDrivers" 
+      :key="driver._id" 
+      :value="driver._id"
+      class="text-gray-900"
+    >
+      {{ driver.name }}
+    </option>
+  </select>
+  
+  <!-- Botón Optimizar Ruta -->
+  <button 
+    @click="$emit('optimize-route')"
+    class="flex items-center justify-center gap-1.5 px-4 py-2.5 border border-purple-300/40 rounded-md bg-gradient-to-r from-purple-500/20 to-purple-600/20 text-white text-sm font-medium transition-all hover:from-purple-500/30 hover:to-purple-600/30 hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:from-purple-500/20 disabled:hover:to-purple-600/20 disabled:hover:translate-y-0 active:scale-95"
+    :disabled="!bulkDriverId || !hasAssignedOrders"
+    :title="!bulkDriverId ? 'Selecciona un conductor primero' : !hasAssignedOrders ? 'Asigna pedidos al conductor primero' : 'Optimizar ruta con Google Maps'"
+  >
+    <span class="text-base">✨</span>
+    <span>Optimizar Ruta</span>
+    <span v-if="hasAssignedOrders" class="bg-green-500/30 px-1.5 py-0.5 rounded-full text-xs font-semibold ml-1">
+      ✓
+    </span>
+  </button>
+</div>
           <div class="relative group">
             <button class="flex items-center justify-center gap-1.5 px-4 py-2.5 border border-white/40 rounded-md bg-white/15 text-white text-sm font-medium transition-all hover:bg-white/20 w-full sm:w-auto">
               <span class="text-base">📝</span>
@@ -267,7 +298,19 @@ const props = defineProps({
   companies: {
     type: Array,
     default: () => []
-  }
+  },
+  availableDrivers: {
+  type: Array,
+  default: () => []
+},
+bulkDriverId: {
+  type: String,
+  default: ''
+},
+hasAssignedOrders: {
+  type: Boolean,
+  default: false
+}
 })
 
 // ==================== EMITS ====================
@@ -277,7 +320,9 @@ const emit = defineEmits([
   'bulk-export',
   'bulk-print',
   'clear-selection',
-  'dismiss-status'
+  'dismiss-status',
+  'optimize-route',
+'driver-selected'
 ])
 
 // ==================== STATE ====================

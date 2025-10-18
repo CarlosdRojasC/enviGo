@@ -1003,6 +1003,112 @@ const scanner = {
 const contact = {
   send: (contactData) => api.post('/contact', contactData)
 }
+const routes = {
+  // Optimizar una nueva ruta
+  optimize: (routeData) => {
+    console.log('🛣️ API: Optimizando ruta con Google Maps');
+    return api.post('/routes/optimize', routeData);
+  },
+
+  // Obtener todas las rutas de la empresa
+  getAll: (params = {}) => {
+    console.log('📋 API: Obteniendo rutas de la empresa');
+    return api.get('/routes', { params });
+  },
+
+  // Obtener una ruta específica
+  getById: (id) => {
+    console.log(`🛣️ API: Obteniendo ruta ${id}`);
+    return api.get(`/routes/${id}`);
+  },
+
+  // Asignar ruta a conductor
+  assign: (routeId, driverId) => {
+    console.log(`👤 API: Asignando ruta ${routeId} a conductor ${driverId}`);
+    return api.patch(`/routes/${routeId}/assign`, { driverId });
+  },
+
+  // Iniciar ruta (solo para conductores)
+  startRoute: (routeId) => {
+    console.log(`🚀 API: Iniciando ruta ${routeId}`);
+    return api.patch(`/routes/${routeId}/start`);
+  },
+
+  // Obtener ruta activa del conductor
+  getActiveRoute: () => {
+    console.log('🎯 API: Obteniendo ruta activa del conductor');
+    return api.get('/routes/driver/active');
+  },
+
+  // Actualizar estado de entrega de un pedido
+  updateOrderStatus: (routeId, orderId, status, deliveryProof = null) => {
+    console.log(`📦 API: Actualizando estado de entrega ${orderId} a ${status}`);
+    return api.patch(`/routes/${routeId}/orders/${orderId}/status`, {
+      status,
+      deliveryProof
+    });
+  },
+
+  // Sincronizar actualizaciones offline
+  syncOfflineUpdates: (routeId, updates) => {
+    console.log(`🔄 API: Sincronizando ${updates.length} actualizaciones offline`);
+    return api.post(`/routes/${routeId}/sync-offline`, { updates });
+  },
+
+  // Eliminar ruta (solo drafts)
+  delete: (routeId) => {
+    console.log(`🗑️ API: Eliminando ruta ${routeId}`);
+    return api.delete(`/routes/${routeId}`);
+  },
+
+  // Obtener estadísticas de rutas
+  getStats: (params = {}) => {
+    console.log('📊 API: Obteniendo estadísticas de rutas');
+    return api.get('/routes/stats/summary', { params });
+  },
+
+  // Obtener historial de rutas de un conductor
+  getDriverHistory: (driverId, params = {}) => {
+    console.log(`📚 API: Obteniendo historial de rutas del conductor ${driverId}`);
+    return api.get('/routes', { 
+      params: { 
+        ...params, 
+        driverId 
+      } 
+    });
+  },
+
+  // Duplicar ruta
+  duplicate: (routeId, newDriverId = null) => {
+    console.log(`📋 API: Duplicando ruta ${routeId}`);
+    return api.post(`/routes/${routeId}/duplicate`, {
+      driverId: newDriverId
+    });
+  },
+
+  // Re-optimizar ruta existente
+  reoptimize: (routeId, preferences = {}) => {
+    console.log(`🔄 API: Re-optimizando ruta ${routeId}`);
+    return api.patch(`/routes/${routeId}/reoptimize`, { preferences });
+  },
+
+  // Operaciones masivas
+  bulkAssign: (routeIds, driverId) => {
+    console.log(`👥 API: Asignación masiva de ${routeIds.length} rutas`);
+    return api.post('/routes/bulk/assign', {
+      routeIds,
+      driverId
+    });
+  },
+
+  bulkUpdateStatus: (routeIds, status) => {
+    console.log(`📝 API: Actualización masiva de estado a ${status}`);
+    return api.post('/routes/bulk/status', {
+      routeIds,
+      status
+    });
+  }
+};
 // ACTUALIZAR la exportación para incluir shipday
 // Exportar todos los servicios
 export const apiService = {
@@ -1025,7 +1131,8 @@ export const apiService = {
   labels,
   pickups,
   collections,
-  contact
+  contact,
+  routes
 }
 
 // Exportar instancia de axios para casos especiales
