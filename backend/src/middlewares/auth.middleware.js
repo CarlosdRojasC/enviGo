@@ -132,6 +132,35 @@ const verifyShopifyWebhook = (req, res, next) => {
     res.status(401).send('No autorizado');
   }
 };
+// ==========================================
+// 🔐 Autorización dinámica por roles permitidos
+// ==========================================
+const authorizeRoles = (allowedRoles = []) => {
+  return (req, res, next) => {
+    try {
+      if (!req.user || !req.user.role) {
+        return res.status(403).json({
+          error: 'No se encontró información del usuario en la solicitud.'
+        });
+      }
+
+      // Si el rol del usuario está dentro del array permitido
+      if (!allowedRoles.includes(req.user.role)) {
+        return res.status(403).json({
+          error: `Acceso denegado. Requiere uno de los roles: ${allowedRoles.join(', ')}`
+        });
+      }
+
+      next();
+    } catch (error) {
+      console.error('Error en authorizeRoles:', error);
+      return res.status(500).json({
+        error: 'Error en la autorización por roles.'
+      });
+    }
+  };
+};
+
 
 module.exports = {
   authenticateToken,
@@ -140,5 +169,6 @@ module.exports = {
   hasCompanyAccess,
   requiresCompany,
   verifyShopifyWebhook,
-  isAdminOrCompanyOwner
+  isAdminOrCompanyOwner,
+  authorizeRoles
 };
