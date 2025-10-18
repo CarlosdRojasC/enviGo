@@ -1101,19 +1101,30 @@ async function optimizeAssignedOrders() {
     isOptimizing.value = true
     toast.info('🚀 Optimizando ruta...')
 
+    // Buscar info del conductor seleccionado
+    const driver = props.availableDrivers.find(d => d._id === props.bulkSelectedDriverId)
+
     const payload = {
+      // ✅ Dirección fija de bodega (punto de inicio)
       startLocation: {
-        latitude: -33.4569,
-        longitude: -70.6483,
-        address: 'Bodega Central, Santiago'
+        latitude: -33.4633,
+        longitude: -70.6045,
+        address: 'Zañartu 1897, Ñuñoa, Santiago'
       },
+
+      // ✅ Dirección del conductor (si existe)
       endLocation: {
-        latitude: -33.4172,
-        longitude: -70.5476,
-        address: 'Casa del Conductor'
+        latitude: driver?.home_latitude || -33.4633,
+        longitude: driver?.home_longitude || -70.6045,
+        address: driver?.home_address || 'Casa del Conductor'
       },
+
       orderIds: props.selectedOrders.map(o => o._id || o.id),
       driverId: props.bulkSelectedDriverId,
+
+      // ✅ Asegurar que se envía company (para evitar el error de validación)
+      company: props.selectedOrders[0]?.company_id || props.selectedOrders[0]?.company || null,
+
       preferences: {
         avoidTolls: false,
         avoidHighways: false,
@@ -1145,6 +1156,7 @@ async function optimizeAssignedOrders() {
     isOptimizing.value = false
   }
 }
+
 
 // ==================== WATCHERS (Agregar este) ====================
 watch(() => props.newOrder?.company_id, (newCompanyId) => {

@@ -38,6 +38,9 @@ const driverSchema = new mongoose.Schema({
     type: Boolean,
     default: true,
   },
+  home_address: { type: String },
+home_latitude: { type: Number },
+home_longitude: { type: Number }
 }, {
   timestamps: true, // Añade createdAt y updatedAt
 });
