@@ -180,7 +180,7 @@ const routes = [
 },
 {
   path: 'admin/routes',
-  name: 'ManageRoutes',
+  name: 'AdminRoutes',
   component: () => import('../views/RouteManager.vue'),
   meta: {
     title: 'Gestor de Rutas',
