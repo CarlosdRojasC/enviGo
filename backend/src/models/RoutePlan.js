@@ -8,11 +8,11 @@ const routePlanSchema = new mongoose.Schema({
   required: false, // ✅ Ya no es obligatorio
   default: null    // ✅ Evita errores de validación si no se envía
 },
-  driver: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    required: true
-  },
+ driver: {
+  type: mongoose.Schema.Types.ObjectId,
+  ref: 'Driver', // ✅ debe coincidir con el nombre del modelo de tu colección
+  required: true
+},
   createdBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
