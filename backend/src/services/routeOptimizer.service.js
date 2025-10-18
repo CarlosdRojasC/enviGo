@@ -36,41 +36,47 @@ class RouteOptimizerService {
       }
 
       // 2. Preparar waypoints para Google Directions API
-      const waypoints = await Promise.all(
-  orders.map(async (order, index) => {
-    let latitude = null;
-    let longitude = null;
+      const waypoints = [];
 
-    // Si el pedido tiene coordenadas guardadas, úsalas
-    if (order.delivery_address && order.delivery_address.latitude && order.delivery_address.longitude) {
-      latitude = order.delivery_address.latitude;
-      longitude = order.delivery_address.longitude;
-    } else if (order.delivery_coordinates && order.delivery_coordinates.latitude) {
-      latitude = order.delivery_coordinates.latitude;
-      longitude = order.delivery_coordinates.longitude;
-    } else if (order.shipping_address) {
-      // Geocodificar si solo hay dirección textual
-      const geocodeUrl = `${this.baseUrl}/geocode/json?address=${encodeURIComponent(order.shipping_address)}&key=${this.googleApiKey}`;
-      const { data } = await axios.get(geocodeUrl);
+for (const [index, order] of orders.entries()) {
+  const address = order.shipping_address || order.customer_address || null;
 
-      if (data.results && data.results.length > 0) {
-        latitude = data.results[0].geometry.location.lat;
-        longitude = data.results[0].geometry.location.lng;
-      } else {
-        console.warn(`⚠️ No se pudieron obtener coordenadas para ${order.shipping_address}`);
-        // fallback por si falla la geocodificación
-        latitude = -33.45 + index * 0.001;
-        longitude = -70.65 + index * 0.001;
-      }
+  if (!address) {
+    console.warn(`⚠️ Pedido sin dirección: ${order._id}`);
+    continue;
+  }
+
+  try {
+    // Llamar a Google Geocoding API
+    const geocodeUrl = `${this.baseUrl}/geocode/json?address=${encodeURIComponent(address)}&key=${this.googleApiKey}`;
+    const { data } = await axios.get(geocodeUrl);
+
+    if (data.status === 'OK' && data.results.length > 0) {
+      const { lat, lng } = data.results[0].geometry.location;
+      waypoints.push({
+        location: `${lat},${lng}`,
+        orderId: order._id,
+        address: address
+      });
+    } else {
+      console.warn(`⚠️ No se pudo geocodificar la dirección: "${address}"`);
+      // fallback: coordenadas aleatorias cerca de Santiago para no romper
+      waypoints.push({
+        location: `${-33.45 + index * 0.001},${-70.65 + index * 0.001}`,
+        orderId: order._id,
+        address: address
+      });
     }
-
-    return {
-      location: `${latitude},${longitude}`,
+  } catch (error) {
+    console.error(`❌ Error geocodificando "${address}":`, error.message);
+    // fallback
+    waypoints.push({
+      location: `${-33.45 + index * 0.001},${-70.65 + index * 0.001}`,
       orderId: order._id,
-      address: order.shipping_address || 'Sin dirección'
-    };
-  })
-);
+      address: address
+    });
+  }
+}
 
 
       // 3. Llamar a Google Routes API para optimización
