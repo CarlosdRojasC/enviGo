@@ -58,33 +58,46 @@ export function useDriverAssignment(selectedOrders, fetchOrders) {
   /**
    * Fetch available drivers from your backend (local)
    */
-  async function fetchAvailableDrivers() {
-    loadingDrivers.value = true
-    try {
-      console.log('👥 Cargando conductores locales...')
-      const response = await apiService.get('/drivers')
-      console.log('📋 API /drivers response:', response)
+async function fetchAvailableDrivers() {
+  loadingDrivers.value = true
+  try {
+    console.log('👥 Cargando conductores locales desde backend...')
 
-      // Maneja distintos formatos posibles
-      let drivers = []
-      if (response.data?.data) {
-        drivers = response.data.data
-      } else if (Array.isArray(response.data)) {
-        drivers = response.data
-      } else {
-        drivers = []
-      }
+    // ✅ Usamos el módulo correcto del apiService
+    const response = await apiService.drivers.getAll()
+    console.log('📋 Respuesta /drivers:', response.data)
 
-      availableDrivers.value = drivers.filter(driver => driver.is_active)
-      console.log('✅ Conductores activos cargados:', availableDrivers.value.length)
-    } catch (error) {
-      console.error('❌ Error cargando conductores locales:', error)
-      toast.error('Error al cargar conductores')
-      availableDrivers.value = []
-    } finally {
-      loadingDrivers.value = false
+    // ✅ Detectamos formato de respuesta (por si el backend cambia)
+    let drivers = []
+    if (response.data?.data) {
+      drivers = response.data.data
+    } else if (Array.isArray(response.data)) {
+      drivers = response.data
+    } else {
+      drivers = []
     }
+
+    // ✅ Filtrar solo activos
+    availableDrivers.value = drivers.filter(driver => driver.is_active)
+
+    // ✅ Mostrar nombres completos en log para verificar
+    console.log(
+      `✅ Conductores activos cargados (${availableDrivers.value.length}):`,
+      availableDrivers.value.map(d => d.full_name || d.name)
+    )
+
+  } catch (error) {
+    console.error('❌ Error cargando conductores locales:', {
+      message: error.message,
+      response: error.response?.data || 'Sin respuesta del servidor'
+    })
+    toast.error('Error al cargar conductores')
+    availableDrivers.value = []
+  } finally {
+    loadingDrivers.value = false
   }
+}
+
 
   /**
    * Confirm individual driver assignment
