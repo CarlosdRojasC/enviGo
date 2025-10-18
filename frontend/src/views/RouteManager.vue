@@ -371,15 +371,15 @@
 
         <!-- Entregas -->
         <GMapMarker
-          v-for="(item, index) in activeRoute.orders"
-          :key="index"
-          v-if="item.order?.location"
-          :position="{
-            lat: item.order.location.latitude,
-            lng: item.order.location.longitude
-          }"
-          :label="String(index + 1)"
-        />
+  v-for="(item, index) in activeRoute.orders || []"
+  :key="index"
+  v-if="item?.order?.location"
+  :position="{
+    lat: item.order.location.latitude,
+    lng: item.order.location.longitude
+  }"
+  :label="String(index + 1)"
+/>
 
         <!-- Fin -->
         <GMapMarker
@@ -405,7 +405,7 @@
 </template>
 
 <script>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, nextTick  } from 'vue'
 import { apiService } from '../services/api'
 
 export default {
@@ -511,55 +511,110 @@ const polylineCoords = ref([])
       }
     }
     
-    const viewRoute = async (route) => {
-  activeRoute.value = route
-  showRouteMap.value = true
+const viewRoute = async (route) => {
+  try {
+    activeRoute.value = route
+    showRouteMap.value = true
 
-  // Centrar el mapa en el inicio o primer pedido
-  if (route.startLocation) {
-    mapCenter.value = {
-      lat: route.startLocation.latitude,
-      lng: route.startLocation.longitude
+    // Esperar a que el modal se monte
+    await nextTick()
+    await new Promise((r) => setTimeout(r, 250))
+
+    // Validar mapa
+    const map = routeMap.value?.$mapObject
+    if (!map) {
+      console.error('❗ No se encontró el mapa en el DOM aún.')
+      return
     }
-  }
 
-  // Si las órdenes no traen coordenadas, poblarlas
-  for (const item of route.orders) {
-    if (item.order && typeof item.order === 'string') {
-      try {
-        const response = await apiService.orders.getById(item.order)
-        item.order = response.data.data
-      } catch (err) {
-        console.warn('No se pudo obtener coordenadas de orden', item.order)
+    // Inicializar servicios de rutas de Google
+    const directionsService = new google.maps.DirectionsService()
+    const directionsRenderer = new google.maps.DirectionsRenderer({
+      map,
+      suppressMarkers: true,
+      polylineOptions: {
+        strokeColor: '#1E88E5',
+        strokeOpacity: 0.9,
+        strokeWeight: 5,
+      },
+    })
+
+    // Centrar el mapa
+    if (route.startLocation) {
+      mapCenter.value = {
+        lat: route.startLocation.latitude,
+        lng: route.startLocation.longitude,
       }
     }
-  }
 
-  // Construir la ruta para el polyline
-  const path = []
-
-  if (route.startLocation)
-    path.push({
-      lat: route.startLocation.latitude,
-      lng: route.startLocation.longitude
-    })
-
-  route.orders.forEach(o => {
-    if (o.order?.location) {
-      path.push({
-        lat: o.order.location.latitude,
-        lng: o.order.location.longitude
-      })
+    // Si las órdenes no traen coordenadas, poblarlas
+    for (const item of route.orders || []) {
+      if (item.order && typeof item.order === 'string') {
+        try {
+          const response = await apiService.orders.getById(item.order)
+          item.order = response.data.data
+        } catch (err) {
+          console.warn('⚠️ No se pudo obtener coordenadas de orden', item.order)
+        }
+      }
     }
-  })
 
-  if (route.endLocation)
-    path.push({
-      lat: route.endLocation.latitude,
-      lng: route.endLocation.longitude
+    // Construir waypoints
+    const waypoints = (route.orders || [])
+      .filter((o) => o?.order?.location)
+      .map((o) => ({
+        location: {
+          lat: o.order.location.latitude,
+          lng: o.order.location.longitude,
+        },
+        stopover: true,
+      }))
+
+    // Crear solicitud Directions API
+    const request = {
+      origin: {
+        lat: route.startLocation.latitude,
+        lng: route.startLocation.longitude,
+      },
+      destination: {
+        lat: route.endLocation.latitude,
+        lng: route.endLocation.longitude,
+      },
+      waypoints,
+      travelMode: google.maps.TravelMode.DRIVING,
+      optimizeWaypoints: false,
+    }
+
+    // Ejecutar la ruta
+    directionsService.route(request, (result, status) => {
+      if (status === 'OK' && result?.routes?.length > 0) {
+        directionsRenderer.setDirections(result)
+        console.log('✅ Ruta mostrada correctamente en el mapa.')
+      } else {
+        console.warn(`⚠️ Error Directions API (${status}), usando fallback Polyline`)
+        // Fallback: dibujar líneas rectas simples
+        const path = []
+
+        if (route.startLocation)
+          path.push({
+            lat: route.startLocation.latitude,
+            lng: route.startLocation.longitude,
+          })
+
+        waypoints.forEach((wp) => path.push(wp.location))
+
+        if (route.endLocation)
+          path.push({
+            lat: route.endLocation.latitude,
+            lng: route.endLocation.longitude,
+          })
+
+        polylineCoords.value = path
+      }
     })
-
-  polylineCoords.value = path
+  } catch (err) {
+    console.error('❌ Error en viewRoute():', err)
+  }
 }
     
     const assignDriver = async (route) => {
