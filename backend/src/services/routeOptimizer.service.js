@@ -36,11 +36,42 @@ class RouteOptimizerService {
       }
 
       // 2. Preparar waypoints para Google Directions API
-      const waypoints = orders.map(order => ({
-        location: `${order.delivery_address.latitude},${order.delivery_address.longitude}`,
-        orderId: order._id,
-        address: order.delivery_address.full_address
-      }));
+      const waypoints = await Promise.all(
+  orders.map(async (order, index) => {
+    let latitude = null;
+    let longitude = null;
+
+    // Si el pedido tiene coordenadas guardadas, úsalas
+    if (order.delivery_address && order.delivery_address.latitude && order.delivery_address.longitude) {
+      latitude = order.delivery_address.latitude;
+      longitude = order.delivery_address.longitude;
+    } else if (order.delivery_coordinates && order.delivery_coordinates.latitude) {
+      latitude = order.delivery_coordinates.latitude;
+      longitude = order.delivery_coordinates.longitude;
+    } else if (order.shipping_address) {
+      // Geocodificar si solo hay dirección textual
+      const geocodeUrl = `${this.baseUrl}/geocode/json?address=${encodeURIComponent(order.shipping_address)}&key=${this.googleApiKey}`;
+      const { data } = await axios.get(geocodeUrl);
+
+      if (data.results && data.results.length > 0) {
+        latitude = data.results[0].geometry.location.lat;
+        longitude = data.results[0].geometry.location.lng;
+      } else {
+        console.warn(`⚠️ No se pudieron obtener coordenadas para ${order.shipping_address}`);
+        // fallback por si falla la geocodificación
+        latitude = -33.45 + index * 0.001;
+        longitude = -70.65 + index * 0.001;
+      }
+    }
+
+    return {
+      location: `${latitude},${longitude}`,
+      orderId: order._id,
+      address: order.shipping_address || 'Sin dirección'
+    };
+  })
+);
+
 
       // 3. Llamar a Google Routes API para optimización
       const optimizedRoute = await this.callGoogleRoutesAPI({
