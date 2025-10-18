@@ -1,95 +1,121 @@
 const axios = require('axios');
-const { VehicleRoutingIndexManager, RoutingModel, DefaultRoutingSearchParameters } = require('ortools');
 const RoutePlan = require('../models/RoutePlan');
 const Order = require('../models/Order');
 
 class RouteOptimizerService {
   constructor() {
     this.googleApiKey = process.env.GOOGLE_MAPS_API_KEY;
+    this.pythonOptimizerUrl = process.env.PYTHON_OPTIMIZER_URL || 'http://localhost:5001/optimize';
   }
 
   /**
-   * 🔹 Optimiza una ruta usando OR-Tools (sin límite de waypoints)
+   * 🔹 Optimiza y asigna una ruta completa (usa OR-Tools o heurístico)
    */
   async optimizeRoute(routeConfig) {
     try {
       const { orderIds, driverId, companyId, createdBy, preferences = {}, startLocation, endLocation } = routeConfig;
 
-      // 1️⃣ Obtener pedidos
+      // 1️⃣ Buscar pedidos válidos
       const orders = await Order.find({ _id: { $in: orderIds }, company: companyId });
       if (!orders.length) throw new Error('No se encontraron pedidos válidos');
 
-      // 2️⃣ Geocodificar direcciones de pedidos
+      // 2️⃣ Geocodificar direcciones
       const geocodedOrders = await Promise.all(
         orders.map(async (order) => {
-          const address = `${order.shipping_address}, ${order.shipping_commune}, Chile`;
+          const address = `${order.shipping_address}, ${order.shipping_commune || ''}, Chile`;
           const geo = await this.geocodeAddress(address);
           if (!geo) {
-            console.warn(`⚠️ No se pudo geocodificar la dirección: "${address}"`);
+            console.warn(`⚠️ No se pudo geocodificar: "${address}"`);
             return null;
           }
-          return {
-            order,
-            lat: geo.lat,
-            lng: geo.lng,
-            fullAddress: address
-          };
+          return { order, lat: geo.lat, lng: geo.lng, fullAddress: address };
         })
       );
 
       const validOrders = geocodedOrders.filter(Boolean);
-      if (!validOrders.length) throw new Error('No se pudieron geocodificar las direcciones de los pedidos');
+      if (!validOrders.length) throw new Error('No se pudieron geocodificar direcciones');
 
-      // 3️⃣ Construir matriz de distancias
+      // 3️⃣ Preparar ubicaciones
       const locations = [
-        { lat: startLocation.latitude, lng: startLocation.longitude }, // origen
+        { lat: startLocation.latitude, lng: startLocation.longitude },
         ...validOrders.map(o => ({ lat: o.lat, lng: o.lng })),
-        { lat: endLocation.latitude, lng: endLocation.longitude } // destino
+        { lat: endLocation.latitude, lng: endLocation.longitude }
       ];
 
-      const distanceMatrix = this.buildDistanceMatrix(locations);
+      let optimizedOrder;
+      let usedEngine = 'heuristic';
 
-      // 4️⃣ Optimizar secuencia con OR-Tools
-      const optimizedOrder = this.solveVRP(distanceMatrix);
+      // 4️⃣ Intentar optimizar con microservicio Python
+      try {
+        console.log(`🚀 Intentando optimización OR-Tools en ${this.pythonOptimizerUrl}`);
+        const res = await axios.post(this.pythonOptimizerUrl, { locations }, { timeout: 8000 });
+        if (res.data && res.data.route && res.data.route.length) {
+          optimizedOrder = res.data.route;
+          usedEngine = 'or-tools';
+          console.log('✅ OR-Tools devolvió una ruta válida.');
+        } else {
+          console.warn('⚠️ OR-Tools devolvió respuesta vacía, se usará heurístico.');
+        }
+      } catch (err) {
+        console.warn('⚠️ Falló optimizador OR-Tools, usando heurístico:', err.message);
+      }
 
-      // 5️⃣ Crear lista ordenada
-      const optimizedSequence = optimizedOrder
-        .slice(1, -1) // quita origen y destino
-        .map(index => validOrders[index - 1]);
+      // 5️⃣ Si no hay ruta desde OR-Tools → fallback heurístico
+      if (!optimizedOrder) {
+        optimizedOrder = this.heuristicOptimize(
+          { lat: startLocation.latitude, lng: startLocation.longitude },
+          validOrders,
+          { lat: endLocation.latitude, lng: endLocation.longitude }
+        );
+      }
 
-      // 6️⃣ Crear RoutePlan
+      // 6️⃣ Generar secuencia de pedidos
+      const sequence =
+        usedEngine === 'or-tools'
+          ? optimizedOrder.slice(1, -1).map(i => validOrders[i - 1])
+          : optimizedOrder;
+
+      // 7️⃣ Crear y asignar RoutePlan
       const routePlan = new RoutePlan({
         company: companyId,
         driver: driverId,
         createdBy,
         startLocation,
         endLocation,
-        orders: optimizedSequence.map((o, i) => ({
+        orders: sequence.map((o, i) => ({
           order: o.order._id,
           sequenceNumber: i + 1,
-          estimatedArrival: new Date(Date.now() + (i * 10 * 60 * 1000)), // 10 min por parada aprox
+          estimatedArrival: new Date(Date.now() + i * 10 * 60 * 1000),
           deliveryStatus: 'pending'
         })),
         optimization: {
-          totalDistance: this.calculateTotalDistance(distanceMatrix, optimizedOrder),
-          totalDuration: 0,
-          algorithm: 'or-tools-vrp',
-          optimizedAt: new Date()
+          algorithm: usedEngine,
+          optimizedAt: new Date(),
+          totalDistance: this.estimateTotalDistance(sequence)
         },
         preferences,
-        status: 'draft'
+        status: 'assigned',
+        assignedAt: new Date()
       });
 
       await routePlan.save();
       await routePlan.populate('orders.order driver');
 
+      // 8️⃣ Marcar pedidos como asignados
+      await Order.updateMany(
+        { _id: { $in: routePlan.orders.map(o => o.order._id || o.order) } },
+        { status: 'assigned', assigned_driver: driverId, assigned_at: new Date() }
+      );
+
       return {
         success: true,
+        message: `Ruta optimizada y asignada (${usedEngine})`,
         routePlan,
         summary: {
           totalOrders: routePlan.orders.length,
+          driver: routePlan.driver.full_name,
           totalDistance: routePlan.optimization.totalDistance,
-          estimatedTime: `${Math.round(routePlan.optimization.totalDistance / 30)} min aprox`
+          algorithm: usedEngine
         }
       };
     } catch (error) {
@@ -98,9 +124,7 @@ class RouteOptimizerService {
     }
   }
 
-  /**
-   * 🗺️ Geocodifica una dirección con Google
-   */
+  /** 🌍 Geocodificación simple con Google */
   async geocodeAddress(address) {
     try {
       const res = await axios.get('https://maps.googleapis.com/maps/api/geocode/json', {
@@ -117,11 +141,27 @@ class RouteOptimizerService {
     }
   }
 
-  /**
-   * 📏 Calcula distancia entre dos puntos (Haversine)
-   */
+  /** 🧠 Fallback heurístico (nearest neighbor) */
+  heuristicOptimize(start, orders, end) {
+    const remaining = [...orders];
+    const route = [];
+    let current = start;
+
+    while (remaining.length) {
+      remaining.sort((a, b) =>
+        this.haversineDistance(current, a) - this.haversineDistance(current, b)
+      );
+      const next = remaining.shift();
+      route.push(next);
+      current = next;
+    }
+
+    return route;
+  }
+
+  /** 📏 Distancia Haversine */
   haversineDistance(a, b) {
-    const R = 6371; // km
+    const R = 6371;
     const dLat = (b.lat - a.lat) * Math.PI / 180;
     const dLon = (b.lng - a.lng) * Math.PI / 180;
     const lat1 = a.lat * Math.PI / 180;
@@ -130,61 +170,11 @@ class RouteOptimizerService {
     return R * 2 * Math.atan2(Math.sqrt(aHav), Math.sqrt(1 - aHav));
   }
 
-  /**
-   * 🧮 Crea matriz de distancias NxN
-   */
-  buildDistanceMatrix(locations) {
-    const matrix = [];
-    for (let i = 0; i < locations.length; i++) {
-      matrix[i] = [];
-      for (let j = 0; j < locations.length; j++) {
-        matrix[i][j] = i === j ? 0 : this.haversineDistance(locations[i], locations[j]);
-      }
-    }
-    return matrix;
-  }
-
-  /**
-   * 🤖 Usa OR-Tools para resolver el VRP
-   */
-  solveVRP(distanceMatrix) {
-    const numLocations = distanceMatrix.length;
-    const manager = new VehicleRoutingIndexManager(numLocations, 1, [0], [numLocations - 1]);
-    const routing = new RoutingModel(manager);
-
-    const distanceCallback = (fromIndex, toIndex) => {
-      const fromNode = manager.IndexToNode(fromIndex);
-      const toNode = manager.IndexToNode(toIndex);
-      return Math.round(distanceMatrix[fromNode][toNode] * 1000); // metros
-    };
-
-    const transitCallbackIndex = routing.RegisterTransitCallback(distanceCallback);
-    routing.SetArcCostEvaluatorOfAllVehicles(transitCallbackIndex);
-
-    const searchParams = new DefaultRoutingSearchParameters();
-    searchParams.first_solution_strategy = 3; // PATH_CHEAPEST_ARC
-    searchParams.time_limit = { seconds: 10 };
-
-    const solution = routing.SolveWithParameters(searchParams);
-    if (!solution) throw new Error('No se pudo encontrar solución óptima');
-
-    const route = [];
-    let index = routing.Start(0);
-    while (!routing.IsEnd(index)) {
-      route.push(manager.IndexToNode(index));
-      index = solution.Value(routing.NextVar(index));
-    }
-    route.push(manager.IndexToNode(index));
-    return route;
-  }
-
-  /**
-   * 📏 Suma total de distancia recorrida en km
-   */
-  calculateTotalDistance(matrix, route) {
+  /** 📊 Estimar distancia total */
+  estimateTotalDistance(sequence) {
     let total = 0;
-    for (let i = 0; i < route.length - 1; i++) {
-      total += matrix[route[i]][route[i + 1]];
+    for (let i = 0; i < sequence.length - 1; i++) {
+      total += this.haversineDistance(sequence[i], sequence[i + 1]);
     }
     return Math.round(total * 100) / 100;
   }
