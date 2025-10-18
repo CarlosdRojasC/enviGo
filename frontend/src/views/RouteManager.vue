@@ -412,8 +412,8 @@ export default {
     
     const loadDrivers = async () => {
       try {
-        const response = await api.users.getCompanyUsers({ role: 'driver' })
-        drivers.value = response.data.data
+        const response = await api.drivers.getAll()
+drivers.value = response.data.data || response.data
       } catch (error) {
         console.error('Error loading drivers:', error)
       }

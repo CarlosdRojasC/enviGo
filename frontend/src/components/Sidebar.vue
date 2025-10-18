@@ -111,6 +111,7 @@ const adminRoutes = [
   { path: '/app/admin/drivers', icon: 'local_shipping', name: 'Conductores' },
   { path: '/app/admin/driver-payments', icon: 'payments', name: 'Pago Conductores' },
   { path: '/app/admin/communes', icon: 'map', name: 'Comunas' },
+  { path: '/app/admin/routes', icon: 'truck', name: 'Rutas Optimizadas' },
 ];
 
 // Rutas para Empresas con Material Icons

@@ -179,6 +179,17 @@ const routes = [
   meta: { roles: ['admin'] }
 },
 {
+  path: '/admin/routes',
+  name: 'RouteManager',
+  component: () => import('../views/RouteManager.vue'),
+  meta: {
+    title: 'Gestor de Rutas',
+    requiresAuth: true,
+    layout: 'admin',
+    icon: '🚚'
+  }
+},
+{
   path: 'admin/manifest/:id',
   name: 'AdminManifestView',
   component: () => import('../views/PickupManifest.vue'),
