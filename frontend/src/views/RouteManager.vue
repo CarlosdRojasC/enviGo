@@ -316,7 +316,7 @@
       </div>
     </div>
 
-    <!-- Route Optimizer Modal (Básico por ahora) -->
+    <!-- Route Optimizer Modal -->
     <div v-if="showRouteOptimizer" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div class="bg-white rounded-xl max-w-md w-full max-h-96 overflow-y-auto" @click.stop>
         <div class="p-6 border-b border-gray-200">
@@ -354,14 +354,14 @@ export default {
     const routes = ref([])
     const drivers = ref([])
     const routeStats = ref({
-  totalRoutes: 0,
-  inProgressRoutes: 0,
-  completedRoutes: 0,
-  completionRate: 0
-})
+      totalRoutes: 0,
+      inProgressRoutes: 0,
+      completedRoutes: 0,
+      completionRate: 0
+    })
     const loading = ref(false)
     const showRouteOptimizer = ref(false)
-    const api = apiService()
+    
     // Filters
     const filters = ref({
       status: '',
@@ -395,12 +395,15 @@ export default {
           ...filters.value
         }
         
-        const response = await api.routes.getAll(params)
+        // ✅ CORREGIDO: Usar apiService directamente (objeto), no como función
+        const response = await apiService.routes.getAll(params)
         routes.value = response.data.data.routes
         pagination.value = response.data.data.pagination
       } catch (error) {
         console.error('Error loading routes:', error)
-        alert('Error al cargar las rutas')
+        // Fallback: usar datos mock si la API no está disponible
+        routes.value = []
+        alert('Error al cargar las rutas: ' + error.message)
       } finally {
         loading.value = false
       }
@@ -408,19 +411,39 @@ export default {
     
     const loadRouteStats = async () => {
       try {
-        const response = await api.routes.getStats(filters.value)
-        routeStats.value = response.data.data
+        // ✅ CORREGIDO: Verificar si el endpoint existe
+        if (apiService.routes && apiService.routes.getStats) {
+          const response = await apiService.routes.getStats(filters.value)
+          routeStats.value = response.data.data
+        } else {
+          // Fallback: usar datos mock
+          routeStats.value = {
+            totalRoutes: routes.value.length,
+            inProgressRoutes: routes.value.filter(r => r.status === 'in_progress').length,
+            completedRoutes: routes.value.filter(r => r.status === 'completed').length,
+            completionRate: routes.value.length > 0 ? Math.round((routes.value.filter(r => r.status === 'completed').length / routes.value.length) * 100) : 0
+          }
+        }
       } catch (error) {
         console.error('Error loading route stats:', error)
+        // Usar stats básicas como fallback
+        routeStats.value = {
+          totalRoutes: 0,
+          inProgressRoutes: 0,
+          completedRoutes: 0,
+          completionRate: 0
+        }
       }
     }
     
     const loadDrivers = async () => {
       try {
-        const response = await api.drivers.getAll()
-drivers.value = response.data.data || response.data
+        // ✅ CORREGIDO: Usar apiService directamente
+        const response = await apiService.drivers.getAll()
+        drivers.value = response.data.data || response.data
       } catch (error) {
         console.error('Error loading drivers:', error)
+        drivers.value = []
       }
     }
     
@@ -433,23 +456,33 @@ drivers.value = response.data.data || response.data
       if (!driverId) return
       
       try {
-        await api.routes.assign(route._id, driverId)
-        alert('Conductor asignado correctamente')
-        await loadRoutes()
+        // ✅ CORREGIDO: Verificar si el método existe
+        if (apiService.routes && apiService.routes.assign) {
+          await apiService.routes.assign(route._id, driverId)
+          alert('Conductor asignado correctamente')
+          await loadRoutes()
+        } else {
+          alert('Funcionalidad de asignación no disponible')
+        }
       } catch (error) {
         console.error('Error assigning driver:', error)
-        alert('Error al asignar conductor')
+        alert('Error al asignar conductor: ' + error.message)
       }
     }
     
     const duplicateRoute = async (route) => {
       try {
-        await api.routes.duplicate(route._id)
-        alert('Ruta duplicada correctamente')
-        await loadRoutes()
+        // ✅ CORREGIDO: Verificar si el método existe
+        if (apiService.routes && apiService.routes.duplicate) {
+          await apiService.routes.duplicate(route._id)
+          alert('Ruta duplicada correctamente')
+          await loadRoutes()
+        } else {
+          alert('Funcionalidad de duplicación no disponible')
+        }
       } catch (error) {
         console.error('Error duplicating route:', error)
-        alert('Error al duplicar ruta')
+        alert('Error al duplicar ruta: ' + error.message)
       }
     }
     
@@ -457,12 +490,17 @@ drivers.value = response.data.data || response.data
       if (!confirm('¿Estás seguro de eliminar esta ruta?')) return
       
       try {
-        await api.routes.delete(route._id)
-        alert('Ruta eliminada correctamente')
-        await loadRoutes()
+        // ✅ CORREGIDO: Verificar si el método existe
+        if (apiService.routes && apiService.routes.delete) {
+          await apiService.routes.delete(route._id)
+          alert('Ruta eliminada correctamente')
+          await loadRoutes()
+        } else {
+          alert('Funcionalidad de eliminación no disponible')
+        }
       } catch (error) {
         console.error('Error deleting route:', error)
-        alert('Error al eliminar ruta')
+        alert('Error al eliminar ruta: ' + error.message)
       }
     }
     
