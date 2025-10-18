@@ -39,16 +39,17 @@ class RouteOptimizerService {
       const waypoints = [];
 
 for (const [index, order] of orders.entries()) {
-  const address = order.shipping_address || order.customer_address || null;
+  const baseAddress = order.shipping_address || order.customer_address || null;
+  const commune = order.shipping_commune || '';
+  const fullAddress = [baseAddress, commune, 'Chile'].filter(Boolean).join(', ');
 
-  if (!address) {
+  if (!baseAddress) {
     console.warn(`⚠️ Pedido sin dirección: ${order._id}`);
     continue;
   }
 
   try {
-    // Llamar a Google Geocoding API
-    const geocodeUrl = `${this.baseUrl}/geocode/json?address=${encodeURIComponent(address)}&key=${this.googleApiKey}`;
+    const geocodeUrl = `${this.baseUrl}/geocode/json?address=${encodeURIComponent(fullAddress)}&region=cl&key=${this.googleApiKey}`;
     const { data } = await axios.get(geocodeUrl);
 
     if (data.status === 'OK' && data.results.length > 0) {
@@ -56,28 +57,27 @@ for (const [index, order] of orders.entries()) {
       waypoints.push({
         location: `${lat},${lng}`,
         orderId: order._id,
-        address: address
+        address: fullAddress
       });
     } else {
-      console.warn(`⚠️ No se pudo geocodificar la dirección: "${address}"`);
-      // fallback: coordenadas aleatorias cerca de Santiago para no romper
+      console.warn(`⚠️ No se pudo geocodificar la dirección: "${fullAddress}"`);
+      // fallback coordenadas dummy
       waypoints.push({
         location: `${-33.45 + index * 0.001},${-70.65 + index * 0.001}`,
         orderId: order._id,
-        address: address
+        address: fullAddress
       });
     }
   } catch (error) {
-    console.error(`❌ Error geocodificando "${address}":`, error.message);
-    // fallback
+    console.error(`❌ Error geocodificando "${fullAddress}":`, error.message);
+    // fallback dummy
     waypoints.push({
       location: `${-33.45 + index * 0.001},${-70.65 + index * 0.001}`,
       orderId: order._id,
-      address: address
+      address: fullAddress
     });
   }
 }
-
 
       // 3. Llamar a Google Routes API para optimización
       const optimizedRoute = await this.callGoogleRoutesAPI({
@@ -171,7 +171,6 @@ for (const [index, order] of orders.entries()) {
         languageCode: 'es-CL',
         units: 'METRIC',
         optimizeWaypointOrder: true, // Clave para optimización
-        requestedReferenceTime: new Date().toISOString()
       };
 
       const headers = {
