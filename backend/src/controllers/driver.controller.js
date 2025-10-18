@@ -20,7 +20,7 @@ async getAllDrivers(req, res) {
 
     // Buscar todos los conductores activos en tu base local
     const drivers = await Driver.find({ is_active: true })
-      .select('_id full_name email phone company_id vehicle_type shipday_driver_id')
+      .select('_id full_name email phone company_id vehicle_type shipday_driver_id is_active')
       .sort({ full_name: 1 });
 
     if (!drivers || drivers.length === 0) {
