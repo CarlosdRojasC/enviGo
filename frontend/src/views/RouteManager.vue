@@ -466,10 +466,7 @@ let mapInstance = null
       }
     }
     
-    const viewRoute = (route) => {
-      alert(`Ver detalles de ruta: ${route._id}`)
-    }
-    
+
     const assignDriver = async (route) => {
       const driverId = prompt('ID del conductor a asignar:')
       if (!driverId) return
@@ -598,6 +595,7 @@ let mapInstance = null
   showRouteMap.value = true
   setTimeout(initMap, 300) // Pequeño delay para esperar render
 }
+
 
 const initMap = () => {
   if (!activeRoute.value) return
