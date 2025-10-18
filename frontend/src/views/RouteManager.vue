@@ -341,11 +341,14 @@
       </div>
     </div>
     <!-- 📍 Route Map Modal -->
-<div v-if="showRouteMap" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+<div
+  v-if="showRouteMap"
+  class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+>
   <div class="bg-white rounded-xl max-w-5xl w-full overflow-hidden shadow-xl">
     <div class="flex justify-between items-center border-b border-gray-200 p-4">
       <h3 class="text-lg font-semibold text-gray-900">
-        🗺️ Ruta #{{ activeRoute?._id.slice(-6).toUpperCase() }}
+        🗺️ Ruta #{{ activeRoute?._id?.slice(-6).toUpperCase() }}
       </h3>
       <button @click="showRouteMap = false" class="text-gray-500 hover:text-gray-700">
         ✖
@@ -353,7 +356,9 @@
     </div>
 
     <div class="p-4">
+      <!-- 👇 ref agregado aquí -->
       <GMapMap
+        ref="routeMap"
         v-if="activeRoute"
         :center="mapCenter"
         :zoom="12"
@@ -364,38 +369,42 @@
           v-if="activeRoute.startLocation"
           :position="{
             lat: activeRoute.startLocation.latitude,
-            lng: activeRoute.startLocation.longitude
+            lng: activeRoute.startLocation.longitude,
           }"
           label="🏭"
         />
 
         <!-- Entregas -->
         <GMapMarker
-  v-for="(item, index) in activeRoute.orders || []"
-  :key="index"
-  v-if="item?.order?.location"
-  :position="{
-    lat: item.order.location.latitude,
-    lng: item.order.location.longitude
-  }"
-  :label="String(index + 1)"
-/>
+          v-for="(item, index) in activeRoute.orders || []"
+          :key="index"
+          v-if="item?.order?.location"
+          :position="{
+            lat: item.order.location.latitude,
+            lng: item.order.location.longitude,
+          }"
+          :label="String(index + 1)"
+        />
 
         <!-- Fin -->
         <GMapMarker
           v-if="activeRoute.endLocation"
           :position="{
             lat: activeRoute.endLocation.latitude,
-            lng: activeRoute.endLocation.longitude
+            lng: activeRoute.endLocation.longitude,
           }"
           label="🏠"
         />
 
-        <!-- Polyline entre puntos -->
+        <!-- Polyline fallback -->
         <GMapPolyline
           v-if="polylineCoords.length > 1"
           :path="polylineCoords"
-          :options="{ strokeColor: '#1E88E5', strokeWeight: 4, strokeOpacity: 0.8 }"
+          :options="{
+            strokeColor: '#1E88E5',
+            strokeWeight: 4,
+            strokeOpacity: 0.8,
+          }"
         />
       </GMapMap>
     </div>
@@ -426,6 +435,7 @@ export default {
 const activeRoute = ref(null)
 const mapCenter = ref({ lat: -33.45, lng: -70.65 }) // 📍 Santiago por defecto
 const polylineCoords = ref([])
+const routeMap = ref(null)
     // Filters
     const filters = ref({
       status: '',
@@ -762,6 +772,7 @@ const viewRoute = async (route) => {
 activeRoute,
 mapCenter,
 polylineCoords,
+routeMap,
 viewRoute,
       
       // Computed
