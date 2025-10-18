@@ -48,21 +48,7 @@
               {{ assignableCount }}
             </span>
           </button>
-<select 
-  :value="bulkDriverId" 
-  @change="$emit('driver-selected', $event.target.value)"
-  class="px-3 py-2 border border-white/40 rounded-md bg-white/15 text-white text-sm font-medium placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-white/50"
->
-  <option value="" class="text-gray-900">Seleccionar conductor</option>
-  <option 
-    v-for="driver in availableDrivers" 
-    :key="driver._id" 
-    :value="driver._id"
-    class="text-gray-900"
-  >
-    {{ driver.full_name || driver.name }}
-  </option>
-</select>
+
           <div class="relative group">
             <button class="flex items-center justify-center gap-1.5 px-4 py-2.5 border border-white/40 rounded-md bg-white/15 text-white text-sm font-medium transition-all hover:bg-white/20 w-full sm:w-auto">
               <span class="text-base">📝</span>
@@ -281,19 +267,7 @@ const props = defineProps({
   companies: {
     type: Array,
     default: () => []
-  },
-  availableDrivers: {
-  type: Array,
-  default: () => []
-},
-bulkDriverId: {
-  type: String,
-  default: ''
-},
-hasAssignedOrders: {
-  type: Boolean,
-  default: false
-}
+  }
 })
 
 // ==================== EMITS ====================
@@ -303,9 +277,7 @@ const emit = defineEmits([
   'bulk-export',
   'bulk-print',
   'clear-selection',
-  'dismiss-status',
-  'optimize-route',
-'driver-selected'
+  'dismiss-status'
 ])
 
 // ==================== STATE ====================
