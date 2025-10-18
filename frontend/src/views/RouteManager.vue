@@ -33,7 +33,7 @@
         <div class="flex items-center gap-4">
           <div class="text-3xl">🛣️</div>
           <div>
-            <h3 class="text-2xl font-bold text-gray-900">{{ routeStats.totalRoutes || 0 }}</h3>
+            <h3 class="text-2xl font-bold text-gray-900">{{ routeStats?.totalRoutes || 0 }}</h3>
             <p class="text-gray-600">Rutas Totales</p>
           </div>
         </div>
@@ -353,7 +353,12 @@ export default {
     // State
     const routes = ref([])
     const drivers = ref([])
-    const routeStats = ref({})
+    const routeStats = ref({
+  totalRoutes: 0,
+  inProgressRoutes: 0,
+  completedRoutes: 0,
+  completionRate: 0
+})
     const loading = ref(false)
     const showRouteOptimizer = ref(false)
     const api = apiService()
