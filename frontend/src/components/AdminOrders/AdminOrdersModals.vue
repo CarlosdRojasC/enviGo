@@ -539,12 +539,12 @@
                 >
                   <option value="" disabled>-- Selecciona un conductor --</option>
                   <option 
-                    v-for="driver in availableDrivers" 
-                    :key="driver.id" 
-                    :value="driver.id"
-                  >
-                    {{ driver.name }} ({{ driver.email }}) - {{ driver.isActive ? 'Activo' : 'Inactivo' }}
-                  </option>
+  v-for="driver in availableDrivers" 
+  :key="driver._id" 
+  :value="driver._id"
+>
+  {{ driver.full_name }} ({{ driver.email }}) - {{ driver.is_active ? 'Activo' : 'Inactivo' }}
+</option>
                 </select>
               </div>
               
@@ -654,12 +654,12 @@
               >
                 <option value="" disabled>-- Selecciona un conductor --</option>
                 <option 
-                  v-for="driver in availableDrivers" 
-                  :key="driver.id" 
-                  :value="driver.id"
-                >
-                  {{ driver.name }} ({{ driver.email }}) - {{ driver.isActive ? 'Activo' : 'Inactivo' }}
-                </option>
+  v-for="driver in availableDrivers" 
+  :key="driver._id" 
+  :value="driver._id"
+>
+  {{ driver.full_name }} ({{ driver.email }}) - {{ driver.is_active ? 'Activo' : 'Inactivo' }}
+</option>
               </select>
             </div>
             
@@ -1022,14 +1022,14 @@ function formatFileSize(bytes) {
  * Get selected driver info
  */
 function getSelectedDriver() {
-  return props.availableDrivers.find(driver => driver.id === props.selectedDriverId)
+  return props.availableDrivers.find(driver => driver._id === props.selectedDriverId)
 }
 
 /**
  * Get bulk selected driver info
  */
 function getBulkSelectedDriver() {
-  return props.availableDrivers.find(driver => driver.id == props.bulkSelectedDriverId)
+  return props.availableDrivers.find(driver => driver._id === props.bulkSelectedDriverId)
 }
 
 /**

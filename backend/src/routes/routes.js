@@ -51,7 +51,7 @@ router.post('/optimize', [
       orderIds,
       driverId,
       preferences,
-      companyId: req.user.company,
+      companyId: req.user.company || req.user.company_id,
       createdBy: req.user.id
     };
 
@@ -525,7 +525,7 @@ router.patch('/:id/reoptimize', [
       orderIds,
       driverId: route.driver,
       preferences: { ...route.preferences, ...preferences },
-      companyId: req.user.company,
+      companyId: req.user.company || req.user.company_id,
       createdBy: req.user.id
     };
 
