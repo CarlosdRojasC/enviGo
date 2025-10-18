@@ -490,20 +490,49 @@ static async processWebhook(channelId, webhookData) {
       headers: { Authorization: `Bearer ${accessToken}` }
     });
 
-    // Log corto del pedido recibido
     console.log(`📦 [ML Webhook] Orden recibida: ${mlOrder.id} | pack=${mlOrder.pack_id || 'N/A'} | shipping=${mlOrder.shipping?.id}`);
 
-    // Verificar si es FLEX (opcional)
+    // ✅ NUEVA VALIDACIÓN: Verificar si ya existe el pedido y está entregado
+    const existingOrder = await Order.findOne({
+      channel_id: channelId,
+      $or: [
+        { external_order_id: mlOrder.shipping?.id?.toString() },
+        { external_order_id: mlOrder.id.toString() }
+      ]
+    });
+
+    if (existingOrder) {
+      console.log(`🔍 [ML Webhook] Pedido existente encontrado (${existingOrder.order_number}) con estado: ${existingOrder.status}`);
+      
+      // ✅ NO ACTUALIZAR SI YA ESTÁ ENTREGADO O CANCELADO
+      if (existingOrder.status === 'delivered' || existingOrder.status === 'cancelled') {
+        console.log(`⏭️ [ML Webhook] Pedido ${existingOrder.order_number} ya está ${existingOrder.status}. No se actualiza.`);
+        return true;
+      }
+      
+      // ✅ Solo actualizar si el nuevo estado es diferente y válido
+      const newStatus = this.mapOrderStatus(mlOrder);
+      if (newStatus !== existingOrder.status) {
+        console.log(`🔄 [ML Webhook] Actualizando estado: ${existingOrder.status} → ${newStatus}`);
+        existingOrder.status = newStatus;
+        existingOrder.raw_data = [...(existingOrder.raw_data || []), mlOrder];
+        existingOrder.updated_at = new Date();
+        await existingOrder.save();
+      }
+      
+      return true;
+    }
+
+    // Verificar si es FLEX para nuevos pedidos
     const isFlex = await this.isFlexOrder(mlOrder, accessToken);
     if (!isFlex) {
       console.log(`[ML Webhook] Pedido ${orderId} no es FLEX. Omitido.`);
       return true;
     }
 
-    // Crear o actualizar en base a la orden y pack_id
+    // Crear nuevo pedido
     await this.createOrderFromApiData(mlOrder, channel, accessToken);
-
-    console.log(`✅ [ML Webhook] Pedido procesado correctamente (order=${orderId}).`);
+    console.log(`✅ [ML Webhook] Nuevo pedido procesado correctamente (order=${orderId}).`);
     return true;
 
   } catch (error) {
@@ -511,7 +540,6 @@ static async processWebhook(channelId, webhookData) {
     return false;
   }
 }
-
 
 
 
@@ -553,21 +581,16 @@ static async createOrderFromApiData(fullOrder, channel, accessToken) {
     return null;
   }
 
-  const externalOrderId = shippingId;      // 👈 Siempre el shipping_id
-  const orderNumber = packId || orderId;   // 👈 pack_id si existe, sino order_id
+  const externalOrderId = shippingId;
+  const orderNumber = packId || orderId;
 
   console.log(`\n📦 [ML Order] Procesando pedido (order=${orderId}, pack=${packId || 'N/A'}, shipping=${shippingId})`);
-  console.log('🧾 [ML DEBUG] fullOrder base:');
-  console.dir(fullOrder, { depth: 3, colors: true });
 
+  // Obtener todos los items (lógica existente de packs)
   let allItems = [];
-
-  // =====================================================
-  // 🧩 Si el pedido pertenece a un pack, obtener todas sus órdenes
-  // =====================================================
   if (packId) {
+    // ... lógica existente para packs ...
     console.log(`🔗 [ML Pack] Pedido pertenece al pack ${packId}, obteniendo órdenes del pack...`);
-
     try {
       const { data: packData } = await axios.get(`${this.API_BASE_URL}/packs/${packId}`, {
         headers: { Authorization: `Bearer ${accessToken}` }
@@ -590,17 +613,13 @@ static async createOrderFromApiData(fullOrder, channel, accessToken) {
             currency: subOrder.currency_id,
           }));
 
-          console.log(`🧩 [ML Pack] Orden ${oid} tiene ${items.length} ítems.`);
           allItems.push(...items);
-
         } catch (err) {
           console.error(`⚠️ [ML Pack] Error obteniendo orden ${oid}:`, err.message);
         }
       }
-
     } catch (err) {
       console.error(`⚠️ [ML Pack] Error consultando pack ${packId}:`, err.message);
-      console.log('🔁 Usando los ítems de la orden base.');
       allItems = (fullOrder.order_items || []).map(i => ({
         title: i.item.title,
         quantity: i.quantity,
@@ -609,9 +628,7 @@ static async createOrderFromApiData(fullOrder, channel, accessToken) {
         currency: fullOrder.currency_id,
       }));
     }
-
   } else {
-    // Si no hay pack, usar los ítems de la orden directamente
     allItems = (fullOrder.order_items || []).map(i => ({
       title: i.item.title,
       quantity: i.quantity,
@@ -623,41 +640,55 @@ static async createOrderFromApiData(fullOrder, channel, accessToken) {
 
   const totalAmount = allItems.reduce((sum, it) => sum + (it.subtotal || 0), 0);
   const shippingCost = fullOrder.shipping?.cost || 0;
-  const status = this.mapOrderStatus(fullOrder);
+  const newStatus = this.mapOrderStatus(fullOrder);
 
-  console.log(`💰 [ML Totales] Productos: ${allItems.length} | Total: ${totalAmount} | Envío: ${shippingCost}`);
-
-  // =====================================================
-  // 🔍 Buscar si ya existe por shipping_id (external_order_id)
-  // =====================================================
+  // ✅ Buscar pedido existente
   let order = await Order.findOne({
     channel_id: channel._id,
     external_order_id: externalOrderId
   });
 
   if (order) {
-    console.log(`🔁 [ML Order] Pedido existente encontrado, actualizando...`);
-    order.items = allItems;
-    order.total_amount = totalAmount;
-    order.shipping_cost = shippingCost;
-    order.status = status;
-    order.raw_data = [...(order.raw_data || []), fullOrder];
-    order.updated_at = new Date();
+    console.log(`🔁 [ML Order] Pedido existente encontrado con estado: ${order.status}`);
+    
+    // ✅ NUEVA LÓGICA: No sobrescribir estados finales
+    const finalStates = ['delivered', 'cancelled'];
+    
+    if (finalStates.includes(order.status)) {
+      console.log(`⚠️ [ML Order] Pedido ya está en estado final (${order.status}). Solo se actualizarán items y montos, NO el estado.`);
+      
+      // Actualizar solo items y montos, preservar el estado
+      order.items = allItems;
+      order.total_amount = totalAmount;
+      order.shipping_cost = shippingCost;
+      order.raw_data = [...(order.raw_data || []), fullOrder];
+      order.updated_at = new Date();
+      
+    } else {
+      console.log(`🔄 [ML Order] Actualizando pedido completamente. Estado: ${order.status} → ${newStatus}`);
+      
+      // Actualizar todo incluyendo el estado
+      order.items = allItems;
+      order.total_amount = totalAmount;
+      order.shipping_cost = shippingCost;
+      order.status = newStatus;
+      order.raw_data = [...(order.raw_data || []), fullOrder];
+      order.updated_at = new Date();
+    }
+    
     await order.save();
     console.log(`💾 [ML Order] Actualizado correctamente (shipping=${shippingId}).`);
     return order;
   }
 
-  // =====================================================
-  // 🆕 Crear nuevo pedido
-  // =====================================================
+  // Crear nuevo pedido (lógica existente)
   const shippingInfo = await this.getShippingInfo(fullOrder, accessToken);
 
   const newOrder = new Order({
     company_id: channel.company_id,
     channel_id: channel._id,
-    external_order_id: externalOrderId, // 👈 shipping_id
-    order_number: orderNumber,          // 👈 pack_id o order_id
+    external_order_id: externalOrderId,
+    order_number: orderNumber,
     ml_shipping_id: shippingId,
     customer_name: `${fullOrder.buyer.first_name || ''} ${fullOrder.buyer.last_name || ''}`.trim(),
     customer_email: fullOrder.buyer.email,
@@ -671,7 +702,7 @@ static async createOrderFromApiData(fullOrder, channel, accessToken) {
     total_amount: totalAmount,
     shipping_cost: shippingCost,
     currency: fullOrder.currency_id,
-    status,
+    status: newStatus,
     order_date: new Date(fullOrder.date_created),
     items: allItems,
     raw_data: [fullOrder],
@@ -880,7 +911,37 @@ static async getShippingLabel(externalOrderId, channelId) {
     
     return 'Información de envío no disponible';
   }
+static isFinalStatus(status) {
+  const finalStates = ['delivered', 'cancelled'];
+  return finalStates.includes(status);
+}
 
+// ✅ FUNCIÓN AUXILIAR: Verificar si un cambio de estado es válido
+static isValidStatusTransition(currentStatus, newStatus) {
+  // Si el estado actual es final, no permitir cambios
+  if (this.isFinalStatus(currentStatus)) {
+    console.log(`⚠️ [ML Status] Transición inválida: ${currentStatus} → ${newStatus} (estado final)`);
+    return false;
+  }
+  
+  // Definir transiciones válidas
+  const validTransitions = {
+    'pending': ['ready_for_pickup', 'shipped', 'cancelled', 'delivered'],
+    'ready_for_pickup': ['shipped', 'cancelled', 'delivered'],
+    'shipped': ['out_for_delivery', 'delivered', 'cancelled'],
+    'out_for_delivery': ['delivered', 'cancelled'],
+    'processing': ['ready_for_pickup', 'shipped', 'cancelled', 'delivered']
+  };
+  
+  const allowedNext = validTransitions[currentStatus] || [];
+  const isValid = allowedNext.includes(newStatus);
+  
+  if (!isValid) {
+    console.log(`⚠️ [ML Status] Transición inválida: ${currentStatus} → ${newStatus}`);
+  }
+  
+  return isValid;
+}
   /**
    * Mapea los estados de Mercado Libre a los estados del sistema
    */
@@ -890,20 +951,20 @@ static mapOrderStatus(mlOrder) {
   // 🚚 Prioridad al estado de shipping (envío)
   if (mlOrder.shipping?.status) {
     const statusMap = {
-      'pending': 'pending',              // ✅ pedido creado pero no despachado
-      'handling': 'ready_for_pickup',    // ✅ preparando envío
-      'ready_to_ship': 'ready_for_pickup', // ✅ listo para despacho
-      'shipped': 'shipped',              // ✅ despachado
-      'in_transit': 'shipped',           // ✅ en camino
-      'out_for_delivery': 'out_for_delivery', // ✅ en reparto
-      'delivered': 'delivered',          // ✅ completado
-      'not_delivered': 'cancelled',      // ✅ intento de entrega fallido
-      'cancelled': 'cancelled'           // ✅ cancelado
+      'pending': 'pending',
+      'handling': 'ready_for_pickup',
+      'ready_to_ship': 'ready_for_pickup',
+      'shipped': 'shipped',
+      'in_transit': 'shipped',
+      'out_for_delivery': 'out_for_delivery',
+      'delivered': 'delivered',        // ✅ ESTADO FINAL
+      'not_delivered': 'cancelled',     // ✅ ESTADO FINAL  
+      'cancelled': 'cancelled'          // ✅ ESTADO FINAL
     };
 
     const mappedStatus = statusMap[mlOrder.shipping.status];
     if (mappedStatus) {
-      console.log(`📦 [ML Status] Shipping status ${mlOrder.shipping.status} -> ${mappedStatus}`);
+      console.log(`📦 [ML Status] Shipping status ${mlOrder.shipping.status} → ${mappedStatus}`);
       return mappedStatus;
     }
   }
@@ -911,24 +972,24 @@ static mapOrderStatus(mlOrder) {
   // 🧾 Si no hay estado de envío, usamos el estado de la orden
   if (mlOrder.status) {
     const generalStatusMap = {
-      'confirmed': 'pending',     // ✅
-      'payment_required': 'pending', // ✅
-      'payment_in_process': 'pending', // ✅
-      'paid': 'pending',          // ✅
-      'cancelled': 'cancelled',   // ✅
-      'invalid': 'cancelled',     // ✅
-      'delivered': 'delivered'    // ✅
+      'confirmed': 'pending',
+      'payment_required': 'pending',
+      'payment_in_process': 'pending',
+      'paid': 'pending',
+      'cancelled': 'cancelled',        // ✅ ESTADO FINAL
+      'invalid': 'cancelled',          // ✅ ESTADO FINAL
+      'delivered': 'delivered'         // ✅ ESTADO FINAL
     };
 
     const mappedStatus = generalStatusMap[mlOrder.status];
     if (mappedStatus) {
-      console.log(`📦 [ML Status] General status ${mlOrder.status} -> ${mappedStatus}`);
+      console.log(`📦 [ML Status] General status ${mlOrder.status} → ${mappedStatus}`);
       return mappedStatus;
     }
   }
 
   console.log(`⚠️ [ML Status] No se pudo mapear el status, usando 'pending' por defecto`);
-  return 'pending'; // ✅ En inglés
+  return 'pending';
 }
 
   static async syncOrders(channelId, options = {}) {
