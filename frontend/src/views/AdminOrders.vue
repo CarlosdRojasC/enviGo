@@ -1260,11 +1260,6 @@ const optimizeSelectedOrders = async () => {
   showRouteOptimizer.value = true
 }
 
-const clearSelection = () => {
-  selectedOrders.value = []
-  bulkDriverId.value = ''
-}
-
 const setDefaultLocations = () => {
   // Ubicaciones de ejemplo en Santiago
   optimizerForm.value.startLocation = {
