@@ -3,10 +3,11 @@ const mongoose = require('mongoose');
 const routePlanSchema = new mongoose.Schema({
   // Información básica de la ruta
   company: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Company',
-    required: true
-  },
+  type: mongoose.Schema.Types.ObjectId,
+  ref: 'Company',
+  required: false, // ✅ Ya no es obligatorio
+  default: null    // ✅ Evita errores de validación si no se envía
+},
   driver: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
