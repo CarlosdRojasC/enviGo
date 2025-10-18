@@ -11,6 +11,7 @@ import './assets/css/variables.css'
 import './assets/css/toast-styles.css'
 import './assets/styles/tailwind.css'
 import 'leaflet/dist/leaflet.css'
+import VueGoogleMaps from '@fawmi/vue-google-maps'
 
 // ==================== CREAR APP ====================
 const app = createApp(App)
@@ -36,6 +37,11 @@ app.use(Toast, {
   position: 'top-right',
   toastClassName: 'envigo-toast',
   bodyClassName: 'envigo-toast-body'
+})
+app.use(VueGoogleMaps, {
+  load: {
+    key: 'AIzaSyBVQvkWQXe-E4AkFXKu0Yx86RCQpUTbwcg',
+  },
 })
 
 // ==================== MONTAR APP PRIMERO ====================

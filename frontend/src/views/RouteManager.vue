@@ -256,12 +256,12 @@
               <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
                 <div class="flex gap-1">
                   <button 
-  @click.stop="viewRoute(route)" 
-  class="text-gray-600 hover:text-gray-900 p-1 rounded"
-  title="Ver detalles"
->
-  🗺️
-</button>
+                    @click.stop="viewRoute(route)" 
+                    class="text-gray-600 hover:text-gray-900 p-1 rounded"
+                    title="Ver detalles"
+                  >
+                    👁️
+                  </button>
                   <button 
                     v-if="route.status === 'draft'"
                     @click.stop="assignDriver(route)" 
@@ -340,28 +340,73 @@
         </div>
       </div>
     </div>
-    <!-- Route Details / Map Modal -->
+    <!-- 📍 Route Map Modal -->
 <div v-if="showRouteMap" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-  <div class="bg-white rounded-xl max-w-4xl w-full overflow-hidden shadow-xl">
+  <div class="bg-white rounded-xl max-w-5xl w-full overflow-hidden shadow-xl">
     <div class="flex justify-between items-center border-b border-gray-200 p-4">
       <h3 class="text-lg font-semibold text-gray-900">
-        🗺️ Detalle de Ruta #{{ activeRoute?._id.slice(-6).toUpperCase() }}
+        🗺️ Ruta #{{ activeRoute?._id.slice(-6).toUpperCase() }}
       </h3>
       <button @click="showRouteMap = false" class="text-gray-500 hover:text-gray-700">
         ✖
       </button>
     </div>
-    <div id="routeMap" class="w-full h-[500px]"></div>
+
+    <div class="p-4">
+      <GMapMap
+        v-if="activeRoute"
+        :center="mapCenter"
+        :zoom="12"
+        style="width: 100%; height: 500px"
+      >
+        <!-- Inicio -->
+        <GMapMarker
+          v-if="activeRoute.startLocation"
+          :position="{
+            lat: activeRoute.startLocation.latitude,
+            lng: activeRoute.startLocation.longitude
+          }"
+          label="🏭"
+        />
+
+        <!-- Entregas -->
+        <GMapMarker
+          v-for="(item, index) in activeRoute.orders"
+          :key="index"
+          v-if="item.order?.location"
+          :position="{
+            lat: item.order.location.latitude,
+            lng: item.order.location.longitude
+          }"
+          :label="String(index + 1)"
+        />
+
+        <!-- Fin -->
+        <GMapMarker
+          v-if="activeRoute.endLocation"
+          :position="{
+            lat: activeRoute.endLocation.latitude,
+            lng: activeRoute.endLocation.longitude
+          }"
+          label="🏠"
+        />
+
+        <!-- Polyline entre puntos -->
+        <GMapPolyline
+          v-if="polylineCoords.length > 1"
+          :path="polylineCoords"
+          :options="{ strokeColor: '#1E88E5', strokeWeight: 4, strokeOpacity: 0.8 }"
+        />
+      </GMapMap>
+    </div>
   </div>
 </div>
-
   </div>
 </template>
 
 <script>
 import { ref, computed, onMounted } from 'vue'
 import { apiService } from '../services/api'
-import L from 'leaflet'
 
 export default {
   name: 'RouteManager',
@@ -379,8 +424,8 @@ export default {
     const showRouteOptimizer = ref(false)
     const showRouteMap = ref(false)
 const activeRoute = ref(null)
-let mapInstance = null
-
+const mapCenter = ref({ lat: -33.45, lng: -70.65 }) // 📍 Santiago por defecto
+const polylineCoords = ref([])
     // Filters
     const filters = ref({
       status: '',
@@ -466,7 +511,57 @@ let mapInstance = null
       }
     }
     
+    const viewRoute = async (route) => {
+  activeRoute.value = route
+  showRouteMap.value = true
 
+  // Centrar el mapa en el inicio o primer pedido
+  if (route.startLocation) {
+    mapCenter.value = {
+      lat: route.startLocation.latitude,
+      lng: route.startLocation.longitude
+    }
+  }
+
+  // Si las órdenes no traen coordenadas, poblarlas
+  for (const item of route.orders) {
+    if (item.order && typeof item.order === 'string') {
+      try {
+        const response = await apiService.orders.getById(item.order)
+        item.order = response.data.data
+      } catch (err) {
+        console.warn('No se pudo obtener coordenadas de orden', item.order)
+      }
+    }
+  }
+
+  // Construir la ruta para el polyline
+  const path = []
+
+  if (route.startLocation)
+    path.push({
+      lat: route.startLocation.latitude,
+      lng: route.startLocation.longitude
+    })
+
+  route.orders.forEach(o => {
+    if (o.order?.location) {
+      path.push({
+        lat: o.order.location.latitude,
+        lng: o.order.location.longitude
+      })
+    }
+  })
+
+  if (route.endLocation)
+    path.push({
+      lat: route.endLocation.latitude,
+      lng: route.endLocation.longitude
+    })
+
+  polylineCoords.value = path
+}
+    
     const assignDriver = async (route) => {
       const driverId = prompt('ID del conductor a asignar:')
       if (!driverId) return
@@ -590,77 +685,6 @@ let mapInstance = null
     const formatDate = (dateString) => {
       return new Date(dateString).toLocaleDateString('es-CL')
     }
-    const viewRoute = (route) => {
-  activeRoute.value = route
-  showRouteMap.value = true
-  setTimeout(initMap, 300) // Pequeño delay para esperar render
-}
-
-
-const initMap = () => {
-  if (!activeRoute.value) return
-
-  const route = activeRoute.value
-  const start = route.startLocation
-  const end = route.endLocation
-  const orders = route.orders || []
-
-  // Crear mapa o reiniciar
-  if (mapInstance) {
-    mapInstance.remove()
-  }
-
-  mapInstance = L.map('routeMap').setView([start.latitude, start.longitude], 12)
-
-  // Añadir capa base
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '© OpenStreetMap contributors'
-  }).addTo(mapInstance)
-
-  // Marcador de inicio
-  const startMarker = L.marker([start.latitude, start.longitude], {
-    title: `Inicio: ${start.address}`
-  }).addTo(mapInstance)
-  startMarker.bindPopup(`<b>Inicio</b><br>${start.address}`).openPopup()
-
-  // Marcadores de pedidos
-  orders.forEach((item, i) => {
-    const o = item.order
-    if (!o || !o.location) return
-
-    L.marker([o.location.latitude, o.location.longitude])
-      .addTo(mapInstance)
-      .bindPopup(`<b>Pedido #${i + 1}</b><br>${o.location.address}`)
-  })
-
-  // Marcador final
-  if (end) {
-    L.marker([end.latitude, end.longitude], {
-      title: `Fin: ${end.address}`,
-      icon: L.icon({
-        iconUrl: 'https://cdn-icons-png.flaticon.com/512/684/684908.png',
-        iconSize: [32, 32]
-      })
-    })
-      .addTo(mapInstance)
-      .bindPopup(`<b>Fin</b><br>${end.address}`)
-  }
-
-  // Ajustar vista a todos los puntos
-  const allPoints = [
-    [start.latitude, start.longitude],
-    ...orders
-      .filter(o => o.order?.location)
-      .map(o => [o.order.location.latitude, o.order.location.longitude]),
-    [end.latitude, end.longitude]
-  ]
-  mapInstance.fitBounds(allPoints, { padding: [50, 50] })
-
-  // Opcional: dibujar línea
-  const polyline = L.polyline(allPoints, { color: 'blue', weight: 3, opacity: 0.7 })
-  polyline.addTo(mapInstance)
-}
-
     
     // Lifecycle
     onMounted(() => {
@@ -681,6 +705,10 @@ const initMap = () => {
       selectedRoutes,
       showRouteMap,
 activeRoute,
+mapCenter,
+polylineCoords,
+viewRoute,
+      
       // Computed
       isAllSelected,
       
@@ -700,8 +728,7 @@ activeRoute,
       getRouteProgress,
       formatDistance,
       formatDuration,
-      formatDate,
-      
+      formatDate
     }
   }
 }

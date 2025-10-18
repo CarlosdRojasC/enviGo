@@ -13,6 +13,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@fawmi/vue-google-maps": "^0.9.79",
     "axios": "^1.10.0",
     "chart.js": "^4.5.0",
     "jspdf": "^3.0.1",
