@@ -1380,6 +1380,7 @@ onMounted(async () => {
     // ✅ CARGAR TODOS LOS DATOS NECESARIOS
     await Promise.all([
       fetchCompanies(),
+      fetchAvailableDrivers(),
     ])
     await fetchOrders();
   
@@ -1399,6 +1400,7 @@ onMounted(async () => {
     
     logger.success('[AdminOrders] ✅ Initial data loaded:', {
       companies: companies.value.length,
+      drivers: availableDrivers.value.length, 
       channels: channels.value.length,
       orders: orders.value.length,
       communes: availableCommunes.value.length
