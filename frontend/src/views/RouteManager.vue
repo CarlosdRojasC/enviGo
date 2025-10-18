@@ -345,7 +345,7 @@
 
 <script>
 import { ref, computed, onMounted } from 'vue'
-import api from '../services/api'
+import { apiService } from '../services/api'
 
 export default {
   name: 'RouteManager',
@@ -356,7 +356,7 @@ export default {
     const routeStats = ref({})
     const loading = ref(false)
     const showRouteOptimizer = ref(false)
-    
+    const api = apiService()
     // Filters
     const filters = ref({
       status: '',

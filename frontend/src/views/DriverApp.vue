@@ -282,13 +282,14 @@
 <script>
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
-import api from '../services/api'
+import { apiService } from '../services/api'
+
 
 export default {
   name: 'DriverApp',
   setup() {
     const router = useRouter()
-    
+    const api = apiService()
     // State
     const activeRoute = ref(null)
     const connectionStatus = ref('online')
