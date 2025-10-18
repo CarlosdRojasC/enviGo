@@ -774,7 +774,18 @@
               {{ bulkAssignmentFinished ? 'Cerrar' : 'Cancelar' }}
             </span>
           </button>
-          
+          <button
+    v-if="!isBulkAssigning && !bulkAssignmentFinished"
+    @click="optimizeAssignedOrders"
+    :disabled="!bulkSelectedDriverId || selectedOrders.length === 0 || isOptimizing"
+    class="btn-modal save"
+    style="background: linear-gradient(135deg, #8b5cf6, #6d28d9);"
+  >
+    <span class="btn-icon">{{ isOptimizing ? '⏳' : '✨' }}</span>
+    <span class="btn-text">
+      {{ isOptimizing ? 'Optimizando...' : 'Optimizar Ruta' }}
+    </span>
+  </button>
           <button 
             v-if="!isBulkAssigning && !bulkAssignmentFinished"
             @click="$emit('confirm-bulk-assignment')" 
@@ -1071,6 +1082,68 @@ function getFailedAssignments() {
  */
 function getFailedResults() {
   return props.bulkAssignmentResults.filter(result => !result.success)
+}
+// ==================== OPTIMIZACIÓN DE RUTA ====================
+const isOptimizing = ref(false)
+
+async function optimizeAssignedOrders() {
+  if (!props.bulkSelectedDriverId) {
+    toast.error('Selecciona un conductor primero')
+    return
+  }
+
+  if (!props.selectedOrders || props.selectedOrders.length === 0) {
+    toast.error('Selecciona pedidos para optimizar')
+    return
+  }
+
+  try {
+    isOptimizing.value = true
+    toast.info('🚀 Optimizando ruta...')
+
+    const payload = {
+      startLocation: {
+        latitude: -33.4569,
+        longitude: -70.6483,
+        address: 'Bodega Central, Santiago'
+      },
+      endLocation: {
+        latitude: -33.4172,
+        longitude: -70.5476,
+        address: 'Casa del Conductor'
+      },
+      orderIds: props.selectedOrders.map(o => o._id || o.id),
+      driverId: props.bulkSelectedDriverId,
+      preferences: {
+        avoidTolls: false,
+        avoidHighways: false,
+        prioritizeTime: true
+      }
+    }
+
+    console.log('🧭 Enviando payload a /routes/optimize:', payload)
+    const response = await apiService.routes.optimize(payload)
+    const result = response.data.data
+
+    if (!result) throw new Error('No se recibió respuesta de optimización')
+
+    toast.success(`✅ Ruta optimizada correctamente`)
+
+    // Abrir la ruta optimizada en nueva pestaña
+    if (confirm('¿Deseas ver la ruta optimizada ahora?')) {
+      window.open(`/routes/${result.routePlan._id}`, '_blank')
+    }
+
+  } catch (error) {
+    console.error('❌ Error optimizando ruta:', error)
+    toast.error(
+      error.response?.data?.message ||
+      error.message ||
+      'Error al optimizar la ruta'
+    )
+  } finally {
+    isOptimizing.value = false
+  }
 }
 
 // ==================== WATCHERS (Agregar este) ====================
