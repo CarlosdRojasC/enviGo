@@ -179,7 +179,7 @@ const routes = [
   meta: { roles: ['admin'] }
 },
 {
-  path: '/admin/routes',
+  path: 'admin/routes',
   name: 'RouteManager',
   component: () => import('../views/RouteManager.vue'),
   meta: {
