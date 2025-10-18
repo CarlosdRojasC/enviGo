@@ -27,7 +27,7 @@ const driverScannerRoutes = require('./driver-scanner.routes');
 const collectionRoutes = require('./collection.routes');
 const sessionsRoutes = require('./sessions.routes');
 const contactRoutes = require('./contact.routes');
-const routeRoutes = require('./routes.routes');
+const routeRoutes = require('./routes');
 // ==================== USAR RUTAS MODULARES ====================
 // Rutas de autenticación (login, registro, perfil, etc.)
 router.use('/sessions', sessionsRoutes);
