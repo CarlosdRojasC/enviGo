@@ -136,7 +136,17 @@ paymentNote: {
   pickup_address: { type: String }, // Dirección de recogida (restaurante/tienda)
   pickup_city: { type: String },
   pickup_phone: { type: String },
-
+  
+location: {
+    latitude: {
+      type: Number,
+      required: false
+    },
+    longitude: {
+      type: Number,
+      required: false
+    }
+  },
   // Estados y fechas
   status: { 
     type: String, 
