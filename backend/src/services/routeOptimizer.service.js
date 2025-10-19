@@ -1,100 +1,95 @@
 const axios = require("axios");
 const RoutePlan = require("../models/RoutePlan");
 const GeoService = require("./routeOptimizer/geo.service");
-// ✅ ¡Volvemos a la librería simple!
 const { Client } = require("@googlemaps/google-maps-services-js");
 
 const geoService = new GeoService();
 const googleMapsClient = new Client({});
 
-// Límite de la API Directions (1 Origen + 1 Destino + 23 Waypoints)
-const GOOGLE_DIRECTIONS_BATCH_SIZE = 25; 
+const GOOGLE_DIRECTIONS_BATCH_SIZE = 25;
 
-/**
- * Optimiza una ruta usando el enfoque HÍBRIDO:
- * 1. Python (OR-Tools) para el ORDEN (sin límite)
- * 2. Google Directions API en LOTES para el MAPA (polilínea y tiempos)
- */
+// ✅ *** NUEVA FUNCIÓN AUXILIAR ***
+// Obtiene {lat, lng} de forma segura desde cualquier tipo de punto
+const getCoords = (point) => {
+  if (point.location && typeof point.location.latitude !== 'undefined' && typeof point.location.longitude !== 'undefined') {
+    // Es un objeto 'order' (con location anidada)
+    return { lat: point.location.latitude, lng: point.location.longitude };
+  } else if (typeof point.latitude !== 'undefined' && typeof point.longitude !== 'undefined') {
+    // Es startLocation o endLocation (lat/lng directos)
+    return { lat: point.latitude, lng: point.longitude };
+  } else {
+    // Estructura desconocida o inválida
+    console.error("🚨 Punto de ruta con estructura de coordenadas inválida:", point);
+    throw new Error("Punto de ruta inválido encontrado.");
+  }
+};
+
+
 exports.optimizeRoute = async (config) => {
   const { startLocation, endLocation, orderIds, driverId, companyId, createdBy, preferences = {} } = config;
 
-  // Validar variables de entorno clave
-  if (!process.env.GOOGLE_MAPS_API_KEY) {
-    throw new Error("Falta GOOGLE_MAPS_API_KEY en variables de entorno");
-  }
-  if (!process.env.PYTHON_OPTIMIZER_URL) {
-    throw new Error("Falta PYTHON_OPTIMIZER_URL en variables de entorno");
-  }
+  if (!process.env.GOOGLE_MAPS_API_KEY) throw new Error("Falta GOOGLE_MAPS_API_KEY");
+  if (!process.env.PYTHON_OPTIMIZER_URL) throw new Error("Falta PYTHON_OPTIMIZER_URL");
 
-  // 1️⃣ Obtener pedidos con coordenadas válidas
+  // 1️⃣ Obtener pedidos válidos
   const orders = await geoService.validateOrderCoordinates(orderIds);
-  if (orders.length === 0) {
-    throw new Error("No hay pedidos válidos para optimizar la ruta.");
-  }
-  console.log(`✅ ${orders.length} órdenes validadas con coordenadas.`);
+  if (orders.length === 0) throw new Error("No hay pedidos válidos para optimizar.");
+  console.log(`✅ ${orders.length} órdenes validadas.`);
 
   // 2️⃣ Preparar ubicaciones para Python
-  // (Inicio, Parada 1...N, Fin)
   const locations = [
-    { lat: startLocation.latitude, lng: startLocation.longitude },
-    ...orders.map(o => ({ lat: o.location.latitude, lng: o.location.longitude })),
-    { lat: endLocation.latitude, lng: endLocation.longitude }
+    getCoords(startLocation), // Usar helper para formato consistente
+    ...orders.map(getCoords),  // Usar helper
+    getCoords(endLocation)    // Usar helper
   ];
 
   let optimizedIndices;
   
-  // 3️⃣ Llamar al CEREBRO (Python) para obtener el ORDEN
+  // 3️⃣ Llamar a Python
   try {
     console.log(`🐍 Llamando a Python OR-Tools en ${process.env.PYTHON_OPTIMIZER_URL}`);
-    const pythonResponse = await axios.post(process.env.PYTHON_OPTIMIZER_URL, { 
-      locations, 
-      preferences 
-    });
+    const pythonResponse = await axios.post(process.env.PYTHON_OPTIMIZER_URL, { locations, preferences });
     optimizedIndices = pythonResponse.data.route;
-    if (!optimizedIndices || optimizedIndices.length === 0) {
-      throw new Error("Python no devolvió una ruta válida.");
-    }
-    console.log(`🧠 Orden óptimo recibido de Python.`);
+    if (!optimizedIndices || optimizedIndices.length === 0) throw new Error("Python no devolvió una ruta válida.");
+    console.log(`🧠 Orden óptimo recibido.`);
   } catch (error) {
-    console.error("❌ Error en el optimizador de Python:", error.message);
+    console.error("❌ Error en Python:", error.message);
     throw new Error("El microservicio de optimización (Python) falló.");
   }
 
-  // 4️⃣ Reconstruir la secuencia de ruta COMPLETA
-  const allStops = [startLocation, ...orders, endLocation];
-  // Mapear los índices a los objetos de parada reales
-  const optimizedStopSequence = optimizedIndices.map(index => allStops[index]);
-  // Extraer solo las órdenes ordenadas (quitando inicio y fin)
-  const orderedOrders = optimizedStopSequence.slice(1, -1);
+  // 4️⃣ Reconstruir secuencia completa (¡OJO! Python ahora trabaja con índices basados en {lat,lng})
+  // Necesitamos mapear los índices de Python a los OBJETOS originales
+  const originalStopsForMapping = [startLocation, ...orders, endLocation]; // Mantener objetos originales
+  const optimizedStopSequence = optimizedIndices.map(index => originalStopsForMapping[index]); // Mapear índices a objetos originales
+  const orderedOrders = optimizedStopSequence.slice(1, -1); // Extraer solo órdenes
 
-  // 5️⃣ Llamar a los OJOS (Google Directions) en LOTES
+  // 5️⃣ Llamar a Google Directions en LOTES
   let totalDistance = 0;
   let totalDuration = 0;
-  let combinedPolylines = []; // Almacenará las polilíneas de cada lote
+  let combinedPolylines = [];
 
   console.log(`🗺️ Iniciando llamadas en lote a Google Directions...`);
   
-  // (BATCH_SIZE - 1) porque los lotes se superponen en 1 punto
   for (let i = 0; i < optimizedStopSequence.length - 1; i += (GOOGLE_DIRECTIONS_BATCH_SIZE - 1)) {
     
-    // Tomar un lote de hasta 25 puntos
     const batchPoints = optimizedStopSequence.slice(i, i + GOOGLE_DIRECTIONS_BATCH_SIZE);
     
-    // El primer punto es el origen
     const origin = batchPoints[0];
-    // El último punto es el destino
     const destination = batchPoints[batchPoints.length - 1];
-    // Los puntos intermedios son los waypoints
     const waypoints = batchPoints.slice(1, -1);
 
-    console.log(`...Lote ${Math.floor(i / (GOOGLE_DIRECTIONS_BATCH_SIZE - 1)) + 1}: ${origin.address || 'Inicio'} -> ${destination.address || 'Fin'} (${waypoints.length} paradas)`);
+    // Identificar el lote para logging
+    const originLabel = originalStopsForMapping.indexOf(origin) === 0 ? 'Inicio' : `Orden ${orders.findIndex(o => o === origin) + 1}`;
+    const destinationLabel = originalStopsForMapping.indexOf(destination) === originalStopsForMapping.length - 1 ? 'Fin' : `Orden ${orders.findIndex(o => o === destination) + 1}`;
+    console.log(`...Lote ${Math.floor(i / (GOOGLE_DIRECTIONS_BATCH_SIZE - 1)) + 1}: ${originLabel} -> ${destinationLabel} (${waypoints.length} paradas)`);
 
+    // ✅ *** USA LA FUNCIÓN AUXILIAR AQUÍ ***
     const directionsRequest = {
       params: {
-        origin: { lat: origin.latitude, lng: origin.longitude },
-        destination: { lat: destination.latitude, lng: destination.longitude },
-        waypoints: waypoints.map(wp => ({ location: { lat: wp.location.latitude, lng: wp.location.longitude } })),
-        optimizeWaypoints: false, // ‼️ CRÍTICO: El orden YA está optimizado
+        origin: getCoords(origin),          // Usar helper
+        destination: getCoords(destination),  // Usar helper
+        waypoints: waypoints.map(wp => ({ location: getCoords(wp) })), // Usar helper
+        optimizeWaypoints: false,
         travelMode: 'DRIVING',
         key: process.env.GOOGLE_MAPS_API_KEY,
       },
@@ -105,22 +100,21 @@ exports.optimizeRoute = async (config) => {
       if (directionsResult.data.routes && directionsResult.data.routes.length > 0) {
         const route = directionsResult.data.routes[0];
         
-        // Sumar los totales
         for (const leg of route.legs) {
-          totalDistance += leg.distance.value; // metros
-          totalDuration += leg.duration.value; // segundos
+          totalDistance += leg.distance.value;
+          totalDuration += leg.duration.value;
         }
-        
-        // Guardar la polilínea del mapa
         combinedPolylines.push(route.overview_polyline.points);
         
       } else {
-        console.warn("⚠️ Google Directions no devolvió una ruta para un lote.");
+        console.warn("⚠️ Google Directions no devolvió ruta para un lote.");
       }
     } catch (e) {
-      console.error("❌ ERROR en lote de Google Directions:", e.response ? e.response.data.error_message : e.message);
-      // Omitir este lote y continuar, o lanzar un error
-      throw new Error(`Fallo en un lote de Google Directions: ${e.message}`);
+       // Log más detallado del error de Google
+      const googleErrorMsg = e.response?.data?.error_message || e.message || 'Error desconocido';
+      console.error(`❌ ERROR en lote (${originLabel} -> ${destinationLabel}):`, googleErrorMsg);
+      // Incluir el error específico en la excepción lanzada
+      throw new Error(`Fallo en un lote de Google Directions (${originLabel} -> ${destinationLabel}): ${googleErrorMsg}`);
     }
   }
 
@@ -133,21 +127,16 @@ exports.optimizeRoute = async (config) => {
     createdBy,
     startLocation,
     endLocation,
-    // Guardar la secuencia de ÓRDENES optimizadas
     orders: orderedOrders.map((order, index) => ({
       order: order._id,
       sequenceNumber: index + 1,
       deliveryStatus: "pending",
     })),
     optimization: {
-      algorithm: "python_or-tools",
+      algorithm: "python_or-tools+google_directions", // Indicar ambos
       totalDistance: totalDistance,
       totalDuration: totalDuration,
-      // Unir todas las polilíneas (esto puede tener saltos, pero es lo mejor que se puede hacer)
-      // Tu frontend tendrá que dibujar múltiples polilíneas
-      overview_polyline: combinedPolylines.join(''), // Simple concatenación
-      // O mejor, guardar el array
-      // polylines_array: combinedPolylines // (requiere cambio en modelo)
+      overview_polyline: combinedPolylines.join(''), // Concatenar polilíneas
     },
     status: "draft",
   });
@@ -158,5 +147,3 @@ exports.optimizeRoute = async (config) => {
   console.log("✅ Ruta híbrida optimizada y guardada en BD.");
   return routePlan;
 };
-
-// ❌ Eliminamos la función getAccessToken y fallbackToOSRM
