@@ -60,14 +60,20 @@ const routePlanSchema = new mongoose.Schema({
   
   // Información de optimización
   optimization: {
-    totalDistance: { type: Number }, // en metros
-    totalDuration: { type: Number }, // en segundos
-    algorithm: { type: String, default: 'google_directions' },
-    optimizedAt: { type: Date, default: Date.now },
-    googleRouteData: {
-      type: mongoose.Schema.Types.Mixed // Guardamos la respuesta completa de Google
-    }
-  },
+  totalDistance: { type: Number }, // en metros
+  totalDuration: { type: Number }, // en segundos
+  algorithm: { type: String, default: 'google_directions' },
+  optimizedAt: { type: Date, default: Date.now },
+
+  // ✅ Campos nuevos para compatibilidad con el optimizador híbrido
+  overview_polyline: { type: String }, // polilínea global
+  overview_polyline_segments: [{ type: String }], // polilíneas por lote
+  batches: { type: Number }, // cantidad de lotes procesados
+
+  googleRouteData: {
+    type: mongoose.Schema.Types.Mixed // Guardamos la respuesta completa de Google (opcional)
+  }
+},
   
   // Estado general de la ruta
   status: {
