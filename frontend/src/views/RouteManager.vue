@@ -134,8 +134,8 @@
 
 <script setup>
 import { ref, computed, onMounted, nextTick } from "vue";
-import { apiService } from "../services/api";
-// ✅ Importa las funciones correctas del loader
+import { apiService } from "../services/api"; // Asegúrate que la ruta sea correcta
+// ✅ ¡Importa las funciones correctas del loader!
 import { setOptions, importLibrary } from "@googlemaps/js-api-loader";
 
 // State
@@ -143,32 +143,41 @@ const routes = ref([]);
 const loading = ref(false);
 const showRouteMap = ref(false);
 const activeRoute = ref(null);
-const mapInstance = ref(null);
+const mapInstance = ref(null); // Para guardar la instancia del mapa
 const showRouteOptimizerModal = ref(false);
 
-// Configura el API Loader UNA SOLA VEZ
+// ✅ Configura el API Loader UNA SOLA VEZ, fuera de cualquier función
 setOptions({
-  apiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "",
+  apiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "", // Usa tu variable de entorno
   version: "weekly",
   libraries: ["maps", "geometry", "marker"], // Carga las librerías necesarias
 });
 
 // Computed Stats
 const statCards = computed(() => {
-    // ... (sin cambios)
+    const total = routes.value.length;
+    const completed = routes.value.filter(r => r.status === 'completed').length;
+    const inProgress = routes.value.filter(r => r.status === 'in_progress').length;
+    const completionRate = total > 0 ? Math.round((completed / total) * 100) : 0;
+    return [
+      { icon: "🛣️", label: "Rutas Totales", value: total },
+      { icon: "✅", label: "Completadas", value: completed },
+      { icon: "🚀", label: "En Progreso", value: inProgress },
+      { icon: "📊", label: "Tasa Éxito", value: `${completionRate}%` }
+    ];
 });
 
 // Methods
 const loadRoutes = async () => {
   loading.value = true;
-  mapInstance.value = null; 
+  mapInstance.value = null; // Resetear mapa al recargar
   try {
-    const response = await apiService.routes.getAll(); 
+    const response = await apiService.routes.getAll();
     routes.value = response.data?.data?.routes || response.data?.routes || response.data || [];
     console.log("📦 Rutas cargadas:", routes.value.length);
   } catch (err) {
     console.error("❌ Error cargando rutas:", err);
-    routes.value = []; 
+    routes.value = []; // Limpiar en caso de error
   } finally {
     loading.value = false;
   }
@@ -182,8 +191,8 @@ const refreshRoutes = () => loadRoutes();
 const viewRoute = async (route) => {
   activeRoute.value = route;
   showRouteMap.value = true;
-  mapInstance.value = null;
-  await nextTick(); 
+  mapInstance.value = null; // Limpia instancia anterior
+  await nextTick(); // Espera a que el modal y el div del mapa existan en el DOM
 
   console.log("🗺️ Mostrando ruta pre-calculada:", route._id);
   const mapContainer = document.getElementById("routeMapContainer");
@@ -191,23 +200,23 @@ const viewRoute = async (route) => {
     console.error("❌ No se encontró el div '#routeMapContainer'");
     return;
   }
-  mapContainer.innerHTML = 'Cargando mapa...'; 
+  mapContainer.innerHTML = 'Cargando mapa...'; // Mensaje de carga
 
   // Verificar polilínea
   const polylineString = route.optimization?.overview_polyline;
   if (!polylineString) {
     console.warn("⚠️ Esta ruta no tiene una polilínea guardada.");
     mapContainer.innerHTML = '⚠️ No hay datos de mapa para esta ruta.';
-    return; 
+    return;
   }
 
   try {
-    // ✅ Usa importLibrary para cargar las clases de Google Maps
+    // ✅ Usa importLibrary para cargar las clases de Google Maps dinámicamente
     const { Map } = await importLibrary("maps");
     const { Polyline } = await importLibrary("maps"); // Polyline está en 'maps'
     const { LatLngBounds } = await importLibrary("core"); // LatLngBounds está en 'core'
-    const { encoding } = await importLibrary("geometry"); 
-    const { AdvancedMarkerElement } = await importLibrary("marker"); 
+    const { encoding } = await importLibrary("geometry");
+    const { AdvancedMarkerElement } = await importLibrary("marker");
 
     console.log("✅ Google Maps API y librerías cargadas");
 
@@ -215,11 +224,11 @@ const viewRoute = async (route) => {
     const map = new Map(mapContainer, {
       center: { lat: route.startLocation.latitude, lng: route.startLocation.longitude },
       zoom: 12,
-      mapId: "ENVIGO_ROUTE_MAP" 
+      mapId: "ENVIGO_ROUTE_MAP" // Opcional: ID para estilos personalizados
     });
     mapInstance.value = map;
-    
-    const bounds = new LatLngBounds(); 
+
+    const bounds = new LatLngBounds(); // Para ajustar el zoom
 
     // 1. Dibujar Polilínea del Backend
     const decodedPath = encoding.decodePath(polylineString);
@@ -231,7 +240,7 @@ const viewRoute = async (route) => {
         strokeWeight: 5,
     });
     routePolyline.setMap(map);
-    decodedPath.forEach(point => bounds.extend(point)); 
+    decodedPath.forEach(point => bounds.extend(point));
     console.log("✅ Polilínea dibujada");
 
     // 2. Marcador de Inicio
@@ -250,7 +259,7 @@ const viewRoute = async (route) => {
           map,
           position,
           title: `Parada ${index + 1}: ${orderItem.order.customer_name || 'Cliente'} #${orderItem.order.order_number || ''}`,
-          content: buildMarkerContent(index + 1), 
+          content: buildMarkerContent(index + 1),
         });
         bounds.extend(position);
       } else {
@@ -266,7 +275,7 @@ const viewRoute = async (route) => {
 
     // 5. Ajustar Zoom
     if (!bounds.isEmpty()) {
-        map.fitBounds(bounds, 60); 
+        map.fitBounds(bounds, 60); // Ajusta con 60px de padding
         // Esperar a que el mapa esté inactivo después de fitBounds
         google.maps.event.addListenerOnce(map, 'idle', () => {
              if (map.getZoom() > 16) map.setZoom(16); // Limitar zoom máximo
@@ -277,22 +286,43 @@ const viewRoute = async (route) => {
 
   } catch (err) {
     console.error("💥 Error al inicializar el mapa o dibujar la ruta:", err);
-    mapContainer.innerHTML = `❌ Error al cargar el mapa: ${err.message}`;
+     mapContainer.innerHTML = `❌ Error al cargar el mapa: ${err.message}`;
   }
 };
 
 // Helper para crear contenido de marcador (sin cambios)
 const buildMarkerContent = (label) => {
-    // ... (igual que antes)
+  const element = document.createElement("div");
+  element.style.width = "28px";
+  element.style.height = "28px";
+  element.style.borderRadius = "50%";
+  element.style.backgroundColor = "#FFFFFF"; // Fondo blanco
+  element.style.border = "2px solid #1E88E5"; // Borde azul
+  element.style.display = "flex";
+  element.style.alignItems = "center";
+  element.style.justifyContent = "center";
+  element.style.fontWeight = "bold";
+  element.style.fontSize = "14px";
+  element.style.color = "#1E88E5"; // Texto azul
+  element.textContent = label.toString();
+  return element;
 };
 
 // Funciones de formato (sin cambios)
 const formatDistance = (meters) => {
-    // ... (igual que antes)
+  if (meters === null || typeof meters === 'undefined') return "-";
+  if (meters < 1000) return `${meters} m`;
+  return `${(meters / 1000).toFixed(1)} km`;
 };
 
 const formatDuration = (seconds) => {
-    // ... (igual que antes)
+  if (seconds === null || typeof seconds === 'undefined' || seconds === 0) return "-";
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  let result = "";
+  if (hours > 0) result += `${hours}h `;
+  result += `${minutes}min`;
+  return result.trim();
 };
 
 // Lifecycle Hook
@@ -305,7 +335,6 @@ onMounted(() => {
   loadRoutes();
 });
 </script>
-
 <style scoped>
 #routeMapContainer {
   width: 100%;
