@@ -4,7 +4,8 @@ const Order = require('../../models/Order');
 
 class GeoService {
   constructor() {
-    this.baseUrl = 'https://nominatim.openstreetmap.org/search';
+    this.googleApiKey = process.env.GOOGLE_MAPS_API_KEY;
+    this.baseUrl = 'https://maps.googleapis.com/maps/api/geocode/json';
   }
 
   async validateOrderCoordinates(orderIds) {
@@ -20,9 +21,14 @@ class GeoService {
 
   hasValidCoordinates(order) {
     const loc = order.location;
-    return loc?.latitude && loc?.longitude &&
-      loc.latitude >= -90 && loc.latitude <= 90 &&
-      loc.longitude >= -180 && loc.longitude <= 180;
+    return (
+      loc?.latitude &&
+      loc?.longitude &&
+      loc.latitude >= -90 &&
+      loc.latitude <= 90 &&
+      loc.longitude >= -180 &&
+      loc.longitude <= 180
+    );
   }
 
   async geocodeOrder(order) {
@@ -32,17 +38,17 @@ class GeoService {
     try {
       const { data } = await axios.get(this.baseUrl, {
         params: {
-          q: address,
-          format: 'json',
-          addressdetails: 1,
-          limit: 1
+          address,
+          key: this.googleApiKey,
+          region: 'cl',
+          components: 'country:CL',
         },
-        headers: { 'User-Agent': 'enviGo-Optimizer/1.0' }
       });
 
-      if (!data.length) return false;
-      const { lat, lon } = data[0];
-      order.location = { latitude: parseFloat(lat), longitude: parseFloat(lon) };
+      if (data.status !== 'OK' || !data.results.length) return false;
+
+      const { lat, lng } = data.results[0].geometry.location;
+      order.location = { latitude: lat, longitude: lng };
       await order.save();
       return true;
     } catch (err) {

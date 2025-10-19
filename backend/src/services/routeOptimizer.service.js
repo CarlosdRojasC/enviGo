@@ -492,13 +492,6 @@ async validateOrderCoordinates(orderIds) {
 /**
  * ✅ MEJORADO: Geocodificar orden con más validaciones
  */
-async migrateOrdersWithLocationField() {
-  const result = await Order.updateMany(
-    { location: { $exists: false } },
-    { $set: { location: { latitude: null, longitude: null } } }
-  );
-  console.log(`Migradas ${result.modifiedCount} órdenes`);
-}
 
 async geocodeOrderIfNeeded(orderId) {
   try {

@@ -7,7 +7,9 @@
           <h1 class="text-3xl font-bold text-gray-900 flex items-center gap-2">
             🛣️ Gestión de Rutas
           </h1>
-          <p class="text-gray-600 mt-1">Optimiza y administra las rutas de entrega de tus conductores</p>
+          <p class="text-gray-600 mt-1">
+            Optimiza y administra las rutas de entrega de tus conductores
+          </p>
         </div>
         <div class="flex gap-3">
           <button
@@ -29,7 +31,11 @@
 
     <!-- Stats -->
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
-      <div v-for="card in statCards" :key="card.label" class="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+      <div
+        v-for="card in statCards"
+        :key="card.label"
+        class="bg-white rounded-xl shadow-sm p-6 border border-gray-100"
+      >
         <div class="flex items-center gap-4">
           <div class="text-3xl">{{ card.icon }}</div>
           <div>
@@ -45,8 +51,11 @@
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <div>
           <label class="block text-sm font-semibold text-gray-700 mb-2">Estado:</label>
-          <select v-model="filters.status" @change="applyFilters"
-            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+          <select
+            v-model="filters.status"
+            @change="applyFilters"
+            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          >
             <option value="">Todos</option>
             <option value="draft">Borrador</option>
             <option value="assigned">Asignada</option>
@@ -57,21 +66,34 @@
         </div>
         <div>
           <label class="block text-sm font-semibold text-gray-700 mb-2">Conductor:</label>
-          <select v-model="filters.driverId" @change="applyFilters"
-            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+          <select
+            v-model="filters.driverId"
+            @change="applyFilters"
+            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          >
             <option value="">Todos</option>
-            <option v-for="driver in drivers" :key="driver._id" :value="driver._id">{{ driver.name }}</option>
+            <option v-for="driver in drivers" :key="driver._id" :value="driver._id">
+              {{ driver.name }}
+            </option>
           </select>
         </div>
         <div>
           <label class="block text-sm font-semibold text-gray-700 mb-2">Fecha desde:</label>
-          <input type="date" v-model="filters.startDate" @change="applyFilters"
-            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+          <input
+            type="date"
+            v-model="filters.startDate"
+            @change="applyFilters"
+            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          />
         </div>
         <div>
           <label class="block text-sm font-semibold text-gray-700 mb-2">Fecha hasta:</label>
-          <input type="date" v-model="filters.endDate" @change="applyFilters"
-            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+          <input
+            type="date"
+            v-model="filters.endDate"
+            @change="applyFilters"
+            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          />
         </div>
       </div>
     </div>
@@ -83,7 +105,8 @@
         <button
           v-if="selectedRoutes.length > 0"
           @click="bulkAssignDriver"
-          class="bg-blue-100 text-blue-700 px-4 py-2 rounded-lg font-medium hover:bg-blue-200 transition-colors">
+          class="bg-blue-100 text-blue-700 px-4 py-2 rounded-lg font-medium hover:bg-blue-200 transition-colors"
+        >
           👥 Asignar Conductor ({{ selectedRoutes.length }})
         </button>
       </div>
@@ -93,8 +116,12 @@
           <thead class="bg-gray-50">
             <tr>
               <th class="px-6 py-3 text-left">
-                <input type="checkbox" @change="toggleSelectAll" :checked="isAllSelected"
-                  class="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                <input
+                  type="checkbox"
+                  @change="toggleSelectAll"
+                  :checked="isAllSelected"
+                  class="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                />
               </th>
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">ID Ruta</th>
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Conductor</th>
@@ -114,12 +141,25 @@
             <tr v-else-if="routes.length === 0">
               <td colspan="10" class="px-6 py-12 text-center">
                 <div>🛣️ No hay rutas aún</div>
-                <button @click="showRouteOptimizer = true" class="mt-3 bg-blue-600 text-white px-6 py-2 rounded-lg">Crear Ruta</button>
+                <button
+                  @click="showRouteOptimizer = true"
+                  class="mt-3 bg-blue-600 text-white px-6 py-2 rounded-lg"
+                >
+                  Crear Ruta
+                </button>
               </td>
             </tr>
-            <tr v-for="route in routes" :key="route._id" class="hover:bg-gray-50">
-              <td class="px-6 py-4"><input type="checkbox" v-model="selectedRoutes" :value="route._id" /></td>
-              <td class="px-6 py-4 font-medium">#{{ route._id.slice(-6).toUpperCase() }}</td>
+            <tr
+              v-for="route in routes"
+              :key="route._id"
+              class="hover:bg-gray-50"
+            >
+              <td class="px-6 py-4">
+                <input type="checkbox" v-model="selectedRoutes" :value="route._id" />
+              </td>
+              <td class="px-6 py-4 font-medium">
+                #{{ route._id.slice(-6).toUpperCase() }}
+              </td>
               <td class="px-6 py-4">{{ route.driver?.name || 'Sin asignar' }}</td>
               <td class="px-6 py-4">{{ getStatusText(route.status) }}</td>
               <td class="px-6 py-4">{{ route.orders?.length || 0 }}</td>
@@ -138,7 +178,7 @@
       </div>
     </div>
 
-    <!-- 🌍 Mapa Leaflet -->
+    <!-- 🗺️ Modal con Google Maps -->
     <div
       v-if="showRouteMap"
       class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
@@ -150,61 +190,8 @@
           </h3>
           <button @click="showRouteMap = false" class="text-gray-500 hover:text-gray-700">✖</button>
         </div>
-
         <div class="p-4">
-          <LMap
-            v-if="activeRoute && isValidCoord(activeRoute.startLocation)"
-            style="height: 500px; width: 100%"
-            :zoom="13"
-            :center="[mapCenter.latitude, mapCenter.longitude]"
-          >
-            <LTileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-
-            <!-- Inicio -->
-            <LMarker
-              v-if="isValidCoord(activeRoute.startLocation)"
-              :lat-lng="[activeRoute.startLocation.latitude, activeRoute.startLocation.longitude]"
-            >
-              <LPopup>Inicio 🏭</LPopup>
-            </LMarker>
-
-            <!-- Entregas -->
-            <LMarker
-              v-for="(item, i) in activeRoute.orders || []"
-              :key="i"
-              v-if="item?.order?.location && isValidCoord(item.order.location)"
-              :lat-lng="[item.order.location.latitude, item.order.location.longitude]"
-            >
-              <LTooltip permanent>{{ i + 1 }}</LTooltip>
-              <LPopup>Entrega #{{ i + 1 }}</LPopup>
-            </LMarker>
-
-            <!-- Fin -->
-            <LMarker
-              v-if="isValidCoord(activeRoute.endLocation)"
-              :lat-lng="[activeRoute.endLocation.latitude, activeRoute.endLocation.longitude]"
-            >
-              <LPopup>Destino 🏠</LPopup>
-            </LMarker>
-
-            <!-- Polyline -->
-            <LPolyline
-              v-if="polylineCoords.length > 1"
-              :lat-lngs="polylineCoords.filter((p) => isValidCoord(p))"
-              color="#1E88E5"
-              :weight="4"
-              :opacity="0.8"
-            />
-          </LMap>
-
-          <div
-            v-else
-            class="text-center text-gray-600 py-20 border border-dashed border-gray-300 rounded-lg"
-          >
-            <div class="text-6xl mb-2">📭</div>
-            <p class="text-lg font-semibold">No hay coordenadas válidas para mostrar el mapa</p>
-            <p class="text-sm text-gray-500">Verifica que la ruta tenga inicio, fin y entregas con ubicaciones.</p>
-          </div>
+          <div id="routeMap" class="w-full h-[500px] rounded-lg border"></div>
         </div>
       </div>
     </div>
@@ -212,43 +199,35 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
-import { apiService } from '../services/api'
-import { LMap, LTileLayer, LMarker, LPopup, LTooltip, LPolyline } from '@vue-leaflet/vue-leaflet'
-import 'leaflet/dist/leaflet.css'
-import polyline from '@mapbox/polyline'
+import { ref, computed, onMounted, nextTick } from "vue"
+import { Loader } from "@googlemaps/js-api-loader"
+import { apiService } from "../services/api"
+import polyline from "@mapbox/polyline"
 
-// State
 const routes = ref([])
 const drivers = ref([])
 const loading = ref(false)
-const filters = ref({ status: '', driverId: '', startDate: '', endDate: '' })
+const filters = ref({ status: "", driverId: "", startDate: "", endDate: "" })
 const pagination = ref({ current: 1, total: 1, limit: 20 })
 const selectedRoutes = ref([])
 const showRouteMap = ref(false)
 const showRouteOptimizer = ref(false)
 const activeRoute = ref(null)
-const polylineCoords = ref([])
 const mapCenter = ref({ latitude: -33.45, longitude: -70.65 })
-
 const routeStats = ref({ totalRoutes: 0, inProgressRoutes: 0, completedRoutes: 0, completionRate: 0 })
-const isAllSelected = computed(() => routes.value.length > 0 && selectedRoutes.value.length === routes.value.length)
+
+const isAllSelected = computed(
+  () => routes.value.length > 0 && selectedRoutes.value.length === routes.value.length
+)
+
 const statCards = computed(() => [
-  { icon: '🛣️', label: 'Rutas Totales', value: routeStats.value.totalRoutes },
-  { icon: '🚀', label: 'En Progreso', value: routeStats.value.inProgressRoutes },
-  { icon: '✅', label: 'Completadas', value: routeStats.value.completedRoutes },
-  { icon: '📊', label: 'Tasa de Éxito', value: `${routeStats.value.completionRate}%` }
+  { icon: "🛣️", label: "Rutas Totales", value: routeStats.value.totalRoutes },
+  { icon: "🚀", label: "En Progreso", value: routeStats.value.inProgressRoutes },
+  { icon: "✅", label: "Completadas", value: routeStats.value.completedRoutes },
+  { icon: "📊", label: "Tasa de Éxito", value: `${routeStats.value.completionRate}%` },
 ])
 
-// --- Utilidades ---
-const isValidCoord = (loc) => {
-  if (!loc) return false
-  const lat = Number(loc.latitude)
-  const lng = Number(loc.longitude)
-  return !isNaN(lat) && !isNaN(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180
-}
-
-// --- Métodos principales ---
+// Métodos principales
 const loadRoutes = async () => {
   loading.value = true
   try {
@@ -271,44 +250,77 @@ const loadDrivers = async () => {
   }
 }
 
-const viewRoute = (route) => {
+// 🗺️ Muestra ruta en Google Maps
+const viewRoute = async (route) => {
   activeRoute.value = route
   showRouteMap.value = true
+  await nextTick()
 
-  if (route.optimization?.overview_polyline) {
-    polylineCoords.value = polyline
-      .decode(route.optimization.overview_polyline)
-      .map(([lat, lng]) => ({ latitude: lat, longitude: lng }))
-  } else {
-    polylineCoords.value = []
+  const loader = new Loader({
+    apiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY,
+    version: "weekly",
+    libraries: ["places"],
+  })
+
+  const google = await loader.load()
+  const mapEl = document.getElementById("routeMap")
+  if (!mapEl) return
+
+  const map = new google.maps.Map(mapEl, {
+    center: {
+      lat: route.startLocation?.latitude ?? -33.45,
+      lng: route.startLocation?.longitude ?? -70.65,
+    },
+    zoom: 12,
+    mapTypeId: "roadmap",
+  })
+
+  const directionsService = new google.maps.DirectionsService()
+  const directionsRenderer = new google.maps.DirectionsRenderer({
+    map,
+    polylineOptions: { strokeColor: "#1E88E5", strokeWeight: 5 },
+  })
+
+  const waypoints = (route.orders || [])
+    .filter((o) => o?.order?.location)
+    .map((o) => ({
+      location: {
+        lat: o.order.location.latitude,
+        lng: o.order.location.longitude,
+      },
+      stopover: true,
+    }))
+
+  const request = {
+    origin: {
+      lat: route.startLocation.latitude,
+      lng: route.startLocation.longitude,
+    },
+    destination: {
+      lat: route.endLocation.latitude,
+      lng: route.endLocation.longitude,
+    },
+    waypoints,
+    travelMode: google.maps.TravelMode.DRIVING,
+    optimizeWaypoints: true,
   }
 
-  mapCenter.value = isValidCoord(route.startLocation)
-    ? route.startLocation
-    : { latitude: -33.45, longitude: -70.65 }
+  directionsService.route(request, (result, status) => {
+    if (status === "OK") directionsRenderer.setDirections(result)
+    else console.warn("Error al mostrar ruta:", status)
+  })
 }
 
-// --- Formateadores ---
-const getStatusText = (status) => ({
-  draft: 'Borrador',
-  assigned: 'Asignada',
-  in_progress: 'En Progreso',
-  completed: 'Completada',
-  cancelled: 'Cancelada'
-}[status] || status)
+// Utilidades
+const getStatusText = (s) =>
+  ({ draft: "Borrador", assigned: "Asignada", in_progress: "En Progreso", completed: "Completada", cancelled: "Cancelada" }[s] || s)
+const getRouteProgress = (r) => (!r.orders?.length ? 0 : Math.round((r.orders.filter((o) => o.deliveryStatus === "delivered").length / r.orders.length) * 100))
+const formatDistance = (m) => (!m ? "-" : `${(m / 1000).toFixed(1)} km`)
+const formatDuration = (s) => (!s ? "-" : `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`)
+const formatDate = (d) => new Date(d).toLocaleDateString("es-CL")
 
-const getRouteProgress = (route) => {
-  if (!route.orders?.length) return 0
-  const completed = route.orders.filter(o => o.deliveryStatus === 'delivered').length
-  return Math.round((completed / route.orders.length) * 100)
-}
-
-const formatDistance = (m) => !m ? '-' : `${(m / 1000).toFixed(1)} km`
-const formatDuration = (s) => !s ? '-' : `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`
-const formatDate = (d) => new Date(d).toLocaleDateString('es-CL')
-
-// --- Otras funciones ---
-const toggleSelectAll = () => selectedRoutes.value = isAllSelected.value ? [] : routes.value.map(r => r._id)
+const toggleSelectAll = () =>
+  (selectedRoutes.value = isAllSelected.value ? [] : routes.value.map((r) => r._id))
 const bulkAssignDriver = () => alert(`Asignar ${selectedRoutes.value.length} rutas (pendiente)`)
 const refreshRoutes = () => loadRoutes()
 const applyFilters = () => loadRoutes()
