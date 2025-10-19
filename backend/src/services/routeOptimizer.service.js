@@ -1,7 +1,8 @@
+// backend/src/services/routeOptimizer.service.js - CÓDIGO COMPLETO MEJORADO
+
 const axios = require('axios');
 const RoutePlan = require('../models/RoutePlan');
 const Order = require('../models/Order');
-// 👇 AÑADIR ESTA LÍNEA
 const { Client } = require("@googlemaps/google-maps-services-js");
 
 class RouteOptimizerService {
@@ -9,38 +10,493 @@ class RouteOptimizerService {
     this.googleApiKey = process.env.GOOGLE_MAPS_API_KEY;
     console.log("API Key Cargada:", this.googleApiKey ? "Sí" : "¡NO!");
     this.pythonOptimizerUrl = process.env.PYTHON_OPTIMIZER_URL || 'http://localhost:5001/optimize';
-    // 👇 AÑADIR ESTA LÍNEA
     this.googleMapsClient = new Client({});
   }
 
+  // ==================== MÉTODOS MEJORADOS PARA EL FRONTEND ====================
+
+  /**
+   * ✅ NUEVO: Obtener rutas con órdenes pobladas para el frontend
+   */
+  async getRoutesWithPopulatedOrders(companyId, filters = {}) {
+    try {
+      const query = { company: companyId, ...filters };
+      
+      console.log(`📋 Obteniendo rutas pobladas para empresa: ${companyId}`);
+      
+      const routes = await RoutePlan.find(query)
+        .populate('driver', 'full_name name email phone')
+        .populate({
+          path: 'orders.order',
+          select: 'order_number customer_name customer_phone shipping_address shipping_commune location total_amount status notes',
+          populate: {
+            path: 'location',
+            select: 'latitude longitude'
+          }
+        })
+        .populate('company', 'name address')
+        .sort({ createdAt: -1 });
+
+      // ✅ ENRIQUECER con información formateada para el frontend
+      const enrichedRoutes = routes.map(route => {
+        const routeObj = route.toObject();
+        
+        // Formatear distancia y duración desde optimization
+        if (routeObj.optimization) {
+          const distanceKm = (routeObj.optimization.totalDistance || 0) / 1000;
+          const durationMinutes = Math.round((routeObj.optimization.totalDuration || 0) / 60);
+          
+          routeObj.routeInfo = {
+            distance: distanceKm >= 1 
+              ? `${distanceKm.toFixed(1)} km` 
+              : `${routeObj.optimization.totalDistance || 0} m`,
+            duration: durationMinutes >= 60 
+              ? `${Math.floor(durationMinutes / 60)}h ${durationMinutes % 60}min` 
+              : `${durationMinutes} min`,
+            totalDistanceKm: distanceKm,
+            totalDurationMinutes: durationMinutes,
+            hasPolyline: !!routeObj.optimization.overview_polyline,
+            algorithm: routeObj.optimization.algorithm || 'or-tools'
+          };
+        } else {
+          routeObj.routeInfo = {
+            distance: '',
+            duration: '',
+            totalDistanceKm: 0,
+            totalDurationMinutes: 0,
+            hasPolyline: false,
+            algorithm: 'unknown'
+          };
+        }
+
+        // ✅ PREPARAR datos para mapa
+        routeObj.mapData = {
+          hasValidCoordinates: routeObj.orders.every(o => 
+            o.order?.location?.latitude && o.order?.location?.longitude
+          ),
+          totalStops: routeObj.orders.length,
+          completedStops: routeObj.orders.filter(o => o.deliveryStatus === 'delivered').length
+        };
+
+        // Agregar información adicional útil
+        routeObj.totalPackages = routeObj.orders ? routeObj.orders.length : 0;
+
+        return routeObj;
+      });
+
+      console.log(`✅ ${enrichedRoutes.length} rutas enriquecidas obtenidas`);
+      return enrichedRoutes;
+
+    } catch (error) {
+      console.error('❌ Error obteniendo rutas pobladas:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * ✅ NUEVO: Obtener una ruta completa por ID con datos para el mapa
+   */
+  async getRouteById(routeId, includeProofDetails = true) {
+    try {
+      console.log(`🔍 Obteniendo ruta completa: ${routeId}`);
+
+      const populateFields = [
+        {
+          path: 'driver',
+          select: 'full_name name email phone avatar'
+        },
+        {
+          path: 'orders.order',
+          select: 'order_number customer_name customer_phone shipping_address shipping_commune location total_amount status notes',
+        },
+        {
+          path: 'company',
+          select: 'name address'
+        }
+      ];
+
+      if (includeProofDetails) {
+        populateFields.push({
+          path: 'orders.proof.deliveredBy',
+          select: 'full_name name'
+        });
+      }
+
+      const route = await RoutePlan.findById(routeId).populate(populateFields);
+
+      if (!route) {
+        throw new Error('Ruta no encontrada');
+      }
+
+      const routeObj = route.toObject();
+
+      // ✅ ENRIQUECER con progreso de entregas
+      routeObj.deliveryProgress = {
+        total: routeObj.orders.length,
+        completed: routeObj.orders.filter(o => o.deliveryStatus === 'delivered').length,
+        pending: routeObj.orders.filter(o => o.deliveryStatus === 'pending').length,
+        inProgress: routeObj.orders.filter(o => o.deliveryStatus === 'in_progress').length,
+        failed: routeObj.orders.filter(o => o.deliveryStatus === 'failed').length,
+        percentage: routeObj.orders.length > 0 
+          ? Math.round((routeObj.orders.filter(o => o.deliveryStatus === 'delivered').length / routeObj.orders.length) * 100)
+          : 0
+      };
+
+      // ✅ FORMATEAR información de distancia/duración
+      if (routeObj.optimization) {
+        const distanceKm = (routeObj.optimization.totalDistance || 0) / 1000;
+        const durationMinutes = Math.round((routeObj.optimization.totalDuration || 0) / 60);
+        
+        routeObj.routeInfo = {
+          distance: distanceKm >= 1 
+            ? `${distanceKm.toFixed(1)} km` 
+            : `${routeObj.optimization.totalDistance || 0} m`,
+          duration: durationMinutes >= 60 
+            ? `${Math.floor(durationMinutes / 60)}h ${durationMinutes % 60}min` 
+            : `${durationMinutes} min`,
+          totalDistanceKm: distanceKm,
+          totalDurationMinutes: durationMinutes,
+          hasPolyline: !!routeObj.optimization.overview_polyline,
+          polyline: routeObj.optimization.overview_polyline,
+          algorithm: routeObj.optimization.algorithm || 'or-tools',
+          bounds: routeObj.optimization.map_bounds
+        };
+      }
+
+      // ✅ PREPARAR órdenes para el mapa con navegación
+      routeObj.orders = routeObj.orders.map(orderItem => ({
+        ...orderItem,
+        navigationLinks: this.generateNavigationLinks(orderItem.order),
+        canMarkDelivered: orderItem.deliveryStatus === 'pending' || orderItem.deliveryStatus === 'in_progress',
+        hasProof: !!(orderItem.proof?.photoUrl || orderItem.proof?.signature || orderItem.proof?.notes)
+      }));
+
+      console.log(`✅ Ruta completa obtenida: ${routeObj.orders.length} órdenes, ${routeObj.deliveryProgress.completed} completadas`);
+      return routeObj;
+
+    } catch (error) {
+      console.error('❌ Error obteniendo ruta por ID:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * ✅ NUEVO: Generar links de navegación para una orden
+   */
+  generateNavigationLinks(order) {
+    if (!order?.location?.latitude || !order?.location?.longitude) {
+      console.warn('⚠️ Orden sin coordenadas para navegación:', order?.order_number);
+      return null;
+    }
+
+    const lat = order.location.latitude;
+    const lng = order.location.longitude;
+    const address = encodeURIComponent(order.shipping_address || '');
+
+    return {
+      waze: `https://www.waze.com/ul?ll=${lat},${lng}&navigate=yes&zoom=17`,
+      googleMaps: `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`,
+      appleMaps: `maps://maps.apple.com/?daddr=${lat},${lng}`,
+      googleMapsAddress: `https://www.google.com/maps/dir/?api=1&destination=${address}`
+    };
+  }
+
+  /**
+   * ✅ NUEVO: Actualizar estado de entrega con prueba
+   */
+  async updateDeliveryStatus(routeId, orderId, status, proofData = null, driverId = null) {
+    try {
+      console.log(`📦 Actualizando entrega: Ruta ${routeId}, Orden ${orderId} -> ${status}`);
+
+      const route = await RoutePlan.findById(routeId);
+      if (!route) {
+        throw new Error('Ruta no encontrada');
+      }
+
+      const orderIndex = route.orders.findIndex(o => o.order.toString() === orderId);
+      if (orderIndex === -1) {
+        throw new Error('Orden no encontrada en la ruta');
+      }
+
+      const previousStatus = route.orders[orderIndex].deliveryStatus;
+
+      // ✅ VALIDAR transición de estados
+      const validTransitions = {
+        'pending': ['in_progress', 'delivered', 'failed', 'cancelled'],
+        'in_progress': ['delivered', 'failed', 'cancelled'],
+        'delivered': [], // Estado final
+        'failed': ['pending', 'in_progress'], // Permitir reintentos
+        'cancelled': ['pending'] // Permitir reactivar
+      };
+
+      const allowedStates = validTransitions[previousStatus] || [];
+      if (!allowedStates.includes(status)) {
+        throw new Error(`Transición inválida: ${previousStatus} -> ${status}`);
+      }
+
+      // ✅ ACTUALIZAR estado
+      route.orders[orderIndex].deliveryStatus = status;
+      
+      if (status === 'delivered') {
+        route.orders[orderIndex].actualArrival = new Date();
+        
+        // ✅ GUARDAR prueba de entrega
+        if (proofData) {
+          route.orders[orderIndex].proof = {
+            ...route.orders[orderIndex].proof,
+            ...proofData,
+            timestamp: new Date(),
+            deliveredBy: driverId
+          };
+        }
+      } else if (status === 'in_progress') {
+        route.orders[orderIndex].actualArrival = null; // Limpiar si se marca como en progreso
+      }
+
+      // ✅ ACTUALIZAR estado general de la ruta
+      const completedOrders = route.orders.filter(o => o.deliveryStatus === 'delivered').length;
+      const totalOrders = route.orders.length;
+      const inProgressOrders = route.orders.filter(o => o.deliveryStatus === 'in_progress').length;
+
+      if (completedOrders === totalOrders) {
+        route.status = 'completed';
+        route.completedAt = new Date();
+        console.log(`🏁 Ruta completada: ${completedOrders}/${totalOrders} entregas`);
+      } else if ((completedOrders > 0 || inProgressOrders > 0) && route.status === 'assigned') {
+        route.status = 'in_progress';
+        if (!route.startedAt) {
+          route.startedAt = new Date();
+        }
+        console.log(`🚀 Ruta iniciada: ${completedOrders}/${totalOrders} entregas completadas`);
+      }
+
+      await route.save();
+
+      // ✅ TAMBIÉN actualizar el estado en la orden original
+      const updateData = {
+        status: status === 'delivered' ? 'delivered' : status === 'failed' ? 'failed' : 'in_transit'
+      };
+      
+      if (status === 'delivered') {
+        updateData.delivery_date = new Date();
+      }
+
+      await Order.findByIdAndUpdate(orderId, updateData);
+
+      console.log(`✅ Estado actualizado: ${previousStatus} -> ${status}`);
+
+      return {
+        message: `Entrega marcada como ${status}`,
+        routePlan: await this.getRouteById(routeId), // Devolver ruta actualizada
+        deliveryProgress: {
+          completed: completedOrders,
+          total: totalOrders,
+          percentage: Math.round((completedOrders / totalOrders) * 100)
+        }
+      };
+
+    } catch (error) {
+      console.error('❌ Error actualizando estado de entrega:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * ✅ NUEVO: Registrar cuando se abre navegación
+   */
+  async trackNavigation(routeId, orderId, navigationType) {
+    try {
+      const route = await RoutePlan.findById(routeId);
+      if (!route) return;
+
+      const orderIndex = route.orders.findIndex(o => o.order.toString() === orderId);
+      if (orderIndex === -1) return;
+
+      // Registrar que se abrió la navegación
+      if (!route.orders[orderIndex].navigation) {
+        route.orders[orderIndex].navigation = {};
+      }
+
+      route.orders[orderIndex].navigation[`openedIn${navigationType}`] = true;
+      route.orders[orderIndex].navigation.lastOpened = new Date();
+
+      await route.save();
+      
+      console.log(`📍 Navegación registrada: ${navigationType} para orden ${orderId}`);
+    } catch (error) {
+      console.error('❌ Error registrando navegación:', error);
+      // No hacer throw - es logging opcional
+    }
+  }
+
+  /**
+   * ✅ NUEVO: Obtener ruta activa de un conductor
+   */
+  async getActiveRouteForDriver(driverId) {
+    try {
+      console.log(`🚚 Obteniendo ruta activa para conductor: ${driverId}`);
+
+      const activeRoute = await RoutePlan.findOne({
+        driver: driverId,
+        status: { $in: ['assigned', 'in_progress'] }
+      }).populate([
+        {
+          path: 'orders.order',
+          select: 'order_number customer_name customer_phone shipping_address shipping_commune location total_amount'
+        },
+        {
+          path: 'company',
+          select: 'name address'
+        }
+      ]);
+
+      if (!activeRoute) {
+        console.log('📭 No hay rutas activas para el conductor');
+        return null;
+      }
+
+      // Enriquecer con links de navegación
+      const enrichedRoute = activeRoute.toObject();
+      enrichedRoute.orders = enrichedRoute.orders.map(orderItem => ({
+        ...orderItem,
+        navigationLinks: this.generateNavigationLinks(orderItem.order),
+        canMarkDelivered: orderItem.deliveryStatus === 'pending' || orderItem.deliveryStatus === 'in_progress'
+      }));
+
+      console.log(`✅ Ruta activa encontrada: ${enrichedRoute.orders.length} entregas`);
+      return enrichedRoute;
+
+    } catch (error) {
+      console.error('❌ Error obteniendo ruta activa:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * ✅ NUEVO: Validar que las órdenes tengan coordenadas
+   */
+  async validateOrderCoordinates(orderIds) {
+    try {
+      console.log(`🔍 Validando coordenadas para ${orderIds.length} órdenes`);
+
+      const orders = await Order.find({ 
+        _id: { $in: orderIds },
+        'location.latitude': { $exists: true },
+        'location.longitude': { $exists: true }
+      });
+
+      const missingCoordinates = orderIds.filter(id => 
+        !orders.find(order => order._id.toString() === id.toString())
+      );
+
+      if (missingCoordinates.length > 0) {
+        console.warn(`⚠️ ${missingCoordinates.length} órdenes sin coordenadas: ${missingCoordinates.join(', ')}`);
+        
+        // Intentar geocodificar las órdenes faltantes
+        for (const orderId of missingCoordinates) {
+          await this.geocodeOrderIfNeeded(orderId);
+        }
+
+        // Volver a consultar después de geocodificar
+        const updatedOrders = await Order.find({ 
+          _id: { $in: orderIds },
+          'location.latitude': { $exists: true },
+          'location.longitude': { $exists: true }
+        });
+
+        const stillMissing = orderIds.filter(id => 
+          !updatedOrders.find(order => order._id.toString() === id.toString())
+        );
+
+        if (stillMissing.length > 0) {
+          console.error(`❌ No se pudieron geocodificar ${stillMissing.length} órdenes`);
+        }
+
+        return updatedOrders;
+      }
+
+      console.log(`✅ Todas las órdenes tienen coordenadas válidas`);
+      return orders;
+    } catch (error) {
+      console.error('❌ Error validando coordenadas:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * ✅ NUEVO: Geocodificar orden si no tiene coordenadas
+   */
+  async geocodeOrderIfNeeded(orderId) {
+    try {
+      const order = await Order.findById(orderId);
+      if (!order || (order.location?.latitude && order.location?.longitude)) {
+        return; // Ya tiene coordenadas
+      }
+
+      console.log(`🌍 Geocodificando orden ${order.order_number}: ${order.shipping_address}`);
+
+      const address = `${order.shipping_address}, ${order.shipping_commune || ''}, Chile`;
+      const coords = await this.geocodeAddress(address);
+
+      if (coords) {
+        order.location = {
+          latitude: coords.lat,
+          longitude: coords.lng
+        };
+        await order.save();
+        console.log(`✅ Coordenadas agregadas a orden ${order.order_number}: ${coords.lat}, ${coords.lng}`);
+      } else {
+        console.warn(`⚠️ No se pudo geocodificar orden ${order.order_number}`);
+      }
+    } catch (error) {
+      console.error(`❌ Error geocodificando orden ${orderId}:`, error);
+    }
+  }
+
+  // ==================== TU MÉTODO ORIGINAL optimizeRoute() - MANTENIDO ====================
+
   /**
    * 🔹 Optimiza y asigna una ruta completa (usa OR-Tools o heurístico)
+   * TU CÓDIGO ORIGINAL MANTENIDO CON PEQUEÑAS MEJORAS
    */
   async optimizeRoute(routeConfig) {
     try {
       const { orderIds, driverId, companyId, company, createdBy, preferences = {}, startLocation, endLocation } = routeConfig;
       const companyRef = companyId || company;
 
-      // 1️⃣ Buscar pedidos válidos
-      const orders = await Order.find({ _id: { $in: orderIds }, company: companyRef });
-      if (!orders.length) throw new Error('No se encontraron pedidos válidos');
+      console.log(`🚀 Iniciando optimización de ruta: ${orderIds.length} órdenes`);
 
-      // 2️⃣ Geocodificar direcciones
+      // 1️⃣ Buscar y validar pedidos
+      const orders = await this.validateOrderCoordinates(orderIds);
+      if (!orders.length) throw new Error('No se encontraron pedidos válidos con coordenadas');
+
+      // 2️⃣ Geocodificar direcciones (tu lógica original)
       const geocodedOrders = await Promise.all(
         orders.map(async (order) => {
-          // Asumir que el pedido ya puede tener coords, si no, geocodificar
+          // Si ya tiene coordenadas, usarlas
           if (order.location && order.location.latitude) {
-            return { order, lat: order.location.latitude, lng: order.location.longitude, fullAddress: order.shipping_address };
+            return { 
+              order, 
+              lat: order.location.latitude, 
+              lng: order.location.longitude, 
+              fullAddress: order.shipping_address 
+            };
           }
           
+          // Si no, geocodificar
           const address = `${order.shipping_address}, ${order.shipping_commune || ''}, Chile`;
           const geo = await this.geocodeAddress(address);
           if (!geo) {
             console.warn(`⚠️ No se pudo geocodificar: "${address}"`);
             return null;
           }
-          // Opcional: Guardar la geocodificación en la orden
-          // await Order.updateOne({ _id: order._id }, { $set: { location: { latitude: geo.lat, longitude: geo.lng } } });
+          
+          // Guardar la geocodificación en la orden
+          await Order.updateOne(
+            { _id: order._id }, 
+            { $set: { location: { latitude: geo.lat, longitude: geo.lng } } }
+          );
+          
           return { order, lat: geo.lat, lng: geo.lng, fullAddress: address };
         })
       );
@@ -55,33 +511,32 @@ class RouteOptimizerService {
         { lat: endLocation.latitude, lng: endLocation.longitude }
       ];
 
-      let optimizedOrderIndexes; // Nombres de variables más claros
+      let optimizedOrderIndexes;
       let usedEngine = 'heuristic';
 
       // 4️⃣ Intentar optimizar con microservicio Python
       try {
         console.log(`🚀 Intentando optimización OR-Tools en ${this.pythonOptimizerUrl}`);
         
-        // 👇 ¡CAMBIO! Enviar también las preferencias
         const optimizerPayload = {
           locations,
           preferences: preferences || { prioritizeTime: true }
         };
         
-        const res = await axios.post(this.pythonOptimizerUrl, optimizerPayload, { timeout: 8000 }); // 👈 CAMBIO
+        const res = await axios.post(this.pythonOptimizerUrl, optimizerPayload, { timeout: 10000 });
         
         if (res.data && res.data.route && res.data.route.length) {
-          optimizedOrderIndexes = res.data.route; // Esto son ÍNDICES
+          optimizedOrderIndexes = res.data.route;
           usedEngine = 'or-tools';
           console.log('✅ OR-Tools devolvió una ruta válida.');
         } else {
-          console.warn('⚠️ OR-Tools devolvió respuesta vacía, se usará heurístico.');
+          console.warn('⚠️ OR-Tools devolvió respuesta vacía, usando heurístico.');
         }
       } catch (err) {
         console.warn('⚠️ Falló optimizador OR-Tools, usando heurístico:', err.message);
       }
 
-      let sequence; // Esta será la secuencia de OBJETOS de pedido
+      let sequence;
 
       // 5️⃣ Si no hay ruta desde OR-Tools → fallback heurístico
       if (!optimizedOrderIndexes) {
@@ -95,10 +550,10 @@ class RouteOptimizerService {
         // 6️⃣ Generar secuencia de pedidos desde los ÍNDICES
         sequence = optimizedOrderIndexes
           .slice(1, -1) // Quitar índice 0 (inicio) e índice final (fin)
-          .map(i => validOrders[i - 1]); // Mapear índice a objeto de pedido
+          .map(i => validOrders[i - 1]);
       }
 
-      // 7️⃣ ¡NUEVO PASO CRÍTICO! Obtener la ruta real y polilínea de Google
+      // 7️⃣ Obtener la ruta real y polilínea de Google
       const waypoints = sequence.map(o => ({
         location: { lat: o.lat, lng: o.lng }
       }));
@@ -119,6 +574,7 @@ class RouteOptimizerService {
       let totalDuration = 0; // en segundos
 
       try {
+        console.log('🗺️ Obteniendo ruta real de Google Directions...');
         const directionsResult = await this.googleMapsClient.directions(directionsRequest);
         if (directionsResult.data.routes && directionsResult.data.routes.length > 0) {
           routeData = directionsResult.data.routes[0];
@@ -133,9 +589,10 @@ class RouteOptimizerService {
         console.error('⚠️ Error al llamar a Google Directions API', e.message);
         // Fallback a la estimación Haversine si Google falla
         totalDistance = this.estimateTotalDistance(sequence, startLocation, endLocation);
+        totalDuration = Math.round(totalDistance / 1000 * 3.5 * 60); // ~3.5 min por km
       }
 
-      // 8️⃣ Crear y asignar RoutePlan (antes 7️⃣)
+      // 8️⃣ Crear y asignar RoutePlan
       const routePlan = new RoutePlan({
         company: companyRef,
         driver: driverId,
@@ -145,17 +602,16 @@ class RouteOptimizerService {
         orders: sequence.map((o, i) => ({
           order: o.order._id,
           sequenceNumber: i + 1,
-          // Estimar llegada usando los datos reales de Google
-          estimatedArrival: new Date(Date.now() + (routeData ? routeData.legs.slice(0, i + 1).reduce((acc, leg) => acc + leg.duration.value, 0) * 1000 : (i + 1) * 10 * 60 * 1000)),
+          estimatedArrival: new Date(Date.now() + (routeData ? 
+            routeData.legs.slice(0, i + 1).reduce((acc, leg) => acc + leg.duration.value, 0) * 1000 : 
+            (i + 1) * 10 * 60 * 1000)),
           deliveryStatus: 'pending'
         })),
         optimization: {
           algorithm: usedEngine,
           optimizedAt: new Date(),
-          
-          // 👇 ¡CAMBIOS CLAVE! Usar los datos reales
-          totalDistance: totalDistance, // en metros
-          totalDuration: totalDuration, // en segundos
+          totalDistance: totalDistance,
+          totalDuration: totalDuration,
           overview_polyline: routeData ? routeData.overview_polyline.points : null,
           map_bounds: routeData ? routeData.bounds : null,
           googleRouteData: routeData // Opcional: guardar todo
@@ -166,24 +622,35 @@ class RouteOptimizerService {
       });
 
       await routePlan.save();
-      await routePlan.populate('orders.order driver');
+      await routePlan.populate([
+        'orders.order', 
+        'driver',
+        { path: 'company', select: 'name' }
+      ]);
 
-      // 9️⃣ Marcar pedidos como asignados (antes 8️⃣)
+      // 9️⃣ Marcar pedidos como asignados
       await Order.updateMany(
         { _id: { $in: routePlan.orders.map(o => o.order._id || o.order) } },
-        { status: 'assigned', assigned_driver: driverId, assigned_at: new Date() }
+        { 
+          status: 'assigned', 
+          assigned_driver: driverId, 
+          assigned_at: new Date() 
+        }
       );
+
+      console.log(`✅ Ruta optimizada creada: ${routePlan._id} (${usedEngine})`);
 
       return {
         success: true,
-        message: `Ruta optimizada y asignada (${usedEngine})`,
+        message: `Ruta optimizada y asignada usando ${usedEngine}`,
         routePlan,
         summary: {
           totalOrders: routePlan.orders.length,
-          driver: routePlan.driver.full_name,
-          totalDistance: routePlan.optimization.totalDistance, // ya está en metros
-          totalDuration: routePlan.optimization.totalDuration, // en segundos
-          algorithm: usedEngine
+          driver: routePlan.driver.full_name || routePlan.driver.name,
+          totalDistance: routePlan.optimization.totalDistance,
+          totalDuration: routePlan.optimization.totalDuration,
+          algorithm: usedEngine,
+          hasPolyline: !!routePlan.optimization.overview_polyline
         }
       };
     } catch (error) {
@@ -191,6 +658,8 @@ class RouteOptimizerService {
       throw new Error(`Error en optimización: ${error.message}`);
     }
   }
+
+  // ==================== TUS MÉTODOS ORIGINALES MANTENIDOS ====================
 
   /** 🌍 Geocodificación simple con Google */
   async geocodeAddress(address) {
@@ -224,13 +693,12 @@ class RouteOptimizerService {
       current = next;
     }
     
-    // Nota: 'end' no se usa aquí, pero se incluirá en el cálculo de Google Directions
     return route;
   }
 
   /** 📏 Distancia Haversine (en METROS) */
   haversineDistance(a, b) {
-    const R = 6371000; // 👈 CAMBIO: Radio en metros
+    const R = 6371000; // Radio en metros
     const dLat = (b.lat - a.lat) * Math.PI / 180;
     const dLon = (b.lng - a.lng) * Math.PI / 180;
     const lat1 = a.lat * Math.PI / 180;
@@ -240,43 +708,366 @@ class RouteOptimizerService {
   }
 
   /** 📊 Estimar distancia total (en METROS) */
-  estimateTotalDistance(sequence, start, end) {
-    // Si no hay paradas, la distancia es 0
-    if (!sequence || sequence.length === 0) {
-      // Si solo es bodega -> casa, calcular esa distancia
-      if (start && end) {
-        const startPoint = { lat: start.latitude, lng: start.longitude };
-        const endPoint = { lat: end.latitude, lng: end.longitude };
-        return Math.round(this.haversineDistance(startPoint, endPoint));
-      }
-      return 0;
+  /** 📊 Estimar distancia total (en METROS) */
+estimateTotalDistance(sequence, start, end) {
+  if (!sequence || sequence.length === 0) {
+    if (start && end) {
+      const startPoint = { lat: start.latitude, lng: start.longitude };
+      const endPoint = { lat: end.latitude, lng: end.longitude };
+      return Math.round(this.haversineDistance(startPoint, endPoint));
     }
+    return 0;
+  }
 
-    // 👇 ¡CORRECCIÓN! Normalizar start/end a { lat, lng }
-    const startPoint = { lat: start.latitude, lng: start.longitude };
-    const endPoint = { lat: end.latitude, lng: end.longitude };
+  const startPoint = { lat: start.latitude, lng: start.longitude };
+  const endPoint = { lat: end.latitude, lng: end.longitude };
+  
+  let total = 0;
+  
+  // 1. De Inicio a la primera orden
+  total += this.haversineDistance(startPoint, { 
+    lat: sequence[0].lat, 
+    lng: sequence[0].lng 
+  });
+  
+  // 2. Entre órdenes consecutivas
+  for (let i = 0; i < sequence.length - 1; i++) {
+    const current = { lat: sequence[i].lat, lng: sequence[i].lng };
+    const next = { lat: sequence[i + 1].lat, lng: sequence[i + 1].lng };
+    total += this.haversineDistance(current, next);
+  }
+  
+  // 3. De la última orden al destino final
+  if (sequence.length > 0) {
+    const lastOrder = sequence[sequence.length - 1];
+    total += this.haversineDistance(
+      { lat: lastOrder.lat, lng: lastOrder.lng }, 
+      endPoint
+    );
+  }
+  
+  return Math.round(total);
+}
+
+/**
+ * ✅ NUEVO: Obtener estadísticas de rutas para dashboard
+ */
+async getRouteStatistics(companyId, timeframe = 'week') {
+  try {
+    console.log(`📊 Obteniendo estadísticas de rutas: ${timeframe}`);
+
+    const dateFilter = this.getDateFilterForTimeframe(timeframe);
     
-    let total = 0;
-    
-    // 1. De Inicio (Bodega) a la primera orden
-    total += this.haversineDistance(startPoint, sequence[0]);
-    
-    // 2. Entre órdenes
-    for (let i = 0; i < sequence.length - 1; i++) {
-      total += this.haversineDistance(sequence[i], sequence[i + 1]);
-    }
-    
-    // 3. De la última orden al Fin (Casa)
-    total += this.haversineDistance(sequence[sequence.length - 1], endPoint);
-    
-    // Salvavidas: si algo sigue saliendo mal, devuelve 0 en lugar de NaN
-    if (isNaN(total)) {
-      console.error("❌ Falló el cálculo de distancia Haversine, devolviendo 0");
-      return 0;
-    }
-    
-    return Math.round(total);
+    const pipeline = [
+      {
+        $match: {
+          company: companyId,
+          createdAt: { $gte: dateFilter }
+        }
+      },
+      {
+        $group: {
+          _id: null,
+          totalRoutes: { $sum: 1 },
+          completedRoutes: {
+            $sum: { $cond: [{ $eq: ['$status', 'completed'] }, 1, 0] }
+          },
+          inProgressRoutes: {
+            $sum: { $cond: [{ $eq: ['$status', 'in_progress'] }, 1, 0] }
+          },
+          totalOrders: { $sum: { $size: '$orders' } },
+          totalDeliveredOrders: {
+            $sum: {
+              $size: {
+                $filter: {
+                  input: '$orders',
+                  cond: { $eq: ['$$this.deliveryStatus', 'delivered'] }
+                }
+              }
+            }
+          },
+          totalDistance: { $sum: '$optimization.totalDistance' },
+          totalDuration: { $sum: '$optimization.totalDuration' },
+          avgRoutesPerDay: {
+            $avg: {
+              $cond: [
+                { $ne: ['$createdAt', null] },
+                { $dayOfYear: '$createdAt' },
+                0
+              ]
+            }
+          }
+        }
+      }
+    ];
+
+    const stats = await RoutePlan.aggregate(pipeline);
+    const result = stats[0] || {
+      totalRoutes: 0,
+      completedRoutes: 0,
+      inProgressRoutes: 0,
+      totalOrders: 0,
+      totalDeliveredOrders: 0,
+      totalDistance: 0,
+      totalDuration: 0
+    };
+
+    // Calcular métricas adicionales
+    const deliveryRate = result.totalOrders > 0 
+      ? Math.round((result.totalDeliveredOrders / result.totalOrders) * 100)
+      : 0;
+
+    const completionRate = result.totalRoutes > 0
+      ? Math.round((result.completedRoutes / result.totalRoutes) * 100)
+      : 0;
+
+    const avgDistancePerRoute = result.totalRoutes > 0
+      ? Math.round(result.totalDistance / result.totalRoutes / 1000 * 10) / 10 // km con 1 decimal
+      : 0;
+
+    const avgDurationPerRoute = result.totalRoutes > 0
+      ? Math.round(result.totalDuration / result.totalRoutes / 60) // minutos
+      : 0;
+
+    return {
+      overview: {
+        totalRoutes: result.totalRoutes,
+        completedRoutes: result.completedRoutes,
+        inProgressRoutes: result.inProgressRoutes,
+        pendingRoutes: result.totalRoutes - result.completedRoutes - result.inProgressRoutes
+      },
+      deliveries: {
+        totalOrders: result.totalOrders,
+        deliveredOrders: result.totalDeliveredOrders,
+        deliveryRate: deliveryRate,
+        pendingDeliveries: result.totalOrders - result.totalDeliveredOrders
+      },
+      efficiency: {
+        completionRate: completionRate,
+        avgDistancePerRoute: avgDistancePerRoute,
+        avgDurationPerRoute: avgDurationPerRoute,
+        totalDistanceKm: Math.round(result.totalDistance / 1000),
+        totalDurationHours: Math.round(result.totalDuration / 3600 * 10) / 10
+      },
+      timeframe: timeframe,
+      generatedAt: new Date()
+    };
+
+  } catch (error) {
+    console.error('❌ Error obteniendo estadísticas:', error);
+    throw error;
   }
 }
 
+/**
+ * ✅ HELPER: Obtener filtro de fecha según timeframe
+ */
+getDateFilterForTimeframe(timeframe) {
+  const now = new Date();
+  
+  switch (timeframe) {
+    case 'today':
+      return new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    
+    case 'week':
+      const weekStart = new Date(now);
+      weekStart.setDate(now.getDate() - 7);
+      return weekStart;
+    
+    case 'month':
+      return new Date(now.getFullYear(), now.getMonth(), 1);
+    
+    case 'quarter':
+      const quarterStart = new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3, 1);
+      return quarterStart;
+    
+    case 'year':
+      return new Date(now.getFullYear(), 0, 1);
+    
+    default:
+      return new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7);
+  }
+}
+
+/**
+ * ✅ NUEVO: Obtener rutas por conductor con filtros
+ */
+async getRoutesByDriver(driverId, filters = {}) {
+  try {
+    console.log(`🚚 Obteniendo rutas para conductor: ${driverId}`);
+
+    const query = { driver: driverId };
+    
+    // Aplicar filtros
+    if (filters.status) {
+      query.status = filters.status;
+    }
+    
+    if (filters.dateFrom || filters.dateTo) {
+      query.createdAt = {};
+      if (filters.dateFrom) {
+        query.createdAt.$gte = new Date(filters.dateFrom);
+      }
+      if (filters.dateTo) {
+        query.createdAt.$lte = new Date(filters.dateTo);
+      }
+    }
+
+    const routes = await RoutePlan.find(query)
+      .populate({
+        path: 'orders.order',
+        select: 'order_number customer_name shipping_address total_amount status'
+      })
+      .populate('company', 'name')
+      .sort({ createdAt: -1 });
+
+    // Enriquecer con estadísticas por ruta
+    const enrichedRoutes = routes.map(route => {
+      const routeObj = route.toObject();
+      
+      const completed = routeObj.orders.filter(o => o.deliveryStatus === 'delivered').length;
+      const total = routeObj.orders.length;
+      
+      routeObj.stats = {
+        completionRate: total > 0 ? Math.round((completed / total) * 100) : 0,
+        totalPackages: total,
+        deliveredPackages: completed,
+        pendingPackages: total - completed,
+        distanceKm: routeObj.optimization?.totalDistance 
+          ? Math.round(routeObj.optimization.totalDistance / 1000 * 10) / 10
+          : 0,
+        durationMinutes: routeObj.optimization?.totalDuration
+          ? Math.round(routeObj.optimization.totalDuration / 60)
+          : 0
+      };
+      
+      return routeObj;
+    });
+
+    console.log(`✅ ${enrichedRoutes.length} rutas obtenidas para conductor`);
+    return enrichedRoutes;
+
+  } catch (error) {
+    console.error('❌ Error obteniendo rutas por conductor:', error);
+    throw error;
+  }
+}
+
+/**
+ * ✅ NUEVO: Eliminar una ruta (solo si no está en progreso)
+ */
+async deleteRoute(routeId, userId) {
+  try {
+    console.log(`🗑️ Eliminando ruta: ${routeId}`);
+
+    const route = await RoutePlan.findById(routeId);
+    if (!route) {
+      throw new Error('Ruta no encontrada');
+    }
+
+    // Validar que se puede eliminar
+    if (route.status === 'in_progress' || route.status === 'completed') {
+      throw new Error('No se puede eliminar una ruta en progreso o completada');
+    }
+
+    // Liberar las órdenes asignadas
+    await Order.updateMany(
+      { _id: { $in: route.orders.map(o => o.order) } },
+      { 
+        $unset: { assigned_driver: "", assigned_at: "" },
+        status: 'ready_for_pickup'
+      }
+    );
+
+    // Eliminar la ruta
+    await RoutePlan.findByIdAndDelete(routeId);
+
+    console.log(`✅ Ruta eliminada: ${routeId}`);
+    return { success: true, message: 'Ruta eliminada correctamente' };
+
+  } catch (error) {
+    console.error('❌ Error eliminando ruta:', error);
+    throw error;
+  }
+}
+
+/**
+ * ✅ NUEVO: Reoptimizar una ruta existente
+ */
+async reoptimizeRoute(routeId) {
+  try {
+    console.log(`🔄 Reoptimizando ruta: ${routeId}`);
+
+    const route = await RoutePlan.findById(routeId)
+      .populate('orders.order')
+      .populate('driver');
+
+    if (!route) {
+      throw new Error('Ruta no encontrada');
+    }
+
+    if (route.status === 'completed') {
+      throw new Error('No se puede reoptimizar una ruta completada');
+    }
+
+    // Solo reoptimizar órdenes pendientes
+    const pendingOrders = route.orders.filter(o => 
+      o.deliveryStatus === 'pending' || o.deliveryStatus === 'in_progress'
+    );
+
+    if (pendingOrders.length === 0) {
+      throw new Error('No hay órdenes pendientes para reoptimizar');
+    }
+
+    // Crear nueva configuración con las órdenes pendientes
+    const reoptimizeConfig = {
+      orderIds: pendingOrders.map(o => o.order._id),
+      driverId: route.driver._id,
+      companyId: route.company,
+      createdBy: route.createdBy,
+      startLocation: route.startLocation,
+      endLocation: route.endLocation,
+      preferences: route.preferences
+    };
+
+    // Eliminar la ruta actual
+    await this.deleteRoute(routeId);
+
+    // Crear nueva ruta optimizada
+    const newRoute = await this.optimizeRoute(reoptimizeConfig);
+
+    console.log(`✅ Ruta reoptimizada: ${routeId} -> ${newRoute.routePlan._id}`);
+    return newRoute;
+
+  } catch (error) {
+    console.error('❌ Error reoptimizando ruta:', error);
+    throw error;
+  }
+}
+
+/**
+ * ✅ NUEVO: Validar configuración del servicio
+ */
+validateConfiguration() {
+  const errors = [];
+
+  if (!this.googleApiKey) {
+    errors.push('GOOGLE_MAPS_API_KEY no configurada');
+  }
+
+  if (!this.pythonOptimizerUrl) {
+    console.warn('⚠️ PYTHON_OPTIMIZER_URL no configurada, usando solo optimización heurística');
+  }
+
+  if (errors.length > 0) {
+    throw new Error(`Configuración inválida: ${errors.join(', ')}`);
+  }
+
+  console.log('✅ Configuración del RouteOptimizerService válida');
+  return true;
+}
+
+} // ← Cierre de la clase RouteOptimizerService
+
+// ✅ EXPORTAR el servicio como singleton
 module.exports = new RouteOptimizerService();
