@@ -80,20 +80,21 @@ exports.optimizeRoute = async (config) => {
     // Construir la petición
     const directionsRequest = {
       params: {
+        // ✅ CORRECCIÓN: Usar getCoords directamente
         origin: getCoords(origin),
+        // ✅ CORRECCIÓN: Usar getCoords directamente
         destination: getCoords(destination),
+        // ✅ CORRECCIÓN: La estructura para waypoints es correcta
         waypoints: waypoints.map(wp => ({ location: getCoords(wp) })),
         optimizeWaypoints: false,
         travelMode: 'DRIVING',
         key: process.env.GOOGLE_MAPS_API_KEY,
       },
-       // 👇 *** AÑADIDO: Timeout de 15 segundos ***
-      timeout: 15000, // milliseconds
+      timeout: 15000, 
     };
 
-    // 👇 *** AÑADIDO: Loguear los parámetros que se envían ***
+    // Loguear los parámetros (sin cambios)
     console.log(`➡️ Enviando parámetros a Directions (Lote ${Math.floor(i / (GOOGLE_DIRECTIONS_BATCH_SIZE - 1)) + 1}):`, JSON.stringify(directionsRequest.params, null, 2));
-
     try {
       const directionsResult = await googleMapsClient.directions(directionsRequest);
       
