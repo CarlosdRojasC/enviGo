@@ -7,9 +7,8 @@ const { Client } = require("@googlemaps/google-maps-services-js");
 const geoService = new GeoService();
 const googleMapsClient = new Client({});
 
-// ====== Constantes de configuración ======
-const GOOGLE_DIRECTIONS_BATCH_POINTS = 25; // puntos por request (origen + (hasta 23 waypoints) + destino)
-const GOOGLE_MAX_WAYPOINTS = GOOGLE_DIRECTIONS_BATCH_POINTS - 2;
+// ====== Configuración general ======
+const GOOGLE_DIRECTIONS_BATCH_POINTS = 25; // (1 origen + 23 waypoints + 1 destino)
 const DIRECTIONS_TIMEOUT_MS = Number(process.env.DIRECTIONS_TIMEOUT_MS || 30000);
 const MAX_RETRIES = Number(process.env.DIRECTIONS_MAX_RETRIES || 5);
 const BASE_BACKOFF_MS = Number(process.env.DIRECTIONS_BASE_BACKOFF_MS || 500);
@@ -17,9 +16,9 @@ const BASE_BACKOFF_MS = Number(process.env.DIRECTIONS_BASE_BACKOFF_MS || 500);
 // ====== Utilidades ======
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const jitter = (n) => Math.floor(n * (0.75 + Math.random() * 0.5));
-
 const isNumber = (v) => typeof v === "number" && !Number.isNaN(v);
 
+// ✅ Normaliza cualquier formato de coordenadas
 const getCoords = (point) => {
   if (
     point &&
@@ -28,11 +27,7 @@ const getCoords = (point) => {
     typeof point.location.longitude !== "undefined"
   ) {
     return { lat: Number(point.location.latitude), lng: Number(point.location.longitude) };
-  } else if (
-    point &&
-    typeof point.latitude !== "undefined" &&
-    typeof point.longitude !== "undefined"
-  ) {
+  } else if (point && typeof point.latitude !== "undefined" && typeof point.longitude !== "undefined") {
     return { lat: Number(point.latitude), lng: Number(point.longitude) };
   }
   console.error("🚨 Punto de ruta con estructura de coordenadas inválida:", point);
@@ -41,6 +36,7 @@ const getCoords = (point) => {
 
 const validateCoords = (c) => !!(c && isNumber(c.lat) && isNumber(c.lng));
 
+// === Codificación / decodificación de polilíneas ===
 const decodePolyline = (str) => {
   let index = 0, lat = 0, lng = 0, points = [];
   while (index < str.length) {
@@ -86,6 +82,7 @@ const encodePolyline = (points) => {
   return result;
 };
 
+// ====== Peticiones con reintento exponencial ======
 async function callDirectionsWithRetry(params, labelsForLog) {
   let attempt = 0;
   while (true) {
@@ -121,7 +118,6 @@ async function callDirectionsWithRetry(params, labelsForLog) {
       const code = e?.code;
       const retriableHttp = statusCode && [408, 409, 429, 500, 502, 503, 504].includes(statusCode);
       const retriableCode = code && ["ECONNRESET", "ETIMEDOUT", "ECONNABORTED"].includes(code);
-      const payload = e?.response?.data;
       if ((retriableHttp || retriableCode) && attempt < MAX_RETRIES) {
         attempt++;
         const wait = jitter(BASE_BACKOFF_MS * Math.pow(2, attempt));
@@ -129,12 +125,13 @@ async function callDirectionsWithRetry(params, labelsForLog) {
         await sleep(wait);
         continue;
       }
-      console.error("❌ Error Directions:", e?.message, payload || "");
+      console.error("❌ Error Directions:", e?.message);
       throw e;
     }
   }
 }
 
+// ====== Parámetros opcionales de preferencias ======
 function buildPreferences(preferences = {}) {
   const avoidList = [];
   if (preferences.avoidTolls) avoidList.push("tolls");
@@ -148,40 +145,44 @@ function buildPreferences(preferences = {}) {
   return params;
 }
 
+// ====== Función principal ======
 exports.optimizeRoute = async (config) => {
   const { startLocation, endLocation, orderIds, driverId, companyId, createdBy, preferences = {} } = config;
 
   if (!process.env.GOOGLE_MAPS_API_KEY) throw new Error("Falta GOOGLE_MAPS_API_KEY");
   if (!process.env.PYTHON_OPTIMIZER_URL) throw new Error("Falta PYTHON_OPTIMIZER_URL");
 
+  // 1️⃣ Validar pedidos
   const orders = await geoService.validateOrderCoordinates(orderIds);
   if (!orders?.length) throw new Error("No hay pedidos válidos para optimizar.");
   console.log(`✅ ${orders.length} órdenes validadas.`);
 
-  const locations = [
-    getCoords(startLocation),
-    ...orders.map(getCoords),
-    getCoords(endLocation),
-  ];
-
+  // 2️⃣ Armar lista de coordenadas
+  const locations = [getCoords(startLocation), ...orders.map(getCoords), getCoords(endLocation)];
   locations.forEach((c, i) => {
     if (!validateCoords(c)) throw new Error(`Coordenadas inválidas en índice ${i}`);
   });
 
+  // 3️⃣ Llamar a Python OR-Tools
   let optimizedIndices;
   try {
     console.log(`🐍 Llamando a Python OR-Tools en ${process.env.PYTHON_OPTIMIZER_URL}`);
-    const pythonResponse = await axios.post(process.env.PYTHON_OPTIMIZER_URL, { locations, preferences }, { timeout: 45000 });
+    const pythonResponse = await axios.post(
+      process.env.PYTHON_OPTIMIZER_URL,
+      { locations, preferences },
+      { timeout: 45000 }
+    );
     optimizedIndices = pythonResponse?.data?.route;
     if (!Array.isArray(optimizedIndices) || optimizedIndices.length === 0) {
       console.error("🔎 Respuesta Python:", pythonResponse?.data);
       throw new Error("Python no devolvió una ruta válida.");
     }
   } catch (error) {
-    console.error("❌ Error en Python:", error?.message, error?.response?.data || "");
+    console.error("❌ Error en Python:", error?.message);
     throw new Error("El microservicio de optimización (Python) falló.");
   }
 
+  // 4️⃣ Reordenar las paradas según el resultado
   const originalStops = [startLocation, ...orders, endLocation];
   const optimizedStops = optimizedIndices.map((i) => originalStops[i]);
   const orderedOrders = optimizedStops.slice(1, -1);
@@ -193,6 +194,7 @@ exports.optimizeRoute = async (config) => {
   const fullPathPoints = [];
   const prefParams = buildPreferences(preferences);
 
+  // 5️⃣ Procesar en lotes Directions
   for (let i = 0; i < optimizedStops.length - 1; i += (GOOGLE_DIRECTIONS_BATCH_POINTS - 1)) {
     const batch = optimizedStops.slice(i, i + GOOGLE_DIRECTIONS_BATCH_POINTS);
     if (batch.length < 2) continue;
@@ -209,55 +211,58 @@ exports.optimizeRoute = async (config) => {
       ...prefParams,
     };
 
-    console.log(`➡️ Lote ${i / (GOOGLE_DIRECTIONS_BATCH_POINTS - 1) + 1}:`, JSON.stringify({ ...directionsParams, key: "***" }, null, 2));
+    console.log(`➡️ Lote ${i / (GOOGLE_DIRECTIONS_BATCH_POINTS - 1) + 1}: ${waypoints.length} puntos intermedios`);
     let directionsResult;
     try {
       directionsResult = await callDirectionsWithRetry(directionsParams, `Lote ${i}`);
-      console.log("📦 Google Directions respuesta bruta:", JSON.stringify(directionsResult.data, null, 2));
     } catch (e) {
       throw new Error(`Fallo en Directions API: ${e.message || "sin respuesta"}`);
     }
 
     const routes = directionsResult?.data?.routes || [];
-    if (!routes.length) throw new Error("Google Directions no devolvió rutas.");
+    if (!routes.length) {
+      console.warn(`⚠️ Google Directions no devolvió rutas para lote ${i}`);
+      continue;
+    }
+
     const route = routes[0];
     for (const leg of route.legs || []) {
-      totalDistance += leg.distance.value;
-      totalDuration += leg.duration.value;
+      totalDistance += leg.distance?.value || 0;
+      totalDuration += leg.duration?.value || 0;
     }
 
+    // ✅ Fallback: usar steps si no hay overview_polyline
     let polyline = route?.overview_polyline?.points;
-
-// 🔁 fallback si no hay overview_polyline
-if (!polyline && route?.legs?.length) {
-  console.warn("⚠️ Ruta sin overview_polyline, reconstruyendo desde steps...");
-  const stepPolys = [];
-  for (const leg of route.legs) {
-    for (const step of leg.steps || []) {
-      if (step.polyline?.points) stepPolys.push(step.polyline.points);
+    if (!polyline && route?.legs?.length) {
+      console.warn("⚠️ Ruta sin overview_polyline, reconstruyendo desde steps...");
+      const stepPolys = [];
+      for (const leg of route.legs) {
+        for (const step of leg.steps || []) {
+          if (step.polyline?.points) stepPolys.push(step.polyline.points);
+        }
+      }
+      const decoded = stepPolys.flatMap(decodePolyline);
+      if (decoded.length) {
+        fullPathPoints.push(...decoded);
+        polyline = encodePolyline(decoded);
+      }
     }
-  }
-  const decoded = stepPolys.flatMap(decodePolyline);
-  if (decoded.length) {
-    fullPathPoints.push(...decoded);
-    polyline = encodePolyline(decoded);
-  }
-}
 
-if (polyline) {
-  polylineSegments.push(polyline);
-  const pts = decodePolyline(polyline);
-  if (fullPathPoints.length && JSON.stringify(fullPathPoints.at(-1)) === JSON.stringify(pts[0])) {
-    fullPathPoints.push(...pts.slice(1));
-  } else {
-    fullPathPoints.push(...pts);
-  }
-}
+    if (polyline) {
+      polylineSegments.push(polyline);
+      const pts = decodePolyline(polyline);
+      if (fullPathPoints.length && JSON.stringify(fullPathPoints.at(-1)) === JSON.stringify(pts[0])) {
+        fullPathPoints.push(...pts.slice(1));
+      } else {
+        fullPathPoints.push(...pts);
+      }
+    }
   }
 
   console.log(`✅ Lotes completados. Distancia: ${totalDistance}m, Duración: ${totalDuration}s`);
   const overviewPolyline = fullPathPoints.length ? encodePolyline(fullPathPoints) : undefined;
 
+  // 6️⃣ Guardar en la base de datos
   const routePlan = new RoutePlan({
     company: companyId,
     driver: driverId,
@@ -282,6 +287,7 @@ if (polyline) {
 
   await routePlan.save();
   await routePlan.populate("driver orders.order");
-  console.log("✅ Ruta híbrida optimizada y guardada en BD.");
+  console.log(`✅ Ruta optimizada y guardada (${overviewPolyline ? "con" : "sin"} polyline).`);
+
   return routePlan;
 };
