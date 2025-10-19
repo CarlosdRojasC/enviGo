@@ -1,7 +1,6 @@
 // backend/src/services/routeOptimizer.service.js
 const axios = require("axios");
 const RoutePlan = require("../models/RoutePlan");
-const Order = require("../models/Order");
 const GeoService = require("./routeOptimizer/geo.service");
 
 const GOOGLE_ROUTE_OPTIMIZATION_URL =
@@ -29,7 +28,7 @@ exports.optimizeRoute = async (config) => {
     throw new Error("Faltan datos para optimizar la ruta.");
   }
 
-  // Obtener pedidos con coordenadas válidas
+  // 🧭 Obtener pedidos con coordenadas válidas
   const orders = await geoService.validateOrderCoordinates(orderIds);
   if (orders.length === 0) {
     throw new Error("No hay pedidos válidos para optimizar la ruta.");
@@ -70,7 +69,7 @@ exports.optimizeRoute = async (config) => {
             },
           },
         },
-        duration: { seconds: 120 }, // Ejemplo: 2 minutos por entrega
+        duration: { seconds: 120 }, // ✅ Correcto
       },
     ],
   }));
@@ -93,6 +92,15 @@ exports.optimizeRoute = async (config) => {
     solvingMode: "OPTIMIZE",
   };
 
+  // ✅ Verificar JSON válido antes de enviarlo
+  try {
+    JSON.parse(JSON.stringify(body));
+  } catch (e) {
+    console.error("🚨 JSON inválido en payload de optimización:", e.message);
+    console.error(JSON.stringify(body, null, 2));
+    throw new Error("Payload JSON inválido antes de llamar a la API de Google.");
+  }
+
   // 🔍 Log de depuración
   console.log("📦 Enviando payload a Google Route Optimization API:");
   console.log(JSON.stringify(body, null, 2));
@@ -105,6 +113,9 @@ exports.optimizeRoute = async (config) => {
       },
     });
 
+    console.log("📡 Respuesta de Google Route Optimization API:");
+    console.log(JSON.stringify(response.data, null, 2));
+
     const solution = response.data.optimizeToursResponse;
     if (!solution || !solution.routes || solution.routes.length === 0) {
       throw new Error("No se recibió una solución de optimización válida.");
@@ -112,15 +123,14 @@ exports.optimizeRoute = async (config) => {
 
     const route = solution.routes[0];
 
-    // 🔢 Ordenar pedidos según el resultado de la API
+    // 🔢 Ordenar pedidos según la respuesta optimizada
     const orderedDeliveries =
       route.vehicleJourneys?.[0]?.events
         ?.filter((e) => e.shipmentName)
         ?.map((e, idx) => ({
           order:
-            orders.find(
-              (o, i) => `order_${i + 1}` === e.shipmentName
-            )?._id || null,
+            orders.find((o, i) => `order_${i + 1}` === e.shipmentName)?._id ||
+            null,
           sequenceNumber: idx + 1,
           deliveryStatus: "pending",
         })) || [];
@@ -147,16 +157,17 @@ exports.optimizeRoute = async (config) => {
     console.log("✅ Ruta optimizada correctamente con Route Optimization API.");
     return routePlan;
   } catch (error) {
+    console.error("❌ Error en optimización con Route Optimization API:");
+    console.error("🧾 Status:", error.response?.status);
+    console.error("🧩 Headers:", error.response?.headers);
     console.error(
-      "❌ Error en optimización con Route Optimization API:",
-      error.response?.data || error.message
+      "📡 Response data:",
+      JSON.stringify(error.response?.data, null, 2)
     );
-    if (error.response?.data) {
-      console.error(
-        "📡 Detalle del error:",
-        JSON.stringify(error.response.data, null, 2)
-      );
-    }
+    console.error(
+      "📤 Request payload:",
+      JSON.stringify(body, null, 2)
+    );
     throw new Error("Error optimizando la ruta con Google Route Optimization API.");
   }
 };
