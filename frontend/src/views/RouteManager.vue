@@ -1,6 +1,5 @@
 <template>
   <div class="p-6 bg-gray-50 min-h-screen">
-    <!-- Header -->
     <div class="bg-white rounded-xl shadow-sm p-6 mb-6 flex justify-between items-center">
       <div>
         <h1 class="text-3xl font-bold text-gray-900 flex items-center gap-2">
@@ -12,8 +11,7 @@
       </div>
       <div class="flex gap-3">
         <button
-          @click="showRouteOptimizer = true"
-          class="bg-gradient-to-r from-blue-500 to-purple-600 text-white px-6 py-3 rounded-lg font-semibold hover:shadow-lg transform hover:-translate-y-0.5 transition-all duration-200"
+          @click="showRouteOptimizerModal = true" class="bg-gradient-to-r from-blue-500 to-purple-600 text-white px-6 py-3 rounded-lg font-semibold hover:shadow-lg transform hover:-translate-y-0.5 transition-all duration-200"
         >
           ✨ Optimizar Nueva Ruta
         </button>
@@ -27,7 +25,6 @@
       </div>
     </div>
 
-    <!-- Stats -->
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
       <div
         v-for="card in statCards"
@@ -44,11 +41,10 @@
       </div>
     </div>
 
-    <!-- Table -->
     <div class="bg-white rounded-xl shadow-sm overflow-hidden">
       <div class="p-6 border-b border-gray-200 flex justify-between items-center">
         <h3 class="text-xl font-semibold text-gray-900">Lista de Rutas</h3>
-      </div>
+        </div>
 
       <div class="overflow-x-auto">
         <table class="w-full">
@@ -64,184 +60,319 @@
           </thead>
           <tbody class="bg-white divide-y divide-gray-200">
             <tr v-if="loading">
-              <td colspan="6" class="px-6 py-12 text-center">⏳ Cargando...</td>
+              <td colspan="6" class="px-6 py-12 text-center text-gray-500">
+                <div class="flex items-center justify-center">
+                  <div class="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+                  <span class="ml-2">Cargando rutas...</span>
+                </div>
+              </td>
             </tr>
             <tr v-else-if="routes.length === 0">
-              <td colspan="6" class="px-6 py-12 text-center">🛣️ No hay rutas registradas</td>
+              <td colspan="6" class="px-6 py-12 text-center text-gray-500">
+                 <div class="text-center">
+                  <div class="text-5xl mb-3">🛣️</div>
+                  <h3 class="text-lg font-medium text-gray-800 mb-1">No hay rutas registradas</h3>
+                  <p class="text-gray-500 mb-4">Crea tu primera ruta optimizada.</p>
+                   <button
+                    @click="showRouteOptimizerModal = true"
+                    class="bg-blue-600 text-white px-5 py-2 rounded-lg font-medium hover:bg-blue-700 transition-colors"
+                  >
+                    Optimizar Ruta
+                  </button>
+                </div>
+              </td>
             </tr>
             <tr v-for="route in routes" :key="route._id" class="hover:bg-gray-50">
-              <td class="px-6 py-4 font-medium">#{{ route._id.slice(-6).toUpperCase() }}</td>
-              <td class="px-6 py-4">{{ route.driver?.name || "Sin asignar" }}</td>
-              <td class="px-6 py-4">{{ route.orders?.length || 0 }}</td>
-              <td class="px-6 py-4">{{ formatDistance(route.optimization?.totalDistance) }}</td>
-              <td class="px-6 py-4">{{ formatDuration(route.optimization?.totalDuration) }}</td>
-              <td class="px-6 py-4">
-                <button @click="viewRoute(route)" class="text-blue-600 hover:text-blue-800">👁️ Ver</button>
-              </td>
+              <td class="px-6 py-4 font-medium text-gray-800">#{{ route._id.slice(-6).toUpperCase() }}</td>
+              <td class="px-6 py-4 text-gray-700">{{ route.driver?.name || "Sin asignar" }}</td>
+              <td class="px-6 py-4 text-gray-700">{{ route.orders?.length || 0 }}</td>
+              <td class="px-6 py-4 text-gray-700">{{ formatDistance(route.optimization?.totalDistance) }}</td>
+              <td class="px-6 py-4 text-gray-700">{{ formatDuration(route.optimization?.totalDuration) }}</td>
+              <td class="px-6 py-4 whitespace-nowrap">
+                <button @click="viewRoute(route)" class="text-blue-600 hover:text-blue-800 font-medium px-2 py-1 rounded hover:bg-blue-50 transition-colors">
+                  👁️ Ver Mapa
+                </button>
+                </td>
             </tr>
           </tbody>
         </table>
+        </div>
+    </div>
+
+    <div
+      v-if="showRouteMap"
+      class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4 backdrop-blur-sm"
+      @click.self="showRouteMap = false" >
+      <div class="bg-white rounded-xl w-full max-w-6xl shadow-xl overflow-hidden flex flex-col max-h-[90vh]">
+        <div class="flex justify-between items-center border-b p-4 bg-gray-50">
+          <h3 class="text-lg font-semibold text-gray-900 flex items-center gap-2">
+            <span class="text-xl">🗺️</span> Ruta #{{ activeRoute?._id?.slice(-6).toUpperCase() }}
+            <span class="text-sm font-normal text-gray-500 ml-2">({{ activeRoute?.driver?.name || 'Sin asignar' }})</span>
+          </h3>
+          <button @click="showRouteMap = false" class="text-gray-500 hover:text-red-600 transition-colors p-1 rounded-full hover:bg-gray-200">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+          </button>
+        </div>
+        <div class="relative p-4 flex-grow overflow-hidden">
+          <div id="routeMapContainer" class="w-full h-full rounded-lg border bg-gray-100 flex items-center justify-center text-gray-400">
+            <span v-if="!mapInstance">Inicializando mapa...</span>
+          </div>
+        </div>
+         <div class="p-3 bg-gray-50 border-t text-sm text-gray-600 text-center">
+          Distancia: {{ formatDistance(activeRoute?.optimization?.totalDistance) }} | Duración estimada: {{ formatDuration(activeRoute?.optimization?.totalDuration) }}
+        </div>
       </div>
     </div>
 
-    <!-- 🗺️ Mapa Modal -->
-    <div
-      v-if="showRouteMap"
-      class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
-    >
-      <div class="bg-white rounded-xl w-full max-w-6xl shadow-xl overflow-hidden">
-        <div class="flex justify-between items-center border-b p-4">
-          <h3 class="text-lg font-semibold text-gray-900">
-            Ruta #{{ activeRoute?._id?.slice(-6).toUpperCase() }}
-          </h3>
-          <button @click="showRouteMap = false" class="text-gray-600 hover:text-gray-900">✖</button>
+    <div v-if="showRouteOptimizerModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" @click.self="showRouteOptimizerModal = false">
+      <div class="bg-white rounded-xl max-w-lg w-full max-h-[80vh] overflow-y-auto" @click.stop>
+        <div class="p-6 border-b border-gray-200 flex justify-between items-center">
+          <h3 class="text-lg font-semibold text-gray-900">✨ Optimizar Nueva Ruta</h3>
+          <button @click="showRouteOptimizerModal = false" class="text-gray-400 hover:text-gray-600">✖</button>
         </div>
-        <div class="relative p-4">
-          <div id="routeMap" class="w-full h-[550px] rounded-lg border"></div>
+        <div class="p-6">
+          <p class="text-gray-600 mb-4">Aquí irá el formulario para seleccionar conductor, órdenes, etc.</p>
+          <p class="text-center text-orange-500 bg-orange-50 p-3 rounded border border-orange-200">🚧 Componente en construcción 🚧</p>
+          <button
+            @click="showRouteOptimizerModal = false"
+            class="mt-6 w-full bg-gray-100 text-gray-700 px-4 py-2 rounded-lg font-medium hover:bg-gray-200 transition-colors"
+          >
+            Cerrar
+          </button>
         </div>
       </div>
     </div>
+
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted, nextTick } from "vue";
-import { apiService } from "../services/api";
-import { setOptions, importLibrary } from "@googlemaps/js-api-loader";
+import { apiService } from "../services/api"; // Asegúrate que la ruta sea correcta
+// ✅ ¡Importamos el loader de Google Maps!
+import { Loader } from "@googlemaps/js-api-loader";
 
+// State
 const routes = ref([]);
 const loading = ref(false);
 const showRouteMap = ref(false);
 const activeRoute = ref(null);
-const mapInstance = ref(null);
-const showRouteOptimizer = ref(false);
+const mapInstance = ref(null); // Para guardar la instancia del mapa
+const showRouteOptimizerModal = ref(false);
 
-const statCards = computed(() => [
-  { icon: "🛣️", label: "Rutas Totales", value: routes.value.length },
-  { icon: "✅", label: "Completadas", value: routes.value.filter(r => r.status === 'completed').length },
-  { icon: "🚀", label: "En Progreso", value: routes.value.filter(r => r.status === 'in_progress').length },
-  { icon: "📊", label: "Tasa Éxito", value: `${Math.round((routes.value.filter(r => r.status === 'completed').length / (routes.value.length || 1)) * 100)}%` }
-]);
+// Loader de Google Maps API
+const loader = new Loader({
+  apiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "", // Usa tu variable de entorno
+  version: "weekly",
+  libraries: ["maps", "geometry", "marker"], // Carga las librerías necesarias
+});
 
+// Computed Stats
+const statCards = computed(() => {
+    const total = routes.value.length;
+    const completed = routes.value.filter(r => r.status === 'completed').length;
+    const inProgress = routes.value.filter(r => r.status === 'in_progress').length;
+    const completionRate = total > 0 ? Math.round((completed / total) * 100) : 0;
+    return [
+      { icon: "🛣️", label: "Rutas Totales", value: total },
+      { icon: "✅", label: "Completadas", value: completed },
+      { icon: "🚀", label: "En Progreso", value: inProgress },
+      { icon: "📊", label: "Tasa Éxito", value: `${completionRate}%` }
+    ];
+});
+
+// Methods
 const loadRoutes = async () => {
   loading.value = true;
+  mapInstance.value = null; // Resetear mapa al recargar
   try {
-    const response = await apiService.routes.getAll();
-    routes.value = response.data.data.routes || [];
+    // ASUMIENDO que tu API devuelve { data: { routes: [...] } }
+    // Ajusta según la estructura real de tu respuesta
+    const response = await apiService.routes.getAll(); 
+    routes.value = response.data?.data?.routes || response.data?.routes || response.data || [];
     console.log("📦 Rutas cargadas:", routes.value.length);
   } catch (err) {
     console.error("❌ Error cargando rutas:", err);
+    routes.value = []; // Limpiar en caso de error
+    // TODO: Mostrar un toast o mensaje de error al usuario
   } finally {
     loading.value = false;
   }
 };
 
-// Mostrar ruta en Google Maps
+const refreshRoutes = () => loadRoutes();
+
+/**
+ * 🗺️ Función para mostrar la ruta en el mapa (CORREGIDA)
+ */
 const viewRoute = async (route) => {
   activeRoute.value = route;
   showRouteMap.value = true;
-  await nextTick();
+  mapInstance.value = null; // Limpia instancia anterior
+  await nextTick(); // Espera a que el modal y el div del mapa existan en el DOM
 
-  console.log("🗺️ Mostrando ruta:", route._id);
-  console.log("🔑 API Key detectada:", import.meta.env.VITE_GOOGLE_MAPS_API_KEY);
-
-  if (!import.meta.env.VITE_GOOGLE_MAPS_API_KEY) {
-    console.error("🚫 ERROR: No se encontró VITE_GOOGLE_MAPS_API_KEY en el entorno.");
+  console.log("🗺️ Mostrando ruta pre-calculada:", route._id);
+  const mapContainer = document.getElementById("routeMapContainer");
+   if (!mapContainer) {
+    console.error("❌ No se encontró el div '#routeMapContainer'");
     return;
+  }
+  mapContainer.innerHTML = 'Cargando mapa...'; // Mensaje de carga
+
+  // Verificar si la ruta tiene una polilínea guardada
+  const polylineString = route.optimization?.overview_polyline;
+  if (!polylineString) {
+    console.warn("⚠️ Esta ruta no tiene una polilínea guardada desde el backend.");
+    mapContainer.innerHTML = '⚠️ No hay datos de mapa para esta ruta.';
+    // Podrías inicializar un mapa centrado, pero sin ruta
+    // initEmptyMap(route.startLocation);
+    return; 
   }
 
   try {
-    // Configurar Google Maps API
-    setOptions({
-      apiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY,
-      version: "weekly",
-    });
-    console.log("✅ setOptions ejecutado correctamente.");
+    // Cargar librerías de Google Maps (esto usa el loader inicializado)
+    const google = await loader.load();
+    console.log("✅ Google Maps API cargada");
 
-    const { Map } = await importLibrary("maps");
-    const { DirectionsService, DirectionsRenderer } = await importLibrary("routes");
-    console.log("✅ Librerías de Google Maps cargadas correctamente.");
-
-    const mapEl = document.getElementById("routeMap");
-    if (!mapEl) {
-      console.error("❌ No se encontró el elemento del mapa (#routeMap)");
-      return;
-    }
-
-    const map = new Map(mapEl, {
-      center: {
-        lat: route.startLocation.latitude || -33.45,
-        lng: route.startLocation.longitude || -70.65,
-      },
+    // Inicializar el mapa
+    const map = new google.maps.Map(mapContainer, {
+      center: { lat: route.startLocation.latitude, lng: route.startLocation.longitude },
       zoom: 12,
+      mapId: "ENVIGO_ROUTE_MAP" // Opcional: ID para estilos personalizados
     });
-    mapInstance.value = map;
-    console.log("🗺️ Mapa inicializado correctamente.");
+    mapInstance.value = map; // Guardar instancia
+    
+    const bounds = new google.maps.LatLngBounds(); // Para ajustar el zoom automáticamente
 
-    const directionsService = new DirectionsService();
-    const directionsRenderer = new DirectionsRenderer({
-      map,
-      polylineOptions: { strokeColor: "#1E88E5", strokeWeight: 5 },
+    // 1. Dibujar la Polilínea desde el Backend
+    const decodedPath = google.maps.geometry.encoding.decodePath(polylineString);
+    const routePolyline = new google.maps.Polyline({
+        path: decodedPath,
+        geodesic: true,
+        strokeColor: "#1E88E5", // Azul
+        strokeOpacity: 0.9,
+        strokeWeight: 5,
     });
+    routePolyline.setMap(map);
+    decodedPath.forEach(point => bounds.extend(point)); // Ajustar bounds
+    console.log("✅ Polilínea dibujada");
 
-    // Construir los puntos
-    const start = {
-      lat: route.startLocation.latitude,
-      lng: route.startLocation.longitude,
-    };
-    const end = {
-      lat: route.endLocation.latitude,
-      lng: route.endLocation.longitude,
-    };
-    const waypoints = (route.orders || [])
-      .filter(o => o.order?.location)
-      .map(o => ({
-        location: {
-          lat: o.order.location.latitude,
-          lng: o.order.location.longitude,
-        },
-        stopover: true,
-      }));
+    // 2. Añadir Marcador de Inicio (Bodega)
+    const startPos = { lat: route.startLocation.latitude, lng: route.startLocation.longitude };
+    new google.maps.marker.AdvancedMarkerElement({
+      map: map,
+      position: startPos,
+      title: "Inicio: Bodega",
+      // Opcional: Icono personalizado
+      // content: createMarkerElement("🏭"), 
+    });
+    bounds.extend(startPos);
 
-    console.log("📍 Puntos de ruta:", { start, waypointsCount: waypoints.length, end });
-
-    const request = {
-      origin: start,
-      destination: end,
-      waypoints,
-      travelMode: google.maps.TravelMode.DRIVING,
-      optimizeWaypoints: false,
-    };
-
-    console.log("🚀 Solicitando ruta a Directions API...");
-    directionsService.route(request, (result, status) => {
-      console.log("📡 Respuesta Directions API:", status);
-      if (status === "OK") {
-        directionsRenderer.setDirections(result);
-        console.log("✅ Ruta renderizada correctamente.");
+    // 3. Añadir Marcadores para cada Orden (Paradas)
+    (route.orders || []).forEach((orderItem, index) => {
+      if (orderItem.order?.location?.latitude && orderItem.order?.location?.longitude) {
+        const position = {
+          lat: orderItem.order.location.latitude,
+          lng: orderItem.order.location.longitude,
+        };
+        new google.maps.marker.AdvancedMarkerElement({
+          map: map,
+          position: position,
+          title: `Parada ${index + 1}: ${orderItem.order.customer_name || 'Cliente'} #${orderItem.order.order_number || ''}`,
+          // Opcional: Contenido personalizado (número)
+           content: buildMarkerContent(index + 1), 
+        });
+        bounds.extend(position);
       } else {
-        console.error("❌ Error al renderizar la ruta:", status, result);
+         console.warn(`⚠️ Orden ${orderItem.order?._id} sin coordenadas válidas.`);
       }
     });
+    console.log(`✅ ${route.orders?.length || 0} marcadores de parada añadidos`);
+
+
+    // 4. Añadir Marcador de Fin (Casa Conductor)
+    const endPos = { lat: route.endLocation.latitude, lng: route.endLocation.longitude };
+    new google.maps.marker.AdvancedMarkerElement({
+      map: map,
+      position: endPos,
+      title: "Fin: Casa Conductor",
+       // Opcional: Icono personalizado
+      // content: createMarkerElement("🏠"), 
+    });
+    bounds.extend(endPos);
+
+    // 5. Ajustar Zoom y Centro del Mapa para mostrar todo
+    if (!bounds.isEmpty()) {
+        map.fitBounds(bounds, 60); // Ajusta con 60px de padding
+         // Limitar el zoom máximo después de fitBounds
+        google.maps.event.addListenerOnce(map, 'idle', function() {
+            if (map.getZoom() > 16) {
+                map.setZoom(16);
+            }
+        });
+    }
+
+    console.log("✅ Mapa renderizado con polilínea y marcadores del backend.");
+
   } catch (err) {
-    console.error("💥 Error al inicializar el mapa o API:", err);
+    console.error("💥 Error al inicializar el mapa o dibujar la ruta:", err);
+     mapContainer.innerHTML = `❌ Error al cargar el mapa: ${err.message}`;
+    // TODO: Mostrar un toast o mensaje de error al usuario
   }
 };
 
-const formatDistance = (m) => (!m ? "-" : `${(m / 1000).toFixed(1)} km`);
-const formatDuration = (s) => (!s ? "-" : `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`);
-const refreshRoutes = () => loadRoutes();
+// Helper para crear contenido de marcador (opcional)
+const buildMarkerContent = (label) => {
+  const element = document.createElement("div");
+  element.style.width = "28px";
+  element.style.height = "28px";
+  element.style.borderRadius = "50%";
+  element.style.backgroundColor = "#FFFFFF"; // Fondo blanco
+  element.style.border = "2px solid #1E88E5"; // Borde azul
+  element.style.display = "flex";
+  element.style.alignItems = "center";
+  element.style.justifyContent = "center";
+  element.style.fontWeight = "bold";
+  element.style.fontSize = "14px";
+  element.style.color = "#1E88E5"; // Texto azul
+  element.textContent = label.toString();
+  return element;
+};
 
+// Funciones de formato (igual que antes)
+const formatDistance = (meters) => {
+  if (meters === null || typeof meters === 'undefined') return "-";
+  if (meters < 1000) return `${meters} m`;
+  return `${(meters / 1000).toFixed(1)} km`;
+};
+
+const formatDuration = (seconds) => {
+  if (seconds === null || typeof seconds === 'undefined' || seconds === 0) return "-";
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  let result = "";
+  if (hours > 0) result += `${hours}h `;
+  result += `${minutes}min`;
+  return result.trim();
+};
+
+// Lifecycle Hook
 onMounted(() => {
   console.log("🧠 Iniciando componente RouteManager...");
+  // Verificar si la API Key está presente
+  if (!import.meta.env.VITE_GOOGLE_MAPS_API_KEY) {
+     console.error("🚫 FATAL: VITE_GOOGLE_MAPS_API_KEY no está definida en el archivo .env del frontend!");
+     alert("Error de configuración: Falta la clave de Google Maps API en el frontend.");
+  }
   loadRoutes();
 });
 </script>
 
 <style scoped>
-#routeMap {
+/* Estilos adicionales si son necesarios */
+#routeMapContainer {
   width: 100%;
-  height: 550px;
-  border-radius: 10px;
+  height: 100%; /* Asegura que tome toda la altura del contenedor padre */
+  border-radius: 8px; /* Bordes redondeados para el mapa */
 }
 </style>
