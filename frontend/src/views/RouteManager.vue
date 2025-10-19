@@ -179,7 +179,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { apiService } from '../services/api'
-import { LMap, LTileLayer, LMarker, LPopup, LTooltip, LPolyline } from 'vue-leaflet'
+import { LMap, LTileLayer, LMarker, LPopup, LTooltip, LPolyline } from '@vue-leaflet/vue-leaflet'
 import 'leaflet/dist/leaflet.css'
 import polyline from '@mapbox/polyline'
 
