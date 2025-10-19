@@ -252,63 +252,77 @@ const loadDrivers = async () => {
 
 // 🗺️ Muestra ruta en Google Maps
 const viewRoute = async (route) => {
-  activeRoute.value = route
-  showRouteMap.value = true
-  await nextTick()
+  try {
+    activeRoute.value = route
+    showRouteMap.value = true
+    await nextTick()
 
-  const loader = new Loader({
-    apiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY,
-    version: "weekly",
-    libraries: ["places"],
-  })
+    // Nueva API funcional (sin Loader)
+    const { setOptions, importLibrary } = await import("@googlemaps/js-api-loader")
 
-  const google = await loader.load()
-  const mapEl = document.getElementById("routeMap")
-  if (!mapEl) return
+    setOptions({
+      apiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY,
+      version: "weekly",
+    })
 
-  const map = new google.maps.Map(mapEl, {
-    center: {
-      lat: route.startLocation?.latitude ?? -33.45,
-      lng: route.startLocation?.longitude ?? -70.65,
-    },
-    zoom: 12,
-    mapTypeId: "roadmap",
-  })
+    const { Map } = await importLibrary("maps")
+    const { DirectionsService, DirectionsRenderer } = await importLibrary("routes")
 
-  const directionsService = new google.maps.DirectionsService()
-  const directionsRenderer = new google.maps.DirectionsRenderer({
-    map,
-    polylineOptions: { strokeColor: "#1E88E5", strokeWeight: 5 },
-  })
+    const mapEl = document.getElementById("routeMap")
+    if (!mapEl) {
+      console.error("No se encontró el contenedor del mapa")
+      return
+    }
 
-  const waypoints = (route.orders || [])
-    .filter((o) => o?.order?.location)
-    .map((o) => ({
-      location: {
-        lat: o.order.location.latitude,
-        lng: o.order.location.longitude,
+    const map = new Map(mapEl, {
+      center: {
+        lat: route.startLocation?.latitude ?? -33.45,
+        lng: route.startLocation?.longitude ?? -70.65,
       },
-      stopover: true,
-    }))
+      zoom: 12,
+      mapTypeId: "roadmap",
+    })
 
-  const request = {
-    origin: {
-      lat: route.startLocation.latitude,
-      lng: route.startLocation.longitude,
-    },
-    destination: {
-      lat: route.endLocation.latitude,
-      lng: route.endLocation.longitude,
-    },
-    waypoints,
-    travelMode: google.maps.TravelMode.DRIVING,
-    optimizeWaypoints: true,
+    const directionsService = new DirectionsService()
+    const directionsRenderer = new DirectionsRenderer({
+      map,
+      polylineOptions: { strokeColor: "#1E88E5", strokeWeight: 5 },
+    })
+
+    const waypoints = (route.orders || [])
+      .filter((o) => o?.order?.location)
+      .map((o) => ({
+        location: {
+          lat: o.order.location.latitude,
+          lng: o.order.location.longitude,
+        },
+        stopover: true,
+      }))
+
+    const request = {
+      origin: {
+        lat: route.startLocation.latitude,
+        lng: route.startLocation.longitude,
+      },
+      destination: {
+        lat: route.endLocation.latitude,
+        lng: route.endLocation.longitude,
+      },
+      waypoints,
+      travelMode: google.maps.TravelMode.DRIVING,
+      optimizeWaypoints: true,
+    }
+
+    directionsService.route(request, (result, status) => {
+      if (status === "OK") {
+        directionsRenderer.setDirections(result)
+      } else {
+        console.warn("Error al mostrar la ruta:", status)
+      }
+    })
+  } catch (err) {
+    console.error("❌ Error en viewRoute:", err)
   }
-
-  directionsService.route(request, (result, status) => {
-    if (status === "OK") directionsRenderer.setDirections(result)
-    else console.warn("Error al mostrar ruta:", status)
-  })
 }
 
 // Utilidades
