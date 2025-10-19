@@ -259,6 +259,7 @@ const viewRoute = async (route) => {
 
     // Nueva API funcional (sin Loader)
     const { setOptions, importLibrary } = await import("@googlemaps/js-api-loader")
+console.log("🧩 API KEY:", import.meta.env.VITE_GOOGLE_MAPS_API_KEY)
 
     setOptions({
       apiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY,
