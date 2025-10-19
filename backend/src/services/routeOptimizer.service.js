@@ -110,11 +110,12 @@ exports.optimizeRoute = async (config) => {
         console.warn("⚠️ Google Directions no devolvió ruta para un lote.");
       }
     } catch (e) {
-       // Log más detallado del error de Google
-      const googleErrorMsg = e.response?.data?.error_message || e.message || 'Error desconocido';
-      console.error(`❌ ERROR en lote (${originLabel} -> ${destinationLabel}):`, googleErrorMsg);
-      // Incluir el error específico en la excepción lanzada
-      throw new Error(`Fallo en un lote de Google Directions (${originLabel} -> ${destinationLabel}): ${googleErrorMsg}`);
+      // 👇 *** LOG THE ENTIRE ERROR OBJECT ***
+      console.error(`❌ ERROR COMPLETO en lote (${originLabel} -> ${destinationLabel}):`, JSON.stringify(e, Object.getOwnPropertyNames(e), 2)); // Stringify for better logging
+
+      // Use a safe fallback message for the thrown error
+      const errorMsg = e.message || 'Error desconocido al llamar a Directions API';
+      throw new Error(`Fallo en un lote de Google Directions (${originLabel} -> ${destinationLabel}): ${errorMsg}`);
     }
   }
 
