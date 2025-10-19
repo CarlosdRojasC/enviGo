@@ -140,6 +140,7 @@ const viewRoute = async (route) => {
   activeRoute.value = route;
   showRouteMap.value = true;
   await nextTick();
+console.log("🔑 API Key detectada en frontend:", import.meta.env.VITE_GOOGLE_MAPS_API_KEY);
 
   // Configurar Google Maps API
   setOptions({
