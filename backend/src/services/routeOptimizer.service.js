@@ -33,7 +33,7 @@ exports.optimizeRoute = async (config) => {
     throw new Error("No hay pedidos válidos para optimizar la ruta.");
   }
 
-  // Construir puntos intermedios
+  // Construir puntos intermedios (waypoints)
   const intermediates = orders.map((order) => ({
     location: {
       latLng: {
@@ -43,15 +43,33 @@ exports.optimizeRoute = async (config) => {
     },
   }));
 
+  // ⚙️ Construir cuerpo de request correctamente (sin address)
   const body = {
-    origin: { location: { latLng: startLocation } },
-    destination: { location: { latLng: endLocation } },
+    origin: {
+      location: {
+        latLng: {
+          latitude: startLocation.latitude,
+          longitude: startLocation.longitude,
+        },
+      },
+    },
+    destination: {
+      location: {
+        latLng: {
+          latitude: endLocation.latitude,
+          longitude: endLocation.longitude,
+        },
+      },
+    },
     intermediates,
     travelMode: "DRIVE",
     routingPreference: "TRAFFIC_AWARE_OPTIMAL",
     optimizeWaypointOrder: true,
     polylineQuality: "HIGH_QUALITY",
   };
+
+  // 🧩 Log de depuración del payload
+  console.log("📦 Enviando payload a Google Routes API:\n", JSON.stringify(body, null, 2));
 
   try {
     const response = await axios.post(GOOGLE_ROUTES_URL, body, {
@@ -92,9 +110,14 @@ exports.optimizeRoute = async (config) => {
     await routePlan.save();
     await routePlan.populate("driver orders.order");
 
+    console.log("✅ Ruta optimizada correctamente con Google API");
     return routePlan;
+
   } catch (error) {
     console.error("❌ Error en optimización con Google API:", error.response?.data || error.message);
+    if (error.response?.data) {
+      console.error("📡 Detalle completo del error de Google:", JSON.stringify(error.response.data, null, 2));
+    }
     throw new Error("Error optimizando la ruta con Google Maps API");
   }
 };
