@@ -128,8 +128,9 @@ const loadRoutes = async () => {
   try {
     const response = await apiService.routes.getAll();
     routes.value = response.data.data.routes || [];
+    console.log("📦 Rutas cargadas:", routes.value.length);
   } catch (err) {
-    console.error("Error cargando rutas:", err);
+    console.error("❌ Error cargando rutas:", err);
   } finally {
     loading.value = false;
   }
@@ -140,69 +141,91 @@ const viewRoute = async (route) => {
   activeRoute.value = route;
   showRouteMap.value = true;
   await nextTick();
-console.log("🔑 API Key detectada en frontend:", import.meta.env.VITE_GOOGLE_MAPS_API_KEY);
 
-  // Configurar Google Maps API
-  setOptions({
-    apiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY,
-    version: "weekly",
-  });
+  console.log("🗺️ Mostrando ruta:", route._id);
+  console.log("🔑 API Key detectada:", import.meta.env.VITE_GOOGLE_MAPS_API_KEY);
 
-  const { Map } = await importLibrary("maps");
-  const { DirectionsService, DirectionsRenderer } = await importLibrary("routes");
+  if (!import.meta.env.VITE_GOOGLE_MAPS_API_KEY) {
+    console.error("🚫 ERROR: No se encontró VITE_GOOGLE_MAPS_API_KEY en el entorno.");
+    return;
+  }
 
-  const mapEl = document.getElementById("routeMap");
-  if (!mapEl) return;
+  try {
+    // Configurar Google Maps API
+    setOptions({
+      apiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY,
+      version: "weekly",
+    });
+    console.log("✅ setOptions ejecutado correctamente.");
 
-  const map = new Map(mapEl, {
-    center: {
-      lat: route.startLocation.latitude || -33.45,
-      lng: route.startLocation.longitude || -70.65,
-    },
-    zoom: 12,
-  });
-  mapInstance.value = map;
+    const { Map } = await importLibrary("maps");
+    const { DirectionsService, DirectionsRenderer } = await importLibrary("routes");
+    console.log("✅ Librerías de Google Maps cargadas correctamente.");
 
-  const directionsService = new DirectionsService();
-  const directionsRenderer = new DirectionsRenderer({
-    map,
-    polylineOptions: { strokeColor: "#1E88E5", strokeWeight: 5 },
-  });
-
-  // Construir los puntos
-  const start = {
-    lat: route.startLocation.latitude,
-    lng: route.startLocation.longitude,
-  };
-  const end = {
-    lat: route.endLocation.latitude,
-    lng: route.endLocation.longitude,
-  };
-  const waypoints = (route.orders || [])
-    .filter(o => o.order?.location)
-    .map(o => ({
-      location: {
-        lat: o.order.location.latitude,
-        lng: o.order.location.longitude,
-      },
-      stopover: true,
-    }));
-
-  const request = {
-    origin: start,
-    destination: end,
-    waypoints,
-    travelMode: google.maps.TravelMode.DRIVING,
-    optimizeWaypoints: false,
-  };
-
-  directionsService.route(request, (result, status) => {
-    if (status === "OK") {
-      directionsRenderer.setDirections(result);
-    } else {
-      console.error("Error al renderizar la ruta:", status);
+    const mapEl = document.getElementById("routeMap");
+    if (!mapEl) {
+      console.error("❌ No se encontró el elemento del mapa (#routeMap)");
+      return;
     }
-  });
+
+    const map = new Map(mapEl, {
+      center: {
+        lat: route.startLocation.latitude || -33.45,
+        lng: route.startLocation.longitude || -70.65,
+      },
+      zoom: 12,
+    });
+    mapInstance.value = map;
+    console.log("🗺️ Mapa inicializado correctamente.");
+
+    const directionsService = new DirectionsService();
+    const directionsRenderer = new DirectionsRenderer({
+      map,
+      polylineOptions: { strokeColor: "#1E88E5", strokeWeight: 5 },
+    });
+
+    // Construir los puntos
+    const start = {
+      lat: route.startLocation.latitude,
+      lng: route.startLocation.longitude,
+    };
+    const end = {
+      lat: route.endLocation.latitude,
+      lng: route.endLocation.longitude,
+    };
+    const waypoints = (route.orders || [])
+      .filter(o => o.order?.location)
+      .map(o => ({
+        location: {
+          lat: o.order.location.latitude,
+          lng: o.order.location.longitude,
+        },
+        stopover: true,
+      }));
+
+    console.log("📍 Puntos de ruta:", { start, waypointsCount: waypoints.length, end });
+
+    const request = {
+      origin: start,
+      destination: end,
+      waypoints,
+      travelMode: google.maps.TravelMode.DRIVING,
+      optimizeWaypoints: false,
+    };
+
+    console.log("🚀 Solicitando ruta a Directions API...");
+    directionsService.route(request, (result, status) => {
+      console.log("📡 Respuesta Directions API:", status);
+      if (status === "OK") {
+        directionsRenderer.setDirections(result);
+        console.log("✅ Ruta renderizada correctamente.");
+      } else {
+        console.error("❌ Error al renderizar la ruta:", status, result);
+      }
+    });
+  } catch (err) {
+    console.error("💥 Error al inicializar el mapa o API:", err);
+  }
 };
 
 const formatDistance = (m) => (!m ? "-" : `${(m / 1000).toFixed(1)} km`);
@@ -210,6 +233,7 @@ const formatDuration = (s) => (!s ? "-" : `${Math.floor(s / 3600)}h ${Math.floor
 const refreshRoutes = () => loadRoutes();
 
 onMounted(() => {
+  console.log("🧠 Iniciando componente RouteManager...");
   loadRoutes();
 });
 </script>
