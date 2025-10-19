@@ -377,58 +377,111 @@ class RouteOptimizerService {
  */
 async validateOrderCoordinates(orderIds) {
   try {
-    console.log(`🔍 Validando coordenadas para ${orderIds.length} órdenes`);
+    // 🔧 FIX: Eliminar duplicados en los IDs
+    const uniqueOrderIds = [...new Set(orderIds.map(id => id.toString()))];
+    console.log(`🔍 Validando coordenadas para ${uniqueOrderIds.length} órdenes únicas (de ${orderIds.length} originales)`);
 
-    // 1️⃣ Primero, buscar órdenes que YA tienen coordenadas
-    const ordersWithCoords = await Order.find({ 
-      _id: { $in: orderIds },
-      'location.latitude': { $exists: true, $ne: null },
-      'location.longitude': { $exists: true, $ne: null }
-    });
+    // 1️⃣ Buscar TODAS las órdenes primero
+    const allOrders = await Order.find({ _id: { $in: uniqueOrderIds } });
+    console.log(`📦 ${allOrders.length} órdenes encontradas en BD`);
 
-    console.log(`✅ ${ordersWithCoords.length} órdenes ya tienen coordenadas`);
+    if (allOrders.length === 0) {
+      throw new Error('No se encontraron órdenes válidas');
+    }
 
-    // 2️⃣ Identificar órdenes SIN coordenadas
+    // 2️⃣ Identificar cuáles YA tienen coordenadas válidas
+    const ordersWithCoords = allOrders.filter(order => 
+      order.location?.latitude && 
+      order.location?.longitude &&
+      !isNaN(order.location.latitude) && 
+      !isNaN(order.location.longitude)
+    );
+
+    console.log(`✅ ${ordersWithCoords.length} órdenes ya tienen coordenadas válidas`);
+
+    // 3️⃣ Identificar cuáles necesitan geocodificación
     const orderIdsWithCoords = ordersWithCoords.map(o => o._id.toString());
-    const orderIdsWithoutCoords = orderIds.filter(id => 
-      !orderIdsWithCoords.includes(id.toString())
+    const ordersWithoutCoords = allOrders.filter(order => 
+      !orderIdsWithCoords.includes(order._id.toString())
     );
 
-    console.log(`⚠️ ${orderIdsWithoutCoords.length} órdenes necesitan geocodificación`);
+    console.log(`⚠️ ${ordersWithoutCoords.length} órdenes necesitan geocodificación`);
 
-    // 3️⃣ Geocodificar las órdenes faltantes
-    if (orderIdsWithoutCoords.length > 0) {
-      const ordersWithoutCoords = await Order.find({ _id: { $in: orderIdsWithoutCoords } });
-      
+    // 4️⃣ Geocodificar las órdenes que no tienen coordenadas
+    let geocodedCount = 0;
+    if (ordersWithoutCoords.length > 0) {
       for (const order of ordersWithoutCoords) {
-        await this.geocodeOrderIfNeeded(order._id);
+        const success = await this.geocodeOrderIfNeeded(order._id);
+        if (success) {
+          geocodedCount++;
+        }
       }
+      console.log(`🌍 Geocodificación completada: ${geocodedCount}/${ordersWithoutCoords.length} exitosas`);
     }
 
-    // 4️⃣ Volver a consultar TODAS las órdenes después de geocodificar
+    // 5️⃣ Consultar NUEVAMENTE todas las órdenes después de geocodificar
     const finalOrders = await Order.find({ 
-      _id: { $in: orderIds },
+      _id: { $in: uniqueOrderIds },
       'location.latitude': { $exists: true, $ne: null },
       'location.longitude': { $exists: true, $ne: null }
     });
 
-    const stillMissingCoords = orderIds.filter(id => 
-      !finalOrders.find(order => order._id.toString() === id.toString())
-    );
+    // 6️⃣ Validar que las coordenadas sean números válidos
+    const validOrders = finalOrders.filter(order => {
+      const lat = order.location?.latitude;
+      const lng = order.location?.longitude;
+      return lat && lng && !isNaN(lat) && !isNaN(lng) && 
+             lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180;
+    });
 
-    if (stillMissingCoords.length > 0) {
-      console.error(`❌ No se pudieron geocodificar ${stillMissingCoords.length} órdenes:`, stillMissingCoords);
+    console.log(`✅ ${validOrders.length} órdenes con coordenadas válidas finales`);
+
+    // 7️⃣ Mostrar estadísticas finales
+    const initialWithCoords = ordersWithCoords.length;
+    const newlyGeocoded = validOrders.length - initialWithCoords;
+    const totalFailed = allOrders.length - validOrders.length;
+
+    console.log(`📊 Resumen de geocodificación:
+      - Órdenes iniciales: ${allOrders.length}
+      - Ya tenían coordenadas: ${initialWithCoords}
+      - Recién geocodificadas: ${newlyGeocoded}
+      - Total válidas: ${validOrders.length}
+      - No se pudieron procesar: ${totalFailed}`);
+
+    // 8️⃣ Si no hay órdenes válidas, mostrar detalles de error
+    if (validOrders.length === 0) {
+      console.error(`❌ DETALLES DEL ERROR:`);
+      console.error(`- Órdenes encontradas en BD: ${allOrders.length}`);
+      console.error(`- Órdenes que necesitaban geocodificación: ${ordersWithoutCoords.length}`);
+      console.error(`- Órdenes geocodificadas exitosamente: ${geocodedCount}`);
       
-      // 🔧 NO FALLAR - continuar con las órdenes que sí tienen coordenadas
-      if (finalOrders.length === 0) {
-        throw new Error('Ninguna orden pudo ser geocodificada');
+      // Mostrar algunas órdenes de ejemplo para debug
+      if (allOrders.length > 0) {
+        const sampleOrder = allOrders[0];
+        console.error(`- Ejemplo de orden: ${sampleOrder.order_number || sampleOrder._id}`);
+        console.error(`- Dirección: ${sampleOrder.shipping_address}`);
+        console.error(`- Location: ${JSON.stringify(sampleOrder.location)}`);
       }
       
-      console.warn(`⚠️ Continuando con ${finalOrders.length} órdenes válidas`);
+      throw new Error(`No se pudo geocodificar ninguna orden. De ${allOrders.length} órdenes encontradas, ${ordersWithoutCoords.length} necesitaban geocodificación pero solo ${geocodedCount} fueron exitosas.`);
     }
 
-    console.log(`✅ ${finalOrders.length} órdenes tienen coordenadas válidas`);
-    return finalOrders;
+    // 9️⃣ Mostrar las órdenes que NO se pudieron geocodificar (para debug)
+    const failedOrderIds = uniqueOrderIds.filter(id => 
+      !validOrders.find(order => order._id.toString() === id.toString())
+    );
+
+    if (failedOrderIds.length > 0) {
+      console.warn(`⚠️ ${failedOrderIds.length} órdenes no se pudieron geocodificar:`, failedOrderIds);
+      
+      // Mostrar detalles de las primeras 3 órdenes fallidas
+      const failedOrders = allOrders.filter(o => failedOrderIds.includes(o._id.toString())).slice(0, 3);
+      failedOrders.forEach(order => {
+        console.warn(`  - ${order.order_number || order._id}: "${order.shipping_address}"`);
+      });
+    }
+
+    return validOrders;
 
   } catch (error) {
     console.error('❌ Error validando coordenadas:', error);
@@ -437,7 +490,7 @@ async validateOrderCoordinates(orderIds) {
 }
 
 /**
- * ✅ MEJORADO: Geocodificar orden si no tiene coordenadas
+ * ✅ MEJORADO: Geocodificar orden con más validaciones
  */
 async geocodeOrderIfNeeded(orderId) {
   try {
@@ -448,51 +501,61 @@ async geocodeOrderIfNeeded(orderId) {
     }
 
     // Verificar si ya tiene coordenadas válidas
-    if (order.location?.latitude && order.location?.longitude) {
-      console.log(`✅ Orden ${order.order_number || orderId} ya tiene coordenadas`);
-      return true;
+    if (order.location?.latitude && order.location?.longitude &&
+        !isNaN(order.location.latitude) && !isNaN(order.location.longitude)) {
+      return true; // Ya tiene coordenadas válidas
+    }
+
+    // Verificar que tenga dirección
+    if (!order.shipping_address || order.shipping_address.trim() === '') {
+      console.warn(`⚠️ Orden ${order.order_number || orderId} no tiene dirección de envío`);
+      return false;
     }
 
     console.log(`🌍 Geocodificando orden ${order.order_number || orderId}: ${order.shipping_address}`);
 
     // Construir dirección completa
     const addressParts = [
-      order.shipping_address,
-      order.shipping_commune,
+      order.shipping_address.trim(),
+      order.shipping_commune?.trim(),
       'Santiago',
       'Chile'
-    ].filter(Boolean);
+    ].filter(part => part && part !== '');
     
     const fullAddress = addressParts.join(', ');
     const coords = await this.geocodeAddress(fullAddress);
 
-    if (coords && coords.lat && coords.lng) {
+    if (coords && coords.lat && coords.lng && 
+        !isNaN(coords.lat) && !isNaN(coords.lng) &&
+        coords.lat >= -90 && coords.lat <= 90 && 
+        coords.lng >= -180 && coords.lng <= 180) {
+      
       // Actualizar la orden con las coordenadas
       const updateResult = await Order.findByIdAndUpdate(
         orderId,
         {
           $set: {
-            'location.latitude': coords.lat,
-            'location.longitude': coords.lng
+            'location.latitude': parseFloat(coords.lat),
+            'location.longitude': parseFloat(coords.lng)
           }
         },
-        { new: true }
+        { new: true, runValidators: true }
       );
 
-      if (updateResult) {
+      if (updateResult && updateResult.location?.latitude && updateResult.location?.longitude) {
         console.log(`✅ Coordenadas agregadas a orden ${order.order_number || orderId}: ${coords.lat}, ${coords.lng}`);
         return true;
       } else {
-        console.error(`❌ No se pudo actualizar orden ${orderId}`);
+        console.error(`❌ No se pudo actualizar orden ${orderId} en BD`);
         return false;
       }
     } else {
-      console.warn(`⚠️ No se pudo geocodificar orden ${order.order_number || orderId}: ${fullAddress}`);
+      console.warn(`⚠️ Coordenadas inválidas para orden ${order.order_number || orderId}: ${JSON.stringify(coords)}`);
       return false;
     }
 
   } catch (error) {
-    console.error(`❌ Error geocodificando orden ${orderId}:`, error);
+    console.error(`❌ Error geocodificando orden ${orderId}:`, error.message);
     return false;
   }
 }
