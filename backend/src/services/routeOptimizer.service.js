@@ -213,6 +213,7 @@ exports.optimizeRoute = async (config) => {
     let directionsResult;
     try {
       directionsResult = await callDirectionsWithRetry(directionsParams, `Lote ${i}`);
+      console.log("📦 Google Directions respuesta bruta:", JSON.stringify(directionsResult.data, null, 2));
     } catch (e) {
       throw new Error(`Fallo en Directions API: ${e.message || "sin respuesta"}`);
     }
