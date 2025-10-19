@@ -184,9 +184,8 @@
 <script setup>
 import { ref, computed, onMounted, nextTick } from "vue";
 import { apiService } from "../services/api";
-import { setOptions, importLibrary } from "@googlemaps/js-api-loader";
 
-// State
+// Estado
 const routes = ref([]);
 const loading = ref(false);
 const showRouteMap = ref(false);
@@ -194,12 +193,43 @@ const activeRoute = ref(null);
 const mapInstance = ref(null);
 const showRouteOptimizerModal = ref(false);
 
-// Configuración Google Maps
-setOptions({
-  apiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "",
-  version: "weekly",
-  libraries: ["maps", "geometry", "marker"],
-});
+// 🔑 Cargar Google Maps dinámicamente
+const getGoogleMapsApiKey = () => {
+  return (
+    window.env?.VITE_GOOGLE_MAPS_API_KEY ||
+    import.meta.env.VITE_GOOGLE_MAPS_API_KEY ||
+    ""
+  );
+};
+
+const loadGoogleMaps = async () => {
+  if (typeof window.google !== "undefined" && window.google.maps) {
+    return window.google.maps;
+  }
+
+  const apiKey = getGoogleMapsApiKey();
+  if (!apiKey) {
+    console.error("🚫 No se encontró Google Maps API Key");
+    alert("⚠️ Falta configurar Google Maps API Key en el frontend");
+    throw new Error("Missing Google Maps API key");
+  }
+
+  return new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=geometry,marker`;
+    script.async = true;
+    script.defer = true;
+    script.onload = () => {
+      console.log("✅ Google Maps API cargada correctamente");
+      resolve(window.google.maps);
+    };
+    script.onerror = (e) => {
+      console.error("❌ Error al cargar Google Maps:", e);
+      reject(e);
+    };
+    document.head.appendChild(script);
+  });
+};
 
 // Estadísticas
 const statCards = computed(() => {
@@ -246,24 +276,19 @@ const viewRoute = async (route) => {
   }
 
   try {
-    const { Map } = await importLibrary("maps");
-    const { Polyline } = await importLibrary("maps");
-    const { LatLngBounds } = await importLibrary("core");
-    const { encoding } = await importLibrary("geometry");
-    const { AdvancedMarkerElement } = await importLibrary("marker");
+    const maps = await loadGoogleMaps();
+    const { geometry } = maps;
 
-    const map = new Map(mapContainer, {
+    const map = new maps.Map(mapContainer, {
       center: { lat: route.startLocation.latitude, lng: route.startLocation.longitude },
       zoom: 12,
-      mapId: "ENVIGO_ROUTE_MAP",
     });
     mapInstance.value = map;
 
-    const bounds = new LatLngBounds();
+    const bounds = new maps.LatLngBounds();
+    const decodedPath = geometry.encoding.decodePath(polylineString);
 
-    // Polilínea principal
-    const decodedPath = encoding.decodePath(polylineString);
-    const routePolyline = new Polyline({
+    const routePolyline = new maps.Polyline({
       path: decodedPath,
       geodesic: true,
       strokeColor: "#1E88E5",
@@ -273,9 +298,8 @@ const viewRoute = async (route) => {
     routePolyline.setMap(map);
     decodedPath.forEach(p => bounds.extend(p));
 
-    // Marcadores
     const startPos = { lat: route.startLocation.latitude, lng: route.startLocation.longitude };
-    new AdvancedMarkerElement({ map, position: startPos, title: "Inicio: Bodega" });
+    new maps.marker.AdvancedMarkerElement({ map, position: startPos, title: "Inicio: Bodega" });
     bounds.extend(startPos);
 
     route.orders.forEach((o, idx) => {
@@ -284,7 +308,7 @@ const viewRoute = async (route) => {
           lat: o.order.location.latitude,
           lng: o.order.location.longitude,
         };
-        new AdvancedMarkerElement({
+        new maps.marker.AdvancedMarkerElement({
           map,
           position: pos,
           title: `Parada ${idx + 1}`,
@@ -295,12 +319,13 @@ const viewRoute = async (route) => {
     });
 
     const endPos = { lat: route.endLocation.latitude, lng: route.endLocation.longitude };
-    new AdvancedMarkerElement({ map, position: endPos, title: "Fin: Casa Conductor" });
+    new maps.marker.AdvancedMarkerElement({ map, position: endPos, title: "Fin: Casa Conductor" });
     bounds.extend(endPos);
 
     map.fitBounds(bounds, 60);
   } catch (err) {
     console.error("💥 Error al dibujar mapa:", err);
+    mapContainer.innerHTML = "❌ Error al cargar mapa.";
   }
 };
 
@@ -340,9 +365,6 @@ const formatDuration = (s) => {
 
 // Lifecycle
 onMounted(() => {
-  if (!import.meta.env.VITE_GOOGLE_MAPS_API_KEY) {
-    alert("🚫 Falta VITE_GOOGLE_MAPS_API_KEY en el frontend");
-  }
   loadRoutes();
 });
 </script>
