@@ -104,7 +104,10 @@ router.get('/', [
     const [routes, total] = await Promise.all([
       RoutePlan.find(filter)
         .populate('driver', 'name email')
-        .populate('orders.order', 'customer_name address location')
+        .populate({
+          path: 'orders.order',
+          select: 'customer_name shipping_address delivery_location location status'
+        })
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(parseInt(limit))
