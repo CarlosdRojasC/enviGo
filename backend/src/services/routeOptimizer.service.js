@@ -226,16 +226,33 @@ exports.optimizeRoute = async (config) => {
       totalDuration += leg.duration.value;
     }
 
-    const polyline = route?.overview_polyline?.points;
-    if (polyline) {
-      polylineSegments.push(polyline);
-      const pts = decodePolyline(polyline);
-      if (fullPathPoints.length && JSON.stringify(fullPathPoints.at(-1)) === JSON.stringify(pts[0])) {
-        fullPathPoints.push(...pts.slice(1));
-      } else {
-        fullPathPoints.push(...pts);
-      }
+    let polyline = route?.overview_polyline?.points;
+
+// 🔁 fallback si no hay overview_polyline
+if (!polyline && route?.legs?.length) {
+  console.warn("⚠️ Ruta sin overview_polyline, reconstruyendo desde steps...");
+  const stepPolys = [];
+  for (const leg of route.legs) {
+    for (const step of leg.steps || []) {
+      if (step.polyline?.points) stepPolys.push(step.polyline.points);
     }
+  }
+  const decoded = stepPolys.flatMap(decodePolyline);
+  if (decoded.length) {
+    fullPathPoints.push(...decoded);
+    polyline = encodePolyline(decoded);
+  }
+}
+
+if (polyline) {
+  polylineSegments.push(polyline);
+  const pts = decodePolyline(polyline);
+  if (fullPathPoints.length && JSON.stringify(fullPathPoints.at(-1)) === JSON.stringify(pts[0])) {
+    fullPathPoints.push(...pts.slice(1));
+  } else {
+    fullPathPoints.push(...pts);
+  }
+}
   }
 
   console.log(`✅ Lotes completados. Distancia: ${totalDistance}m, Duración: ${totalDuration}s`);
