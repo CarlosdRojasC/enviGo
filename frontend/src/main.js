@@ -40,15 +40,12 @@ app.use(Toast, {
 })
 app.use(VueGoogleMaps, {
   load: {
-    key: 'AIzaSyBVQvkWQXe-E4AkFXKu0Yx86RCQpUTbwcg',
+    key: import.meta.env.VITE_GOOGLE_MAPS_API_KEY,
+    libraries: 'places,geometry',
+    language: 'es',
+    region: 'CL'
   },
 })
-setOptions({
-  apiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY,
-  version: "weekly",
-  libraries: ["maps", "geometry", "marker"],
-});
-
 // ==================== MONTAR APP PRIMERO ====================
 app.mount('#app')
 
