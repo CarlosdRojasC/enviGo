@@ -111,12 +111,20 @@ exports.optimizeRoute = async (config) => {
         console.warn("⚠️ Google Directions no devolvió ruta para un lote.");
       }
     } catch (e) {
-      // Log del error completo
-      console.error(`❌ ERROR COMPLETO en lote (${originLabel} -> ${destinationLabel}):`, JSON.stringify(e, Object.getOwnPropertyNames(e), 2)); 
+  console.error(`❌ ERROR COMPLETO en lote (${originLabel} -> ${destinationLabel}):`, JSON.stringify(e, Object.getOwnPropertyNames(e), 2)); 
 
-      const errorMsg = e.message || 'Error desconocido al llamar a Directions API';
-      throw new Error(`Fallo en un lote de Google Directions (${originLabel} -> ${destinationLabel}): ${errorMsg}`);
-    }
+  if (e.response) {
+    console.error("🧾 Google API Response:", e.response.data);
+    console.error("📦 Status:", e.response.status);
+  } else if (e.request) {
+    console.error("📡 Request enviado pero sin respuesta:", e.request);
+  } else {
+    console.error("💥 Error al configurar petición:", e.message);
+  }
+
+  const errorMsg = e.message || 'Error desconocido al llamar a Directions API';
+  throw new Error(`Fallo en un lote de Google Directions (${originLabel} -> ${destinationLabel}): ${errorMsg}`);
+}
   } // Fin del bucle for
 
   console.log(`✅ Lotes completados. Distancia: ${totalDistance}m, Duración: ${totalDuration}s`);
