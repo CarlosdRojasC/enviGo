@@ -1,4 +1,3 @@
-// backend/src/services/routeOptimizer.service.js
 const axios = require("axios");
 const RoutePlan = require("../models/RoutePlan");
 const GeoService = require("./routeOptimizer/geo.service");
@@ -11,8 +10,6 @@ const geoService = new GeoService();
 /**
  * Optimiza una ruta utilizando Google Route Optimization API (Fleet Routing)
  * Permite hasta 1000 paradas por vehículo
- * @param {Object} config
- * @returns {Object}
  */
 exports.optimizeRoute = async (config) => {
   const {
@@ -69,7 +66,7 @@ exports.optimizeRoute = async (config) => {
             },
           },
         },
-        duration: { seconds: 120 }, // ✅ Correcto
+        duration: { seconds: 120 },
       },
     ],
   }));
@@ -92,18 +89,15 @@ exports.optimizeRoute = async (config) => {
     solvingMode: "OPTIMIZE",
   };
 
-  // ✅ Verificar JSON válido antes de enviarlo
+  // ✅ Validar JSON antes de enviar
   try {
     JSON.parse(JSON.stringify(body));
   } catch (e) {
-    console.error("🚨 JSON inválido en payload de optimización:", e.message);
-    console.error(JSON.stringify(body, null, 2));
+    console.error("🚨 JSON inválido antes de enviar:", e.message);
     throw new Error("Payload JSON inválido antes de llamar a la API de Google.");
   }
 
-  // 🔍 Log de depuración
-  console.log("📦 Enviando payload a Google Route Optimization API:");
-  console.log(JSON.stringify(body, null, 2));
+  console.log("🛣️ Llamando a Google Route Optimization API...");
 
   try {
     const response = await axios.post(GOOGLE_ROUTE_OPTIMIZATION_URL, body, {
@@ -112,9 +106,6 @@ exports.optimizeRoute = async (config) => {
         "X-Goog-Api-Key": process.env.GOOGLE_MAPS_API_KEY,
       },
     });
-
-    console.log("📡 Respuesta de Google Route Optimization API:");
-    console.log(JSON.stringify(response.data, null, 2));
 
     const solution = response.data.optimizeToursResponse;
     if (!solution || !solution.routes || solution.routes.length === 0) {
@@ -135,7 +126,7 @@ exports.optimizeRoute = async (config) => {
           deliveryStatus: "pending",
         })) || [];
 
-    // 🗺️ Crear plan de ruta en la BD
+    // 🗺️ Guardar en BD
     const routePlan = new RoutePlan({
       company: companyId,
       driver: driverId,
@@ -159,14 +150,13 @@ exports.optimizeRoute = async (config) => {
   } catch (error) {
     console.error("❌ Error en optimización con Route Optimization API:");
     console.error("🧾 Status:", error.response?.status);
-    console.error("🧩 Headers:", error.response?.headers);
     console.error(
-      "📡 Response data:",
-      JSON.stringify(error.response?.data, null, 2)
+      "📡 Mensaje:",
+      error.response?.data?.error?.message || error.message
     );
     console.error(
-      "📤 Request payload:",
-      JSON.stringify(body, null, 2)
+      "📋 Detalles:",
+      JSON.stringify(error.response?.data?.error?.details || {}, null, 2)
     );
     throw new Error("Error optimizando la ruta con Google Route Optimization API.");
   }
