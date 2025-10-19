@@ -240,19 +240,39 @@ class RouteOptimizerService {
 
   /** 📊 Estimar distancia total (en METROS) */
   estimateTotalDistance(sequence, start, end) {
-    if (!sequence.length) return 0;
+    // Si no hay paradas, la distancia es 0
+    if (!sequence || sequence.length === 0) {
+      // Si solo es bodega -> casa, calcular esa distancia
+      if (start && end) {
+        const startPoint = { lat: start.latitude, lng: start.longitude };
+        const endPoint = { lat: end.latitude, lng: end.longitude };
+        return Math.round(this.haversineDistance(startPoint, endPoint));
+      }
+      return 0;
+    }
+
+    // 👇 ¡CORRECCIÓN! Normalizar start/end a { lat, lng }
+    const startPoint = { lat: start.latitude, lng: start.longitude };
+    const endPoint = { lat: end.latitude, lng: end.longitude };
     
     let total = 0;
-    // De Inicio a primera orden
-    total += this.haversineDistance(start, sequence[0]);
     
-    // Entre órdenes
+    // 1. De Inicio (Bodega) a la primera orden
+    total += this.haversineDistance(startPoint, sequence[0]);
+    
+    // 2. Entre órdenes
     for (let i = 0; i < sequence.length - 1; i++) {
       total += this.haversineDistance(sequence[i], sequence[i + 1]);
     }
     
-    // De última orden a Fin
-    total += this.haversineDistance(sequence[sequence.length - 1], end);
+    // 3. De la última orden al Fin (Casa)
+    total += this.haversineDistance(sequence[sequence.length - 1], endPoint);
+    
+    // Salvavidas: si algo sigue saliendo mal, devuelve 0 en lugar de NaN
+    if (isNaN(total)) {
+      console.error("❌ Falló el cálculo de distancia Haversine, devolviendo 0");
+      return 0;
+    }
     
     return Math.round(total);
   }
