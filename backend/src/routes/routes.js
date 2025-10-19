@@ -104,10 +104,11 @@ router.get('/', [
     const [routes, total] = await Promise.all([
       RoutePlan.find(filter)
         .populate('driver', 'name email')
-        .populate('orders.order', 'order_number delivery_address customer')
+        .populate('orders.order', 'customer_name address location')
         .sort({ createdAt: -1 })
         .skip(skip)
-        .limit(parseInt(limit)),
+        .limit(parseInt(limit))
+        .lean(),
       RoutePlan.countDocuments(filter)
     ]);
 
