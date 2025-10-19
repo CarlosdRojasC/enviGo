@@ -146,30 +146,48 @@
           <button @click="showRouteMap = false" class="text-gray-500 hover:text-gray-700">✖</button>
         </div>
         <div class="p-4">
-          <LMap v-if="activeRoute" style="height: 500px; width: 100%" :zoom="13" :center="[mapCenter.lat, mapCenter.lng]">
-            <LTileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+          <LMap
+  v-if="activeRoute && hasValidCoordinates(activeRoute.startLocation)"
+  style="height: 500px; width: 100%"
+  :zoom="13"
+  :center="[mapCenter.lat, mapCenter.lng]"
+>
+  <LTileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
 
-            <LMarker v-if="activeRoute.startLocation"
-              :lat-lng="[activeRoute.startLocation.latitude, activeRoute.startLocation.longitude]">
-              <LPopup>Inicio 🏭</LPopup>
-            </LMarker>
+  <!-- Inicio -->
+  <LMarker
+    v-if="hasValidCoordinates(activeRoute.startLocation)"
+    :lat-lng="[activeRoute.startLocation.latitude, activeRoute.startLocation.longitude]"
+  >
+    <LPopup>Inicio 🏭</LPopup>
+  </LMarker>
 
-            <LMarker
-              v-for="(item, i) in activeRoute.orders || []"
-              :key="i"
-              v-if="item?.order?.location"
-              :lat-lng="[item.order.location.latitude, item.order.location.longitude]">
-              <LTooltip permanent>{{ i + 1 }}</LTooltip>
-              <LPopup>Entrega #{{ i + 1 }}</LPopup>
-            </LMarker>
+  <!-- Entregas -->
+  <LMarker
+    v-for="(item, i) in activeRoute.orders || []"
+    :key="i"
+    v-if="item?.order?.location && hasValidCoordinates(item.order.location)"
+    :lat-lng="[item.order.location.latitude, item.order.location.longitude]"
+  >
+    <LTooltip permanent>{{ i + 1 }}</LTooltip>
+    <LPopup>Entrega #{{ i + 1 }}</LPopup>
+  </LMarker>
 
-            <LMarker v-if="activeRoute.endLocation"
-              :lat-lng="[activeRoute.endLocation.latitude, activeRoute.endLocation.longitude]">
-              <LPopup>Destino 🏠</LPopup>
-            </LMarker>
+  <!-- Fin -->
+  <LMarker
+    v-if="hasValidCoordinates(activeRoute.endLocation)"
+    :lat-lng="[activeRoute.endLocation.latitude, activeRoute.endLocation.longitude]"
+  >
+    <LPopup>Destino 🏠</LPopup>
+  </LMarker>
 
-            <LPolyline v-if="polylineCoords.length > 1" :lat-lngs="polylineCoords" color="#1E88E5" />
-          </LMap>
+  <!-- Ruta -->
+  <LPolyline
+    v-if="polylineCoords.length > 1"
+    :lat-lngs="polylineCoords.filter(hasValidCoordinates)"
+    color="#1E88E5"
+  />
+</LMap>
         </div>
       </div>
     </div>
@@ -218,6 +236,13 @@ const loadRoutes = async () => {
   }
 }
 
+const hasValidCoordinates = (loc) =>
+  loc &&
+  typeof loc.latitude === 'number' &&
+  typeof loc.longitude === 'number' &&
+  !isNaN(loc.latitude) &&
+  !isNaN(loc.longitude)
+
 const loadDrivers = async () => {
   try {
     const response = await apiService.drivers.getAll()
@@ -237,7 +262,9 @@ const viewRoute = (route) => {
   } else {
     polylineCoords.value = []
   }
-  mapCenter.value = route.startLocation || { lat: -33.45, lng: -70.65 }
+  mapCenter.value = hasValidCoordinates(route.startLocation)
+  ? route.startLocation
+  : { lat: -33.45, lng: -70.65 }
 }
 
 // --- Utilidades ---
