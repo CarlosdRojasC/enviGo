@@ -3,7 +3,7 @@ const RoutePlan = require("../models/RoutePlan");
 const GeoService = require("./routeOptimizer/geo.service");
 
 const GOOGLE_ROUTE_OPTIMIZATION_URL =
-  "https://routes.googleapis.com/fleetengine/v1/optimizedRoutes:batchOptimizeTours";
+  "https://fleetengine.googleapis.com/v1/optimizeTours";
 
 const geoService = new GeoService();
 
