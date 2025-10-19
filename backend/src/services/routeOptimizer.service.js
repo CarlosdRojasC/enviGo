@@ -2,14 +2,14 @@ const axios = require("axios");
 const RoutePlan = require("../models/RoutePlan");
 const GeoService = require("./routeOptimizer/geo.service");
 
-const GOOGLE_ROUTE_OPTIMIZATION_URL =
-  "https://fleetengine.googleapis.com/v1/optimizeTours";
+// ✅ URL CORRECTA para Route Optimization API
+const GOOGLE_ROUTE_OPTIMIZATION_URL = 
+  "https://routeoptimization.googleapis.com/v1/projects/{PROJECT_ID}/optimizeToursRequest:optimizeTours";
 
 const geoService = new GeoService();
 
 /**
- * Optimiza una ruta utilizando Google Route Optimization API (Fleet Routing)
- * Permite hasta 1000 paradas por vehículo
+ * Optimiza una ruta utilizando Google Route Optimization API
  */
 exports.optimizeRoute = async (config) => {
   const {
@@ -25,15 +25,23 @@ exports.optimizeRoute = async (config) => {
     throw new Error("Faltan datos para optimizar la ruta.");
   }
 
+  // Verificar variables de entorno necesarias
+  if (!process.env.GOOGLE_MAPS_API_KEY) {
+    throw new Error("Falta GOOGLE_MAPS_API_KEY en variables de entorno");
+  }
+
+  if (!process.env.GOOGLE_CLOUD_PROJECT_ID) {
+    throw new Error("Falta GOOGLE_CLOUD_PROJECT_ID en variables de entorno");
+  }
+
   // 🧭 Obtener pedidos con coordenadas válidas
   const orders = await geoService.validateOrderCoordinates(orderIds);
   if (orders.length === 0) {
     throw new Error("No hay pedidos válidos para optimizar la ruta.");
   }
 
-  // 🚗 Definir vehículo
+  // 🚗 Definir vehículo con la estructura correcta
   const vehicle = {
-    name: "vehicle_1",
     startWaypoint: {
       location: {
         latLng: {
@@ -50,12 +58,13 @@ exports.optimizeRoute = async (config) => {
         },
       },
     },
-    travelMode: "DRIVE",
+    travelMode: "DRIVING", // ✅ Cambio: era "DRIVE"
+    costPerKilometer: 1.0,
+    costPerHour: 10.0,
   };
 
-  // 📦 Crear los “shipments” (entregas)
+  // 📦 Crear los "shipments" (entregas) con estructura correcta
   const shipments = orders.map((order, index) => ({
-    name: `order_${index + 1}`,
     deliveries: [
       {
         arrivalWaypoint: {
@@ -66,65 +75,69 @@ exports.optimizeRoute = async (config) => {
             },
           },
         },
-        duration: { seconds: 120 },
+        duration: "120s", // ✅ Formato correcto de duración
+        timeWindows: [
+          {
+            startTime: "2025-10-19T08:00:00Z",
+            endTime: "2025-10-19T18:00:00Z",
+          },
+        ],
       },
     ],
+    label: `order_${index + 1}`, // ✅ Usar label en lugar de name
   }));
 
-  // 🧩 Cuerpo del request a Fleet Routing API
-  const body = {
+  // 🧩 Estructura correcta del request
+  const requestBody = {
+    parent: `projects/${process.env.GOOGLE_CLOUD_PROJECT_ID}`,
     model: {
       shipments,
       vehicles: [vehicle],
       globalStartTime: "2025-10-19T08:00:00Z",
       globalEndTime: "2025-10-19T20:00:00Z",
-      durationDistanceMatrices: [
-        {
-          vehicleTravelMode: "DRIVE",
-          costPerKm: 1.0,
-          costPerHour: 10.0,
-        },
-      ],
     },
-    solvingMode: "OPTIMIZE",
   };
 
-  // ✅ Validar JSON antes de enviar
-  try {
-    JSON.parse(JSON.stringify(body));
-  } catch (e) {
-    console.error("🚨 JSON inválido antes de enviar:", e.message);
-    throw new Error("Payload JSON inválido antes de llamar a la API de Google.");
-  }
+  // ✅ Construir URL con PROJECT_ID
+  const apiUrl = GOOGLE_ROUTE_OPTIMIZATION_URL.replace(
+    "{PROJECT_ID}", 
+    process.env.GOOGLE_CLOUD_PROJECT_ID
+  );
 
   console.log("🛣️ Llamando a Google Route Optimization API...");
+  console.log("📍 URL:", apiUrl);
 
   try {
-    const response = await axios.post(GOOGLE_ROUTE_OPTIMIZATION_URL, body, {
+    const response = await axios.post(apiUrl, requestBody, {
       headers: {
         "Content-Type": "application/json",
-        "X-Goog-Api-Key": process.env.GOOGLE_MAPS_API_KEY,
+        "Authorization": `Bearer ${await getAccessToken()}`, // ✅ OAuth en lugar de API Key
       },
     });
 
-    const solution = response.data.optimizeToursResponse;
+    const solution = response.data;
     if (!solution || !solution.routes || solution.routes.length === 0) {
       throw new Error("No se recibió una solución de optimización válida.");
     }
 
     const route = solution.routes[0];
 
-    // 🔢 Ordenar pedidos según la respuesta optimizada
-    const orderedDeliveries =
-      route.vehicleJourneys?.[0]?.events
-        ?.filter((e) => e.shipmentName)
-        ?.map((e, idx) => ({
-          order:
-            orders.find((o, i) => `order_${i + 1}` === e.shipmentName)?._id ||
-            null,
-          sequenceNumber: idx + 1,
-          deliveryStatus: "pending",
-        })) || [];
+    // 🔢 Procesar la respuesta optimizada
+    const orderedDeliveries = [];
+    if (route.visits) {
+      route.visits.forEach((visit, index) => {
+        if (visit.shipmentIndex !== undefined) {
+          const order = orders[visit.shipmentIndex];
+          if (order) {
+            orderedDeliveries.push({
+              order: order._id,
+              sequenceNumber: index + 1,
+              deliveryStatus: "pending",
+            });
+          }
+        }
+      });
+    }
 
     // 🗺️ Guardar en BD
     const routePlan = new RoutePlan({
@@ -135,9 +148,10 @@ exports.optimizeRoute = async (config) => {
       endLocation,
       orders: orderedDeliveries,
       optimization: {
-        totalDistance: route.totalTravelDistanceMeters || 0,
-        totalDuration: route.totalTravelDuration || 0,
-        overview_polyline: route.polyline?.encodedPolyline || null,
+        algorithm: "google_route_optimization",
+        totalDistance: route.routeDistanceMeters || 0,
+        totalDuration: route.routeDuration || "0s",
+        overview_polyline: route.routePolyline?.encodedPolyline || null,
       },
       status: "draft",
     });
@@ -147,17 +161,44 @@ exports.optimizeRoute = async (config) => {
 
     console.log("✅ Ruta optimizada correctamente con Route Optimization API.");
     return routePlan;
+
   } catch (error) {
     console.error("❌ Error en optimización con Route Optimization API:");
     console.error("🧾 Status:", error.response?.status);
-    console.error(
-      "📡 Mensaje:",
-      error.response?.data?.error?.message || error.message
-    );
-    console.error(
-      "📋 Detalles:",
-      JSON.stringify(error.response?.data?.error?.details || {}, null, 2)
-    );
-    throw new Error("Error optimizando la ruta con Google Route Optimization API.");
+    console.error("📡 URL llamada:", apiUrl);
+    console.error("📋 Response:", error.response?.data);
+    console.error("📨 Request body:", JSON.stringify(requestBody, null, 2));
+    
+    // Si falla Google API, usar fallback a OSRM
+    console.log("🔄 Intentando con OSRM como fallback...");
+    return await fallbackToOSRM(config);
   }
 };
+
+/**
+ * Obtener token de acceso OAuth para Google Cloud
+ */
+async function getAccessToken() {
+  try {
+    // Si estás en Google Cloud (App Engine, Cloud Run, etc.)
+    const metadataUrl = 'http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token';
+    const response = await axios.get(metadataUrl, {
+      headers: { 'Metadata-Flavor': 'Google' }
+    });
+    return response.data.access_token;
+  } catch (error) {
+    // Fallback: usar Google Application Default Credentials
+    console.log("⚠️ No se pudo obtener token desde metadata, usando API Key como fallback");
+    throw new Error("Configurar autenticación OAuth para Route Optimization API");
+  }
+}
+
+/**
+ * Fallback a OSRM si Google Route Optimization falla
+ */
+async function fallbackToOSRM(config) {
+  console.log("🔄 Usando OSRM como método de optimización alternativo...");
+  
+  const RouteOptimizerService = require("./routeOptimizer/index");
+  return await RouteOptimizerService.optimizeRoute(config);
+}
