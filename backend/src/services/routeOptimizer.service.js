@@ -372,56 +372,174 @@ class RouteOptimizerService {
     }
   }
 
-  /**
-   * ✅ NUEVO: Validar que las órdenes tengan coordenadas
-   */
-  async validateOrderCoordinates(orderIds) {
-    try {
-      console.log(`🔍 Validando coordenadas para ${orderIds.length} órdenes`);
+/**
+ * ✅ CORREGIDO: Validar que las órdenes tengan coordenadas
+ */
+async validateOrderCoordinates(orderIds) {
+  try {
+    console.log(`🔍 Validando coordenadas para ${orderIds.length} órdenes`);
 
-      const orders = await Order.find({ 
-        _id: { $in: orderIds },
-        'location.latitude': { $exists: true },
-        'location.longitude': { $exists: true }
-      });
+    // 1️⃣ Primero, buscar órdenes que YA tienen coordenadas
+    const ordersWithCoords = await Order.find({ 
+      _id: { $in: orderIds },
+      'location.latitude': { $exists: true, $ne: null },
+      'location.longitude': { $exists: true, $ne: null }
+    });
 
-      const missingCoordinates = orderIds.filter(id => 
-        !orders.find(order => order._id.toString() === id.toString())
+    console.log(`✅ ${ordersWithCoords.length} órdenes ya tienen coordenadas`);
+
+    // 2️⃣ Identificar órdenes SIN coordenadas
+    const orderIdsWithCoords = ordersWithCoords.map(o => o._id.toString());
+    const orderIdsWithoutCoords = orderIds.filter(id => 
+      !orderIdsWithCoords.includes(id.toString())
+    );
+
+    console.log(`⚠️ ${orderIdsWithoutCoords.length} órdenes necesitan geocodificación`);
+
+    // 3️⃣ Geocodificar las órdenes faltantes
+    if (orderIdsWithoutCoords.length > 0) {
+      const ordersWithoutCoords = await Order.find({ _id: { $in: orderIdsWithoutCoords } });
+      
+      for (const order of ordersWithoutCoords) {
+        await this.geocodeOrderIfNeeded(order._id);
+      }
+    }
+
+    // 4️⃣ Volver a consultar TODAS las órdenes después de geocodificar
+    const finalOrders = await Order.find({ 
+      _id: { $in: orderIds },
+      'location.latitude': { $exists: true, $ne: null },
+      'location.longitude': { $exists: true, $ne: null }
+    });
+
+    const stillMissingCoords = orderIds.filter(id => 
+      !finalOrders.find(order => order._id.toString() === id.toString())
+    );
+
+    if (stillMissingCoords.length > 0) {
+      console.error(`❌ No se pudieron geocodificar ${stillMissingCoords.length} órdenes:`, stillMissingCoords);
+      
+      // 🔧 NO FALLAR - continuar con las órdenes que sí tienen coordenadas
+      if (finalOrders.length === 0) {
+        throw new Error('Ninguna orden pudo ser geocodificada');
+      }
+      
+      console.warn(`⚠️ Continuando con ${finalOrders.length} órdenes válidas`);
+    }
+
+    console.log(`✅ ${finalOrders.length} órdenes tienen coordenadas válidas`);
+    return finalOrders;
+
+  } catch (error) {
+    console.error('❌ Error validando coordenadas:', error);
+    throw error;
+  }
+}
+
+/**
+ * ✅ MEJORADO: Geocodificar orden si no tiene coordenadas
+ */
+async geocodeOrderIfNeeded(orderId) {
+  try {
+    const order = await Order.findById(orderId);
+    if (!order) {
+      console.warn(`⚠️ Orden ${orderId} no encontrada`);
+      return false;
+    }
+
+    // Verificar si ya tiene coordenadas válidas
+    if (order.location?.latitude && order.location?.longitude) {
+      console.log(`✅ Orden ${order.order_number || orderId} ya tiene coordenadas`);
+      return true;
+    }
+
+    console.log(`🌍 Geocodificando orden ${order.order_number || orderId}: ${order.shipping_address}`);
+
+    // Construir dirección completa
+    const addressParts = [
+      order.shipping_address,
+      order.shipping_commune,
+      'Santiago',
+      'Chile'
+    ].filter(Boolean);
+    
+    const fullAddress = addressParts.join(', ');
+    const coords = await this.geocodeAddress(fullAddress);
+
+    if (coords && coords.lat && coords.lng) {
+      // Actualizar la orden con las coordenadas
+      const updateResult = await Order.findByIdAndUpdate(
+        orderId,
+        {
+          $set: {
+            'location.latitude': coords.lat,
+            'location.longitude': coords.lng
+          }
+        },
+        { new: true }
       );
 
-      if (missingCoordinates.length > 0) {
-        console.warn(`⚠️ ${missingCoordinates.length} órdenes sin coordenadas: ${missingCoordinates.join(', ')}`);
-        
-        // Intentar geocodificar las órdenes faltantes
-        for (const orderId of missingCoordinates) {
-          await this.geocodeOrderIfNeeded(orderId);
-        }
-
-        // Volver a consultar después de geocodificar
-        const updatedOrders = await Order.find({ 
-          _id: { $in: orderIds },
-          'location.latitude': { $exists: true },
-          'location.longitude': { $exists: true }
-        });
-
-        const stillMissing = orderIds.filter(id => 
-          !updatedOrders.find(order => order._id.toString() === id.toString())
-        );
-
-        if (stillMissing.length > 0) {
-          console.error(`❌ No se pudieron geocodificar ${stillMissing.length} órdenes`);
-        }
-
-        return updatedOrders;
+      if (updateResult) {
+        console.log(`✅ Coordenadas agregadas a orden ${order.order_number || orderId}: ${coords.lat}, ${coords.lng}`);
+        return true;
+      } else {
+        console.error(`❌ No se pudo actualizar orden ${orderId}`);
+        return false;
       }
-
-      console.log(`✅ Todas las órdenes tienen coordenadas válidas`);
-      return orders;
-    } catch (error) {
-      console.error('❌ Error validando coordenadas:', error);
-      throw error;
+    } else {
+      console.warn(`⚠️ No se pudo geocodificar orden ${order.order_number || orderId}: ${fullAddress}`);
+      return false;
     }
+
+  } catch (error) {
+    console.error(`❌ Error geocodificando orden ${orderId}:`, error);
+    return false;
   }
+}
+
+/**
+ * ✅ MEJORADO: Geocodificación con mejor manejo de errores
+ */
+async geocodeAddress(address) {
+  try {
+    if (!this.googleApiKey) {
+      console.error('❌ Google API Key no configurada');
+      return null;
+    }
+
+    const cleanAddress = address.trim().replace(/\s+/g, ' ');
+    console.log(`🌍 Geocodificando: "${cleanAddress}"`);
+
+    const response = await axios.get('https://maps.googleapis.com/maps/api/geocode/json', {
+      params: { 
+        address: cleanAddress, 
+        key: this.googleApiKey,
+        region: 'cl', // Bias hacia Chile
+        components: 'country:CL' // Restringir a Chile
+      },
+      timeout: 10000 // 10 segundos timeout
+    });
+
+    if (response.data.status === 'OK' && response.data.results.length > 0) {
+      const location = response.data.results[0].geometry.location;
+      console.log(`✅ Geocodificación exitosa: ${location.lat}, ${location.lng}`);
+      return { lat: location.lat, lng: location.lng };
+    } else {
+      console.warn(`⚠️ Google Geocoding API: ${response.data.status} para "${cleanAddress}"`);
+      return null;
+    }
+
+  } catch (error) {
+    if (error.code === 'ECONNABORTED') {
+      console.error('❌ Timeout geocodificando:', address);
+    } else if (error.response) {
+      console.error('❌ Error de Google API:', error.response.status, error.response.data);
+    } else {
+      console.error('❌ Error geocodificando:', error.message);
+    }
+    return null;
+  }
+}
 
   /**
    * ✅ NUEVO: Geocodificar orden si no tiene coordenadas
@@ -455,209 +573,201 @@ class RouteOptimizerService {
 
   // ==================== TU MÉTODO ORIGINAL optimizeRoute() - MANTENIDO ====================
 
-  /**
-   * 🔹 Optimiza y asigna una ruta completa (usa OR-Tools o heurístico)
-   * TU CÓDIGO ORIGINAL MANTENIDO CON PEQUEÑAS MEJORAS
-   */
-  async optimizeRoute(routeConfig) {
-    try {
-      const { orderIds, driverId, companyId, company, createdBy, preferences = {}, startLocation, endLocation } = routeConfig;
-      const companyRef = companyId || company;
+ /**
+ * 🔹 CORREGIDO: Optimiza y asigna una ruta completa (usa OR-Tools o heurístico)
+ */
+async optimizeRoute(routeConfig) {
+  try {
+    const { orderIds, driverId, companyId, company, createdBy, preferences = {}, startLocation, endLocation } = routeConfig;
+    const companyRef = companyId || company;
 
-      console.log(`🚀 Iniciando optimización de ruta: ${orderIds.length} órdenes`);
+    console.log(`🚀 Iniciando optimización de ruta: ${orderIds.length} órdenes`);
 
-      // 1️⃣ Buscar y validar pedidos
-      const orders = await this.validateOrderCoordinates(orderIds);
-      if (!orders.length) throw new Error('No se encontraron pedidos válidos con coordenadas');
-
-      // 2️⃣ Geocodificar direcciones (tu lógica original)
-      const geocodedOrders = await Promise.all(
-        orders.map(async (order) => {
-          // Si ya tiene coordenadas, usarlas
-          if (order.location && order.location.latitude) {
-            return { 
-              order, 
-              lat: order.location.latitude, 
-              lng: order.location.longitude, 
-              fullAddress: order.shipping_address 
-            };
-          }
-          
-          // Si no, geocodificar
-          const address = `${order.shipping_address}, ${order.shipping_commune || ''}, Chile`;
-          const geo = await this.geocodeAddress(address);
-          if (!geo) {
-            console.warn(`⚠️ No se pudo geocodificar: "${address}"`);
-            return null;
-          }
-          
-          // Guardar la geocodificación en la orden
-          await Order.updateOne(
-            { _id: order._id }, 
-            { $set: { location: { latitude: geo.lat, longitude: geo.lng } } }
-          );
-          
-          return { order, lat: geo.lat, lng: geo.lng, fullAddress: address };
-        })
-      );
-
-      const validOrders = geocodedOrders.filter(Boolean);
-      if (!validOrders.length) throw new Error('No se pudieron geocodificar direcciones');
-
-      // 3️⃣ Preparar ubicaciones
-      const locations = [
-        { lat: startLocation.latitude, lng: startLocation.longitude },
-        ...validOrders.map(o => ({ lat: o.lat, lng: o.lng })),
-        { lat: endLocation.latitude, lng: endLocation.longitude }
-      ];
-
-      let optimizedOrderIndexes;
-      let usedEngine = 'heuristic';
-
-      // 4️⃣ Intentar optimizar con microservicio Python
-      try {
-        console.log(`🚀 Intentando optimización OR-Tools en ${this.pythonOptimizerUrl}`);
-        
-        const optimizerPayload = {
-          locations,
-          preferences: preferences || { prioritizeTime: true }
-        };
-        
-        const res = await axios.post(this.pythonOptimizerUrl, optimizerPayload, { timeout: 10000 });
-        
-        if (res.data && res.data.route && res.data.route.length) {
-          optimizedOrderIndexes = res.data.route;
-          usedEngine = 'or-tools';
-          console.log('✅ OR-Tools devolvió una ruta válida.');
-        } else {
-          console.warn('⚠️ OR-Tools devolvió respuesta vacía, usando heurístico.');
-        }
-      } catch (err) {
-        console.warn('⚠️ Falló optimizador OR-Tools, usando heurístico:', err.message);
-      }
-
-      let sequence;
-
-      // 5️⃣ Si no hay ruta desde OR-Tools → fallback heurístico
-      if (!optimizedOrderIndexes) {
-        sequence = this.heuristicOptimize(
-          { lat: startLocation.latitude, lng: startLocation.longitude },
-          validOrders,
-          { lat: endLocation.latitude, lng: endLocation.longitude }
-        );
-        usedEngine = 'heuristic';
-      } else {
-        // 6️⃣ Generar secuencia de pedidos desde los ÍNDICES
-        sequence = optimizedOrderIndexes
-          .slice(1, -1) // Quitar índice 0 (inicio) e índice final (fin)
-          .map(i => validOrders[i - 1]);
-      }
-
-      // 7️⃣ Obtener la ruta real y polilínea de Google
-      const waypoints = sequence.map(o => ({
-        location: { lat: o.lat, lng: o.lng }
-      }));
-
-      const directionsRequest = {
-        params: {
-          origin: { lat: startLocation.latitude, lng: startLocation.longitude },
-          destination: { lat: endLocation.latitude, lng: endLocation.longitude },
-          waypoints: waypoints,
-          optimizeWaypoints: false, // La secuencia YA está optimizada
-          travelMode: 'DRIVING',
-          key: this.googleApiKey,
-        },
-      };
-
-      let routeData = null;
-      let totalDistance = 0; // en metros
-      let totalDuration = 0; // en segundos
-
-      try {
-        console.log('🗺️ Obteniendo ruta real de Google Directions...');
-        const directionsResult = await this.googleMapsClient.directions(directionsRequest);
-        if (directionsResult.data.routes && directionsResult.data.routes.length > 0) {
-          routeData = directionsResult.data.routes[0];
-          console.log('✅ Ruta real obtenida de Google Directions');
-          
-          for (const leg of routeData.legs) {
-            totalDistance += leg.distance.value;
-            totalDuration += leg.duration.value;
-          }
-        }
-      } catch (e) {
-        console.error('⚠️ Error al llamar a Google Directions API', e.message);
-        // Fallback a la estimación Haversine si Google falla
-        totalDistance = this.estimateTotalDistance(sequence, startLocation, endLocation);
-        totalDuration = Math.round(totalDistance / 1000 * 3.5 * 60); // ~3.5 min por km
-      }
-
-      // 8️⃣ Crear y asignar RoutePlan
-      const routePlan = new RoutePlan({
-        company: companyRef,
-        driver: driverId,
-        createdBy,
-        startLocation,
-        endLocation,
-        orders: sequence.map((o, i) => ({
-          order: o.order._id,
-          sequenceNumber: i + 1,
-          estimatedArrival: new Date(Date.now() + (routeData ? 
-            routeData.legs.slice(0, i + 1).reduce((acc, leg) => acc + leg.duration.value, 0) * 1000 : 
-            (i + 1) * 10 * 60 * 1000)),
-          deliveryStatus: 'pending'
-        })),
-        optimization: {
-          algorithm: usedEngine,
-          optimizedAt: new Date(),
-          totalDistance: totalDistance,
-          totalDuration: totalDuration,
-          overview_polyline: routeData ? routeData.overview_polyline.points : null,
-          map_bounds: routeData ? routeData.bounds : null,
-          googleRouteData: routeData // Opcional: guardar todo
-        },
-        preferences,
-        status: 'assigned',
-        assignedAt: new Date()
-      });
-
-      await routePlan.save();
-      await routePlan.populate([
-        'orders.order', 
-        'driver',
-        { path: 'company', select: 'name' }
-      ]);
-
-      // 9️⃣ Marcar pedidos como asignados
-      await Order.updateMany(
-        { _id: { $in: routePlan.orders.map(o => o.order._id || o.order) } },
-        { 
-          status: 'assigned', 
-          assigned_driver: driverId, 
-          assigned_at: new Date() 
-        }
-      );
-
-      console.log(`✅ Ruta optimizada creada: ${routePlan._id} (${usedEngine})`);
-
-      return {
-        success: true,
-        message: `Ruta optimizada y asignada usando ${usedEngine}`,
-        routePlan,
-        summary: {
-          totalOrders: routePlan.orders.length,
-          driver: routePlan.driver.full_name || routePlan.driver.name,
-          totalDistance: routePlan.optimization.totalDistance,
-          totalDuration: routePlan.optimization.totalDuration,
-          algorithm: usedEngine,
-          hasPolyline: !!routePlan.optimization.overview_polyline
-        }
-      };
-    } catch (error) {
-      console.error('❌ Error optimizando ruta:', error);
-      throw new Error(`Error en optimización: ${error.message}`);
+    // 1️⃣ USAR LA FUNCIÓN CORREGIDA - Buscar y validar pedidos con coordenadas
+    const orders = await this.validateOrderCoordinates(orderIds);
+    if (!orders.length) {
+      throw new Error('No se encontraron pedidos válidos con coordenadas válidas');
     }
+
+    console.log(`✅ ${orders.length} órdenes válidas con coordenadas encontradas`);
+
+    // 2️⃣ Preparar órdenes geocodificadas (ya vienen con coordenadas)
+    const geocodedOrders = orders.map(order => ({
+      order,
+      lat: order.location.latitude,
+      lng: order.location.longitude,
+      fullAddress: order.shipping_address
+    }));
+
+    console.log(`📍 ${geocodedOrders.length} órdenes preparadas para optimización`);
+
+    // 3️⃣ Preparar ubicaciones para el optimizador
+    const locations = [
+      { lat: startLocation.latitude, lng: startLocation.longitude },
+      ...geocodedOrders.map(o => ({ lat: o.lat, lng: o.lng })),
+      { lat: endLocation.latitude, lng: endLocation.longitude }
+    ];
+
+    let optimizedOrderIndexes;
+    let usedEngine = 'heuristic';
+
+    // 4️⃣ Intentar optimizar con microservicio Python
+    try {
+      console.log(`🚀 Intentando optimización OR-Tools en ${this.pythonOptimizerUrl}`);
+      
+      const optimizerPayload = {
+        locations,
+        preferences: preferences || { prioritizeTime: true }
+      };
+      
+      const res = await axios.post(this.pythonOptimizerUrl, optimizerPayload, { timeout: 10000 });
+      
+      if (res.data && res.data.route && res.data.route.length) {
+        optimizedOrderIndexes = res.data.route;
+        usedEngine = 'or-tools';
+        console.log('✅ OR-Tools devolvió una ruta válida.');
+      } else {
+        console.warn('⚠️ OR-Tools devolvió respuesta vacía, usando heurístico.');
+      }
+    } catch (err) {
+      console.warn('⚠️ Falló optimizador OR-Tools, usando heurístico:', err.message);
+    }
+
+    let sequence;
+
+    // 5️⃣ Si no hay ruta desde OR-Tools → fallback heurístico
+    if (!optimizedOrderIndexes) {
+      sequence = this.heuristicOptimize(
+        { lat: startLocation.latitude, lng: startLocation.longitude },
+        geocodedOrders,
+        { lat: endLocation.latitude, lng: endLocation.longitude }
+      );
+      usedEngine = 'heuristic';
+    } else {
+      // 6️⃣ Generar secuencia de pedidos desde los ÍNDICES
+      sequence = optimizedOrderIndexes
+        .slice(1, -1) // Quitar índice 0 (inicio) e índice final (fin)
+        .map(i => geocodedOrders[i - 1]);
+    }
+
+    console.log(`🎯 Secuencia optimizada generada: ${sequence.length} órdenes`);
+
+    // 7️⃣ Obtener la ruta real y polilínea de Google
+    const waypoints = sequence.map(o => ({
+      location: { lat: o.lat, lng: o.lng }
+    }));
+
+    // ✅ IMPORTAR GOOGLE MAPS CLIENT SI NO ESTÁ IMPORTADO
+    const { Client } = require("@googlemaps/google-maps-services-js");
+    const googleMapsClient = new Client({});
+
+    const directionsRequest = {
+      params: {
+        origin: { lat: startLocation.latitude, lng: startLocation.longitude },
+        destination: { lat: endLocation.latitude, lng: endLocation.longitude },
+        waypoints: waypoints,
+        optimizeWaypoints: false, // La secuencia YA está optimizada
+        travelMode: 'DRIVING',
+        key: this.googleApiKey,
+      },
+    };
+
+    let routeData = null;
+    let totalDistance = 0; // en metros
+    let totalDuration = 0; // en segundos
+
+    try {
+      console.log('🗺️ Obteniendo ruta real de Google Directions...');
+      const directionsResult = await googleMapsClient.directions(directionsRequest);
+      if (directionsResult.data.routes && directionsResult.data.routes.length > 0) {
+        routeData = directionsResult.data.routes[0];
+        console.log('✅ Ruta real obtenida de Google Directions');
+        
+        // ✅ CALCULAR DISTANCIA Y DURACIÓN REAL
+        for (const leg of routeData.legs) {
+          totalDistance += leg.distance.value;
+          totalDuration += leg.duration.value;
+        }
+        
+        console.log(`📏 Distancia total: ${(totalDistance/1000).toFixed(1)} km`);
+        console.log(`⏱️ Duración total: ${Math.round(totalDuration/60)} min`);
+      }
+    } catch (e) {
+      console.error('⚠️ Error al llamar a Google Directions API', e.message);
+      // Fallback a la estimación Haversine si Google falla
+      totalDistance = this.estimateTotalDistance(sequence, startLocation, endLocation);
+      totalDuration = Math.round(totalDistance / 1000 * 3.5 * 60); // ~3.5 min por km
+      console.log(`📏 Usando estimación Haversine: ${(totalDistance/1000).toFixed(1)} km`);
+    }
+
+    // 8️⃣ Crear y asignar RoutePlan
+    const routePlan = new RoutePlan({
+      company: companyRef,
+      driver: driverId,
+      createdBy,
+      startLocation,
+      endLocation,
+      orders: sequence.map((o, i) => ({
+        order: o.order._id,
+        sequenceNumber: i + 1,
+        estimatedArrival: new Date(Date.now() + (routeData ? 
+          routeData.legs.slice(0, i + 1).reduce((acc, leg) => acc + leg.duration.value, 0) * 1000 : 
+          (i + 1) * 10 * 60 * 1000)),
+        deliveryStatus: 'pending'
+      })),
+      optimization: {
+        algorithm: usedEngine,
+        optimizedAt: new Date(),
+        totalDistance: totalDistance,
+        totalDuration: totalDuration,
+        overview_polyline: routeData ? routeData.overview_polyline.points : null,
+        map_bounds: routeData ? routeData.bounds : null,
+        googleRouteData: routeData // Opcional: guardar todo
+      },
+      preferences,
+      status: 'assigned',
+      assignedAt: new Date()
+    });
+
+    await routePlan.save();
+    await routePlan.populate([
+      'orders.order', 
+      'driver',
+      { path: 'company', select: 'name' }
+    ]);
+
+    // 9️⃣ Marcar pedidos como asignados
+    await Order.updateMany(
+      { _id: { $in: routePlan.orders.map(o => o.order._id || o.order) } },
+      { 
+        status: 'assigned', 
+        assigned_driver: driverId, 
+        assigned_at: new Date() 
+      }
+    );
+
+    console.log(`✅ Ruta optimizada creada: ${routePlan._id} (${usedEngine})`);
+
+    return {
+      success: true,
+      message: `Ruta optimizada y asignada usando ${usedEngine}`,
+      routePlan,
+      summary: {
+        totalOrders: routePlan.orders.length,
+        driver: routePlan.driver.full_name || routePlan.driver.name,
+        totalDistance: routePlan.optimization.totalDistance,
+        totalDuration: routePlan.optimization.totalDuration,
+        totalDistanceKm: Math.round(routePlan.optimization.totalDistance / 1000 * 10) / 10,
+        totalDurationMin: Math.round(routePlan.optimization.totalDuration / 60),
+        algorithm: usedEngine,
+        hasPolyline: !!routePlan.optimization.overview_polyline
+      }
+    };
+  } catch (error) {
+    console.error('❌ Error optimizando ruta:', error);
+    throw new Error(`Error en optimización: ${error.message}`);
   }
+}
 
   // ==================== TUS MÉTODOS ORIGINALES MANTENIDOS ====================
 
