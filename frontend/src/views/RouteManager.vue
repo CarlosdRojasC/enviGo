@@ -150,8 +150,8 @@
                   {{ stop.order?.customer_name || 'Cliente' }}
                 </p>
                 <p class="text-xs text-gray-500">
-                  {{ stop.order?.address || 'Sin dirección' }}
-                </p>
+  {{ stop.order?.delivery_location?.formatted_address || stop.order?.shipping_address || 'Sin dirección' }}
+</p>
               </div>
             </li>
           </ol>

@@ -206,6 +206,7 @@ exports.optimizeRoute = async (config) => {
       origin: `${origin.lat},${origin.lng}`,
       destination: `${destination.lat},${destination.lng}`,
       waypoints: waypoints.map((wp) => `${wp.lat},${wp.lng}`),
+      optimizeWaypoints: false,
       travelMode: "DRIVING",
       key: process.env.GOOGLE_MAPS_API_KEY,
       ...prefParams,
