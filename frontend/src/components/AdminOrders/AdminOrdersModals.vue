@@ -1106,8 +1106,8 @@ async function optimizeAssignedOrders() {
 
     const payload = {
   startLocation: {
-    latitude: -33.4633,
-    longitude: -70.6045,
+    latitude: -33.47275705846726,
+    longitude: -70.61288037580736,
     address: 'Zañartu 1897, Ñuñoa, Santiago'
   },
   endLocation: {
