@@ -7,6 +7,7 @@ const { Client } = require("@googlemaps/google-maps-services-js");
 class RouteOptimizerService {
   constructor() {
     this.googleApiKey = process.env.GOOGLE_MAPS_API_KEY;
+    console.log("API Key Cargada:", this.googleApiKey ? "Sí" : "¡NO!");
     this.pythonOptimizerUrl = process.env.PYTHON_OPTIMIZER_URL || 'http://localhost:5001/optimize';
     // 👇 AÑADIR ESTA LÍNEA
     this.googleMapsClient = new Client({});
