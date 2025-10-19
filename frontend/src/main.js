@@ -11,6 +11,7 @@ import './assets/css/variables.css'
 import './assets/css/toast-styles.css'
 import './assets/styles/tailwind.css'
 import VueGoogleMaps from '@fawmi/vue-google-maps'
+import { setOptions } from "@googlemaps/js-api-loader";
 
 // ==================== CREAR APP ====================
 const app = createApp(App)
@@ -42,6 +43,11 @@ app.use(VueGoogleMaps, {
     key: 'AIzaSyBVQvkWQXe-E4AkFXKu0Yx86RCQpUTbwcg',
   },
 })
+setOptions({
+  apiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY,
+  version: "weekly",
+  libraries: ["maps", "geometry", "marker"],
+});
 
 // ==================== MONTAR APP PRIMERO ====================
 app.mount('#app')
