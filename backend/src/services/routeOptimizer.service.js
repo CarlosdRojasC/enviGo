@@ -8,17 +8,13 @@ const googleMapsClient = new Client({});
 
 const GOOGLE_DIRECTIONS_BATCH_SIZE = 25;
 
-// ✅ *** NUEVA FUNCIÓN AUXILIAR ***
-// Obtiene {lat, lng} de forma segura desde cualquier tipo de punto
+// Función auxiliar para obtener coordenadas
 const getCoords = (point) => {
   if (point.location && typeof point.location.latitude !== 'undefined' && typeof point.location.longitude !== 'undefined') {
-    // Es un objeto 'order' (con location anidada)
     return { lat: point.location.latitude, lng: point.location.longitude };
   } else if (typeof point.latitude !== 'undefined' && typeof point.longitude !== 'undefined') {
-    // Es startLocation o endLocation (lat/lng directos)
     return { lat: point.latitude, lng: point.longitude };
   } else {
-    // Estructura desconocida o inválida
     console.error("🚨 Punto de ruta con estructura de coordenadas inválida:", point);
     throw new Error("Punto de ruta inválido encontrado.");
   }
@@ -38,9 +34,9 @@ exports.optimizeRoute = async (config) => {
 
   // 2️⃣ Preparar ubicaciones para Python
   const locations = [
-    getCoords(startLocation), // Usar helper para formato consistente
-    ...orders.map(getCoords),  // Usar helper
-    getCoords(endLocation)    // Usar helper
+    getCoords(startLocation),
+    ...orders.map(getCoords),
+    getCoords(endLocation)
   ];
 
   let optimizedIndices;
@@ -57,11 +53,10 @@ exports.optimizeRoute = async (config) => {
     throw new Error("El microservicio de optimización (Python) falló.");
   }
 
-  // 4️⃣ Reconstruir secuencia completa (¡OJO! Python ahora trabaja con índices basados en {lat,lng})
-  // Necesitamos mapear los índices de Python a los OBJETOS originales
-  const originalStopsForMapping = [startLocation, ...orders, endLocation]; // Mantener objetos originales
-  const optimizedStopSequence = optimizedIndices.map(index => originalStopsForMapping[index]); // Mapear índices a objetos originales
-  const orderedOrders = optimizedStopSequence.slice(1, -1); // Extraer solo órdenes
+  // 4️⃣ Reconstruir secuencia completa
+  const originalStopsForMapping = [startLocation, ...orders, endLocation];
+  const optimizedStopSequence = optimizedIndices.map(index => originalStopsForMapping[index]);
+  const orderedOrders = optimizedStopSequence.slice(1, -1);
 
   // 5️⃣ Llamar a Google Directions en LOTES
   let totalDistance = 0;
@@ -78,25 +73,30 @@ exports.optimizeRoute = async (config) => {
     const destination = batchPoints[batchPoints.length - 1];
     const waypoints = batchPoints.slice(1, -1);
 
-    // Identificar el lote para logging
     const originLabel = originalStopsForMapping.indexOf(origin) === 0 ? 'Inicio' : `Orden ${orders.findIndex(o => o === origin) + 1}`;
     const destinationLabel = originalStopsForMapping.indexOf(destination) === originalStopsForMapping.length - 1 ? 'Fin' : `Orden ${orders.findIndex(o => o === destination) + 1}`;
     console.log(`...Lote ${Math.floor(i / (GOOGLE_DIRECTIONS_BATCH_SIZE - 1)) + 1}: ${originLabel} -> ${destinationLabel} (${waypoints.length} paradas)`);
 
-    // ✅ *** USA LA FUNCIÓN AUXILIAR AQUÍ ***
+    // Construir la petición
     const directionsRequest = {
       params: {
-        origin: getCoords(origin),          // Usar helper
-        destination: getCoords(destination),  // Usar helper
-        waypoints: waypoints.map(wp => ({ location: getCoords(wp) })), // Usar helper
+        origin: getCoords(origin),
+        destination: getCoords(destination),
+        waypoints: waypoints.map(wp => ({ location: getCoords(wp) })),
         optimizeWaypoints: false,
         travelMode: 'DRIVING',
         key: process.env.GOOGLE_MAPS_API_KEY,
       },
+       // 👇 *** AÑADIDO: Timeout de 15 segundos ***
+      timeout: 15000, // milliseconds
     };
+
+    // 👇 *** AÑADIDO: Loguear los parámetros que se envían ***
+    console.log(`➡️ Enviando parámetros a Directions (Lote ${Math.floor(i / (GOOGLE_DIRECTIONS_BATCH_SIZE - 1)) + 1}):`, JSON.stringify(directionsRequest.params, null, 2));
 
     try {
       const directionsResult = await googleMapsClient.directions(directionsRequest);
+      
       if (directionsResult.data.routes && directionsResult.data.routes.length > 0) {
         const route = directionsResult.data.routes[0];
         
@@ -110,14 +110,13 @@ exports.optimizeRoute = async (config) => {
         console.warn("⚠️ Google Directions no devolvió ruta para un lote.");
       }
     } catch (e) {
-      // 👇 *** LOG THE ENTIRE ERROR OBJECT ***
-      console.error(`❌ ERROR COMPLETO en lote (${originLabel} -> ${destinationLabel}):`, JSON.stringify(e, Object.getOwnPropertyNames(e), 2)); // Stringify for better logging
+      // Log del error completo
+      console.error(`❌ ERROR COMPLETO en lote (${originLabel} -> ${destinationLabel}):`, JSON.stringify(e, Object.getOwnPropertyNames(e), 2)); 
 
-      // Use a safe fallback message for the thrown error
       const errorMsg = e.message || 'Error desconocido al llamar a Directions API';
       throw new Error(`Fallo en un lote de Google Directions (${originLabel} -> ${destinationLabel}): ${errorMsg}`);
     }
-  }
+  } // Fin del bucle for
 
   console.log(`✅ Lotes completados. Distancia: ${totalDistance}m, Duración: ${totalDuration}s`);
 
@@ -134,10 +133,10 @@ exports.optimizeRoute = async (config) => {
       deliveryStatus: "pending",
     })),
     optimization: {
-      algorithm: "python_or-tools+google_directions", // Indicar ambos
+      algorithm: "python_or-tools+google_directions",
       totalDistance: totalDistance,
       totalDuration: totalDuration,
-      overview_polyline: combinedPolylines.join(''), // Concatenar polilíneas
+      overview_polyline: combinedPolylines.join(''),
     },
     status: "draft",
   });
