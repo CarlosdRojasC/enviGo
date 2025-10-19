@@ -280,9 +280,10 @@ const viewRoute = async (route) => {
     const { geometry } = maps;
 
     const map = new maps.Map(mapContainer, {
-      center: { lat: route.startLocation.latitude, lng: route.startLocation.longitude },
-      zoom: 12,
-    });
+  center: { lat: route.startLocation.latitude, lng: route.startLocation.longitude },
+  zoom: 12,
+  mapId: "ENVIGO_MAP_DEFAULT" // ✅ agrega un ID de mapa válido
+});
     mapInstance.value = map;
 
     const bounds = new maps.LatLngBounds();
