@@ -1,497 +1,801 @@
-<!-- RouteManager.vue - Con Leaflet + OSRM (sin Google Maps) -->
-
 <template>
   <div class="p-6 bg-gray-50 min-h-screen">
-    <!-- Header igual que antes... -->
-    
-    <!-- Modal del mapa con Leaflet -->
-    <div
-      v-if="showRouteMap"
-      class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
-    >
-      <div class="bg-white rounded-xl max-w-6xl w-full overflow-hidden shadow-xl">
-        <div class="flex justify-between items-center border-b border-gray-200 p-4">
-          <h3 class="text-lg font-semibold text-gray-900">
-            🗺️ Ruta #{{ activeRoute?._id?.slice(-6).toUpperCase() }}
-          </h3>
-          <div class="flex items-center gap-4">
-            <!-- Información de distancia -->
-            <div v-if="routeInfo.distance" class="text-sm text-gray-600 bg-gray-100 px-3 py-1 rounded-lg">
-              📏 {{ routeInfo.distance }} • ⏱️ {{ routeInfo.duration }}
-            </div>
-            <button @click="showRouteMap = false" class="text-gray-500 hover:text-gray-700">
-              ✖
-            </button>
+    <!-- Header -->
+    <div class="bg-white rounded-xl shadow-sm p-6 mb-6">
+      <div class="flex justify-between items-center">
+        <div>
+          <h1 class="text-3xl font-bold text-gray-900 flex items-center gap-2">
+            🛣️ Gestión de Rutas
+          </h1>
+          <p class="text-gray-600 mt-1">Optimiza y administra las rutas de entrega de tus conductores</p>
+        </div>
+        <div class="flex gap-3">
+          <button 
+            @click="showRouteOptimizer = true" 
+            class="bg-gradient-to-r from-blue-500 to-purple-600 text-white px-6 py-3 rounded-lg font-semibold hover:shadow-lg transform hover:-translate-y-0.5 transition-all duration-200"
+          >
+            ✨ Optimizar Nueva Ruta
+          </button>
+          <button 
+            @click="refreshRoutes" 
+            class="bg-gray-100 text-gray-700 px-4 py-3 rounded-lg font-semibold hover:bg-gray-200 transition-colors"
+            :disabled="loading"
+          >
+            🔄 Actualizar
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Stats Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
+      <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+        <div class="flex items-center gap-4">
+          <div class="text-3xl">🛣️</div>
+          <div>
+            <h3 class="text-2xl font-bold text-gray-900">{{ routeStats?.totalRoutes || 0 }}</h3>
+            <p class="text-gray-600">Rutas Totales</p>
           </div>
         </div>
-
-        <div class="flex h-[600px]">
-          <!-- Mapa con Leaflet -->
-          <div class="flex-1">
-            <div 
-              ref="mapContainer" 
-              id="route-map" 
-              style="width: 100%; height: 100%"
-            ></div>
+      </div>
+      <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+        <div class="flex items-center gap-4">
+          <div class="text-3xl">🚀</div>
+          <div>
+            <h3 class="text-2xl font-bold text-gray-900">{{ routeStats.inProgressRoutes || 0 }}</h3>
+            <p class="text-gray-600">En Progreso</p>
           </div>
-
-          <!-- Panel lateral con direcciones -->
-          <div class="w-80 bg-gray-50 border-l border-gray-200 overflow-y-auto">
-            <div class="p-4">
-              <h4 class="font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                🧭 Información de la Ruta
-              </h4>
-              
-              <!-- Información general -->
-              <div v-if="routeInfo.distance" class="bg-white rounded-lg p-3 mb-4 border border-gray-200">
-                <div class="grid grid-cols-2 gap-2 text-sm">
-                  <div>
-                    <span class="text-gray-500">Distancia:</span>
-                    <div class="font-semibold text-blue-600">{{ routeInfo.distance }}</div>
-                  </div>
-                  <div>
-                    <span class="text-gray-500">Duración:</span>
-                    <div class="font-semibold text-green-600">{{ routeInfo.duration }}</div>
-                  </div>
-                  <div>
-                    <span class="text-gray-500">Paradas:</span>
-                    <div class="font-semibold">{{ (activeRoute?.orders || []).length }}</div>
-                  </div>
-                  <div>
-                    <span class="text-gray-500">Algoritmo:</span>
-                    <div class="font-semibold capitalize">{{ activeRoute?.optimization?.algorithm || 'N/A' }}</div>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Lista de paradas -->
-              <div v-if="activeRoute?.orders?.length" class="space-y-2">
-                <h5 class="font-medium text-gray-700 mb-2">📋 Secuencia de Entregas</h5>
-                <div 
-                  v-for="(orderItem, index) in activeRoute.orders" 
-                  :key="index"
-                  class="bg-white rounded-lg p-3 border border-gray-200 hover:bg-blue-50 transition-colors cursor-pointer"
-                  @click="focusOnStop(index)"
-                >
-                  <div class="flex items-start gap-3">
-                    <div class="w-6 h-6 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center text-xs font-bold">
-                      {{ orderItem.sequenceNumber || index + 1 }}
-                    </div>
-                    <div class="flex-1">
-                      <div class="text-sm font-medium text-gray-900">
-                        {{ orderItem.order?.customer_name || 'Cliente' }}
-                      </div>
-                      <div class="text-xs text-gray-500 mt-1">
-                        {{ orderItem.order?.shipping_address || 'Sin dirección' }}
-                      </div>
-                      <div class="text-xs text-green-600 mt-1">
-                        {{ orderItem.order?.shipping_commune || '' }}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Loading state -->
-              <div v-if="loadingRouteDetails" class="text-center py-8">
-                <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-                <p class="text-gray-500 mt-2">Cargando detalles...</p>
-              </div>
-            </div>
+        </div>
+      </div>
+      <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+        <div class="flex items-center gap-4">
+          <div class="text-3xl">✅</div>
+          <div>
+            <h3 class="text-2xl font-bold text-gray-900">{{ routeStats.completedRoutes || 0 }}</h3>
+            <p class="text-gray-600">Completadas</p>
+          </div>
+        </div>
+      </div>
+      <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+        <div class="flex items-center gap-4">
+          <div class="text-3xl">📊</div>
+          <div>
+            <h3 class="text-2xl font-bold text-gray-900">{{ routeStats.completionRate || 0 }}%</h3>
+            <p class="text-gray-600">Tasa de Éxito</p>
           </div>
         </div>
       </div>
     </div>
+
+    <!-- Filters -->
+    <div class="bg-white rounded-xl shadow-sm p-6 mb-6">
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-2">Estado:</label>
+          <select 
+            v-model="filters.status" 
+            @change="applyFilters"
+            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          >
+            <option value="">Todos</option>
+            <option value="draft">Borrador</option>
+            <option value="assigned">Asignada</option>
+            <option value="in_progress">En Progreso</option>
+            <option value="completed">Completada</option>
+            <option value="cancelled">Cancelada</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-2">Conductor:</label>
+          <select 
+            v-model="filters.driverId" 
+            @change="applyFilters"
+            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          >
+            <option value="">Todos</option>
+            <option v-for="driver in drivers" :key="driver._id" :value="driver._id">
+              {{ driver.name }}
+            </option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-2">Fecha desde:</label>
+          <input 
+            type="date" 
+            v-model="filters.startDate" 
+            @change="applyFilters"
+            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          >
+        </div>
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-2">Fecha hasta:</label>
+          <input 
+            type="date" 
+            v-model="filters.endDate" 
+            @change="applyFilters"
+            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          >
+        </div>
+      </div>
+    </div>
+
+    <!-- Routes Table -->
+    <div class="bg-white rounded-xl shadow-sm overflow-hidden">
+      <div class="p-6 border-b border-gray-200">
+        <div class="flex justify-between items-center">
+          <h3 class="text-xl font-semibold text-gray-900">Lista de Rutas</h3>
+          <div class="flex gap-2">
+            <button 
+              v-if="selectedRoutes.length > 0"
+              @click="bulkAssignDriver"
+              class="bg-blue-100 text-blue-700 px-4 py-2 rounded-lg font-medium hover:bg-blue-200 transition-colors"
+            >
+              👥 Asignar Conductor ({{ selectedRoutes.length }})
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="w-full">
+          <thead class="bg-gray-50">
+            <tr>
+              <th class="px-6 py-3 text-left">
+                <input 
+                  type="checkbox" 
+                  @change="toggleSelectAll"
+                  :checked="isAllSelected"
+                  class="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                >
+              </th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID Ruta</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Conductor</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Entregas</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Progreso</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Distancia</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tiempo Est.</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Creada</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
+            </tr>
+          </thead>
+          <tbody class="bg-white divide-y divide-gray-200">
+            <tr v-if="loading">
+              <td colspan="10" class="px-6 py-12 text-center">
+                <div class="flex items-center justify-center">
+                  <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                  <span class="ml-2 text-gray-600">Cargando rutas...</span>
+                </div>
+              </td>
+            </tr>
+            <tr v-else-if="routes.length === 0">
+              <td colspan="10" class="px-6 py-12 text-center">
+                <div class="text-center">
+                  <div class="text-6xl mb-4">🛣️</div>
+                  <h3 class="text-lg font-medium text-gray-900 mb-2">No hay rutas</h3>
+                  <p class="text-gray-600 mb-4">Aún no has creado ninguna ruta optimizada</p>
+                  <button 
+                    @click="showRouteOptimizer = true" 
+                    class="bg-blue-600 text-white px-6 py-2 rounded-lg font-medium hover:bg-blue-700 transition-colors"
+                  >
+                    Crear Primera Ruta
+                  </button>
+                </div>
+              </td>
+            </tr>
+            <tr 
+              v-else
+              v-for="route in routes" 
+              :key="route._id"
+              :class="{ 'bg-blue-50': selectedRoutes.includes(route._id) }"
+              class="hover:bg-gray-50 cursor-pointer"
+              @click="selectRoute(route)"
+            >
+              <td class="px-6 py-4 whitespace-nowrap" @click.stop>
+                <input 
+                  type="checkbox" 
+                  :value="route._id"
+                  v-model="selectedRoutes"
+                  class="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                >
+              </td>
+              <td class="px-6 py-4 whitespace-nowrap">
+                <div class="font-medium text-gray-900">
+                  #{{ route._id.slice(-6).toUpperCase() }}
+                </div>
+              </td>
+              <td class="px-6 py-4 whitespace-nowrap">
+                <div class="flex items-center gap-3">
+                  <div class="h-8 w-8 rounded-full bg-gradient-to-r from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold text-sm">
+                    {{ route.driver?.name?.charAt(0) || 'N' }}
+                  </div>
+                  <div>
+                    <div class="font-medium text-gray-900">{{ route.driver?.name || 'Sin asignar' }}</div>
+                    <div class="text-sm text-gray-500">{{ route.driver?.email || '' }}</div>
+                  </div>
+                </div>
+              </td>
+              <td class="px-6 py-4 whitespace-nowrap">
+                <span 
+                  :class="{
+                    'bg-yellow-100 text-yellow-800': route.status === 'draft',
+                    'bg-blue-100 text-blue-800': route.status === 'assigned',
+                    'bg-purple-100 text-purple-800': route.status === 'in_progress',
+                    'bg-green-100 text-green-800': route.status === 'completed',
+                    'bg-red-100 text-red-800': route.status === 'cancelled'
+                  }"
+                  class="inline-flex px-2 py-1 text-xs font-semibold rounded-full"
+                >
+                  {{ getStatusText(route.status) }}
+                </span>
+              </td>
+              <td class="px-6 py-4 whitespace-nowrap">
+                <div class="text-sm font-medium text-gray-900">{{ route.orders?.length || 0 }}</div>
+                <div class="text-sm text-gray-500">pedidos</div>
+              </td>
+              <td class="px-6 py-4 whitespace-nowrap">
+                <div class="flex items-center gap-2">
+                  <div class="w-16 bg-gray-200 rounded-full h-2">
+                    <div 
+                      class="bg-gradient-to-r from-green-400 to-green-600 h-2 rounded-full transition-all duration-300"
+                      :style="{ width: `${getRouteProgress(route)}%` }"
+                    ></div>
+                  </div>
+                  <span class="text-sm font-medium text-gray-700">{{ getRouteProgress(route) }}%</span>
+                </div>
+              </td>
+              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                {{ formatDistance(route.optimization?.totalDistance) }}
+              </td>
+              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                {{ formatDuration(route.optimization?.totalDuration) }}
+              </td>
+              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                {{ formatDate(route.createdAt) }}
+              </td>
+              <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                <div class="flex gap-1">
+                  <button 
+                    @click.stop="viewRoute(route)" 
+                    class="text-gray-600 hover:text-gray-900 p-1 rounded"
+                    title="Ver detalles"
+                  >
+                    👁️
+                  </button>
+                  <button 
+                    v-if="route.status === 'draft'"
+                    @click.stop="assignDriver(route)" 
+                    class="text-blue-600 hover:text-blue-900 p-1 rounded"
+                    title="Asignar conductor"
+                  >
+                    👤
+                  </button>
+                  <button 
+                    @click.stop="duplicateRoute(route)" 
+                    class="text-green-600 hover:text-green-900 p-1 rounded"
+                    title="Duplicar ruta"
+                  >
+                    📋
+                  </button>
+                  <button 
+                    v-if="route.status === 'draft'"
+                    @click.stop="deleteRoute(route)" 
+                    class="text-red-600 hover:text-red-900 p-1 rounded"
+                    title="Eliminar"
+                  >
+                    🗑️
+                  </button>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Pagination -->
+      <div v-if="pagination.total > 1" class="bg-white px-6 py-4 border-t border-gray-200">
+        <div class="flex justify-between items-center">
+          <button 
+            @click="changePage(pagination.current - 1)"
+            :disabled="pagination.current === 1"
+            class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            ← Anterior
+          </button>
+          <span class="text-sm text-gray-700">
+            Página {{ pagination.current }} de {{ pagination.total }}
+          </span>
+          <button 
+            @click="changePage(pagination.current + 1)"
+            :disabled="pagination.current === pagination.total"
+            class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Siguiente →
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Route Optimizer Modal -->
+    <div v-if="showRouteOptimizer" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div class="bg-white rounded-xl max-w-md w-full max-h-96 overflow-y-auto" @click.stop>
+        <div class="p-6 border-b border-gray-200">
+          <div class="flex justify-between items-center">
+            <h3 class="text-lg font-semibold text-gray-900">✨ Optimizar Nueva Ruta</h3>
+            <button @click="showRouteOptimizer = false" class="text-gray-400 hover:text-gray-600">
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+              </svg>
+            </button>
+          </div>
+        </div>
+        <div class="p-6">
+          <p class="text-gray-600 mb-4">Modal de optimización - En construcción</p>
+          <button 
+            @click="showRouteOptimizer = false" 
+            class="w-full bg-gray-100 text-gray-700 px-4 py-2 rounded-lg font-medium hover:bg-gray-200 transition-colors"
+          >
+            Cerrar
+          </button>
+        </div>
+      </div>
+    </div>
+    <!-- 📍 Route Map Modal -->
+<div
+  v-if="showRouteMap"
+  class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+>
+  <div class="bg-white rounded-xl max-w-5xl w-full overflow-hidden shadow-xl">
+    <div class="flex justify-between items-center border-b border-gray-200 p-4">
+      <h3 class="text-lg font-semibold text-gray-900">
+        🗺️ Ruta #{{ activeRoute?._id?.slice(-6).toUpperCase() }}
+      </h3>
+      <button @click="showRouteMap = false" class="text-gray-500 hover:text-gray-700">
+        ✖
+      </button>
+    </div>
+
+    <div class="p-4">
+      <!-- 👇 ref agregado aquí -->
+      <GMapMap
+        ref="routeMap"
+        v-if="activeRoute"
+        :center="mapCenter"
+        :zoom="12"
+        style="width: 100%; height: 500px"
+      >
+        <!-- Inicio -->
+        <GMapMarker
+          v-if="activeRoute.startLocation"
+          :position="{
+            lat: activeRoute.startLocation.latitude,
+            lng: activeRoute.startLocation.longitude,
+          }"
+          label="🏭"
+        />
+
+        <!-- Entregas -->
+        <GMapMarker
+          v-for="(item, index) in activeRoute.orders || []"
+          :key="index"
+          v-if="item?.order?.location"
+          :position="{
+            lat: item.order.location.latitude,
+            lng: item.order.location.longitude,
+          }"
+          :label="String(index + 1)"
+        />
+
+        <!-- Fin -->
+        <GMapMarker
+          v-if="activeRoute.endLocation"
+          :position="{
+            lat: activeRoute.endLocation.latitude,
+            lng: activeRoute.endLocation.longitude,
+          }"
+          label="🏠"
+        />
+
+        <!-- Polyline fallback -->
+        <GMapPolyline
+          v-if="polylineCoords.length > 1"
+          :path="polylineCoords"
+          :options="{
+            strokeColor: '#1E88E5',
+            strokeWeight: 4,
+            strokeOpacity: 0.8,
+          }"
+        />
+      </GMapMap>
+    </div>
+  </div>
+</div>
   </div>
 </template>
 
 <script>
-import { ref, computed, onMounted, nextTick } from 'vue'
+import { ref, computed, onMounted, nextTick  } from 'vue'
 import { apiService } from '../services/api'
-import { useToast } from 'vue-toastification'
-// Importar Leaflet
-import L from 'leaflet'
-import 'leaflet/dist/leaflet.css'
 
 export default {
   name: 'RouteManager',
   setup() {
-    const toast = useToast()
-
-    // Estado
-    const loading = ref(false)
+    // State
     const routes = ref([])
+    const drivers = ref([])
     const routeStats = ref({
       totalRoutes: 0,
-      inProgressRoutes: 0, 
+      inProgressRoutes: 0,
       completedRoutes: 0,
       completionRate: 0
     })
-
-    // Modal y mapa
+    const loading = ref(false)
+    const showRouteOptimizer = ref(false)
     const showRouteMap = ref(false)
-    const activeRoute = ref(null)
-    const mapContainer = ref(null)
-    const leafletMap = ref(null)
-    const loadingRouteDetails = ref(false)
-
-    // Datos de ruta
-    const routeInfo = ref({
-      distance: '',
-      duration: '',
-      totalDistanceKm: 0,
-      totalDurationMinutes: 0
+const activeRoute = ref(null)
+const mapCenter = ref({ lat: -33.45, lng: -70.65 }) // 📍 Santiago por defecto
+const polylineCoords = ref([])
+const routeMap = ref(null)
+    // Filters
+    const filters = ref({
+      status: '',
+      driverId: '',
+      startDate: '',
+      endDate: ''
     })
-
-    // ==================== FUNCIONES DE MAPA ====================
-
-    // Inicializar mapa con Leaflet
-    const initializeMap = () => {
-      if (!mapContainer.value) return
-
-      // Crear mapa centrado en Santiago
-      leafletMap.value = L.map('route-map').setView([-33.4489, -70.6693], 12)
-
-      // Agregar tiles de OpenStreetMap (GRATIS)
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© OpenStreetMap contributors'
-      }).addTo(leafletMap.value)
-
-      console.log('✅ Mapa Leaflet inicializado')
-    }
-
-    // Mostrar ruta en el mapa
-    const displayRouteOnMap = async (route) => {
-      if (!leafletMap.value || !route) return
-
-      try {
-        console.log('🗺️ Mostrando ruta en Leaflet...')
-
-        // Limpiar mapa
-        leafletMap.value.eachLayer((layer) => {
-          if (layer instanceof L.Marker || layer instanceof L.Polyline) {
-            leafletMap.value.removeLayer(layer)
-          }
-        })
-
-        const bounds = L.latLngBounds([])
-
-        // 1. Agregar marcador de inicio (verde)
-        if (route.startLocation) {
-          const startIcon = L.divIcon({
-            html: '<div style="background: green; color: white; border-radius: 50%; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; font-weight: bold;">🏭</div>',
-            className: 'custom-marker',
-            iconSize: [30, 30]
-          })
-
-          const startMarker = L.marker([route.startLocation.latitude, route.startLocation.longitude], { icon: startIcon })
-            .addTo(leafletMap.value)
-            .bindPopup('📍 Inicio: ' + (route.startLocation.address || 'Punto de inicio'))
-
-          bounds.extend([route.startLocation.latitude, route.startLocation.longitude])
-        }
-
-        // 2. Agregar marcadores de entregas (azules numerados)
-        if (route.orders) {
-          route.orders.forEach((orderItem, index) => {
-            if (orderItem.order?.location) {
-              const deliveryIcon = L.divIcon({
-                html: `<div style="background: blue; color: white; border-radius: 50%; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 12px;">${orderItem.sequenceNumber || index + 1}</div>`,
-                className: 'custom-marker',
-                iconSize: [30, 30]
-              })
-
-              const deliveryMarker = L.marker([orderItem.order.location.latitude, orderItem.order.location.longitude], { icon: deliveryIcon })
-                .addTo(leafletMap.value)
-                .bindPopup(`📦 Parada ${orderItem.sequenceNumber || index + 1}: ${orderItem.order.customer_name || 'Cliente'}<br>${orderItem.order.shipping_address || ''}`)
-
-              bounds.extend([orderItem.order.location.latitude, orderItem.order.location.longitude])
-            }
-          })
-        }
-
-        // 3. Agregar marcador de fin (rojo)
-        if (route.endLocation) {
-          const endIcon = L.divIcon({
-            html: '<div style="background: red; color: white; border-radius: 50%; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; font-weight: bold;">🏠</div>',
-            className: 'custom-marker',
-            iconSize: [30, 30]
-          })
-
-          const endMarker = L.marker([route.endLocation.latitude, route.endLocation.longitude], { icon: endIcon })
-            .addTo(leafletMap.value)
-            .bindPopup('🏁 Final: ' + (route.endLocation.address || 'Punto final'))
-
-          bounds.extend([route.endLocation.latitude, route.endLocation.longitude])
-        }
-
-        // 4. Dibujar línea de ruta (si existe polyline del backend)
-        if (route.optimization?.overview_polyline) {
-          console.log('✅ Dibujando polyline optimizada por Python')
-          
-          // Decodificar polyline de Google (tu backend la tiene)
-          const decodedPoints = decodePolyline(route.optimization.overview_polyline)
-          
-          // Crear polyline en Leaflet
-          const polyline = L.polyline(decodedPoints, {
-            color: '#1E88E5',
-            weight: 5,
-            opacity: 0.8
-          }).addTo(leafletMap.value)
-
-          // Agregar puntos de la polyline a los bounds
-          decodedPoints.forEach(point => bounds.extend(point))
-        } else {
-          console.log('⚠️ No hay polyline, dibujando líneas directas')
-          
-          // Dibujar líneas directas entre puntos
-          const points = []
-          
-          if (route.startLocation) {
-            points.push([route.startLocation.latitude, route.startLocation.longitude])
-          }
-          
-          if (route.orders) {
-            route.orders
-              .sort((a, b) => (a.sequenceNumber || 0) - (b.sequenceNumber || 0))
-              .forEach(orderItem => {
-                if (orderItem.order?.location) {
-                  points.push([orderItem.order.location.latitude, orderItem.order.location.longitude])
-                }
-              })
-          }
-          
-          if (route.endLocation) {
-            points.push([route.endLocation.latitude, route.endLocation.longitude])
-          }
-
-          if (points.length > 1) {
-            L.polyline(points, {
-              color: '#FF6B6B',
-              weight: 3,
-              opacity: 0.7,
-              dashArray: '10, 10'
-            }).addTo(leafletMap.value)
-          }
-        }
-
-        // 5. Ajustar vista del mapa
-        if (bounds.isValid()) {
-          leafletMap.value.fitBounds(bounds, { padding: [20, 20] })
-        }
-
-        console.log('✅ Ruta mostrada en Leaflet')
-
-      } catch (error) {
-        console.error('❌ Error mostrando ruta:', error)
-      }
-    }
-
-    // Función para decodificar polyline de Google
-    const decodePolyline = (encoded) => {
-      const points = []
-      let index = 0
-      const len = encoded.length
-      let lat = 0
-      let lng = 0
-
-      while (index < len) {
-        let b, shift = 0, result = 0
-        do {
-          b = encoded.charCodeAt(index++) - 63
-          result |= (b & 0x1f) << shift
-          shift += 5
-        } while (b >= 0x20)
-        
-        const dlat = ((result & 1) ? ~(result >> 1) : (result >> 1))
-        lat += dlat
-
-        shift = 0
-        result = 0
-        do {
-          b = encoded.charCodeAt(index++) - 63
-          result |= (b & 0x1f) << shift
-          shift += 5
-        } while (b >= 0x20)
-        
-        const dlng = ((result & 1) ? ~(result >> 1) : (result >> 1))
-        lng += dlng
-
-        points.push([lat / 1e5, lng / 1e5])
-      }
-
-      return points
-    }
-
-    // Enfocar en una parada específica
-    const focusOnStop = (stopIndex) => {
-      if (!leafletMap.value || !activeRoute.value?.orders?.[stopIndex]) return
-
-      const orderItem = activeRoute.value.orders[stopIndex]
-      if (orderItem.order?.location) {
-        leafletMap.value.setView([
-          orderItem.order.location.latitude,
-          orderItem.order.location.longitude
-        ], 16)
-
-        console.log('🎯 Enfocando en parada:', stopIndex + 1)
-      }
-    }
-
-    // ==================== FUNCIONES PRINCIPALES ====================
-
-    // Ver ruta (usando solo datos del backend)
-    const viewRoute = async (route) => {
-      try {
-        activeRoute.value = route
-        showRouteMap.value = true
-        loadingRouteDetails.value = true
-        
-        // Reset
-        routeInfo.value = { distance: '', duration: '', totalDistanceKm: 0, totalDurationMinutes: 0 }
-
-        console.log('🗺️ Cargando ruta optimizada:', route._id)
-
-        // Obtener datos completos desde backend
-        const response = await apiService.routes.getById(route._id)
-        const fullRoute = response.data.data
-        
-        activeRoute.value = fullRoute
-        
-        // Usar información calculada por Python
-        if (fullRoute.routeInfo) {
-          routeInfo.value = fullRoute.routeInfo
-          console.log('✅ Información de Python OR-Tools:', routeInfo.value)
-        }
-
-        await nextTick()
-        await new Promise((r) => setTimeout(r, 300))
-        
-        // Inicializar mapa si no existe
-        if (!leafletMap.value) {
-          initializeMap()
-          await new Promise((r) => setTimeout(r, 100))
-        }
-        
-        // Mostrar ruta en Leaflet
-        await displayRouteOnMap(fullRoute)
-        
-      } catch (error) {
-        console.error('❌ Error mostrando ruta:', error)
-        toast.error('Error al cargar la ruta: ' + error.message)
-      } finally {
-        loadingRouteDetails.value = false
-      }
-    }
-
-    // Resto de funciones igual que antes...
+    
+    // Pagination
+    const pagination = ref({
+      current: 1,
+      total: 1,
+      limit: 20
+    })
+    
+    // Selection
+    const selectedRoutes = ref([])
+    
+    // Computed
+    const isAllSelected = computed(() => {
+      return routes.value.length > 0 && selectedRoutes.value.length === routes.value.length
+    })
+    
+    // Methods
     const loadRoutes = async () => {
       loading.value = true
       try {
-        const response = await apiService.routes.getAll({ page: 1, limit: 50 })
-        routes.value = response.data.data.routes || response.data.routes || []
-        console.log('✅ Rutas cargadas:', routes.value.length)
-        await loadRouteStats()
+        const params = {
+          page: pagination.value.current,
+          limit: pagination.value.limit,
+          ...filters.value
+        }
+        
+        // ✅ CORREGIDO: Usar apiService directamente (objeto), no como función
+        const response = await apiService.routes.getAll(params)
+        routes.value = response.data.data.routes
+        pagination.value = response.data.data.pagination
       } catch (error) {
-        console.error('❌ Error cargando rutas:', error)
-        toast.error('Error al cargar las rutas')
+        console.error('Error loading routes:', error)
+        // Fallback: usar datos mock si la API no está disponible
         routes.value = []
+        alert('Error al cargar las rutas: ' + error.message)
       } finally {
         loading.value = false
       }
     }
-
+    
     const loadRouteStats = async () => {
       try {
-        const response = await apiService.routes.getStats()
-        const stats = response.data.data
-        routeStats.value = {
-          totalRoutes: stats.totalRoutes,
-          inProgressRoutes: stats.summary.inProgressRoutes,
-          completedRoutes: stats.summary.completedRoutes,
-          completionRate: stats.summary.completionRate
+        // ✅ CORREGIDO: Verificar si el endpoint existe
+        if (apiService.routes && apiService.routes.getStats) {
+          const response = await apiService.routes.getStats(filters.value)
+          routeStats.value = response.data.data
+        } else {
+          // Fallback: usar datos mock
+          routeStats.value = {
+            totalRoutes: routes.value.length,
+            inProgressRoutes: routes.value.filter(r => r.status === 'in_progress').length,
+            completedRoutes: routes.value.filter(r => r.status === 'completed').length,
+            completionRate: routes.value.length > 0 ? Math.round((routes.value.filter(r => r.status === 'completed').length / routes.value.length) * 100) : 0
+          }
         }
       } catch (error) {
-        console.error('❌ Error cargando estadísticas:', error)
+        console.error('Error loading route stats:', error)
+        // Usar stats básicas como fallback
+        routeStats.value = {
+          totalRoutes: 0,
+          inProgressRoutes: 0,
+          completedRoutes: 0,
+          completionRate: 0
+        }
+      }
+    }
+    
+    const loadDrivers = async () => {
+      try {
+        // ✅ CORREGIDO: Usar apiService directamente
+        const response = await apiService.drivers.getAll()
+        drivers.value = response.data.data || response.data
+      } catch (error) {
+        console.error('Error loading drivers:', error)
+        drivers.value = []
+      }
+    }
+    
+const viewRoute = async (route) => {
+  try {
+    activeRoute.value = route
+    showRouteMap.value = true
+
+    // Esperar a que el modal se monte
+    await nextTick()
+    await new Promise((r) => setTimeout(r, 250))
+
+    // Validar mapa
+    const map = routeMap.value?.$mapObject
+    if (!map) {
+      console.error('❗ No se encontró el mapa en el DOM aún.')
+      return
+    }
+
+    // Inicializar servicios de rutas de Google
+    const directionsService = new google.maps.DirectionsService()
+    const directionsRenderer = new google.maps.DirectionsRenderer({
+      map,
+      suppressMarkers: true,
+      polylineOptions: {
+        strokeColor: '#1E88E5',
+        strokeOpacity: 0.9,
+        strokeWeight: 5,
+      },
+    })
+
+    // Centrar el mapa
+    if (route.startLocation) {
+      mapCenter.value = {
+        lat: route.startLocation.latitude,
+        lng: route.startLocation.longitude,
       }
     }
 
-    // ==================== LIFECYCLE ====================
-    onMounted(async () => {
-      await loadRoutes()
-    })
+    // Si las órdenes no traen coordenadas, poblarlas
+    for (const item of route.orders || []) {
+      if (item.order && typeof item.order === 'string') {
+        try {
+          const response = await apiService.orders.getById(item.order)
+          item.order = response.data.data
+        } catch (err) {
+          console.warn('⚠️ No se pudo obtener coordenadas de orden', item.order)
+        }
+      }
+    }
 
-    // ==================== RETURN ====================
+    // Construir waypoints
+    const waypoints = (route.orders || [])
+      .filter((o) => o?.order?.location)
+      .map((o) => ({
+        location: {
+          lat: o.order.location.latitude,
+          lng: o.order.location.longitude,
+        },
+        stopover: true,
+      }))
+
+    // Crear solicitud Directions API
+    const request = {
+      origin: {
+        lat: route.startLocation.latitude,
+        lng: route.startLocation.longitude,
+      },
+      destination: {
+        lat: route.endLocation.latitude,
+        lng: route.endLocation.longitude,
+      },
+      waypoints,
+      travelMode: google.maps.TravelMode.DRIVING,
+      optimizeWaypoints: false,
+    }
+
+    // Ejecutar la ruta
+    directionsService.route(request, (result, status) => {
+      if (status === 'OK' && result?.routes?.length > 0) {
+        directionsRenderer.setDirections(result)
+        console.log('✅ Ruta mostrada correctamente en el mapa.')
+      } else {
+        console.warn(`⚠️ Error Directions API (${status}), usando fallback Polyline`)
+        // Fallback: dibujar líneas rectas simples
+        const path = []
+
+        if (route.startLocation)
+          path.push({
+            lat: route.startLocation.latitude,
+            lng: route.startLocation.longitude,
+          })
+
+        waypoints.forEach((wp) => path.push(wp.location))
+
+        if (route.endLocation)
+          path.push({
+            lat: route.endLocation.latitude,
+            lng: route.endLocation.longitude,
+          })
+
+        polylineCoords.value = path
+      }
+    })
+  } catch (err) {
+    console.error('❌ Error en viewRoute():', err)
+  }
+}
+    
+    const assignDriver = async (route) => {
+      const driverId = prompt('ID del conductor a asignar:')
+      if (!driverId) return
+      
+      try {
+        // ✅ CORREGIDO: Verificar si el método existe
+        if (apiService.routes && apiService.routes.assign) {
+          await apiService.routes.assign(route._id, driverId)
+          alert('Conductor asignado correctamente')
+          await loadRoutes()
+        } else {
+          alert('Funcionalidad de asignación no disponible')
+        }
+      } catch (error) {
+        console.error('Error assigning driver:', error)
+        alert('Error al asignar conductor: ' + error.message)
+      }
+    }
+    
+    const duplicateRoute = async (route) => {
+      try {
+        // ✅ CORREGIDO: Verificar si el método existe
+        if (apiService.routes && apiService.routes.duplicate) {
+          await apiService.routes.duplicate(route._id)
+          alert('Ruta duplicada correctamente')
+          await loadRoutes()
+        } else {
+          alert('Funcionalidad de duplicación no disponible')
+        }
+      } catch (error) {
+        console.error('Error duplicating route:', error)
+        alert('Error al duplicar ruta: ' + error.message)
+      }
+    }
+    
+    const deleteRoute = async (route) => {
+      if (!confirm('¿Estás seguro de eliminar esta ruta?')) return
+      
+      try {
+        // ✅ CORREGIDO: Verificar si el método existe
+        if (apiService.routes && apiService.routes.delete) {
+          await apiService.routes.delete(route._id)
+          alert('Ruta eliminada correctamente')
+          await loadRoutes()
+        } else {
+          alert('Funcionalidad de eliminación no disponible')
+        }
+      } catch (error) {
+        console.error('Error deleting route:', error)
+        alert('Error al eliminar ruta: ' + error.message)
+      }
+    }
+    
+    const applyFilters = () => {
+      pagination.value.current = 1
+      loadRoutes()
+      loadRouteStats()
+    }
+    
+    const refreshRoutes = () => {
+      loadRoutes()
+      loadRouteStats()
+    }
+    
+    const toggleSelectAll = () => {
+      if (isAllSelected.value) {
+        selectedRoutes.value = []
+      } else {
+        selectedRoutes.value = routes.value.map(r => r._id)
+      }
+    }
+    
+    const selectRoute = (route) => {
+      if (selectedRoutes.value.includes(route._id)) {
+        selectedRoutes.value = selectedRoutes.value.filter(id => id !== route._id)
+      } else {
+        selectedRoutes.value.push(route._id)
+      }
+    }
+    
+    const changePage = (page) => {
+      pagination.value.current = page
+      loadRoutes()
+    }
+    
+    const bulkAssignDriver = () => {
+      alert(`Asignar conductor a ${selectedRoutes.value.length} rutas - En construcción`)
+    }
+    
+    // Utility functions
+    const getStatusText = (status) => {
+      const statusMap = {
+        'draft': 'Borrador',
+        'assigned': 'Asignada',
+        'in_progress': 'En Progreso',
+        'completed': 'Completada',
+        'cancelled': 'Cancelada'
+      }
+      return statusMap[status] || status
+    }
+    
+    const getRouteProgress = (route) => {
+      if (!route.orders || route.orders.length === 0) return 0
+      const completed = route.orders.filter(o => o.deliveryStatus === 'delivered').length
+      return Math.round((completed / route.orders.length) * 100)
+    }
+    
+    const formatDistance = (meters) => {
+      if (!meters) return '-'
+      const km = meters / 1000
+      return `${km.toFixed(1)} km`
+    }
+    
+    const formatDuration = (seconds) => {
+      if (!seconds) return '-'
+      const hours = Math.floor(seconds / 3600)
+      const minutes = Math.floor((seconds % 3600) / 60)
+      return `${hours}h ${minutes}m`
+    }
+    
+    const formatDate = (dateString) => {
+      return new Date(dateString).toLocaleDateString('es-CL')
+    }
+    
+    // Lifecycle
+    onMounted(() => {
+      loadRoutes()
+      loadRouteStats()
+      loadDrivers()
+    })
+    
     return {
-      // Estado
-      loading,
+      // State
       routes,
+      drivers,
       routeStats,
-      
-      // Modal y mapa
+      loading,
+      showRouteOptimizer,
+      filters,
+      pagination,
+      selectedRoutes,
       showRouteMap,
-      activeRoute,
-      mapContainer,
-      loadingRouteDetails,
-      routeInfo,
+activeRoute,
+mapCenter,
+polylineCoords,
+routeMap,
+viewRoute,
       
-      // Funciones
+      // Computed
+      isAllSelected,
+      
+      // Methods
       loadRoutes,
       viewRoute,
-      focusOnStop,
-      
-      // Funciones auxiliares
-      getDriverInitials: (driver) => {
-        if (!driver) return '??'
-        const name = driver.full_name || driver.name || 'Conductor'
-        return name.split(' ').map(n => n[0]).join('').toUpperCase()
-      },
-      
-      getStatusBadgeClass: (status) => {
-        const classes = {
-          'draft': 'bg-gray-100 text-gray-800',
-          'assigned': 'bg-blue-100 text-blue-800',
-          'in_progress': 'bg-yellow-100 text-yellow-800',
-          'completed': 'bg-green-100 text-green-800',
-          'cancelled': 'bg-red-100 text-red-800'
-        }
-        return classes[status] || 'bg-gray-100 text-gray-800'
-      },
-      
-      getStatusText: (status) => {
-        const texts = {
-          'draft': 'Borrador',
-          'assigned': 'Asignada',
-          'in_progress': 'En Progreso',
-          'completed': 'Completada', 
-          'cancelled': 'Cancelada'
-        }
-        return texts[status] || 'Sin Estado'
-      },
-      
-      formatDate: (dateString) => {
-        if (!dateString) return 'Sin fecha'
-        return new Date(dateString).toLocaleDateString('es-CL', {
-          day: '2-digit',
-          month: '2-digit',
-          year: 'numeric',
-          hour: '2-digit',
-          minute: '2-digit'
-        })
-      }
+      assignDriver,
+      duplicateRoute,
+      deleteRoute,
+      applyFilters,
+      refreshRoutes,
+      toggleSelectAll,
+      selectRoute,
+      changePage,
+      bulkAssignDriver,
+      getStatusText,
+      getRouteProgress,
+      formatDistance,
+      formatDuration,
+      formatDate
     }
   }
 }
 </script>
-
-<style scoped>
-/* Estilos específicos para Leaflet */
-.custom-marker {
-  background: transparent !important;
-  border: none !important;
-}
-
-#route-map {
-  z-index: 1;
-}
-</style>
