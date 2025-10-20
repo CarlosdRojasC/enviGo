@@ -47,46 +47,77 @@
           </p>
         </div>
 
-        <!-- Foto de entrega -->
+        <!-- Fotos de entrega - SECCIÓN MEJORADA -->
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-2">
-            Foto de entrega *
+            Fotos de entrega * (máximo 5)
           </label>
-          <div v-if="!deliveryPhoto" class="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-blue-400 transition-colors">
+          
+          <!-- Botón para agregar fotos -->
+          <div v-if="deliveryPhotos.length < 5" class="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-blue-400 transition-colors mb-4">
             <input 
               type="file" 
               accept="image/*" 
               capture="environment"
+              multiple
               @change="handlePhotoCapture"
               class="hidden"
               ref="photoInput"
             >
             <div class="text-4xl mb-3">📷</div>
-            <p class="text-gray-600 mb-4">Toma una foto como prueba de entrega</p>
+            <p class="text-gray-600 mb-4">
+              {{ deliveryPhotos.length === 0 ? 'Toma fotos como prueba de entrega' : `Agregar más fotos (${deliveryPhotos.length}/5)` }}
+            </p>
             <button 
               @click="$refs.photoInput.click()"
               type="button"
               class="bg-blue-600 text-white px-6 py-2 rounded-lg font-medium hover:bg-blue-700 transition-colors"
             >
-              Abrir Cámara
+              {{ deliveryPhotos.length === 0 ? 'Abrir Cámara' : 'Agregar Foto' }}
             </button>
           </div>
-          
-          <div v-else class="relative">
-            <img 
-              :src="deliveryPhoto" 
-              alt="Foto de entrega" 
-              class="w-full h-48 object-cover rounded-lg border border-gray-300"
-            >
-            <button 
-              @click="retakePhoto"
-              type="button"
-              class="absolute top-2 right-2 bg-red-600 text-white p-2 rounded-full shadow-lg hover:bg-red-700 transition-colors"
-            >
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
-              </svg>
-            </button>
+
+          <!-- Grid de fotos capturadas -->
+          <div v-if="deliveryPhotos.length > 0" class="space-y-3">
+            <div class="flex items-center justify-between">
+              <span class="text-sm text-gray-600">{{ deliveryPhotos.length }} foto{{ deliveryPhotos.length !== 1 ? 's' : '' }} seleccionada{{ deliveryPhotos.length !== 1 ? 's' : '' }}</span>
+              <button 
+                v-if="deliveryPhotos.length > 0"
+                @click="clearAllPhotos"
+                type="button"
+                class="text-red-600 hover:text-red-800 text-sm font-medium"
+              >
+                Borrar todas
+              </button>
+            </div>
+            
+            <div class="grid grid-cols-2 gap-3">
+              <div 
+                v-for="(photo, index) in deliveryPhotos" 
+                :key="index"
+                class="relative group"
+              >
+                <img 
+                  :src="photo" 
+                  :alt="`Foto de entrega ${index + 1}`" 
+                  class="w-full h-32 object-cover rounded-lg border border-gray-300"
+                >
+                <!-- Número de foto -->
+                <div class="absolute top-2 left-2 bg-black bg-opacity-70 text-white text-xs px-2 py-1 rounded-full font-medium">
+                  {{ index + 1 }}
+                </div>
+                <!-- Botón eliminar -->
+                <button 
+                  @click="removePhoto(index)"
+                  type="button"
+                  class="absolute top-2 right-2 bg-red-600 text-white p-1.5 rounded-full shadow-lg hover:bg-red-700 transition-colors opacity-90 group-hover:opacity-100"
+                >
+                  <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                  </svg>
+                </button>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -127,7 +158,8 @@
             <div>
               <h5 class="text-sm font-medium text-yellow-900">Importante</h5>
               <ul class="text-xs text-yellow-800 mt-1 space-y-1">
-                <li>• Asegúrate de que la foto muestre claramente el producto entregado</li>
+                <li>• Puedes tomar hasta 5 fotos como prueba de entrega</li>
+                <li>• Asegúrate de que las fotos muestren claramente el producto entregado</li>
                 <li>• Verifica que el nombre del receptor sea correcto</li>
                 <li>• Una vez confirmada, la entrega no se puede deshacer</li>
               </ul>
@@ -184,41 +216,58 @@ const deliveryForm = ref({
   comments: ''
 })
 
-const deliveryPhoto = ref(null)
+// CAMBIO: Array de fotos en lugar de una sola
+const deliveryPhotos = ref([])
 const currentLocation = ref(null)
 
 // Computed
 const isFormValid = computed(() => {
-  return deliveryForm.value.recipientName.trim() !== '' && deliveryPhoto.value !== null
+  return deliveryForm.value.recipientName.trim() !== '' && deliveryPhotos.value.length > 0
 })
 
 // Methods
 const handlePhotoCapture = (event) => {
-  const file = event.target.files[0]
-  if (file) {
+  const files = Array.from(event.target.files)
+  const remainingSlots = 5 - deliveryPhotos.value.length
+  
+  if (files.length > remainingSlots) {
+    alert(`Solo puedes agregar ${remainingSlots} foto${remainingSlots !== 1 ? 's' : ''} más`)
+    files.length = remainingSlots
+  }
+
+  files.forEach(file => {
     // Validar tamaño del archivo (máximo 5MB)
     if (file.size > 5 * 1024 * 1024) {
-      alert('La imagen es demasiado grande. Por favor selecciona una imagen menor a 5MB.')
+      alert('Una de las imágenes es demasiado grande. Por favor selecciona imágenes menores a 5MB.')
       return
     }
 
     const reader = new FileReader()
     reader.onload = (e) => {
-      deliveryPhoto.value = e.target.result
+      deliveryPhotos.value.push(e.target.result)
     }
     reader.readAsDataURL(file)
-  }
+  })
+
+  // Limpiar el input
+  event.target.value = ''
 }
 
-const retakePhoto = () => {
-  deliveryPhoto.value = null
+const removePhoto = (index) => {
+  deliveryPhotos.value.splice(index, 1)
+}
+
+const clearAllPhotos = () => {
+  if (confirm('¿Estás seguro de que quieres borrar todas las fotos?')) {
+    deliveryPhotos.value = []
+  }
 }
 
 const confirmDelivery = () => {
   if (!isFormValid.value) return
 
   const deliveryData = {
-    photo: deliveryPhoto.value,
+    photos: deliveryPhotos.value, // CAMBIO: Enviar array de fotos
     recipientName: deliveryForm.value.recipientName.trim(),
     comments: deliveryForm.value.comments.trim(),
     location: currentLocation.value,
@@ -258,7 +307,7 @@ const resetForm = () => {
     recipientName: '',
     comments: ''
   }
-  deliveryPhoto.value = null
+  deliveryPhotos.value = [] // CAMBIO: Limpiar array de fotos
   currentLocation.value = null
 }
 
