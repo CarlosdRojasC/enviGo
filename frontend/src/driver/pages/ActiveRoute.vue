@@ -1,41 +1,209 @@
 <template>
-  <div class="min-h-screen bg-gray-50 p-4">
-    <h1 class="text-xl font-bold mb-3">🚛 Mi Ruta Activa</h1>
-
-    <div v-if="loading" class="text-gray-600">Cargando ruta...</div>
-    <div v-else-if="!route">
-      <p class="text-gray-600">No tienes rutas asignadas.</p>
+  <div class="space-y-6">
+    <!-- Sin rutas asignadas -->
+    <div v-if="!activeRoute && !isLoading" class="text-center py-12">
+      <div class="max-w-md mx-auto">
+        <div class="text-6xl mb-4">🚚</div>
+        <h3 class="text-xl font-semibold text-gray-900 mb-2">Sin rutas asignadas</h3>
+        <p class="text-gray-600 mb-6">Esperando que el administrador te asigne una ruta...</p>
+        <button 
+          @click="$emit('refresh')"
+          class="bg-blue-600 text-white px-6 py-2 rounded-lg font-medium hover:bg-blue-700 transition-colors"
+        >
+          🔄 Verificar rutas
+        </button>
+      </div>
     </div>
 
-    <div v-else>
-      <!-- MAPA -->
-      <div id="driverMap" class="w-full h-72 rounded-lg shadow mb-4"></div>
+    <!-- Loading -->
+    <div v-if="isLoading" class="text-center py-12">
+      <div class="inline-flex items-center">
+        <div class="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+        <span class="ml-3 text-gray-600">Cargando ruta activa...</span>
+      </div>
+    </div>
 
-      <!-- LISTA DE PEDIDOS -->
-      <div
-        v-for="order in route.orders"
-        :key="order._id"
-        class="bg-white p-4 rounded-lg shadow mb-3"
-      >
-        <h3 class="font-semibold text-lg">
-          {{ order.order?.customer_name || 'Cliente desconocido' }}
-        </h3>
-        <p class="text-sm text-gray-500">
-          {{ order.order?.shipping_address || 'Sin dirección disponible' }}
-        </p>
-
-        <div class="flex gap-2 mt-3">
-          <button
-            @click="markDelivered(order)"
-            class="bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700"
+    <!-- Ruta activa -->
+    <div v-if="activeRoute" class="space-y-6">
+      <!-- Estado de la ruta -->
+      <div class="bg-white rounded-xl shadow-sm p-6">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="text-lg font-semibold text-gray-900">
+            Ruta #{{ activeRoute._id.slice(-6).toUpperCase() }}
+          </h3>
+          <span 
+            class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium"
+            :class="getStatusBadgeClass(activeRoute.status)"
           >
-            Entregar
+            {{ getStatusText(activeRoute.status) }}
+          </span>
+        </div>
+
+        <!-- Información básica -->
+        <div class="grid grid-cols-2 gap-4 mb-6">
+          <div class="text-center">
+            <div class="text-2xl font-bold text-blue-600">{{ activeRoute.orders?.length || 0 }}</div>
+            <div class="text-sm text-gray-600">Entregas totales</div>
+          </div>
+          <div class="text-center">
+            <div class="text-2xl font-bold text-green-600">{{ completedCount }}</div>
+            <div class="text-sm text-gray-600">Completadas</div>
+          </div>
+        </div>
+
+        <!-- Progreso -->
+        <div class="mb-6">
+          <div class="flex justify-between items-center mb-2">
+            <span class="text-sm text-gray-600">Progreso de entregas</span>
+            <span class="text-sm font-medium">{{ routeProgress }}%</span>
+          </div>
+          <div class="w-full bg-gray-200 rounded-full h-2">
+            <div 
+              class="bg-blue-600 h-2 rounded-full transition-all duration-300"
+              :style="{ width: `${routeProgress}%` }"
+            ></div>
+          </div>
+        </div>
+
+        <!-- Acciones principales -->
+        <div class="space-y-3">
+          <button 
+            v-if="activeRoute.status === 'assigned'"
+            @click="$emit('start-route')"
+            class="w-full bg-green-600 text-white px-4 py-3 rounded-lg font-medium hover:bg-green-700 transition-colors flex items-center justify-center space-x-2"
+          >
+            <span>🚀</span>
+            <span>Iniciar Ruta</span>
           </button>
-          <button
-            @click="viewProof(order.order._id)"
-            class="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700"
+          
+          <div v-if="activeRoute.status === 'in_progress'" class="grid grid-cols-2 gap-3">
+            <button 
+              @click="openNextDelivery"
+              :disabled="!hasNextDelivery"
+              class="bg-orange-600 text-white px-4 py-3 rounded-lg font-medium hover:bg-orange-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
+            >
+              <span>📦</span>
+              <span>Siguiente</span>
+            </button>
+            
+            <button 
+              @click="$emit('open-map')"
+              class="bg-blue-600 text-white px-4 py-3 rounded-lg font-medium hover:bg-blue-700 transition-colors flex items-center justify-center space-x-2"
+            >
+              <span>🗺️</span>
+              <span>Ver Mapa</span>
+            </button>
+          </div>
+
+          <div v-if="activeRoute.status === 'completed'" class="text-center py-4">
+            <div class="text-4xl mb-2">🎉</div>
+            <h4 class="text-lg font-semibold text-green-600 mb-1">¡Ruta Completada!</h4>
+            <p class="text-gray-600">Todas las entregas han sido realizadas exitosamente.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Próxima entrega (si está en progreso) -->
+      <div v-if="activeRoute.status === 'in_progress' && nextDelivery" class="bg-gradient-to-r from-orange-50 to-yellow-50 border border-orange-200 rounded-xl p-6">
+        <h4 class="text-lg font-semibold text-orange-800 mb-3 flex items-center space-x-2">
+          <span>🎯</span>
+          <span>Próxima Entrega</span>
+        </h4>
+        
+        <div class="space-y-3">
+          <div class="flex items-start space-x-3">
+            <div class="w-8 h-8 rounded-full bg-orange-600 text-white flex items-center justify-center text-sm font-bold">
+              {{ nextDelivery.sequenceNumber }}
+            </div>
+            <div class="flex-1">
+              <h5 class="font-medium text-gray-900">{{ nextDelivery.order.customer_name || 'Cliente' }}</h5>
+              <p class="text-sm text-gray-600">{{ nextDelivery.order.shipping_address || 'Sin dirección' }}</p>
+              <p class="text-xs text-gray-500 mt-1">
+                Pedido #{{ nextDelivery.order.order_number || nextDelivery.order._id.slice(-6) }}
+              </p>
+            </div>
+          </div>
+          
+          <div class="flex space-x-3">
+            <button 
+              v-if="nextDelivery.deliveryStatus === 'pending'"
+              @click="$emit('mark-in-progress', nextDelivery)"
+              class="flex-1 bg-yellow-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-yellow-700 transition-colors"
+            >
+              🚀 Iniciar Entrega
+            </button>
+            
+            <button 
+              v-if="nextDelivery.deliveryStatus === 'in_progress'"
+              @click="$emit('open-delivery', nextDelivery)"
+              class="flex-1 bg-green-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-green-700 transition-colors"
+            >
+              ✅ Confirmar Entrega
+            </button>
+            
+            <button 
+              @click="openMapsApp"
+              class="bg-blue-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-blue-700 transition-colors"
+            >
+              📍 Navegar
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Estadísticas de la ruta -->
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div class="bg-white rounded-lg p-4 text-center shadow-sm">
+          <div class="text-2xl font-bold text-blue-600">{{ formatDistance(activeRoute.optimization?.totalDistance) }}</div>
+          <div class="text-sm text-gray-600">Distancia total</div>
+        </div>
+        <div class="bg-white rounded-lg p-4 text-center shadow-sm">
+          <div class="text-2xl font-bold text-green-600">{{ formatDuration(activeRoute.optimization?.totalDuration) }}</div>
+          <div class="text-sm text-gray-600">Tiempo estimado</div>
+        </div>
+        <div class="bg-white rounded-lg p-4 text-center shadow-sm">
+          <div class="text-2xl font-bold text-orange-600">{{ completedCount }}</div>
+          <div class="text-sm text-gray-600">Completadas</div>
+        </div>
+        <div class="bg-white rounded-lg p-4 text-center shadow-sm">
+          <div class="text-2xl font-bold text-gray-600">{{ pendingCount }}</div>
+          <div class="text-sm text-gray-600">Pendientes</div>
+        </div>
+      </div>
+
+      <!-- Resumen de entregas recientes -->
+      <div class="bg-white rounded-xl shadow-sm p-6">
+        <h4 class="text-lg font-semibold text-gray-900 mb-4">Últimas Entregas</h4>
+        
+        <div v-if="recentDeliveries.length === 0" class="text-center py-8 text-gray-500">
+          <div class="text-3xl mb-2">📦</div>
+          <p>Aún no has realizado entregas en esta ruta</p>
+        </div>
+        
+        <div v-else class="space-y-3">
+          <div 
+            v-for="delivery in recentDeliveries.slice(0, 3)" 
+            :key="delivery.order._id"
+            class="flex items-center space-x-3 p-3 bg-green-50 rounded-lg"
           >
-            Prueba
+            <div class="w-8 h-8 rounded-full bg-green-600 text-white flex items-center justify-center text-sm font-bold">
+              ✓
+            </div>
+            <div class="flex-1">
+              <p class="font-medium text-gray-900">{{ delivery.order.customer_name || 'Cliente' }}</p>
+              <p class="text-sm text-gray-600">{{ delivery.order.shipping_address || 'Sin dirección' }}</p>
+            </div>
+            <div class="text-xs text-gray-500">
+              {{ formatTime(delivery.deliveredAt) }}
+            </div>
+          </div>
+          
+          <button 
+            v-if="recentDeliveries.length > 3"
+            @click="$emit('view-all-deliveries')"
+            class="w-full text-center py-2 text-blue-600 hover:text-blue-700 font-medium"
+          >
+            Ver todas las entregas ({{ recentDeliveries.length }})
           </button>
         </div>
       </div>
@@ -44,85 +212,134 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
-import { useAuthStore } from '../../store/auth'
-import axios from 'axios'
-import { importLibrary, setOptions } from '@googlemaps/js-api-loader'
+import { computed } from 'vue'
 
-const router = useRouter()
-const auth = useAuthStore()
-const route = ref(null)
-const loading = ref(true)
-
-const loadActiveRoute = async () => {
-  try {
-    const { data } = await axios.get('/api/routes/driver/active', {
-      headers: {
-        Authorization: `Bearer ${auth.token}`,
-      },
-    })
-    route.value = data.data
-  } catch (err) {
-    console.error('❌ Error al cargar ruta:', err)
-    route.value = null
-  } finally {
-    loading.value = false
+// Props
+const props = defineProps({
+  activeRoute: {
+    type: Object,
+    default: null
+  },
+  isLoading: {
+    type: Boolean,
+    default: false
   }
-}
-
-const drawMap = async () => {
-  if (!route.value?.startLocation) return
-  setOptions({
-    apiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY,
-    version: 'weekly',
-    libraries: ['maps', 'geometry', 'marker'],
-  })
-
-  const { Map } = await importLibrary('maps')
-  const { encoding } = await importLibrary('geometry')
-
-  const map = new Map(document.getElementById('driverMap'), {
-    center: {
-      lat: route.value.startLocation.latitude,
-      lng: route.value.startLocation.longitude,
-    },
-    zoom: 12,
-  })
-
-  if (route.value.optimization?.overview_polyline) {
-    const path = encoding.decodePath(route.value.optimization.overview_polyline)
-    new google.maps.Polyline({
-      path,
-      geodesic: true,
-      strokeColor: '#2563eb',
-      strokeOpacity: 0.8,
-      strokeWeight: 5,
-      map,
-    })
-  }
-}
-
-const markDelivered = async (order) => {
-  try {
-    await axios.patch(
-      `/api/routes/${route.value._id}/orders/${order.order._id}/status`,
-      { status: 'delivered' },
-      {
-        headers: { Authorization: `Bearer ${auth.token}` },
-      }
-    )
-    await loadActiveRoute()
-    await drawMap()
-  } catch (err) {
-    console.error('❌ Error al marcar entrega:', err)
-  }
-}
-
-const viewProof = (id) => router.push(`/driver/proof/${id}`)
-
-onMounted(async () => {
-  await loadActiveRoute()
-  await drawMap()
 })
+
+// Emits
+const emit = defineEmits([
+  'start-route',
+  'refresh',
+  'open-delivery',
+  'mark-in-progress',
+  'open-map',
+  'view-all-deliveries'
+])
+
+// Computed properties
+const routeProgress = computed(() => {
+  if (!props.activeRoute?.orders?.length) return 0
+  const completed = props.activeRoute.orders.filter(o => o.deliveryStatus === 'delivered').length
+  return Math.round((completed / props.activeRoute.orders.length) * 100)
+})
+
+const completedCount = computed(() => {
+  return props.activeRoute?.orders?.filter(o => o.deliveryStatus === 'delivered').length || 0
+})
+
+const pendingCount = computed(() => {
+  return props.activeRoute?.orders?.filter(o => o.deliveryStatus === 'pending').length || 0
+})
+
+const sortedOrders = computed(() => {
+  if (!props.activeRoute?.orders) return []
+  return [...props.activeRoute.orders].sort((a, b) => a.sequenceNumber - b.sequenceNumber)
+})
+
+const nextDelivery = computed(() => {
+  return sortedOrders.value.find(o => o.deliveryStatus === 'pending' || o.deliveryStatus === 'in_progress')
+})
+
+const hasNextDelivery = computed(() => {
+  return !!nextDelivery.value
+})
+
+const recentDeliveries = computed(() => {
+  return sortedOrders.value
+    .filter(o => o.deliveryStatus === 'delivered')
+    .sort((a, b) => new Date(b.deliveredAt) - new Date(a.deliveredAt))
+})
+
+// Methods
+const openNextDelivery = () => {
+  if (nextDelivery.value) {
+    emit('open-delivery', nextDelivery.value)
+  }
+}
+
+const openMapsApp = () => {
+  if (!nextDelivery.value?.order?.location) return
+  
+  const { latitude, longitude } = nextDelivery.value.order.location
+  const address = encodeURIComponent(nextDelivery.value.order.shipping_address || '')
+  
+  // Detectar si es iOS o Android
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
+  const isAndroid = /Android/.test(navigator.userAgent)
+  
+  let mapsUrl
+  
+  if (isIOS) {
+    // Apple Maps
+    mapsUrl = `maps://maps.apple.com/?daddr=${latitude},${longitude}&dirflg=d`
+  } else if (isAndroid) {
+    // Google Maps
+    mapsUrl = `google.navigation:q=${latitude},${longitude}`
+  } else {
+    // Web fallback
+    mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${latitude},${longitude}`
+  }
+  
+  window.open(mapsUrl, '_blank')
+}
+
+const getStatusText = (status) => {
+  const statusMap = {
+    'assigned': 'Asignada',
+    'in_progress': 'En Progreso',
+    'completed': 'Completada',
+    'cancelled': 'Cancelada'
+  }
+  return statusMap[status] || status
+}
+
+const getStatusBadgeClass = (status) => {
+  const classMap = {
+    'assigned': 'bg-blue-100 text-blue-800',
+    'in_progress': 'bg-yellow-100 text-yellow-800',
+    'completed': 'bg-green-100 text-green-800',
+    'cancelled': 'bg-red-100 text-red-800'
+  }
+  return classMap[status] || 'bg-gray-100 text-gray-800'
+}
+
+const formatDistance = (meters) => {
+  if (!meters) return '0 km'
+  return meters < 1000 ? `${meters} m` : `${(meters / 1000).toFixed(1)} km`
+}
+
+const formatDuration = (seconds) => {
+  if (!seconds) return '0 min'
+  const hours = Math.floor(seconds / 3600)
+  const minutes = Math.floor((seconds % 3600) / 60)
+  return hours > 0 ? `${hours}h ${minutes}min` : `${minutes}min`
+}
+
+const formatTime = (dateString) => {
+  if (!dateString) return ''
+  return new Date(dateString).toLocaleTimeString('es-CL', {
+    hour: '2-digit',
+    minute: '2-digit'
+  })
+}
 </script>

@@ -237,47 +237,20 @@ const routes = [
 
   // ==================== RUTAS EXCLUSIVAS PARA CONDUCTORES ====================
   {
-    path: '/driver',
-    component: EmptyLayout, // Sin sidebar ni dashboard
-    children: [
-      {
-        path: 'login',
-        name: 'DriverLogin',
-        component: () => import('../driver/pages/LoginPage.vue'),
-        meta: { 
-          guest: true,
-          driverOnly: true // ✅ Marcar como ruta específica de driver
-        }
-      },
-      {
-        path: 'route',
-        name: 'DriverRoute',
-        component: () => import('../driver/pages/ActiveRoute.vue'),
-        meta: { 
-          requiresDriverAuth: true,
-          driverOnly: true
-        }
-      },
-      {
-        path: 'proof/:orderId',
-        name: 'DriverProof',
-        component: () => import('../driver/pages/ProofOfDelivery.vue'),
-        meta: { 
-          requiresDriverAuth: true,
-          driverOnly: true
-        }
-      },
-      {
-        path: 'offline',
-        name: 'DriverOffline',
-        component: () => import('../driver/pages/OfflineSync.vue'),
-        meta: { 
-          requiresDriverAuth: true,
-          driverOnly: true
-        }
+  path: '/driver',
+  component: EmptyLayout, // Sin sidebar ni dashboard  
+  children: [
+    {
+      path: '',
+      name: 'DriverApp',
+      component: () => import('../views/DriverApp.vue'), // ✅ SPA principal del conductor
+      meta: { 
+        requiresAuth: true, // ✅ Usar el mismo guard que admins
+        driverOnly: true    // ✅ Pero solo para conductores
       }
-    ]
-  },
+    }
+  ]
+},
 
   // Catch all
   { 
@@ -292,56 +265,67 @@ const router = createRouter({
 })
 
 // ✅ GUARDS DE NAVEGACIÓN MEJORADOS
-router.beforeEach((to, from, next) => {
-  const auth = useAuthStore()
-  const isAuthenticated = auth.isLoggedIn
-  const userRole = auth.user?.role
-  const hasCompany = auth.hasCompany
-
-  // ✅ 1. LÓGICA PARA RUTAS DE DRIVERS
-  if (to.path.startsWith('/driver')) {
-  // ✅ Si el usuario ya está logueado como driver, no lo mandes al login
-  if (to.meta.guest && userRole === 'driver') {
-    return next({ name: 'DriverRoute' })
+router.beforeEach(async (to, from, next) => {
+  const token = localStorage.getItem('token')
+  
+  // Si no hay token y la ruta requiere autenticación
+  if (!token && to.meta.requiresAuth) {
+    return next('/login') // ✅ Todos van al mismo login
   }
-
-  // ✅ Si requiere autenticación de driver
-  if (to.meta.requiresDriverAuth && userRole !== 'driver') {
-    return next({ name: 'Login' }) // redirige al login principal
+  
+  // Si hay token, verificar el rol del usuario
+  if (token) {
+    try {
+      // Decodificar el token para obtener el rol
+      const payload = JSON.parse(atob(token.split('.')[1]))
+      const userRole = payload.role
+      
+      console.log('👤 Usuario autenticado como:', userRole)
+      
+      // ✅ Redirección inteligente según rol
+      if (userRole === 'driver') {
+        // Conductores solo pueden acceder a rutas de driver
+        if (to.meta.driverOnly || to.path === '/driver') {
+          // Permitir acceso
+        } else if (to.path === '/login' || to.path === '/' || to.path === '/dashboard') {
+          // Redirigir conductores a su app
+          return next('/driver')
+        } else {
+          // Bloquear acceso a rutas de admin
+          return next('/driver')
+        }
+      } else {
+        // Admins/Managers no pueden acceder a rutas de driver
+        if (to.meta.driverOnly) {
+          return next('/dashboard')
+        } else if (to.path === '/login' || to.path === '/') {
+          return next('/dashboard')
+        }
+      }
+      
+    } catch (error) {
+      console.error('❌ Error decodificando token:', error)
+      localStorage.removeItem('token')
+      return next('/login')
+    }
   }
-
-  // ✅ Si el usuario NO es driver pero está logueado como admin/empresa
-  if (isAuthenticated && userRole !== 'driver') {
-    return next({ name: 'Dashboard' })
-  }
-
-  return next()
-}
-
-
-  // Si requiere autenticación y no está autenticado
-  if (to.meta.requiresAuth && !isAuthenticated) {
-    return next({ name: 'Login' })
-  }
-
-  // Si es una ruta de invitado y está autenticado, redirigir al dashboard
-  if (to.meta.guest && !to.meta.driverOnly && isAuthenticated) {
-    if (userRole === 'admin') return next({ path: '/app/admin/dashboard' })
-    return next({ path: '/app/dashboard' })
-  }
-
-  // Verificar roles
-  if (to.meta.roles && !to.meta.roles.includes(userRole)) {
-    if (userRole === 'admin') return next({ path: '/app/admin/dashboard' })
-    return next({ path: '/app/dashboard' })
-  }
-
-  // Verificar si requiere empresa
-  if (to.meta.requiresCompany && !hasCompany) {
-    return next({ name: 'Login' })
+  
+  // Si es ruta de invitado y hay token, redirigir según rol
+  if (to.meta.guest && token) {
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]))
+      const userRole = payload.role
+      
+      if (userRole === 'driver') {
+        return next('/driver')
+      } else {
+        return next('/dashboard')
+      }
+    } catch (error) {
+      localStorage.removeItem('token')
+    }
   }
   
   next()
 })
-
 export default router
