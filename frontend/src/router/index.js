@@ -11,8 +11,6 @@ import EmptyLayout from '../layouts/EmptyLayout.vue'
 import LandingPage from '../views/LandingPage.vue'
 import Login from '../views/login.vue'
 
-// ✅ Importar el store de drivers
-import { driverStore } from '../driver/store'
 
 const routes = [
   // ==================== RUTAS PÚBLICAS ====================
@@ -302,27 +300,23 @@ router.beforeEach((to, from, next) => {
 
   // ✅ 1. LÓGICA PARA RUTAS DE DRIVERS
   if (to.path.startsWith('/driver')) {
-    
-    // Si es una ruta de guest driver y ya está autenticado como driver
-    if (to.meta.guest && to.meta.driverOnly && driverStore.isAuthenticated) {
-      return next({ name: 'DriverRoute' })
-    }
-
-    // Si requiere autenticación de driver
-    if (to.meta.requiresDriverAuth) {
-      if (!driverStore.isAuthenticated) {
-        return next({ name: 'DriverLogin' })
-      }
-    }
-
-    // Si tiene sesión de admin/empresa activa, hacer logout
-    if (isAuthenticated && userRole !== 'driver') {
-      auth.logout()
-      localStorage.removeItem('driver_token')
-    }
-
-    return next()
+  // ✅ Si el usuario ya está logueado como driver, no lo mandes al login
+  if (to.meta.guest && userRole === 'driver') {
+    return next({ name: 'DriverRoute' })
   }
+
+  // ✅ Si requiere autenticación de driver
+  if (to.meta.requiresDriverAuth && userRole !== 'driver') {
+    return next({ name: 'Login' }) // redirige al login principal
+  }
+
+  // ✅ Si el usuario NO es driver pero está logueado como admin/empresa
+  if (isAuthenticated && userRole !== 'driver') {
+    return next({ name: 'Dashboard' })
+  }
+
+  return next()
+}
 
   // ✅ 2. LÓGICA PARA RUTAS DEL SISTEMA (admin/empresas)
   
