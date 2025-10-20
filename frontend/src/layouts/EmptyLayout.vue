@@ -3,7 +3,7 @@
     <!-- HEADER -->
     <header class="flex items-center justify-between px-4 py-3 bg-white dark:bg-gray-800 shadow-sm">
       <div class="flex items-center gap-2">
-        <img src="/logo.png" alt="envigo logo" class="w-8 h-8" />
+        <img src="../assets/envigoLogo.png" alt="envigo logo" class="w-8 h-8" />
         <h1 class="text-lg font-semibold text-gray-800 dark:text-gray-200">enviGo Driver</h1>
       </div>
 
