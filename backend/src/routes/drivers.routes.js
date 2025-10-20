@@ -166,7 +166,6 @@ router.patch('/change-password', authenticateDriver, async (req, res) => {
   }
 });
 
-router.get('/driver/active', authenticateToken, isDriver, routeController.getActiveRoute);
 
 // ==================== RUTAS SOLO ADMIN ====================
 
