@@ -44,6 +44,14 @@
       </div>
     </div>
 
+    <!-- Debug info (temporal) -->
+    <div v-if="routes.length > 0" class="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
+      <details>
+        <summary class="cursor-pointer font-semibold text-yellow-800">🔍 Debug - Datos de la primera ruta</summary>
+        <pre class="mt-2 text-xs text-yellow-700 overflow-auto max-h-40">{{ JSON.stringify(routes[0], null, 2) }}</pre>
+      </details>
+    </div>
+
     <!-- Routes Table -->
     <div class="bg-white rounded-xl shadow-sm overflow-hidden">
       <div class="p-6 border-b border-gray-200 flex justify-between items-center">
@@ -56,6 +64,7 @@
             <tr>
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Conductor</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Estado</th>
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Entregas</th>
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Distancia</th>
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Duración</th>
@@ -64,7 +73,7 @@
           </thead>
           <tbody class="bg-white divide-y divide-gray-200">
             <tr v-if="loading">
-              <td colspan="6" class="px-6 py-12 text-center text-gray-500">
+              <td colspan="7" class="px-6 py-12 text-center text-gray-500">
                 <div class="flex items-center justify-center">
                   <div class="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
                   <span class="ml-2">Cargando rutas...</span>
@@ -73,7 +82,7 @@
             </tr>
 
             <tr v-else-if="routes.length === 0">
-              <td colspan="6" class="px-6 py-12 text-center text-gray-500">
+              <td colspan="7" class="px-6 py-12 text-center text-gray-500">
                 <div class="text-center">
                   <div class="text-5xl mb-3">🛣️</div>
                   <h3 class="text-lg font-medium text-gray-800 mb-1">No hay rutas registradas</h3>
@@ -90,7 +99,25 @@
 
             <tr v-for="route in routes" :key="route._id" class="hover:bg-gray-50">
               <td class="px-6 py-4 font-medium text-gray-800">#{{ route._id.slice(-6).toUpperCase() }}</td>
-              <td class="px-6 py-4 text-gray-700">{{ route.driver?.name || "Sin asignar" }}</td>
+              <td class="px-6 py-4">
+                <div class="flex flex-col">
+                  <!-- ✅ CORREGIDO: Usar full_name en lugar de name -->
+                  <span class="font-medium text-gray-900">
+                    {{ getDriverName(route.driver) }}
+                  </span>
+                  <span v-if="route.driver?.email" class="text-xs text-gray-500">
+                    {{ route.driver.email }}
+                  </span>
+                </div>
+              </td>
+              <td class="px-6 py-4">
+                <span 
+                  class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
+                  :class="getStatusBadgeClass(route.status)"
+                >
+                  {{ getStatusText(route.status) }}
+                </span>
+              </td>
               <td class="px-6 py-4 text-gray-700">{{ route.orders?.length || 0 }}</td>
               <td class="px-6 py-4 text-gray-700">{{ formatDistance(route.optimization?.totalDistance) }}</td>
               <td class="px-6 py-4 text-gray-700">{{ formatDuration(route.optimization?.totalDuration) }}</td>
@@ -131,7 +158,8 @@
             </button>
           </div>
           <div class="text-sm text-gray-600 mb-3">
-            Conductor: <span class="font-medium">{{ activeRoute?.driver?.name || 'Sin asignar' }}</span>
+            <!-- ✅ CORREGIDO: Usar full_name -->
+            Conductor: <span class="font-medium">{{ getDriverName(activeRoute?.driver) }}</span>
           </div>
 
           <h4 class="text-sm font-semibold text-gray-700 mb-2">Paradas:</h4>
@@ -150,8 +178,8 @@
                   {{ stop.order?.customer_name || 'Cliente' }}
                 </p>
                 <p class="text-xs text-gray-500">
-  {{ stop.order?.delivery_location?.formatted_address || stop.order?.shipping_address || 'Sin dirección' }}
-</p>
+                  {{ stop.order?.delivery_location?.formatted_address || stop.order?.shipping_address || 'Sin dirección' }}
+                </p>
               </div>
             </li>
           </ol>
@@ -192,6 +220,36 @@ const showRouteMap = ref(false);
 const activeRoute = ref(null);
 const mapInstance = ref(null);
 const showRouteOptimizerModal = ref(false);
+
+// ✅ NUEVA FUNCIÓN: Obtener nombre del conductor correctamente
+const getDriverName = (driver) => {
+  if (!driver) return 'Sin asignar';
+  return driver.full_name || driver.name || driver.email || 'Conductor';
+};
+
+// ✅ NUEVA FUNCIÓN: Obtener texto del estado
+const getStatusText = (status) => {
+  const statusMap = {
+    'draft': 'Borrador',
+    'assigned': 'Asignada',
+    'in_progress': 'En Progreso',
+    'completed': 'Completada',
+    'cancelled': 'Cancelada'
+  };
+  return statusMap[status] || status;
+};
+
+// ✅ NUEVA FUNCIÓN: Clases CSS para badges de estado
+const getStatusBadgeClass = (status) => {
+  const classMap = {
+    'draft': 'bg-gray-100 text-gray-800',
+    'assigned': 'bg-blue-100 text-blue-800',
+    'in_progress': 'bg-yellow-100 text-yellow-800',
+    'completed': 'bg-green-100 text-green-800',
+    'cancelled': 'bg-red-100 text-red-800'
+  };
+  return classMap[status] || 'bg-gray-100 text-gray-800';
+};
 
 // 🔑 Cargar Google Maps dinámicamente
 const getGoogleMapsApiKey = () => {
@@ -249,8 +307,12 @@ const statCards = computed(() => {
 const loadRoutes = async () => {
   loading.value = true;
   try {
+    console.log('🔍 Cargando rutas...');
     const res = await apiService.routes.getAll();
+    console.log('📡 Respuesta del servidor:', res.data);
+    
     routes.value = res.data?.data?.routes || res.data?.routes || res.data || [];
+    console.log(`✅ ${routes.value.length} rutas cargadas`);
   } catch (err) {
     console.error("❌ Error cargando rutas:", err);
   } finally {
@@ -280,10 +342,10 @@ const viewRoute = async (route) => {
     const { geometry } = maps;
 
     const map = new maps.Map(mapContainer, {
-  center: { lat: route.startLocation.latitude, lng: route.startLocation.longitude },
-  zoom: 12,
-  mapId: "ENVIGO_MAP_DEFAULT" // ✅ agrega un ID de mapa válido
-});
+      center: { lat: route.startLocation.latitude, lng: route.startLocation.longitude },
+      zoom: 12,
+      mapId: "ENVIGO_MAP_DEFAULT" // ✅ agrega un ID de mapa válido
+    });
     mapInstance.value = map;
 
     const bounds = new maps.LatLngBounds();
