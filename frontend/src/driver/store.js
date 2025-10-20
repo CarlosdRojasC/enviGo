@@ -7,7 +7,7 @@ export const driverStore = reactive({
   isLoading: false,
 
   async login(email, password) {
-    const res = await axios.post("/api/auth/login", { email, password });
+    const res = await axios.post("/api/drivers/login", { email, password });
     const user = res.data.user;
 
     if (user.role !== "driver") {
