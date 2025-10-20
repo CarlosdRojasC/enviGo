@@ -1,50 +1,73 @@
 const mongoose = require('mongoose');
+const bcrypt = require('bcryptjs');
 
 const driverSchema = new mongoose.Schema({
-  // Datos principales del conductor
+  // 🧍 Datos personales
   full_name: {
     type: String,
     required: true,
+    trim: true
   },
   email: {
     type: String,
     required: true,
-    unique: true, // El email debe ser único
+    unique: true,
+    lowercase: true,
+    trim: true
   },
   phone: {
     type: String,
-    required: true,
+    required: false,
+    trim: true
   },
-  // IDs de las plataformas externas
-  shipday_driver_id: {
-    type: String,
-    required: true,
-  },
-  circuit_driver_id: {
-    type: String,
-    required: false, // Es opcional porque la creación en Circuit puede fallar
-  },
-  // Datos adicionales que ya usas
+
+  // 🏠 Dirección base del conductor (para inicio de ruta)
+  home_address: { type: String, required: false },
+  home_latitude: { type: Number, required: false },
+  home_longitude: { type: Number, required: false },
+
+  // 🚚 Datos de compañía
   company_id: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Company',
-    required: false, // Hazlo opcional si no siempre lo tienes al crear
+    required: false
   },
+
+  // 🚗 Tipo de vehículo (auto, moto, bici, etc.)
   vehicle_type: {
     type: String,
-    required: false,
+    enum: ['car', 'motorcycle', 'bicycle', 'van', 'truck', 'other'],
+    default: 'car'
   },
+
+  // 🔒 Autenticación
+  password: {
+    type: String,
+    required: true,
+    select: false
+  },
+
+  // ⚙️ Estado del conductor
   is_active: {
     type: Boolean,
-    default: true,
+    default: true
   },
-  home_address: { type: String },
-home_latitude: { type: Number },
-home_longitude: { type: Number }
+
+  // ⏱️ Tiempos automáticos
 }, {
-  timestamps: true, // Añade createdAt y updatedAt
+  timestamps: true
 });
 
-const Driver = mongoose.model('Driver', driverSchema);
+// 🔑 Encriptar contraseña automáticamente antes de guardar
+driverSchema.pre('save', async function (next) {
+  if (!this.isModified('password')) return next();
+  this.password = await bcrypt.hash(this.password, 10);
+  next();
+});
 
-module.exports = Driver;
+// ✅ Método para validar contraseñas
+driverSchema.methods.comparePassword = async function (candidatePassword) {
+  return bcrypt.compare(candidatePassword, this.password);
+};
+
+module.exports = mongoose.model('Driver', driverSchema);

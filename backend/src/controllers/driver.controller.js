@@ -1,294 +1,259 @@
-// backend/src/controllers/driver.controller.js
-const bcrypt = require('bcrypt');
-const User = require('../models/User');
-const ShipdayService = require('../services/shipday.service.js');
-const { ERRORS } = require('../config/constants');
-const circuitController = require('./circuit.controller');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 const Driver = require('../models/Driver');
+const { ERRORS } = require('../config/constants');
 
 class DriverController {
   /**
-   * Obtiene la lista de todos los conductores. Solo para administradores.
+   * 🔍 Obtener todos los conductores (solo admin)
    */
-async getAllDrivers(req, res) {
-  try {
-    if (req.user.role !== 'admin') {
-      return res.status(403).json({ error: 'No autorizado' });
-    }
+  async getAllDrivers(req, res) {
+    try {
+      if (req.user.role !== 'admin')
+        return res.status(403).json({ success: false, message: ERRORS.FORBIDDEN });
 
-    console.log('🚗 Obteniendo conductores locales desde MongoDB...');
+      const drivers = await Driver.find()
+        .select('_id full_name email phone vehicle_type company_id is_active home_address createdAt')
+        .sort({ full_name: 1 });
 
-    // Buscar todos los conductores activos en tu base local
-    const drivers = await Driver.find({ is_active: true })
-      .select('_id full_name email phone company_id vehicle_type shipday_driver_id is_active')
-      .sort({ full_name: 1 });
-
-    if (!drivers || drivers.length === 0) {
-      return res.status(200).json({
+      res.status(200).json({
         success: true,
-        message: 'No se encontraron conductores registrados localmente',
-        data: [],
-        total: 0,
+        total: drivers.length,
+        data: drivers,
       });
-    }
-
-    res.status(200).json({
-      success: true,
-      total: drivers.length,
-      data: drivers,
-    });
-  } catch (error) {
-    console.error('❌ Error al obtener conductores locales:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message || 'Error al obtener la lista de conductores',
-    });
-  }
-}
-
-  /**
-   * Crear nuevo conductor
-   */
-async createDriver(req, res) {
-    console.log('--- INICIO DEL PROCESO DE CREACIÓN DE CONDUCTOR ---');
-    try {
-        if (req.user.role !== 'admin') {
-            return res.status(403).json({ error: ERRORS.FORBIDDEN });
-        }
-
-        const driverData = req.body;
-        console.log('1. DATOS RECIBIDOS DEL FORMULARIO:', driverData);
-
-        if (!driverData.name || !driverData.email || !driverData.phone) {
-            return res.status(400).json({ error: 'Faltan campos obligatorios: name, email, phone' });
-        }
-        
-        // --- PASO A: Crear en Shipday ---
-        console.log('2. Intentando crear en Shipday...');
-        const shipdayDriver = await ShipdayService.createDriver(driverData);
-        if (!shipdayDriver || !shipdayDriver.id) {
-            throw new Error('La creación en Shipday falló o no devolvió un ID.');
-        }
-        console.log('✅ Éxito en Shipday. ID:', shipdayDriver.id);
-
-        // --- PASO B: Crear en Circuit ---
-        console.log('3. Intentando crear en Circuit...');
-        const circuitDriver = await circuitController.createDriverInCircuit(driverData);
-        if (circuitDriver && circuitDriver.id) {
-            console.log(`✅ Éxito en Circuit. ID: ${circuitDriver.id}`);
-        } else {
-            console.warn('⚠️ Fallo en Circuit. El conductor no se creó en la plataforma de Circuit, pero el proceso continuará.');
-        }
-
-        // --- PASO C: Preparar para guardar en base de datos ---
-        console.log('4. Preparando datos para guardar en la base de datos local...');
-        const newDriver = new Driver({
-            full_name: driverData.name,
-            email: driverData.email,
-            phone: driverData.phone,
-            company_id: driverData.company_id,
-            is_active: true,
-            shipday_driver_id: shipdayDriver.id,
-            circuit_driver_id: circuitDriver?.id, // Guarda el ID de Circuit si existe
-        });
-        console.log('   -> Datos a guardar:', newDriver.toObject());
-
-        // --- PASO D: Guardar en la base de datos ---
-        console.log('5. Intentando guardar en la base de datos (MongoDB)...');
-        await newDriver.save();
-        console.log('✅ Éxito al guardar en la base de datos.');
-
-        console.log('--- PROCESO COMPLETADO EXITOSAMENTE ---');
-        res.status(201).json({
-            success: true,
-            message: 'Conductor creado exitosamente.',
-            data: newDriver,
-        });
-        
     } catch (error) {
-        // ESTE BLOQUE ES EL MÁS IMPORTANTE PARA NOSOTROS
-        console.error('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!');
-        console.error('❌ ERROR CRÍTICO DURANTE LA CREACIÓN DEL CONDUCTOR ❌');
-        console.error('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!');
-        console.error('Mensaje de error:', error.message);
-        console.error('Stack de error:', error.stack); // El stack nos dirá la línea exacta del error
-        
-        res.status(500).json({ 
-            success: false, 
-            error: 'Ocurrió un error en el servidor. Revisa la consola del backend para más detalles.',
-            errorMessage: error.message 
-        });
+      console.error('❌ Error al obtener conductores:', error);
+      res.status(500).json({ success: false, message: 'Error interno al obtener conductores' });
     }
-}
-  /**
-   * Obtener conductor específico
-   */
-  async getDriver(req, res) {
-    try {
-      const { driverId } = req.params;
-      console.log('🔍 Obteniendo conductor:', driverId);
+  }
 
-      const driver = await ShipdayService.getDriver(driverId);
-      
-      if (!driver) {
-        return res.status(404).json({
+  /**
+   * 🧍 Crear un nuevo conductor (solo admin)
+   */
+  async createDriver(req, res) {
+    try {
+      if (req.user.role !== 'admin')
+        return res.status(403).json({ success: false, message: ERRORS.FORBIDDEN });
+
+      const {
+        full_name,
+        email,
+        phone,
+        home_address,
+        home_latitude,
+        home_longitude,
+        vehicle_type,
+        company_id,
+        password,
+      } = req.body;
+
+      if (!full_name || !email || !password)
+        return res.status(400).json({
           success: false,
-          error: 'Conductor no encontrado'
+          message: 'Nombre, correo y contraseña son obligatorios.',
         });
-      }
+
+      const existing = await Driver.findOne({ email: email.toLowerCase() });
+      if (existing)
+        return res.status(400).json({ success: false, message: 'El correo ya está registrado.' });
+
+      const hashedPassword = await bcrypt.hash(password, 10);
+
+      const driver = new Driver({
+        full_name,
+        email: email.toLowerCase(),
+        phone,
+        home_address,
+        home_latitude,
+        home_longitude,
+        vehicle_type,
+        company_id,
+        password: hashedPassword,
+        is_active: true,
+      });
+
+      await driver.save();
+
+      res.status(201).json({
+        success: true,
+        message: 'Conductor creado correctamente.',
+        data: {
+          id: driver._id,
+          full_name: driver.full_name,
+          email: driver.email,
+          phone: driver.phone,
+          home_address: driver.home_address,
+        },
+      });
+    } catch (error) {
+      console.error('❌ Error creando conductor:', error);
+      res.status(500).json({ success: false, message: 'Error interno al crear conductor' });
+    }
+  }
+
+  /**
+   * 🧠 Login de conductor (email + password)
+   */
+  async loginDriver(req, res) {
+    try {
+      const { email, password } = req.body;
+
+      if (!email || !password)
+        return res.status(400).json({
+          success: false,
+          message: 'Debe ingresar correo y contraseña',
+        });
+
+      const driver = await Driver.findOne({ email: email.toLowerCase(), is_active: true }).select('+password');
+
+      if (!driver)
+        return res.status(404).json({ success: false, message: 'Conductor no encontrado o inactivo' });
+
+      const match = await bcrypt.compare(password, driver.password);
+      if (!match)
+        return res.status(401).json({ success: false, message: 'Contraseña incorrecta' });
+
+      const token = jwt.sign(
+        { id: driver._id, role: 'driver' },
+        process.env.JWT_SECRET,
+        { expiresIn: '7d' }
+      );
 
       res.json({
         success: true,
-        data: driver,
-        timestamp: new Date().toISOString()
+        message: 'Inicio de sesión exitoso',
+        token,
+        driver: {
+          id: driver._id,
+          full_name: driver.full_name,
+          email: driver.email,
+          phone: driver.phone,
+          home_address: driver.home_address,
+        },
       });
-      
     } catch (error) {
-      console.error('❌ Error obteniendo conductor:', error);
-      res.status(500).json({ 
-        success: false, 
-        error: error.message 
-      });
+      console.error('❌ Error en login de conductor:', error);
+      res.status(500).json({ success: false, message: 'Error interno en login' });
     }
   }
 
   /**
-   * Actualizar conductor
+   * ✏️ Actualizar conductor (solo admin)
    */
   async updateDriver(req, res) {
     try {
-      if (req.user.role !== 'admin') {
-        return res.status(403).json({ error: ERRORS.FORBIDDEN });
-      }
+      if (req.user.role !== 'admin')
+        return res.status(403).json({ success: false, message: ERRORS.FORBIDDEN });
 
       const { driverId } = req.params;
-      const updateData = req.body;
-      
-      console.log('🔄 Actualizando conductor:', driverId);
+      const updates = req.body;
 
-      const updatedDriver = await ShipdayService.updateDriver(driverId, updateData);
-      
-      // Actualizar también en base de datos local si existe
-      try {
-        await User.findOneAndUpdate(
-          { shipday_driver_id: driverId },
-          {
-            full_name: updateData.name,
-            phone: updateData.phone,
-            is_active: updateData.isActive
-          }
-        );
-      } catch (localError) {
-        console.warn('⚠️ No se pudo actualizar conductor local:', localError.message);
+      const driver = await Driver.findById(driverId);
+      if (!driver)
+        return res.status(404).json({ success: false, message: 'Conductor no encontrado' });
+
+      if (updates.email && updates.email !== driver.email) {
+        const exists = await Driver.findOne({ email: updates.email });
+        if (exists)
+          return res.status(400).json({ success: false, message: 'El correo ya está en uso' });
       }
-      
+
+      if (updates.password) {
+        updates.password = await bcrypt.hash(updates.password, 10);
+      }
+
+      Object.assign(driver, updates);
+      await driver.save();
+
       res.json({
         success: true,
-        message: 'Conductor actualizado exitosamente',
-        data: updatedDriver,
-        timestamp: new Date().toISOString()
+        message: 'Conductor actualizado correctamente',
+        data: driver,
       });
-      
     } catch (error) {
       console.error('❌ Error actualizando conductor:', error);
-      res.status(500).json({ 
-        success: false, 
-        error: error.message 
-      });
+      res.status(500).json({ success: false, message: 'Error interno al actualizar conductor' });
     }
   }
 
   /**
-   * Eliminar conductor
+   * ❌ Eliminar conductor (solo admin)
    */
   async deleteDriver(req, res) {
     try {
-      if (req.user.role !== 'admin') {
-        return res.status(403).json({ error: ERRORS.FORBIDDEN });
-      }
+      if (req.user.role !== 'admin')
+        return res.status(403).json({ success: false, message: ERRORS.FORBIDDEN });
 
       const { driverId } = req.params;
-      console.log('🗑️ Eliminando conductor:', driverId);
+      const driver = await Driver.findByIdAndDelete(driverId);
 
-      // Eliminar de Shipday
-      await ShipdayService.deleteDriver(driverId);
-      
-      // Eliminar también de base de datos local si existe
-      try {
-        const deletedDriver = await User.findOneAndDelete({ 
-          shipday_driver_id: driverId 
-        });
-        console.log('🗑️ Conductor local eliminado:', deletedDriver?.full_name || 'No encontrado');
-      } catch (localError) {
-        console.warn('⚠️ No se pudo eliminar conductor local:', localError.message);
-      }
-      
-      res.json({
-        success: true,
-        message: 'Conductor eliminado exitosamente',
-        timestamp: new Date().toISOString()
-      });
-      
+      if (!driver)
+        return res.status(404).json({ success: false, message: 'Conductor no encontrado' });
+
+      res.json({ success: true, message: 'Conductor eliminado correctamente' });
     } catch (error) {
       console.error('❌ Error eliminando conductor:', error);
-      res.status(500).json({ 
-        success: false, 
-        error: error.message 
+      res.status(500).json({ success: false, message: 'Error interno al eliminar conductor' });
+    }
+  }
+
+  /**
+   * 🔐 Reiniciar contraseña de conductor (solo admin)
+   */
+  async resetPassword(req, res) {
+    try {
+      if (req.user.role !== 'admin')
+        return res.status(403).json({ success: false, message: ERRORS.FORBIDDEN });
+
+      const { driverId } = req.params;
+      const { newPassword } = req.body;
+
+      if (!newPassword || newPassword.length < 6)
+        return res.status(400).json({ success: false, message: 'Contraseña demasiado corta' });
+
+      const driver = await Driver.findById(driverId);
+      if (!driver)
+        return res.status(404).json({ success: false, message: 'Conductor no encontrado' });
+
+      driver.password = await bcrypt.hash(newPassword, 10);
+      await driver.save();
+
+      res.json({
+        success: true,
+        message: `Contraseña del conductor ${driver.full_name} actualizada correctamente.`,
       });
+    } catch (error) {
+      console.error('❌ Error reseteando contraseña:', error);
+      res.status(500).json({ success: false, message: 'Error interno al resetear contraseña' });
     }
   }
 
-async syncWithShipday(req, res) {
-  try {
-    console.log('🔄 Iniciando sincronización de conductores con Shipday...');
-    
-    const shipdayDrivers = await ShipdayService.getDrivers();
-    if (!shipdayDrivers || shipdayDrivers.length === 0) {
-      return res.status(404).json({ error: 'No se encontraron conductores en Shipday.' });
+  /**
+   * ⚙️ Activar / desactivar conductor
+   */
+  async toggleStatus(req, res) {
+    try {
+      if (req.user.role !== 'admin')
+        return res.status(403).json({ success: false, message: ERRORS.FORBIDDEN });
+
+      const { driverId } = req.params;
+      const driver = await Driver.findById(driverId);
+
+      if (!driver)
+        return res.status(404).json({ success: false, message: 'Conductor no encontrado' });
+
+      driver.is_active = !driver.is_active;
+      await driver.save();
+
+      res.json({
+        success: true,
+        message: `Conductor ${driver.is_active ? 'activado' : 'desactivado'} correctamente.`,
+      });
+    } catch (error) {
+      console.error('❌ Error cambiando estado de conductor:', error);
+      res.status(500).json({ success: false, message: 'Error interno al cambiar estado' });
     }
-
-    let createdCount = 0;
-    let updatedCount = 0;
-
-    for (const shipdayDriver of shipdayDrivers) {
-      // Buscamos si ya existe por el ID de Shipday
-      const existingDriver = await Driver.findOne({ shipday_driver_id: shipdayDriver.id });
-
-      // --- INICIO DE LA CORRECCIÓN ---
-      const driverData = {
-        full_name: shipdayDriver.name,
-        email: shipdayDriver.email,
-        phone: shipdayDriver.phone || 'No disponible', // Valor por defecto si no hay teléfono
-        shipday_driver_id: shipdayDriver.id, // <-- CORREGIDO: Usamos el nombre exacto que pide el modelo
-        is_active: shipdayDriver.isActive,
-      };
-      // --- FIN DE LA CORRECCIÓN ---
-
-      if (existingDriver) {
-        // Si existe, lo actualizamos
-        await Driver.updateOne({ _id: existingDriver._id }, driverData);
-        updatedCount++;
-      } else {
-        // Si no existe, lo creamos
-        await Driver.create(driverData);
-        createdCount++;
-      }
-    }
-
-    console.log(`✅ Sincronización completada: ${createdCount} creados, ${updatedCount} actualizados.`);
-    res.status(200).json({
-      message: 'Sincronización con Shipday completada.',
-      created: createdCount,
-      updated: updatedCount,
-      total_in_shipday: shipdayDrivers.length
-    });
-
-  } catch (error) {
-    console.error('❌ Error sincronizando conductores con Shipday:', error);
-    res.status(500).json({ error: error.message || 'Error interno del servidor' });
   }
 }
-}
 
-// Exportar instancia para usar como middleware
 module.exports = new DriverController();

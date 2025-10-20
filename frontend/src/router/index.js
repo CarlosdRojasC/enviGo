@@ -8,7 +8,7 @@ import EmptyLayout from '../layouts/EmptyLayout.vue'
 // Vistas públicas
 import LandingPage from '../views/LandingPage.vue'
 import Login from '../views/login.vue'
- 
+import driverRouter from '../driver/router'
 
 // Vistas del sistema (existentes)
 const routes = [
@@ -245,6 +245,36 @@ const routes = [
     path: '/:pathMatch(.*)*', 
     redirect: '/' 
   },
+  {
+  path: '/driver',
+  component: EmptyLayout, // sin sidebar ni dashboard
+  children: [
+    {
+      path: 'login',
+      name: 'DriverLogin',
+      component: () => import('../driver/pages/LoginPage.vue'),
+      meta: { guest: true }
+    },
+    {
+      path: 'route',
+      name: 'DriverRoute',
+      component: () => import('../driver/pages/ActiveRoute.vue'),
+      meta: { requiresDriverAuth: true }
+    },
+    {
+      path: 'proof/:orderId',
+      name: 'DriverProof',
+      component: () => import('../driver/pages/ProofOfDelivery.vue'),
+      meta: { requiresDriverAuth: true }
+    },
+    {
+      path: 'offline',
+      name: 'DriverOffline',
+      component: () => import('../driver/pages/OfflineSync.vue'),
+      meta: { requiresDriverAuth: true }
+    }
+  ]
+},
   
 ]
 
@@ -260,6 +290,13 @@ router.beforeEach((to, from, next) => {
   const userRole = auth.user?.role
   const hasCompany = auth.hasCompany
 
+   if (to.path.startsWith('/driver')) {
+    // Si tiene sesión normal activa, forzar logout del admin
+    if (isAuthenticated && userRole !== 'driver') {
+      auth.logout()
+      localStorage.removeItem('driver_token')
+    }
+  }
   // Si requiere autenticación y no está autenticado
   if (to.meta.requiresAuth && !isAuthenticated) {
     return next({ name: 'Login' })
@@ -280,6 +317,12 @@ router.beforeEach((to, from, next) => {
   // Verificar si requiere empresa
   if (to.meta.requiresCompany && !hasCompany) {
     return next({ name: 'Login' })
+  }
+  if (to.meta.requiresDriverAuth) {
+    const driverToken = localStorage.getItem('driver_token')
+    if (!driverToken) {
+      return next({ name: 'DriverLogin' })
+    }
   }
   
   next()
