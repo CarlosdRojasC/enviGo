@@ -256,8 +256,8 @@ const initializeMap = async () => {
         lat: props.activeRoute.startLocation.latitude, 
         lng: props.activeRoute.startLocation.longitude 
       },
-      zoom: 12,
-      mapId: "ENVIGO_DRIVER_MAP"
+      zoom: 12
+      // ✅ Quité mapId para usar marcadores clásicos
     })
     mapInstance.value = map
 
@@ -295,45 +295,69 @@ const addRouteMarkers = (maps) => {
   routeMarkers.value = []
 
   // Marcador de inicio
-  const startMarker = new maps.marker.AdvancedMarkerElement({
+  const startMarker = new maps.Marker({
     map: mapInstance.value,
     position: {
       lat: props.activeRoute.startLocation.latitude,
       lng: props.activeRoute.startLocation.longitude
     },
     title: "Inicio: " + props.activeRoute.startLocation.address,
-    content: buildCustomMarker("🏢", "#4f46e5")
+    icon: {
+      url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(`
+        <svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="16" cy="16" r="14" fill="#4f46e5" stroke="white" stroke-width="2"/>
+          <text x="16" y="20" text-anchor="middle" fill="white" font-size="16" font-weight="bold">🏢</text>
+        </svg>
+      `),
+      scaledSize: new maps.Size(32, 32),
+      anchor: new maps.Point(16, 16)
+    }
   })
   routeMarkers.value.push(startMarker)
 
   // Marcadores de paradas
   props.activeRoute.orders.forEach((order, idx) => {
     if (order.order?.location?.latitude && order.order?.location?.longitude) {
-      const marker = new maps.marker.AdvancedMarkerElement({
+      const marker = new maps.Marker({
         map: mapInstance.value,
         position: {
           lat: order.order.location.latitude,
           lng: order.order.location.longitude
         },
         title: `Parada ${idx + 1}: ${order.order.customer_name || 'Cliente'}`,
-        content: buildCustomMarker(
-          order.sequenceNumber.toString(), 
-          getMarkerColor(order.deliveryStatus)
-        )
+        icon: {
+          url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(`
+            <svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="16" cy="16" r="14" fill="${getMarkerColor(order.deliveryStatus)}" stroke="white" stroke-width="2"/>
+              <text x="16" y="20" text-anchor="middle" fill="white" font-size="12" font-weight="bold">${order.sequenceNumber}</text>
+            </svg>
+          `),
+          scaledSize: new maps.Size(32, 32),
+          anchor: new maps.Point(16, 16)
+        }
       })
       routeMarkers.value.push(marker)
     }
   })
 
   // Marcador de fin
-  const endMarker = new maps.marker.AdvancedMarkerElement({
+  const endMarker = new maps.Marker({
     map: mapInstance.value,
     position: {
       lat: props.activeRoute.endLocation.latitude,
       lng: props.activeRoute.endLocation.longitude
     },
     title: "Fin: " + props.activeRoute.endLocation.address,
-    content: buildCustomMarker("🏠", "#059669")
+    icon: {
+      url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(`
+        <svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="16" cy="16" r="14" fill="#059669" stroke="white" stroke-width="2"/>
+          <text x="16" y="20" text-anchor="middle" fill="white" font-size="16" font-weight="bold">🏠</text>
+        </svg>
+      `),
+      scaledSize: new maps.Size(32, 32),
+      anchor: new maps.Point(16, 16)
+    }
   })
   routeMarkers.value.push(endMarker)
 }
@@ -383,7 +407,14 @@ const fitBounds = () => {
     lng: props.activeRoute.endLocation.longitude
   })
   
-  mapInstance.value.fitBounds(bounds, 50)
+  mapInstance.value.fitBounds(bounds)
+  
+  // Ajustar zoom si hay pocas paradas
+  setTimeout(() => {
+    if (mapInstance.value.getZoom() > 15) {
+      mapInstance.value.setZoom(15)
+    }
+  }, 100)
 }
 
 const centerOnStop = (stop, index) => {
@@ -418,11 +449,20 @@ const centerOnCurrentLocation = () => {
           currentLocationMarker.value.setMap(null)
         }
 
-        currentLocationMarker.value = new google.maps.marker.AdvancedMarkerElement({
+        currentLocationMarker.value = new google.maps.Marker({
           map: mapInstance.value,
           position: currentPos,
           title: "Mi ubicación actual",
-          content: buildCustomMarker("📍", "#ef4444")
+          icon: {
+            url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(`
+              <svg width="24" height="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="12" cy="12" r="10" fill="#ef4444" stroke="white" stroke-width="2"/>
+                <circle cx="12" cy="12" r="4" fill="white"/>
+              </svg>
+            `),
+            scaledSize: new google.maps.Size(24, 24),
+            anchor: new google.maps.Point(12, 12)
+          }
         })
       }
     },
