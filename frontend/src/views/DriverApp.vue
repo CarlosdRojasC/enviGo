@@ -115,13 +115,16 @@
 
       <!-- Vista: Lista de Entregas -->
       <DeliveriesList 
-        v-if="currentView === 'deliveries'"
-        :orders="sortedOrders"
-        :is-loading="isLoading"
-        @select-delivery="openDeliveryProof"
-        @mark-in-progress="markInProgress"
-      />
-
+  v-if="currentView === 'deliveries'"
+  :orders="sortedOrders"
+  :is-loading="isLoading"
+  :search-query="searchQuery"
+  :status-filter="statusFilter"
+  @select-delivery="openDeliveryProof"
+  @mark-in-progress="markInProgress"
+  @update-search="searchQuery = $event"
+  @update-status-filter="statusFilter = $event"
+/>
       <!-- Vista: Mapa -->
       <RouteMap 
         v-if="currentView === 'map'"
@@ -176,6 +179,8 @@ const showDeliveryProof = ref(false)
 const selectedOrder = ref(null)
 const isSyncing = ref(false)
 const isSubmitting = ref(false)
+const searchQuery = ref('')
+const statusFilter = ref('')
 
 // Datos del conductor
 const driverId = ref(null)
@@ -202,10 +207,16 @@ const refreshData = async () => {
   await checkForActiveRoute()
 }
 
-const checkForActiveRoute = async () => {
-  isLoading.value = true
+const checkForActiveRoute = async (preserveSearchState = false) => {
+  // No mostrar loading si es actualización automática
+  isLoading.value = !preserveSearchState
+  
   try {
     console.log('🔍 Verificando ruta activa del conductor...')
+    
+    // Preservar estado de búsqueda antes de la actualización
+    const savedSearchQuery = preserveSearchState ? searchQuery.value : ''
+    const savedStatusFilter = preserveSearchState ? statusFilter.value : ''
     
     const response = await apiService.routes.getActiveRoute()
     console.log('📡 Respuesta del servidor:', response.data)
@@ -215,11 +226,18 @@ const checkForActiveRoute = async () => {
       driverName.value = activeRoute.value.driver?.full_name || activeRoute.value.driver?.name || 'Conductor'
       driverId.value = activeRoute.value.driver?._id
       
+      // Restaurar estado de búsqueda después de la actualización
+      if (preserveSearchState) {
+        searchQuery.value = savedSearchQuery
+        statusFilter.value = savedStatusFilter
+      }
+      
       console.log('✅ Ruta activa encontrada:', {
         routeId: activeRoute.value._id,
         status: activeRoute.value.status,
         ordersCount: activeRoute.value.orders?.length || 0,
-        driverName: driverName.value
+        driverName: driverName.value,
+        preservedState: preserveSearchState
       })
     } else {
       console.log('ℹ️ No hay rutas activas asignadas')
@@ -457,7 +475,8 @@ const logout = () => {
 
 // Lifecycle
 onMounted(() => {
-  checkForActiveRoute()
+  // Carga inicial sin preservar estado (primera vez)
+  checkForActiveRoute(false)
   loadOfflineUpdates()
   updateConnectionStatus()
   
@@ -465,7 +484,14 @@ onMounted(() => {
   window.addEventListener('online', updateConnectionStatus)
   window.addEventListener('offline', updateConnectionStatus)
   
-  // Check for active route periodically
-  setInterval(checkForActiveRoute, 30000) // Every 30 seconds
+  // Check for active route periodically - PRESERVANDO ESTADO
+  setInterval(() => {
+    checkForActiveRoute(true) // true = preservar estado de búsqueda
+  }, 30000) // Every 30 seconds
 })
+
+// También modificar refreshData si tienes este método
+const refreshData = async () => {
+  await checkForActiveRoute(true) // Preservar estado en refresh manual
+}
 </script>
