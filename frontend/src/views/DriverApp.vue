@@ -204,7 +204,7 @@ const hasOfflineData = computed(() => {
 
 // Métodos principales
 const refreshData = async () => {
-  await checkForActiveRoute()
+  await checkForActiveRoute(true)
 }
 
 const checkForActiveRoute = async (preserveSearchState = false) => {
@@ -490,8 +490,5 @@ onMounted(() => {
   }, 30000) // Every 30 seconds
 })
 
-// También modificar refreshData si tienes este método
-const refreshData = async () => {
-  await checkForActiveRoute(true) // Preservar estado en refresh manual
-}
+
 </script>
