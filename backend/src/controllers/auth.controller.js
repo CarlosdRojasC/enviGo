@@ -6,82 +6,86 @@ const nodemailer = require('nodemailer');
 const User = require('../models/User');
 const Company = require('../models/Company');
 const { ERRORS, ROLES } = require('../config/constants');
-
+const Driver = require('../models/Driver');
 class AuthController {
   // Login mejorado
-  login = async(req, res) => {
-    try {
-      const { email, password, remember_me = false } = req.body;
-      const clientIP = req.ip || req.connection.remoteAddress;
+  login = async (req, res) => {
+  try {
+    const { email, password, remember_me = false } = req.body;
+    const clientIP = req.ip || req.connection.remoteAddress;
 
-      const user = await User.findOne({ email }).populate('company_id');
-if (!user) {
-  this.logFailedAttempt(email, clientIP, 'USER_NOT_FOUND');
-  return res.status(401).json({ error: ERRORS.INVALID_CREDENTIALS });
-}
+    // Buscar primero en usuarios normales
+    let user = await User.findOne({ email }).populate('company_id');
+    let isDriver = false;
 
-// 🔥 NUEVA VALIDACIÓN: Verificar si el usuario está desactivado
-if (!user.is_active) {
-  this.logFailedAttempt(email, clientIP, 'USER_DISABLED');
-  return res.status(403).json({ 
-    error: 'Tu cuenta ha sido desactivada. Contacta al administrador.',
-    code: 'USER_DISABLED' 
-  });
-}
-
-      // Verificar si la cuenta está bloqueada
-      if (user.locked_until && user.locked_until > new Date()) {
-        const lockTimeRemaining = Math.ceil((user.locked_until - new Date()) / 1000 / 60);
-        return res.status(423).json({ 
-          error: 'Cuenta bloqueada',
-          details: `Intentalo de nuevo en ${lockTimeRemaining} minutos`,
-          locked_until: user.locked_until
-        });
-      }
-
-      const validPassword = await bcrypt.compare(password, user.password_hash);
-      if (!validPassword) {
-        await this.handleFailedLogin(user, clientIP);
-        return res.status(401).json({ error: ERRORS.INVALID_CREDENTIALS });
-      }
-
-      // Login exitoso - resetear contadores de fallo
-      await this.handleSuccessfulLogin(user, clientIP);
-
-      // Generar token
-      const tokenExpiry = remember_me ? '30d' : (process.env.JWT_EXPIRE || '7d');
-      const token = jwt.sign(
-        { 
-          id: user._id, 
-          email: user.email, 
-          role: user.role, 
-          company_id: user.company_id?._id || null,
-          session_id: crypto.randomUUID()
-        },
-        process.env.JWT_SECRET,
-        { expiresIn: tokenExpiry }
-      );
-
-      res.json({
-        token,
-        expires_in: tokenExpiry,
-        user: {
-          id: user._id,
-          email: user.email,
-          full_name: user.full_name,
-          role: user.role,
-          company: user.company_id,
-          permissions: this.getUserPermissions(user.role),
-          last_login: user.last_login,
-          requires_password_change: user.password_change_required || false
-        },
-      });
-    } catch (error) {
-      console.error('Error en login:', error);
-      res.status(500).json({ error: ERRORS.SERVER_ERROR });
+    // Si no existe en User, buscar en Driver
+    if (!user) {
+      user = await Driver.findOne({ email, is_active: true });
+      if (user) isDriver = true;
     }
-  }
 
+    if (!user) {
+      this.logFailedAttempt(email, clientIP, 'USER_NOT_FOUND');
+      return res.status(401).json({ error: ERRORS.INVALID_CREDENTIALS });
+    }
+
+    // Verificar si está activo
+    if (!user.is_active) {
+      this.logFailedAttempt(email, clientIP, 'USER_DISABLED');
+      return res.status(403).json({
+        error: 'Tu cuenta ha sido desactivada. Contacta al administrador.',
+        code: 'USER_DISABLED'
+      });
+    }
+
+    // Verificar contraseña (campo diferente si es driver)
+    const passwordHash = user.password_hash || user.password;
+    const validPassword = await bcrypt.compare(password, passwordHash);
+
+    if (!validPassword) {
+      await this.handleFailedLogin(user, clientIP);
+      return res.status(401).json({ error: ERRORS.INVALID_CREDENTIALS });
+    }
+
+    // Login exitoso
+    await this.handleSuccessfulLogin(user, clientIP);
+
+    // Generar token
+    const tokenExpiry = remember_me ? '30d' : (process.env.JWT_EXPIRE || '7d');
+    const role = isDriver ? 'driver' : user.role;
+
+    const token = jwt.sign(
+      {
+        id: user._id,
+        email: user.email,
+        role,
+        company_id: user.company_id?._id || user.company_id || null,
+        session_id: crypto.randomUUID()
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: tokenExpiry }
+    );
+
+    res.json({
+      success: true,
+      token,
+      expires_in: tokenExpiry,
+      user: {
+        id: user._id,
+        email: user.email,
+        full_name: user.full_name,
+        role,
+        company: user.company_id,
+        permissions: this.getUserPermissions(role),
+        last_login: user.last_login || null,
+        requires_password_change: user.password_change_required || false
+      }
+    });
+  } catch (error) {
+    console.error('Error en login:', error);
+    res.status(500).json({ error: ERRORS.SERVER_ERROR });
+  }
+};
   // Registro de usuario
   register = async(req, res) => {
     try {
