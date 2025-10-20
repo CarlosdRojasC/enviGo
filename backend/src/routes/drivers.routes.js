@@ -2,11 +2,12 @@
 const express = require('express');
 const router = express.Router();
 const driverController = require('../controllers/driver.controller');
-const { authenticateToken, isAdmin } = require('../middlewares/auth.middleware');
+const { authenticateToken, isDriver } = require('../middlewares/auth.middleware');
 const { authenticateDriver } = require('../middlewares/driverAuth.middleware'); // ✅ Nuevo middleware
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const Driver = require('../models/Driver');
+
 
 // ==================== RUTAS PÚBLICAS PARA CONDUCTORES ====================
 
@@ -164,6 +165,8 @@ router.patch('/change-password', authenticateDriver, async (req, res) => {
     });
   }
 });
+
+router.get('/driver/active', authenticateToken, isDriver, routeController.getActiveRoute);
 
 // ==================== RUTAS SOLO ADMIN ====================
 
