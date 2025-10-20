@@ -318,12 +318,6 @@ router.beforeEach((to, from, next) => {
   return next()
 }
 
-  // ✅ 2. LÓGICA PARA RUTAS DEL SISTEMA (admin/empresas)
-  
-  // Si el usuario está en rutas del sistema pero tiene sesión de driver, limpiar
-  if (driverStore.isAuthenticated && to.path.startsWith('/app')) {
-    driverStore.logout()
-  }
 
   // Si requiere autenticación y no está autenticado
   if (to.meta.requiresAuth && !isAuthenticated) {
