@@ -2,6 +2,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { apiService } from '../services/api'
+import router from '../router'
 
 export const useAuthStore = defineStore('auth', () => {
   // Estado
@@ -38,42 +39,38 @@ export const useAuthStore = defineStore('auth', () => {
 
   // Métodos principales
   async function login(email, password, rememberMe = false) {
-    loading.value = true
-    error.value = null
+  loading.value = true
+  error.value = null
 
-    try {
-      const { data } = await apiService.auth.login(email, password, rememberMe)
+  try {
+    const { data } = await apiService.auth.login(email, password, rememberMe)
 
-      user.value = data.user
-      token.value = data.token
+    user.value = data.user
+    token.value = data.token
 
-      // Persistir en localStorage
-      localStorage.setItem('user', JSON.stringify(data.user))
-      localStorage.setItem('token', data.token)
+    // Persistir en localStorage
+    localStorage.setItem('user', JSON.stringify(data.user))
+    localStorage.setItem('token', data.token)
 
-      return { success: true, user: data.user }
-    } catch (err) {
-      console.error('Error en login:', err.response || err)
-      
-      const errorMessage = err.response?.data?.error || err.message || 'Error al iniciar sesión'
-      error.value = errorMessage
+    // ✅ Redirección según el rol
+    const redirectRoute = getRedirectRoute()
+    router.push(redirectRoute)
 
-      // Manejar casos específicos
-      if (err.response?.status === 423) {
-        // Cuenta bloqueada
-        return { 
-          success: false, 
-          error: errorMessage,
-          locked: true,
-          locked_until: err.response.data.locked_until
-        }
-      }
+    return { success: true, user: data.user }
+  } catch (err) {
+    console.error('Error en login:', err.response || err)
+    const errorMessage = err.response?.data?.error || err.message || 'Error al iniciar sesión'
+    error.value = errorMessage
 
-      return { success: false, error: errorMessage }
-    } finally {
-      loading.value = false
+    if (err.response?.status === 423) {
+      return { success: false, error: errorMessage, locked: true, locked_until: err.response.data.locked_until }
     }
+
+    return { success: false, error: errorMessage }
+  } finally {
+    loading.value = false
   }
+}
 
   async function register(userData) {
     loading.value = true
@@ -302,14 +299,16 @@ async function validateResetToken(token) {
 
   // Método para obtener la ruta de redirección después del login
   function getRedirectRoute() {
-    if (isAdmin.value) {
-      return '/app/admin/dashboard'
-    } else if (hasCompany.value) {
-      return '/app/dashboard'
-    } else {
-      return '/setup' // Ruta para configurar empresa si no tiene
-    }
+  if (isAdmin.value) {
+    return '/app/admin/dashboard'
+  } else if (isCompanyOwner.value || isCompanyEmployee.value) {
+    return '/app/dashboard'
+  } else if (role.value === 'driver') {
+    return '/driver/route' // ✅ Redirigir a la ruta activa de conductores
+  } else {
+    return '/setup' // Ruta para usuarios sin empresa o sin rol definido
   }
+}
 
   // Auto-refresh del perfil cada cierto tiempo
   let profileRefreshInterval = null
