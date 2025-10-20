@@ -1,3 +1,4 @@
+// frontend/src/router/index.js - GUARDS CORREGIDOS
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '../store/auth'
 
@@ -5,12 +6,14 @@ import { useAuthStore } from '../store/auth'
 import DashboardLayout from '../layouts/DashboardLayout.vue'
 import PublicLayout from '../layouts/PublicLayout.vue'
 import EmptyLayout from '../layouts/EmptyLayout.vue'
+
 // Vistas públicas
 import LandingPage from '../views/LandingPage.vue'
 import Login from '../views/login.vue'
-import driverRouter from '../driver/router'
 
-// Vistas del sistema (existentes)
+// ✅ Importar el store de drivers
+import { driverStore } from '../driver/store'
+
 const routes = [
   // ==================== RUTAS PÚBLICAS ====================
   {
@@ -77,29 +80,29 @@ const routes = [
         meta: { roles: ['company_owner', 'company_employee'], requiresCompany: true }
       },
       {
-  path: 'profile',
-  name: 'Profile',
-  component: () => import('../components/Profile.vue'),
-  meta: { roles: ['company_owner', 'company_employee'], requiresCompany: true }
-},
-{
-  path: 'settings',
-  name: 'Settings',
-  component: () => import('../components/Settings.vue'),
-  meta: { roles: ['company_owner', 'company_employee'], requiresCompany: true }
-},
+        path: 'profile',
+        name: 'Profile',
+        component: () => import('../components/Profile.vue'),
+        meta: { roles: ['company_owner', 'company_employee'], requiresCompany: true }
+      },
       {
-  path: 'manifests',
-  name: 'Manifests',
-  component: () => import('../views/ManifestsAdmin.vue'), // Reutilizar el mismo componente
-  meta: { roles: ['company_owner', 'company_employee'], requiresCompany: true }
-},
-{
-  path: 'manifest/:id',
-  name: 'ManifestView',
-  component: () => import('../views/PickupManifest.vue'),
-  meta: { roles: ['company_owner', 'company_employee'], requiresCompany: true }
-},
+        path: 'settings',
+        name: 'Settings',
+        component: () => import('../components/Settings.vue'),
+        meta: { roles: ['company_owner', 'company_employee'], requiresCompany: true }
+      },
+      {
+        path: 'manifests',
+        name: 'Manifests',
+        component: () => import('../views/ManifestsAdmin.vue'),
+        meta: { roles: ['company_owner', 'company_employee'], requiresCompany: true }
+      },
+      {
+        path: 'manifest/:id',
+        name: 'ManifestView',
+        component: () => import('../views/PickupManifest.vue'),
+        meta: { roles: ['company_owner', 'company_employee'], requiresCompany: true }
+      },
       
       // RUTAS PARA ADMIN
       {
@@ -109,17 +112,17 @@ const routes = [
         meta: { roles: ['admin'] }
       },
       {
-  path: 'admin/profile',
-  name: 'AdminProfile',
-  component: () => import('../components/Profile.vue'),
-  meta: { roles: ['admin'] }
-},
-{
-  path: 'admin/settings',
-  name: 'AdminSettings',
-  component: () => import('../components/Settings.vue'),
-  meta: { roles: ['admin'] }
-},
+        path: 'admin/profile',
+        name: 'AdminProfile',
+        component: () => import('../components/Profile.vue'),
+        meta: { roles: ['admin'] }
+      },
+      {
+        path: 'admin/settings',
+        name: 'AdminSettings',
+        component: () => import('../components/Settings.vue'),
+        meta: { roles: ['admin'] }
+      },
       {
         path: 'admin/companies',
         name: 'AdminCompanies',
@@ -150,7 +153,6 @@ const routes = [
         component: () => import('../views/Drivers.vue'),
         meta: { roles: ['admin'] }
       },
-
       {
         path: 'admin/driver-payments',
         name: 'AdminDriverPayments',
@@ -164,55 +166,52 @@ const routes = [
         meta: { roles: ['admin'] }
       },
       {
-  path: 'admin/manifests',
-  name: 'AdminManifests',
-  component: () => import('../views/ManifestsAdmin.vue'),
-  meta: { 
-    requiresAuth: true, 
-    roles: ['admin'] 
-  }
-},
-{
-  path: 'admin/pickup-routes',
-  name: 'PickupRoutes',
-  component: () => import('../components/PickupRoutes.vue'),
-  meta: { roles: ['admin'] }
-},
-{
-  path: 'admin/routes',
-  name: 'AdminRoutes',
-  component: () => import('../views/RouteManager.vue'),
-  meta: {
-    title: 'Gestor de Rutas',
-    requiresAuth: true,
-    layout: 'admin',
-    icon: '🚚'
-  }
-},
-{
-  path: 'admin/manifest/:id',
-  name: 'AdminManifestView',
-  component: () => import('../views/PickupManifest.vue'),
-  meta: { 
-    requiresAuth: true, 
-    roles: ['admin'] 
-  }
-},
+        path: 'admin/manifests',
+        name: 'AdminManifests',
+        component: () => import('../views/ManifestsAdmin.vue'),
+        meta: { 
+          requiresAuth: true, 
+          roles: ['admin'] 
+        }
+      },
+      {
+        path: 'admin/pickup-routes',
+        name: 'PickupRoutes',
+        component: () => import('../components/PickupRoutes.vue'),
+        meta: { roles: ['admin'] }
+      },
+      {
+        path: 'admin/routes',
+        name: 'AdminRoutes',
+        component: () => import('../views/RouteManager.vue'),
+        meta: {
+          title: 'Gestor de Rutas',
+          requiresAuth: true,
+          layout: 'admin',
+          icon: '🚚'
+        }
+      },
+      {
+        path: 'admin/manifest/:id',
+        name: 'AdminManifestView',
+        component: () => import('../views/PickupManifest.vue'),
+        meta: { 
+          requiresAuth: true, 
+          roles: ['admin'] 
+        }
+      }
     ]
   },
-{
-  path: '/scanner',
-  name: 'MLScanner',
-  component: () => import('../views/DriverMLScanner.vue'),
-  meta: { 
-    requiresAuth: false
-  }
-},
-
-
-  
 
   // ==================== RUTAS ESPECIALES ====================
+  {
+    path: '/scanner',
+    name: 'MLScanner',
+    component: () => import('../views/DriverMLScanner.vue'),
+    meta: { 
+      requiresAuth: false
+    }
+  },
   {
     path: '/integrations/mercadolibre/callback',
     name: 'MercadoLibreCallback',
@@ -224,58 +223,69 @@ const routes = [
     name: 'IntegrationSuccess',
     component: () => import('../views/IntegrationSuccess.vue'),
     meta: { 
-      requiresAuth: false, // No requiere auth porque viene de callback externo
+      requiresAuth: false,
       title: 'Integración Exitosa'
     }
   },
-
-  // 🆕 Página de error de integración
   {
     path: '/integration-error',
     name: 'IntegrationError',
     component: () => import('../views/IntegrationError.vue'),
     meta: { 
-      requiresAuth: false, // No requiere auth porque viene de callback externo
+      requiresAuth: false,
       title: 'Error en Integración'
     }
   },
 
-  // Redirigir cualquier ruta no encontrada
+  // ==================== RUTAS EXCLUSIVAS PARA CONDUCTORES ====================
+  {
+    path: '/driver',
+    component: EmptyLayout, // Sin sidebar ni dashboard
+    children: [
+      {
+        path: 'login',
+        name: 'DriverLogin',
+        component: () => import('../driver/pages/LoginPage.vue'),
+        meta: { 
+          guest: true,
+          driverOnly: true // ✅ Marcar como ruta específica de driver
+        }
+      },
+      {
+        path: 'route',
+        name: 'DriverRoute',
+        component: () => import('../driver/pages/ActiveRoute.vue'),
+        meta: { 
+          requiresDriverAuth: true,
+          driverOnly: true
+        }
+      },
+      {
+        path: 'proof/:orderId',
+        name: 'DriverProof',
+        component: () => import('../driver/pages/ProofOfDelivery.vue'),
+        meta: { 
+          requiresDriverAuth: true,
+          driverOnly: true
+        }
+      },
+      {
+        path: 'offline',
+        name: 'DriverOffline',
+        component: () => import('../driver/pages/OfflineSync.vue'),
+        meta: { 
+          requiresDriverAuth: true,
+          driverOnly: true
+        }
+      }
+    ]
+  },
+
+  // Catch all
   { 
     path: '/:pathMatch(.*)*', 
     redirect: '/' 
-  },
-  {
-  path: '/driver',
-  component: EmptyLayout, // sin sidebar ni dashboard
-  children: [
-    {
-      path: 'login',
-      name: 'DriverLogin',
-      component: () => import('../driver/pages/LoginPage.vue'),
-      meta: { guest: true }
-    },
-    {
-      path: 'route',
-      name: 'DriverRoute',
-      component: () => import('../driver/pages/ActiveRoute.vue'),
-      meta: { requiresDriverAuth: true }
-    },
-    {
-      path: 'proof/:orderId',
-      name: 'DriverProof',
-      component: () => import('../driver/pages/ProofOfDelivery.vue'),
-      meta: { requiresDriverAuth: true }
-    },
-    {
-      path: 'offline',
-      name: 'DriverOffline',
-      component: () => import('../driver/pages/OfflineSync.vue'),
-      meta: { requiresDriverAuth: true }
-    }
-  ]
-},
-  
+  }
 ]
 
 const router = createRouter({
@@ -283,27 +293,51 @@ const router = createRouter({
   routes
 })
 
-// Guards de navegación actualizados
+// ✅ GUARDS DE NAVEGACIÓN MEJORADOS
 router.beforeEach((to, from, next) => {
   const auth = useAuthStore()
   const isAuthenticated = auth.isLoggedIn
   const userRole = auth.user?.role
   const hasCompany = auth.hasCompany
 
-   if (to.path.startsWith('/driver')) {
-    // Si tiene sesión normal activa, forzar logout del admin
+  // ✅ 1. LÓGICA PARA RUTAS DE DRIVERS
+  if (to.path.startsWith('/driver')) {
+    
+    // Si es una ruta de guest driver y ya está autenticado como driver
+    if (to.meta.guest && to.meta.driverOnly && driverStore.isAuthenticated) {
+      return next({ name: 'DriverRoute' })
+    }
+
+    // Si requiere autenticación de driver
+    if (to.meta.requiresDriverAuth) {
+      if (!driverStore.isAuthenticated) {
+        return next({ name: 'DriverLogin' })
+      }
+    }
+
+    // Si tiene sesión de admin/empresa activa, hacer logout
     if (isAuthenticated && userRole !== 'driver') {
       auth.logout()
       localStorage.removeItem('driver_token')
     }
+
+    return next()
   }
+
+  // ✅ 2. LÓGICA PARA RUTAS DEL SISTEMA (admin/empresas)
+  
+  // Si el usuario está en rutas del sistema pero tiene sesión de driver, limpiar
+  if (driverStore.isAuthenticated && to.path.startsWith('/app')) {
+    driverStore.logout()
+  }
+
   // Si requiere autenticación y no está autenticado
   if (to.meta.requiresAuth && !isAuthenticated) {
     return next({ name: 'Login' })
   }
 
   // Si es una ruta de invitado y está autenticado, redirigir al dashboard
-  if (to.meta.guest && isAuthenticated) {
+  if (to.meta.guest && !to.meta.driverOnly && isAuthenticated) {
     if (userRole === 'admin') return next({ path: '/app/admin/dashboard' })
     return next({ path: '/app/dashboard' })
   }
@@ -317,12 +351,6 @@ router.beforeEach((to, from, next) => {
   // Verificar si requiere empresa
   if (to.meta.requiresCompany && !hasCompany) {
     return next({ name: 'Login' })
-  }
-  if (to.meta.requiresDriverAuth) {
-    const driverToken = localStorage.getItem('driver_token')
-    if (!driverToken) {
-      return next({ name: 'DriverLogin' })
-    }
   }
   
   next()
