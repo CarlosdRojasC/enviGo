@@ -4,9 +4,23 @@ const Driver = require('../models/Driver');
 const { ERRORS } = require('../config/constants');
 
 class DriverController {
+
+  async getDriver(req, res) {
+  try {
+    const { driverId } = req.params;
+    const driver = await Driver.findById(driverId);
+    if (!driver) return res.status(404).json({ success: false, message: 'Conductor no encontrado' });
+    res.json({ success: true, data: driver });
+  } catch (error) {
+    console.error('❌ Error obteniendo conductor:', error);
+    res.status(500).json({ success: false, message: 'Error interno' });
+  }
+}
+
   /**
    * 🔍 Obtener todos los conductores (solo admin)
    */
+
   async getAllDrivers(req, res) {
     try {
       if (req.user.role !== 'admin')
