@@ -344,6 +344,7 @@ const goBackToLogin = () => {
   resetEmail.value = ''
 }
 
+
 // Lifecycle
 onMounted(() => {
   auth.clearError()

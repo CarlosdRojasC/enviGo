@@ -130,17 +130,17 @@
       />
 
       <!-- Vista: Historial -->
-      <DeliveryHistory 
+      <!-- <DeliveryHistory 
         v-if="currentView === 'history'"
         :driver-id="driverId"
-      />
+      /> -->
 
       <!-- Vista: Configuración -->
-      <DriverSettings 
+      <!-- <DriverSettings 
         v-if="currentView === 'settings'"
         @logout="logout"
         @back="currentView = 'active-route'"
-      />
+      /> -->
     </main>
 
     <!-- Modal de Prueba de Entrega -->
@@ -160,12 +160,12 @@ import { useRouter } from 'vue-router'
 import { apiService } from '../services/api'
 
 // Componentes
-import ActiveRoute from '../components/driver/ActiveRoute.vue'
+import ActiveRoute from '../driver/pages/ActiveRoute.vue'
 import DeliveriesList from '../components/driver/DeliveriesList.vue'
 import RouteMap from '../components/driver/RouteMap.vue'
 import DeliveryHistory from '../components/driver/DeliveryHistory.vue'
 import DriverSettings from '../components/driver/DriverSettings.vue'
-import DeliveryProofModal from '../components/driver/DeliveryProofModal.vue'
+import DeliveryProofModal from '../driver/pages/DeliveryProofModal.vue'
 
 const router = useRouter()
 
