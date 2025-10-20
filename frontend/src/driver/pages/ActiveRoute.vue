@@ -280,27 +280,104 @@ const openNextDelivery = () => {
 const openMapsApp = () => {
   if (!nextDelivery.value?.order?.location) return
   
-  const { latitude, longitude } = nextDelivery.value.order.location
-  const address = encodeURIComponent(nextDelivery.value.order.shipping_address || '')
+  showNavigationOptions(nextDelivery.value)
+}
+
+// Función para mostrar opciones de navegación
+const showNavigationOptions = (orderItem) => {
+  const { latitude, longitude } = orderItem.order.location
+  const address = orderItem.order.shipping_address || ''
+  const customerName = orderItem.order.customer_name || 'Cliente'
   
-  // Detectar si es iOS o Android
-  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
-  const isAndroid = /Android/.test(navigator.userAgent)
+  // Crear modal de opciones
+  const modal = document.createElement('div')
+  modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4'
+  modal.innerHTML = `
+    <div class="bg-white rounded-xl max-w-sm w-full p-6">
+      <div class="text-center mb-4">
+        <h3 class="text-lg font-semibold text-gray-900 mb-2">Navegar a:</h3>
+        <p class="text-sm font-medium text-gray-800">${customerName}</p>
+        <p class="text-xs text-gray-600">${address}</p>
+      </div>
+      
+      <div class="space-y-3">
+        <button onclick="openNavigation('google', ${latitude}, ${longitude}, '${encodeURIComponent(address)}')" 
+                class="w-full bg-blue-600 text-white px-4 py-3 rounded-lg font-medium hover:bg-blue-700 transition-colors flex items-center justify-center space-x-2">
+          <span>🗺️</span>
+          <span>Google Maps</span>
+        </button>
+        
+        <button onclick="openNavigation('waze', ${latitude}, ${longitude}, '${encodeURIComponent(address)}')" 
+                class="w-full bg-purple-600 text-white px-4 py-3 rounded-lg font-medium hover:bg-purple-700 transition-colors flex items-center justify-center space-x-2">
+          <span>🚗</span>
+          <span>Waze</span>
+        </button>
+        
+        <button onclick="openNavigation('apple', ${latitude}, ${longitude}, '${encodeURIComponent(address)}')" 
+                class="w-full bg-gray-800 text-white px-4 py-3 rounded-lg font-medium hover:bg-gray-900 transition-colors flex items-center justify-center space-x-2">
+          <span>🍎</span>
+          <span>Apple Maps</span>
+        </button>
+        
+        <button onclick="closeNavigationModal()" 
+                class="w-full bg-gray-200 text-gray-800 px-4 py-2 rounded-lg font-medium hover:bg-gray-300 transition-colors">
+          Cancelar
+        </button>
+      </div>
+    </div>
+  `
   
-  let mapsUrl
+  document.body.appendChild(modal)
   
-  if (isIOS) {
-    // Apple Maps
-    mapsUrl = `maps://maps.apple.com/?daddr=${latitude},${longitude}&dirflg=d`
-  } else if (isAndroid) {
-    // Google Maps
-    mapsUrl = `google.navigation:q=${latitude},${longitude}`
-  } else {
-    // Web fallback
-    mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${latitude},${longitude}`
+  // Función global para abrir navegación
+  window.openNavigation = (app, lat, lng, addr) => {
+    let url = ''
+    
+    switch (app) {
+      case 'google':
+        // Google Maps con dirección y coordenadas
+        if (addr) {
+          url = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(addr)}&travelmode=driving`
+        } else {
+          url = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=driving`
+        }
+        break
+        
+      case 'waze':
+        // Waze con coordenadas
+        url = `https://waze.com/ul?ll=${lat},${lng}&navigate=yes`
+        break
+        
+      case 'apple':
+        // Apple Maps con dirección
+        if (addr) {
+          url = `maps://maps.apple.com/?daddr=${encodeURIComponent(addr)}&dirflg=d`
+        } else {
+          url = `maps://maps.apple.com/?daddr=${lat},${lng}&dirflg=d`
+        }
+        break
+    }
+    
+    if (url) {
+      window.open(url, '_blank')
+    }
+    
+    closeNavigationModal()
   }
   
-  window.open(mapsUrl, '_blank')
+  // Función global para cerrar modal
+  window.closeNavigationModal = () => {
+    modal.remove()
+    delete window.openNavigation
+    delete window.closeNavigationModal
+  }
+  
+  // Cerrar al hacer click fuera
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) {
+      closeNavigationModal()
+    }
+  })
 }
 
 const getStatusText = (status) => {
