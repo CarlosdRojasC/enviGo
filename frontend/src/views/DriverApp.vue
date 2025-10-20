@@ -293,37 +293,122 @@ const confirmDelivery = async (deliveryData) => {
   isSubmitting.value = true
   
   try {
+    console.log('📦 Confirmando entrega con datos:', {
+      orderId: selectedOrder.value.order._id,
+      recipientName: deliveryData.recipientName,
+      photosCount: deliveryData.photos?.length || 0,
+      hasLocation: !!deliveryData.location,
+      hasComments: !!deliveryData.comments
+    })
+    
+    // Preparar datos de entrega con múltiples fotos
     const deliveryProof = {
-      ...deliveryData,
-      timestamp: new Date().toISOString()
+      photos: deliveryData.photos || [], // Array de fotos en base64
+      recipientName: deliveryData.recipientName,
+      comments: deliveryData.comments || '',
+      location: deliveryData.location,
+      timestamp: new Date().toISOString(),
+      deliveryMethod: 'driver_app'
     }
     
     if (connectionStatus.value === 'online') {
-      await apiService.routes.updateOrderStatus(
+      console.log('🌐 Modo online: enviando al servidor...')
+      
+      // Crear FormData para envío de múltiples archivos
+      const formData = new FormData()
+      formData.append('recipient_name', deliveryProof.recipientName)
+      formData.append('notes', deliveryProof.comments)
+      
+      // Convertir fotos base64 a archivos y agregarlas al FormData
+      if (deliveryProof.photos && deliveryProof.photos.length > 0) {
+        deliveryProof.photos.forEach((photoBase64, index) => {
+          try {
+            // Convertir base64 a blob
+            const base64Data = photoBase64.split(',')[1] // Remover prefijo data:image/...
+            const byteCharacters = atob(base64Data)
+            const byteArrays = []
+            
+            for (let offset = 0; offset < byteCharacters.length; offset += 512) {
+              const slice = byteCharacters.slice(offset, offset + 512)
+              const byteNumbers = new Array(slice.length)
+              for (let i = 0; i < slice.length; i++) {
+                byteNumbers[i] = slice.charCodeAt(i)
+              }
+              const byteArray = new Uint8Array(byteNumbers)
+              byteArrays.push(byteArray)
+            }
+            
+            const blob = new Blob(byteArrays, { type: 'image/jpeg' })
+            const file = new File([blob], `delivery_photo_${index + 1}.jpg`, { type: 'image/jpeg' })
+            
+            formData.append('photos', file)
+            console.log(`📸 Foto ${index + 1} agregada al FormData`)
+          } catch (error) {
+            console.error(`❌ Error procesando foto ${index + 1}:`, error)
+          }
+        })
+      }
+      
+      // Agregar ubicación si está disponible
+      if (deliveryProof.location) {
+        formData.append('latitude', deliveryProof.location.latitude)
+        formData.append('longitude', deliveryProof.location.longitude)
+        formData.append('accuracy', deliveryProof.location.accuracy)
+      }
+      
+      // Enviar al servidor usando endpoint específico para drivers
+      await apiService.routes.confirmDeliveryWithPhotos(
         activeRoute.value._id,
         selectedOrder.value.order._id,
-        'delivered',
-        deliveryProof
+        formData
       )
+      
+      console.log('✅ Entrega confirmada en el servidor')
       await checkForActiveRoute()
+      
     } else {
+      console.log('📴 Modo offline: guardando para sincronización...')
+      
       // Guardar para sincronización offline
-      addOfflineUpdate(selectedOrder.value.order._id, 'status_update', {
+      addOfflineUpdate(selectedOrder.value.order._id, 'delivery_confirmation', {
         status: 'delivered',
         deliveryProof
       })
+      
+      // Actualizar localmente
       selectedOrder.value.deliveryStatus = 'delivered'
+      selectedOrder.value.deliveryProof = deliveryProof
+      
+      console.log('💾 Entrega guardada offline')
     }
     
     closeDeliveryProof()
-    alert('¡Entrega confirmada correctamente!')
+    
+    const message = connectionStatus.value === 'online' 
+      ? '¡Entrega confirmada correctamente!' 
+      : 'Entrega guardada. Se sincronizará cuando tengas conexión.'
+    
+    alert(message)
+    
   } catch (error) {
     console.error('❌ Error confirmando entrega:', error)
-    alert('Error al confirmar la entrega')
+    
+    let errorMessage = 'Error al confirmar la entrega'
+    
+    if (error.response?.status === 413) {
+      errorMessage = 'Las fotos son demasiado grandes. Intenta con imágenes más pequeñas.'
+    } else if (error.response?.status === 400) {
+      errorMessage = error.response.data?.error || 'Datos de entrega inválidos'
+    } else if (error.message?.includes('Network')) {
+      errorMessage = 'Error de conexión. Intenta nuevamente.'
+    }
+    
+    alert(errorMessage)
   } finally {
     isSubmitting.value = false
   }
 }
+
 
 // Funciones auxiliares para offline
 const addOfflineUpdate = (orderId, type, data) => {

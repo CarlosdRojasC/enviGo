@@ -1,12 +1,12 @@
 <template>
   <div class="space-y-6">
     <!-- Header -->
-    <div class="flex justify-between items-center">
+    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
       <h2 class="text-2xl font-bold text-gray-900">Mis Entregas</h2>
-      <div class="flex items-center space-x-4">
+      <div class="flex items-center space-x-4 w-full sm:w-auto">
         <select 
           v-model="statusFilter" 
-          class="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          class="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 flex-1 sm:flex-none"
         >
           <option value="">Todos los estados</option>
           <option value="pending">Pendientes</option>
@@ -17,8 +17,32 @@
       </div>
     </div>
 
+    <!-- Buscador -->
+    <div class="relative">
+      <input 
+        v-model="searchQuery"
+        type="text"
+        placeholder="Buscar por número, cliente, dirección, teléfono..."
+        class="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+      >
+      <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+        <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+        </svg>
+      </div>
+      <button 
+        v-if="searchQuery"
+        @click="clearSearch"
+        class="absolute inset-y-0 right-0 pr-3 flex items-center"
+      >
+        <svg class="h-5 w-5 text-gray-400 hover:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+        </svg>
+      </button>
+    </div>
+
     <!-- Estadísticas rápidas -->
-    <div class="grid grid-cols-4 gap-4">
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
       <div class="bg-white rounded-lg p-4 text-center shadow-sm">
         <div class="text-2xl font-bold text-gray-600">{{ stats.total }}</div>
         <div class="text-sm text-gray-500">Total</div>
@@ -37,12 +61,40 @@
       </div>
     </div>
 
+    <!-- Resultados de búsqueda -->
+    <div v-if="searchQuery && filteredOrders.length !== props.orders.length" class="bg-blue-50 border border-blue-200 rounded-lg p-3">
+      <div class="flex items-center justify-between text-sm">
+        <span class="text-blue-800">
+          Mostrando {{ filteredOrders.length }} de {{ props.orders.length }} entregas
+        </span>
+        <button 
+          @click="clearSearch"
+          class="text-blue-600 hover:text-blue-800 font-medium"
+        >
+          Limpiar búsqueda
+        </button>
+      </div>
+    </div>
+
     <!-- Loading -->
     <div v-if="isLoading" class="text-center py-12">
       <div class="inline-flex items-center">
         <div class="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
         <span class="ml-3 text-gray-600">Cargando entregas...</span>
       </div>
+    </div>
+
+    <!-- Estado vacío -->
+    <div v-else-if="filteredOrders.length === 0 && searchQuery" class="text-center py-12">
+      <div class="text-6xl mb-4">🔍</div>
+      <h3 class="text-xl font-semibold text-gray-900 mb-2">No se encontraron entregas</h3>
+      <p class="text-gray-600">Intenta con otros términos de búsqueda</p>
+      <button 
+        @click="clearSearch"
+        class="mt-3 text-blue-600 hover:text-blue-800 font-medium"
+      >
+        Limpiar búsqueda
+      </button>
     </div>
 
     <!-- Sin entregas -->
@@ -86,14 +138,15 @@
                 </div>
                 
                 <div class="space-y-1">
+                  <!-- Número de orden destacado -->
+                  <p class="text-gray-900 text-sm font-mono font-medium flex items-center">
+                    <span class="mr-2">📋</span>
+                    #{{ order.order.order_number || order.order._id.slice(-6) }}
+                  </p>
+                  
                   <p class="text-gray-600 text-sm flex items-center">
                     <span class="mr-2">📍</span>
                     {{ order.order.shipping_address || 'Sin dirección' }}
-                  </p>
-                  
-                  <p class="text-gray-500 text-xs flex items-center">
-                    <span class="mr-2">📋</span>
-                    Pedido #{{ order.order.order_number || order.order._id.slice(-6) }}
                   </p>
                   
                   <p v-if="order.order.customer_phone" class="text-gray-500 text-xs flex items-center">
@@ -131,7 +184,7 @@
           </div>
 
           <!-- Acciones -->
-          <div class="mt-4 flex space-x-3">
+          <div class="mt-4 flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3">
             <!-- Botón para iniciar entrega -->
             <button 
               v-if="order.deliveryStatus === 'pending' && isCurrentDelivery(order)"
@@ -159,7 +212,8 @@
               class="bg-blue-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-blue-700 transition-colors flex items-center justify-center space-x-2"
             >
               <span>📍</span>
-              <span>Navegar</span>
+              <span class="hidden sm:inline">Navegar</span>
+              <span class="sm:hidden">Nav</span>
             </button>
             
             <!-- Llamar al cliente -->
@@ -169,7 +223,8 @@
               class="bg-gray-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-gray-700 transition-colors flex items-center justify-center space-x-2"
             >
               <span>📞</span>
-              <span>Llamar</span>
+              <span class="hidden sm:inline">Llamar</span>
+              <span class="sm:hidden">Call</span>
             </button>
           </div>
         </div>
@@ -200,7 +255,22 @@
             <p class="text-gray-900">{{ formatDateTime(selectedProof.deliveredAt) }}</p>
           </div>
           
-          <div v-if="selectedProof.deliveryProof.photo">
+          <!-- Mostrar múltiples fotos si existen -->
+          <div v-if="selectedProof.deliveryProof.photos && selectedProof.deliveryProof.photos.length > 0">
+            <label class="block text-sm font-medium text-gray-700 mb-2">Fotos de entrega:</label>
+            <div class="grid grid-cols-2 gap-2">
+              <img 
+                v-for="(photo, index) in selectedProof.deliveryProof.photos" 
+                :key="index"
+                :src="photo" 
+                :alt="`Prueba de entrega ${index + 1}`" 
+                class="w-full h-32 object-cover rounded-lg border"
+              >
+            </div>
+          </div>
+          
+          <!-- Foto única (compatibilidad) -->
+          <div v-else-if="selectedProof.deliveryProof.photo">
             <label class="block text-sm font-medium text-gray-700 mb-1">Foto de entrega:</label>
             <img 
               :src="selectedProof.deliveryProof.photo" 
@@ -239,13 +309,40 @@ const emit = defineEmits(['select-delivery', 'mark-in-progress'])
 
 // Reactive data
 const statusFilter = ref('')
+const searchQuery = ref('')
 const showProofModal = ref(false)
 const selectedProof = ref(null)
 
-// Computed
+// Computed - Filtrar órdenes
 const filteredOrders = computed(() => {
-  if (!statusFilter.value) return props.orders
-  return props.orders.filter(order => order.deliveryStatus === statusFilter.value)
+  let filtered = [...props.orders]
+  
+  // Filtrar por estado
+  if (statusFilter.value) {
+    filtered = filtered.filter(order => order.deliveryStatus === statusFilter.value)
+  }
+  
+  // Filtrar por búsqueda
+  if (searchQuery.value.trim()) {
+    const query = searchQuery.value.toLowerCase().trim()
+    filtered = filtered.filter(order => {
+      const orderNumber = order.order.order_number || ''
+      const orderId = order.order._id || ''
+      const customerName = order.order.customer_name || ''
+      const shippingAddress = order.order.shipping_address || ''
+      const customerPhone = order.order.customer_phone || ''
+      const sequenceNumber = order.sequenceNumber?.toString() || ''
+      
+      return orderNumber.toLowerCase().includes(query) ||
+             orderId.toLowerCase().includes(query) ||
+             customerName.toLowerCase().includes(query) ||
+             shippingAddress.toLowerCase().includes(query) ||
+             customerPhone.includes(query) ||
+             sequenceNumber.includes(query)
+    })
+  }
+  
+  return filtered
 })
 
 const stats = computed(() => {
@@ -258,6 +355,10 @@ const stats = computed(() => {
 })
 
 // Methods
+const clearSearch = () => {
+  searchQuery.value = ''
+}
+
 const isCurrentDelivery = (order) => {
   // Lógica para determinar si es la entrega actual
   const pendingOrders = props.orders.filter(o => o.deliveryStatus === 'pending' || o.deliveryStatus === 'in_progress')
@@ -325,7 +426,6 @@ const showNavigationOptions = (orderItem) => {
     
     switch (app) {
       case 'google':
-        // Google Maps con dirección y coordenadas
         if (addr) {
           url = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(addr)}&travelmode=driving`
         } else {
@@ -334,12 +434,10 @@ const showNavigationOptions = (orderItem) => {
         break
         
       case 'waze':
-        // Waze con coordenadas
         url = `https://waze.com/ul?ll=${lat},${lng}&navigate=yes`
         break
         
       case 'apple':
-        // Apple Maps con dirección
         if (addr) {
           url = `maps://maps.apple.com/?daddr=${encodeURIComponent(addr)}&dirflg=d`
         } else {
