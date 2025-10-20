@@ -28,6 +28,8 @@ const collectionRoutes = require('./collection.routes');
 const sessionsRoutes = require('./sessions.routes');
 const contactRoutes = require('./contact.routes');
 const routeRoutes = require('./routes');
+const uploadRoutes = require('./upload.routes');
+
 // ==================== USAR RUTAS MODULARES ====================
 // Rutas de autenticación (login, registro, perfil, etc.)
 router.use('/sessions', sessionsRoutes);
@@ -70,5 +72,6 @@ router.use('/driver-scanner', driverScannerRoutes);
 router.use('/collections', collectionRoutes);
 router.use('/contact', contactRoutes);
 router.use('/routes', routeRoutes);
+router.use('/upload', uploadRoutes);
 
 module.exports = router;
