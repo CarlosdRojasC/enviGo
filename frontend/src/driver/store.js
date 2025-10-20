@@ -37,7 +37,7 @@ export const driverStore = reactive({
   // ================================================
   async login(email, password) {
     try {
-      const res = await axios.post("/api/drivers/login", { email, password });
+      const res = await axios.post("/login", { email, password });
 
       // Validación
       if (!res.data.success) {
