@@ -163,8 +163,6 @@ import { apiService } from '../services/api'
 import ActiveRoute from '../driver/pages/ActiveRoute.vue'
 import DeliveriesList from '../driver/pages/DeliveriesList.vue'
 import RouteMap from '../driver/pages/RouteMap.vue'
-import DeliveryHistory from '../components/driver/DeliveryHistory.vue'
-import DriverSettings from '../components/driver/DriverSettings.vue'
 import DeliveryProofModal from '../driver/pages/DeliveryProofModal.vue'
 
 const router = useRouter()
