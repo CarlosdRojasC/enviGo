@@ -12,6 +12,8 @@ const Driver = require('../models/Driver');
 
 // 🔑 Login específico para conductores
 router.post('/login', async (req, res) => {
+    console.log('📝 Intentando login de driver:', req.body.email);
+
   try {
     const { email, password } = req.body;
     
