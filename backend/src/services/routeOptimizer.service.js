@@ -163,9 +163,9 @@ exports.optimizeRoute = async (config) => {
   // 3️⃣ Llamar a Python
   let optimizedIndices;
   try {
-    console.log(`🐍 Llamando a Python OR-Tools → ${process.env.PYTHON_OPTIMIZER_URL}/optimize`);
+    console.log(`🐍 Llamando a Python OR-Tools → ${process.env.PYTHON_OPTIMIZER_URL}`);
     const pythonResponse = await axios.post(
-      `${process.env.PYTHON_OPTIMIZER_URL}/optimize`,
+      `${process.env.PYTHON_OPTIMIZER_URL}`,
       { locations, preferences },
       { timeout: 60000 }
     );
