@@ -9,7 +9,7 @@ const { ERRORS, ROLES } = require('../config/constants');
 const Driver = require('../models/Driver');
 class AuthController {
   // Login mejorado
-  login = async (req, res) => {
+login = async (req, res) => {
   try {
     const { email, password, remember_me = false } = req.body;
     const clientIP = req.ip || req.connection.remoteAddress;
@@ -20,10 +20,11 @@ class AuthController {
 
     // Si no existe en User, buscar en Driver
     if (!user) {
-      user = await Driver.findOne({ email, is_active: true });
+      user = await Driver.findOne({ email, is_active: true }).select('+password');
       if (user) isDriver = true;
     }
 
+    // Si no se encontró ni usuario ni driver
     if (!user) {
       this.logFailedAttempt(email, clientIP, 'USER_NOT_FOUND');
       return res.status(401).json({ error: ERRORS.INVALID_CREDENTIALS });
@@ -38,10 +39,24 @@ class AuthController {
       });
     }
 
-    // Verificar contraseña (campo diferente si es driver)
-    const passwordHash = user.password_hash || user.password;
-    const validPassword = await bcrypt.compare(password, passwordHash);
+    // Determinar hash de contraseña según tipo de usuario
+    let passwordHash = null;
 
+    if (isDriver) {
+      passwordHash = user.password;
+    } else {
+      passwordHash = user.password_hash;
+    }
+
+    // Validar existencia del hash antes de comparar
+    if (!passwordHash) {
+      return res.status(400).json({
+        error: 'El usuario no tiene contraseña configurada. Contacta al administrador.'
+      });
+    }
+
+    // Comparar contraseña
+    const validPassword = await bcrypt.compare(password, passwordHash);
     if (!validPassword) {
       await this.handleFailedLogin(user, clientIP);
       return res.status(401).json({ error: ERRORS.INVALID_CREDENTIALS });
@@ -50,7 +65,7 @@ class AuthController {
     // Login exitoso
     await this.handleSuccessfulLogin(user, clientIP);
 
-    // Generar token
+    // Generar token JWT
     const tokenExpiry = remember_me ? '30d' : (process.env.JWT_EXPIRE || '7d');
     const role = isDriver ? 'driver' : user.role;
 
@@ -66,6 +81,7 @@ class AuthController {
       { expiresIn: tokenExpiry }
     );
 
+    // Respuesta final
     res.json({
       success: true,
       token,
@@ -75,12 +91,13 @@ class AuthController {
         email: user.email,
         full_name: user.full_name,
         role,
-        company: user.company_id,
+        company: user.company_id || null,
         permissions: this.getUserPermissions(role),
         last_login: user.last_login || null,
         requires_password_change: user.password_change_required || false
       }
     });
+
   } catch (error) {
     console.error('Error en login:', error);
     res.status(500).json({ error: ERRORS.SERVER_ERROR });
