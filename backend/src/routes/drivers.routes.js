@@ -2,7 +2,7 @@
 const express = require('express');
 const router = express.Router();
 const driverController = require('../controllers/driver.controller');
-const { authenticateToken, isDriver } = require('../middlewares/auth.middleware');
+const { authenticateToken, isDriver,isAdmin } = require('../middlewares/auth.middleware');
 const { authenticateDriver } = require('../middlewares/driverAuth.middleware'); // ✅ Nuevo middleware
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
