@@ -1,49 +1,72 @@
-// frontend/src/driver/store.js - CORREGIDO
+// ✅ frontend/src/driver/store.js
 import { reactive } from "vue";
 import axios from "axios";
 
+// ================================================
+// 🔧 CONFIGURACIÓN GLOBAL DE AXIOS
+// ================================================
+
+// ✅ Base URL dinámica según entorno
+axios.defaults.baseURL = import.meta.env.VITE_PROD_API_URL
+  ? "https://www.envigo.cl" // 🔥 URL del backend en producción
+  : "http://localhost:3001"; // 🧪 URL del backend local
+
+// ✅ Configuración por defecto
+axios.defaults.headers.common["Content-Type"] = "application/json";
+axios.defaults.withCredentials = true;
+
+// ================================================
+// 🚛 DRIVER STORE
+// ================================================
 export const driverStore = reactive({
-  driver: null, // ✅ Cambiar de 'user' a 'driver'
+  driver: null,
   route: null,
   isLoading: false,
-  token: localStorage.getItem('driver_token'),
+  token: localStorage.getItem("driver_token"),
 
-  // ✅ Inicializar driver si hay token
+  // ✅ Inicializar store al cargar
   init() {
     if (this.token) {
       axios.defaults.headers.common["Authorization"] = `Bearer ${this.token}`;
-      // Cargar perfil del driver
       this.loadProfile();
     }
   },
 
+  // ================================================
+  // 🔑 LOGIN DE CONDUCTOR
+  // ================================================
   async login(email, password) {
     try {
       const res = await axios.post("/api/drivers/login", { email, password });
-      
-      // ✅ Validar la respuesta correcta del backend
+
+      // Validación
       if (!res.data.success) {
         throw new Error(res.data.message || "Error de autenticación");
       }
 
-      const driver = res.data.driver; // ✅ Usar 'driver' del backend
+      const driver = res.data.driver;
       const token = res.data.token;
 
-      // ✅ Guardar token y configurar headers
+      // Guardar token y configurar headers
       localStorage.setItem("driver_token", token);
       axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
-      
-      // ✅ Guardar driver en el store
+
+      // Guardar datos en store
       this.driver = driver;
       this.token = token;
 
       return { success: true };
     } catch (error) {
       console.error("❌ Error en login driver:", error);
-      throw new Error(error.response?.data?.message || error.message || "Error de autenticación");
+      throw new Error(
+        error.response?.data?.message || error.message || "Error de autenticación"
+      );
     }
   },
 
+  // ================================================
+  // 👤 Cargar perfil del conductor autenticado
+  // ================================================
   async loadProfile() {
     try {
       const res = await axios.get("/api/drivers/me");
@@ -56,6 +79,9 @@ export const driverStore = reactive({
     }
   },
 
+  // ================================================
+  // 🚚 Cargar ruta activa del conductor
+  // ================================================
   async loadActiveRoute() {
     this.isLoading = true;
     try {
@@ -69,6 +95,9 @@ export const driverStore = reactive({
     }
   },
 
+  // ================================================
+  // 🚪 Cerrar sesión
+  // ================================================
   logout() {
     localStorage.removeItem("driver_token");
     delete axios.defaults.headers.common["Authorization"];
@@ -77,11 +106,13 @@ export const driverStore = reactive({
     this.token = null;
   },
 
-  // ✅ Getter para verificar si está autenticado
+  // ================================================
+  // ✅ Getter: Verificar si el conductor está autenticado
+  // ================================================
   get isAuthenticated() {
     return !!this.token && !!this.driver;
-  }
+  },
 });
 
-// ✅ Inicializar store al cargar
+// ✅ Ejecutar init automáticamente al cargar
 driverStore.init();
