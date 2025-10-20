@@ -6,86 +6,81 @@ const nodemailer = require('nodemailer');
 const User = require('../models/User');
 const Company = require('../models/Company');
 const { ERRORS, ROLES } = require('../config/constants');
-const Driver = require('../models/Driver');
 
 class AuthController {
   // Login mejorado
-login = async (req, res) => {
-  try {
-    const { email, password, remember_me = false } = req.body;
-    const clientIP = req.ip || req.connection.remoteAddress;
+  login = async(req, res) => {
+    try {
+      const { email, password, remember_me = false } = req.body;
+      const clientIP = req.ip || req.connection.remoteAddress;
 
-    // Buscar en User o Driver
-    let user = await User.findOne({ email }).populate('company_id');
-    let isDriver = false;
+      const user = await User.findOne({ email }).populate('company_id');
+if (!user) {
+  this.logFailedAttempt(email, clientIP, 'USER_NOT_FOUND');
+  return res.status(401).json({ error: ERRORS.INVALID_CREDENTIALS });
+}
 
-    if (!user) {
-      user = await Driver.findOne({ email }).populate('company_id');
-      if (user) isDriver = true;
-    }
+// 🔥 NUEVA VALIDACIÓN: Verificar si el usuario está desactivado
+if (!user.is_active) {
+  this.logFailedAttempt(email, clientIP, 'USER_DISABLED');
+  return res.status(403).json({ 
+    error: 'Tu cuenta ha sido desactivada. Contacta al administrador.',
+    code: 'USER_DISABLED' 
+  });
+}
 
-    if (!user) {
-      this.logFailedAttempt(email, clientIP, 'USER_NOT_FOUND');
-      return res.status(401).json({ error: ERRORS.INVALID_CREDENTIALS });
-    }
+      // Verificar si la cuenta está bloqueada
+      if (user.locked_until && user.locked_until > new Date()) {
+        const lockTimeRemaining = Math.ceil((user.locked_until - new Date()) / 1000 / 60);
+        return res.status(423).json({ 
+          error: 'Cuenta bloqueada',
+          details: `Intentalo de nuevo en ${lockTimeRemaining} minutos`,
+          locked_until: user.locked_until
+        });
+      }
 
-    // Si es Driver, su campo de password puede ser diferente
-    const passwordField = isDriver ? 'password' : 'password_hash';
-    const passwordToCompare = isDriver ? user.password : user.password_hash;
+      const validPassword = await bcrypt.compare(password, user.password_hash);
+      if (!validPassword) {
+        await this.handleFailedLogin(user, clientIP);
+        return res.status(401).json({ error: ERRORS.INVALID_CREDENTIALS });
+      }
 
-    // Validar activo
-    if (user.is_active === false) {
-      this.logFailedAttempt(email, clientIP, 'USER_DISABLED');
-      return res.status(403).json({
-        error: 'Tu cuenta ha sido desactivada. Contacta al administrador.',
-        code: 'USER_DISABLED'
+      // Login exitoso - resetear contadores de fallo
+      await this.handleSuccessfulLogin(user, clientIP);
+
+      // Generar token
+      const tokenExpiry = remember_me ? '30d' : (process.env.JWT_EXPIRE || '7d');
+      const token = jwt.sign(
+        { 
+          id: user._id, 
+          email: user.email, 
+          role: user.role, 
+          company_id: user.company_id?._id || null,
+          session_id: crypto.randomUUID()
+        },
+        process.env.JWT_SECRET,
+        { expiresIn: tokenExpiry }
+      );
+
+      res.json({
+        token,
+        expires_in: tokenExpiry,
+        user: {
+          id: user._id,
+          email: user.email,
+          full_name: user.full_name,
+          role: user.role,
+          company: user.company_id,
+          permissions: this.getUserPermissions(user.role),
+          last_login: user.last_login,
+          requires_password_change: user.password_change_required || false
+        },
       });
+    } catch (error) {
+      console.error('Error en login:', error);
+      res.status(500).json({ error: ERRORS.SERVER_ERROR });
     }
-
-    // Validar contraseña
-    const validPassword = await bcrypt.compare(password, passwordToCompare);
-    if (!validPassword) {
-      await this.handleFailedLogin(user, clientIP);
-      return res.status(401).json({ error: ERRORS.INVALID_CREDENTIALS });
-    }
-
-    // Login exitoso
-    await this.handleSuccessfulLogin(user, clientIP);
-
-    const role = isDriver ? 'driver' : user.role;
-    const tokenExpiry = remember_me ? '30d' : (process.env.JWT_EXPIRE || '7d');
-
-    const token = jwt.sign(
-      {
-        id: user._id,
-        email: user.email,
-        role,
-        company_id: user.company_id?._id || null,
-        session_id: crypto.randomUUID(),
-      },
-      process.env.JWT_SECRET,
-      { expiresIn: tokenExpiry }
-    );
-
-    res.json({
-      success: true,
-      token,
-      expires_in: tokenExpiry,
-      user: {
-        id: user._id,
-        email: user.email,
-        full_name: user.full_name || user.name,
-        role,
-        company: user.company_id,
-        permissions: this.getUserPermissions(role),
-        last_login: user.last_login,
-      },
-    });
-  } catch (error) {
-    console.error('Error en login:', error);
-    res.status(500).json({ error: ERRORS.SERVER_ERROR });
   }
-};
 
   // Registro de usuario
   register = async(req, res) => {
