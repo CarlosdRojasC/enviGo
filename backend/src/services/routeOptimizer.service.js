@@ -145,7 +145,7 @@ function buildPreferences(preferences = {}) {
 }
 
 // ====== FUNCIÓN PRINCIPAL ======
-exports.optimizeRoute = async (config) => {
+const optimizeRoute = async (config) => {
   const { startLocation, endLocation, orderIds, driverId, companyId, createdBy, preferences = {} } = config;
 
   if (!process.env.GOOGLE_MAPS_API_KEY) throw new Error("Falta GOOGLE_MAPS_API_KEY");
@@ -247,7 +247,7 @@ exports.optimizeRoute = async (config) => {
   console.log(`✅ Direcciones completadas. Distancia=${(totalDistance/1000).toFixed(1)}km, Duración=${(totalDuration/3600).toFixed(2)}h`);
   const overviewPolyline = fullPathPoints.length ? encodePolyline(fullPathPoints) : undefined;
 
-  // Guardar
+  // Guardar - CAMBIO IMPORTANTE: status debe ser "assigned" no "draft"
   const routePlan = new RoutePlan({
     company: companyId,
     driver: driverId,
@@ -267,7 +267,8 @@ exports.optimizeRoute = async (config) => {
       overview_polyline_segments: polylineSegments,
       batches: Math.ceil((optimizedStops.length - 1) / (GOOGLE_DIRECTIONS_BATCH_POINTS - 1)),
     },
-    status: "draft",
+    status: "assigned", // ✅ CAMBIO: Directamente asignada al crear
+    assignedAt: new Date() // ✅ CAMBIO: Fecha de asignación
   });
 
   await routePlan.save();
@@ -275,4 +276,232 @@ exports.optimizeRoute = async (config) => {
   console.log(`✅ Ruta guardada (${overviewPolyline ? "con" : "sin"} polyline).`);
 
   return routePlan;
+};
+
+// ==================== MÉTODOS ADICIONALES REQUERIDOS ====================
+
+/**
+ * Asigna una ruta existente a un conductor
+ */
+const assignRouteToDriver = async (routeId, driverId) => {
+  try {
+    const Driver = require('../models/Driver');
+    
+    // Validar que el conductor existe
+    const driver = await Driver.findById(driverId);
+    if (!driver) {
+      throw new Error('Conductor no encontrado');
+    }
+
+    // Validar que la ruta existe
+    const route = await RoutePlan.findById(routeId);
+    if (!route) {
+      throw new Error('Ruta no encontrada');
+    }
+
+    // Actualizar la ruta con el conductor
+    route.driver = driverId;
+    route.status = 'assigned';
+    route.assignedAt = new Date();
+
+    await route.save();
+    await route.populate(['driver', 'company', 'orders.order']);
+
+    console.log(`✅ Ruta ${routeId} asignada al conductor ${driver.full_name} (${driver.email})`);
+
+    return {
+      message: `Ruta asignada correctamente al conductor ${driver.full_name}`,
+      routePlan: route
+    };
+  } catch (error) {
+    console.error('❌ Error asignando ruta:', error);
+    throw error;
+  }
+};
+
+/**
+ * Inicia una ruta asignada (cambiar estado a in_progress)
+ */
+const startRoute = async (routeId, driverId) => {
+  try {
+    const route = await RoutePlan.findById(routeId).populate(['driver', 'orders.order']);
+    
+    if (!route) {
+      throw new Error('Ruta no encontrada');
+    }
+
+    // Validar que la ruta está asignada al conductor correcto
+    if (route.driver._id.toString() !== driverId.toString()) {
+      throw new Error('Esta ruta no está asignada a tu usuario');
+    }
+
+    if (route.status !== 'assigned') {
+      throw new Error(`No se puede iniciar una ruta con estado: ${route.status}`);
+    }
+
+    // Cambiar estado a in_progress
+    route.status = 'in_progress';
+    route.startedAt = new Date();
+
+    await route.save();
+
+    console.log(`🚀 Ruta ${routeId} iniciada por conductor ${route.driver.full_name}`);
+
+    return {
+      message: 'Ruta iniciada correctamente',
+      routePlan: route
+    };
+  } catch (error) {
+    console.error('❌ Error iniciando ruta:', error);
+    throw error;
+  }
+};
+
+/**
+ * Obtiene la ruta activa de un conductor específico
+ */
+const getActiveRouteForDriver = async (driverId) => {
+  try {
+    console.log(`🔍 Buscando ruta activa para conductor: ${driverId}`);
+
+    const activeRoute = await RoutePlan.findOne({
+      driver: driverId,
+      status: { $in: ['assigned', 'in_progress'] }
+    })
+    .populate([
+      'driver', 
+      'company', 
+      {
+        path: 'orders.order',
+        model: 'Order'
+      }
+    ])
+    .sort({ assignedAt: -1 });
+
+    if (activeRoute) {
+      console.log(`✅ Ruta activa encontrada: ${activeRoute._id} con ${activeRoute.orders.length} pedidos`);
+    } else {
+      console.log(`ℹ️ No hay rutas activas para el conductor ${driverId}`);
+    }
+
+    return activeRoute;
+  } catch (error) {
+    console.error('❌ Error obteniendo ruta activa:', error);
+    throw error;
+  }
+};
+
+/**
+ * Actualiza el estado de entrega de un pedido específico
+ */
+const updateDeliveryStatus = async (routeId, orderId, status, deliveryProof = null) => {
+  try {
+    const route = await RoutePlan.findById(routeId).populate(['driver', 'orders.order']);
+    
+    if (!route) {
+      throw new Error('Ruta no encontrada');
+    }
+
+    // Encontrar el pedido en la ruta
+    const orderItem = route.orders.find(o => o.order._id.toString() === orderId.toString());
+    if (!orderItem) {
+      throw new Error('Pedido no encontrado en esta ruta');
+    }
+
+    // Actualizar estado de entrega
+    orderItem.deliveryStatus = status;
+    
+    if (deliveryProof) {
+      orderItem.deliveryProof = deliveryProof;
+    }
+
+    if (status === 'delivered') {
+      orderItem.deliveredAt = new Date();
+    }
+
+    await route.save();
+
+    // También actualizar el estado del pedido principal
+    const Order = require('../models/Order');
+    await Order.findByIdAndUpdate(orderId, { 
+      status: status === 'delivered' ? 'delivered' : 'assigned' 
+    });
+
+    console.log(`📦 Estado actualizado: Pedido ${orderId} -> ${status}`);
+
+    // Verificar si todas las entregas están completadas
+    const allDelivered = route.orders.every(o => o.deliveryStatus === 'delivered');
+    if (allDelivered && route.status === 'in_progress') {
+      route.status = 'completed';
+      route.completedAt = new Date();
+      await route.save();
+      console.log(`🎉 Ruta ${routeId} completada - todas las entregas finalizadas`);
+    }
+
+    return {
+      message: `Estado actualizado correctamente a: ${status}`,
+      routePlan: route
+    };
+  } catch (error) {
+    console.error('❌ Error actualizando estado de entrega:', error);
+    throw error;
+  }
+};
+
+/**
+ * Procesa actualizaciones offline del conductor
+ */
+const processOfflineUpdates = async (routeId, updates) => {
+  try {
+    const route = await RoutePlan.findById(routeId);
+    if (!route) {
+      throw new Error('Ruta no encontrada');
+    }
+
+    const processedUpdates = [];
+
+    for (const update of updates) {
+      try {
+        if (update.type === 'status_update') {
+          await updateDeliveryStatus(
+            routeId, 
+            update.orderId, 
+            update.data.status, 
+            update.data.deliveryProof
+          );
+          processedUpdates.push({
+            orderId: update.orderId,
+            success: true,
+            message: 'Estado actualizado correctamente'
+          });
+        }
+      } catch (error) {
+        processedUpdates.push({
+          orderId: update.orderId,
+          success: false,
+          error: error.message
+        });
+      }
+    }
+
+    console.log(`🔄 Procesadas ${processedUpdates.length} actualizaciones offline`);
+
+    return {
+      message: `Procesadas ${processedUpdates.length} actualizaciones`,
+      processedUpdates
+    };
+  } catch (error) {
+    console.error('❌ Error procesando actualizaciones offline:', error);
+    throw error;
+  }
+};
+
+// ==================== EXPORTAR TODOS LOS MÉTODOS ====================
+module.exports = {
+  optimizeRoute,
+  assignRouteToDriver,
+  startRoute,
+  getActiveRouteForDriver,
+  updateDeliveryStatus,
+  processOfflineUpdates
 };
