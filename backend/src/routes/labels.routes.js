@@ -22,16 +22,19 @@ router.get('/find/:code', labelController.findByCode);
 router.get('/stats', labelController.getStats);
 
 // Función para generar QR más grande
-async function generateQRCode(text, size = 180) {
+async function generateQRCode(text, size = 240) {
   try {
     const qrBuffer = await QRCode.toBuffer(text, {
       width: size,
-      margin: 2,
+      margin: 3, // Margen más grande
       color: {
         dark: '#000000',
         light: '#FFFFFF'
       },
-      errorCorrectionLevel: 'M'
+      errorCorrectionLevel: 'H', // Nivel alto de corrección de errores
+      type: 'png',
+      quality: 1.0,
+      scale: 8 // Escala alta para mejor definición
     });
     return qrBuffer;
   } catch (error) {
@@ -131,10 +134,21 @@ function drawCustomerInfo(doc, order, x, y, width) {
 function drawLargeQRCode(doc, order, qrBuffer, x, y, width) {
   if (!qrBuffer) return;
 
-  // Tamaño del QR más grande
-  const qrSize = 100;
-  const qrX = x + (width - qrSize) / 2; // Centrado
+  // QR más grande y mejor posicionado
+  const qrSize = 120; // Aumentado de 100 a 120px
+  const qrX = x + (width - qrSize) / 2;
   
+  // Fondo blanco para el QR (mejor contraste)
+  doc.rect(qrX - 5, y + 15, qrSize + 10, qrSize + 10)
+     .fillColor('#ffffff')
+     .fill();
+
+  // Borde sutil alrededor del QR
+  doc.rect(qrX - 5, y + 15, qrSize + 10, qrSize + 10)
+     .lineWidth(1)
+     .strokeColor('#e5e7eb')
+     .stroke();
+
   // Título del QR
   doc.font('Helvetica-Bold')
      .fontSize(12)
@@ -144,27 +158,35 @@ function drawLargeQRCode(doc, order, qrBuffer, x, y, width) {
        align: 'center'
      });
 
-  // Insertar el QR centrado
+  // Insertar el QR
   doc.image(qrBuffer, qrX, y + 20, { 
     width: qrSize, 
     height: qrSize 
   });
 
-  // Código de seguimiento debajo del QR
-  const trackingCode = order.tracking_code || order.envigo_label?.unique_code || order._id;
-  doc.font('Helvetica')
-     .fontSize(10)
-     .fillColor('#6b7280')
-     .text(trackingCode, x, y + 20 + qrSize + 10, {
+  // Order number grande y destacado debajo del QR
+  const displayCode = order.order_number || 'Sin código';
+  doc.font('Helvetica-Bold')
+     .fontSize(16) // Más grande
+     .fillColor('#1f2937')
+     .text(displayCode, x, y + 20 + qrSize + 15, {
        width: width,
        align: 'center'
      });
 
-  // Instrucciones
+  // Instrucciones más claras
+  doc.font('Helvetica')
+     .fontSize(9)
+     .fillColor('#6b7280')
+     .text('Escanear con la app del conductor', x, y + 20 + qrSize + 40, {
+       width: width,
+       align: 'center'
+     });
+     
   doc.font('Helvetica')
      .fontSize(8)
      .fillColor('#9ca3af')
-     .text('Escanear con la app del conductor', x, y + 20 + qrSize + 30, {
+     .text('O ingresar el código manualmente', x, y + 20 + qrSize + 55, {
        width: width,
        align: 'center'
      });
@@ -212,9 +234,17 @@ router.post('/print-pdf/:orderId', async (req, res) => {
       return res.status(404).json({ error: 'Pedido o etiqueta no encontrada' });
     }
 
-    // Generar código QR más grande
+    // QR contiene SOLO el order_number
     const qrText = order.order_number;
-    const qrBuffer = await generateQRCode(qrText, 200);
+    
+    if (!qrText) {
+      return res.status(400).json({ error: 'El pedido no tiene order_number' });
+    }
+
+    console.log(`📱 Generando QR para order_number: ${qrText}`);
+
+    // QR optimizado para escaneo
+    const qrBuffer = await generateQRCode(qrText, 280); // Tamaño más grande
 
     const doc = new PDFDocument({
       size: [283.5, 425.25], // 10x15 cm exacto
@@ -222,7 +252,7 @@ router.post('/print-pdf/:orderId', async (req, res) => {
     });
 
     res.setHeader('Content-Type', 'application/pdf');
-    const filename = `etiqueta-${sanitize(order.envigo_label.unique_code || order._id)}.pdf`;
+    const filename = `etiqueta-${sanitize(order.order_number || order._id)}.pdf`;
     res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
     doc.pipe(res);
 
@@ -234,7 +264,7 @@ router.post('/print-pdf/:orderId', async (req, res) => {
        .fillColor('#ffffff')
        .fill();
 
-    // Borde perimetral suave
+    // Borde perimetral
     doc.rect(8, 8, pageW - 16, pageH - 16)
        .lineWidth(0.5)
        .strokeColor('#e5e7eb')
@@ -243,28 +273,28 @@ router.post('/print-pdf/:orderId', async (req, res) => {
     const margin = 20;
     let y = 25;
 
-    // Header simple (sin QR)
+    // Header
     drawSimpleHeader(doc, order, margin, y, pageW - margin * 2);
-    y += 80;
+    y += 70; // Reducido para dar más espacio al QR
 
-    // Comuna destacada
+    // Comuna
     drawCommune(doc, order, margin, y, pageW - margin * 2);
-    y += 55;
+    y += 45; // Reducido
 
-    // Información del cliente
+    // Info cliente (más compacta)
     drawCustomerInfo(doc, order, margin, y, pageW - margin * 2);
-    y += 110; // Más espacio para el QR
+    y += 90; // Reducido
 
-    // QR CODE GRANDE
+    // QR CODE GRANDE Y OPTIMIZADO
     drawLargeQRCode(doc, order, qrBuffer, margin, y, pageW - margin * 2);
     
     // Footer en la parte inferior
-    drawSimpleFooter(doc, order, margin, pageH - 80, pageW - margin * 2);
+    drawSimpleFooter(doc, order, margin, pageH - 60, pageW - margin * 2);
 
     doc.end();
 
   } catch (error) {
-    console.error('Error generando etiqueta con QR grande:', error);
+    console.error('Error generando etiqueta:', error);
     res.status(500).json({ error: 'Error interno al generar el PDF.' });
   }
 });
