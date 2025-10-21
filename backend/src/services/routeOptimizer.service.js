@@ -395,100 +395,115 @@ const getActiveRouteForDriver = async (driverId) => {
  * Actualiza el estado de entrega de un pedido específico
  */
 const updateDeliveryStatus = async (routeId, orderId, status, deliveryProof = null) => {
-  try {
-    const route = await RoutePlan.findById(routeId).populate(['driver', 'orders.order']);
+ try {
+    const route = await RoutePlan.findById(routeId).populate('orders.order');
     
     if (!route) {
       throw new Error('Ruta no encontrada');
     }
 
-    // Encontrar el pedido en la ruta
-    const orderItem = route.orders.find(o => o.order._id.toString() === orderId.toString());
+    // Buscar la orden en la ruta
+    const orderItem = route.orders.find(o => o.order._id.toString() === orderId);
     if (!orderItem) {
-      throw new Error('Pedido no encontrado en esta ruta');
+      throw new Error('Orden no encontrada en la ruta');
     }
 
-    // Actualizar estado de entrega
+    // Actualizar estado
     orderItem.deliveryStatus = status;
     
-    if (deliveryProof) {
-      // ✅ NUEVO: Manejar fotos de Cloudinary
-      const processedProof = {
-        ...deliveryProof,
-        timestamp: new Date(deliveryProof.timestamp || Date.now())
+    const now = new Date();
+
+    // Si es entrega exitosa, guardar prueba con información del conductor
+    if (status === 'delivered' && deliveryProof) {
+      orderItem.deliveryProof = {
+        photos: deliveryProof.photos || [],
+        photo: deliveryProof.photo || (deliveryProof.photos && deliveryProof.photos[0]) || null,
+        recipientName: deliveryProof.recipientName || 'No especificado',
+        comments: deliveryProof.comments || '',
+        location: deliveryProof.location || null,
+        timestamp: now,
+        deliveredBy: driverInfo ? {
+          id: driverInfo.id,
+          name: driverInfo.name,
+          email: driverInfo.email
+        } : null,
+        deliveryMethod: deliveryProof.deliveryMethod || 'driver_app'
       };
 
-      // Manejar múltiples fotos desde Cloudinary
-      if (deliveryProof.photos && Array.isArray(deliveryProof.photos)) {
-        processedProof.photo_urls = deliveryProof.photos; // URLs de Cloudinary
-        processedProof.photoCount = deliveryProof.photos.length;
-        processedProof.photo_url = deliveryProof.photos[0]; // Primera foto como principal
-        
-        // Guardar public_ids para poder eliminar después si es necesario
-        if (deliveryProof.photo_public_ids) {
-          processedProof.photo_public_ids = deliveryProof.photo_public_ids;
-        }
-      }
+      orderItem.deliveredAt = now;
 
-      orderItem.deliveryProof = processedProof;
+      // IMPORTANTE: También actualizar la orden principal en la colección Orders
+      const Order = require('../models/Order');
+      await Order.findByIdAndUpdate(orderId, {
+        status: 'delivered',
+        delivery_date: now,
+        proof_of_delivery: {
+          photo_urls: deliveryProof.photos || [],
+          photo_url: deliveryProof.photo || (deliveryProof.photos && deliveryProof.photos[0]) || null,
+          recipient_name: deliveryProof.recipientName || 'No especificado',
+          notes: deliveryProof.comments || '',
+          timestamp: now,
+          delivered_by: driverInfo ? driverInfo.name : 'Desconocido',
+          delivered_by_id: driverInfo ? driverInfo.id : null,
+          delivered_by_email: driverInfo ? driverInfo.email : null,
+          delivery_location: deliveryProof.location,
+          delivery_method: deliveryProof.deliveryMethod || 'driver_app'
+        },
+        updated_at: now
+      });
+
+      console.log('✅ Entrega confirmada:', {
+        orderId,
+        deliveredBy: driverInfo?.name || 'Desconocido',
+        timestamp: now
+      });
     }
 
-    if (status === 'delivered') {
-      orderItem.deliveredAt = new Date();
+    // Si es fallo, guardar información del fallo
+    if (status === 'failed' && deliveryProof) {
+      orderItem.deliveryProof = {
+        comments: deliveryProof.comments || 'Entrega fallida',
+        timestamp: now,
+        failureReason: deliveryProof.failureReason || 'No especificado',
+        attemptedBy: driverInfo ? {
+          id: driverInfo.id,
+          name: driverInfo.name,
+          email: driverInfo.email
+        } : null
+      };
+
+      orderItem.attemptedAt = now;
+
+      // Actualizar orden principal
+      const Order = require('../models/Order');
+      await Order.findByIdAndUpdate(orderId, {
+        status: 'failed',
+        updated_at: now,
+        failure_reason: deliveryProof.comments || 'Entrega fallida'
+      });
+    }
+
+    // Verificar si todas las entregas están completadas
+    const allCompleted = route.orders.every(o => 
+      ['delivered', 'failed', 'cancelled'].includes(o.deliveryStatus)
+    );
+
+    if (allCompleted && route.status !== 'completed') {
+      route.status = 'completed';
+      route.completedAt = now;
+      
+      console.log('🏁 Ruta completada:', routeId);
     }
 
     await route.save();
 
-    // ✅ ACTUALIZAR LA ORDEN PRINCIPAL CON TODA LA INFORMACIÓN
-    const Order = require('../models/Order');
-    const updateData = {
-      status: status === 'delivered' ? 'delivered' : 'assigned'
-    };
-
-    // Si se entregó, agregar toda la información de entrega
-    if (status === 'delivered' && deliveryProof) {
-      updateData.delivery_date = orderItem.deliveredAt;
-      updateData.delivered_by = route.driver;
-      
-      // ✅ AGREGAR ESTRUCTURA COMPLETA DE PROOF_OF_DELIVERY
-      updateData.proof_of_delivery = {
-        photo_urls: deliveryProof.photos || [], // Array de URLs de Cloudinary
-        photo_url: deliveryProof.photos?.[0] || null, // Primera foto como principal
-        photoCount: deliveryProof.photos?.length || 0,
-        recipient_name: deliveryProof.recipientName,
-        notes: deliveryProof.comments || '',
-        timestamp: orderItem.deliveredAt,
-        delivered_by: route.driver,
-        location: deliveryProof.location || null,
-        // Para compatibilidad con el frontend existente
-        podUrls: deliveryProof.photos || []
-      };
-
-      // Si hay public_ids, guardarlos también
-      if (deliveryProof.photo_public_ids) {
-        updateData.proof_of_delivery.photo_public_ids = deliveryProof.photo_public_ids;
-      }
-    }
-
-    await Order.findByIdAndUpdate(orderId, updateData);
-
-    console.log(`📦 Estado actualizado: Pedido ${orderId} -> ${status}${deliveryProof?.photoCount ? ` (${deliveryProof.photoCount} fotos en Cloudinary)` : ''}`);
-
-    // Verificar si todas las entregas están completadas
-    const allDelivered = route.orders.every(o => o.deliveryStatus === 'delivered');
-    if (allDelivered && route.status === 'in_progress') {
-      route.status = 'completed';
-      route.completedAt = new Date();
-      await route.save();
-      console.log(`🎉 Ruta ${routeId} completada - todas las entregas finalizadas`);
-    }
-
     return {
-      message: `Estado actualizado correctamente a: ${status}`,
+      message: `Estado actualizado a ${status}`,
       routePlan: route
     };
+
   } catch (error) {
-    console.error('❌ Error actualizando estado de entrega:', error);
+    console.error('❌ Error en updateDeliveryStatus:', error);
     throw error;
   }
 };

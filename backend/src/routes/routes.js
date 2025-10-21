@@ -273,14 +273,47 @@ router.patch('/:id/orders/:orderId/status', [
   handleValidationErrors
 ], asyncHandler(async (req, res) => {
   try {
-    const { status } = req.body;
-    const { deliveryProof } = req.body;
+    const { status, deliveryProof } = req.body;
+    const { id: routeId, orderId } = req.params;
+
+    console.log('📦 Actualizando estado de entrega:', {
+      routeId,
+      orderId,
+      status,
+      userId: req.user.id,
+      userRole: req.user.role
+    });
+
+    // AGREGAR: Obtener información del conductor
+    let driverInfo = {
+      id: req.user.id,
+      name: req.user.name || req.user.email,
+      email: req.user.email
+    };
+
+    // Si es un conductor, buscar su información completa
+    if (req.user.role === 'driver' && req.user.driver_id) {
+      try {
+        const Driver = require('../models/Driver'); // Asegúrate de tener el modelo Driver
+        const driver = await Driver.findById(req.user.driver_id);
+        if (driver) {
+          driverInfo = {
+            id: driver._id,
+            name: driver.full_name || driver.name,
+            email: driver.email
+          };
+        }
+      } catch (error) {
+        console.log('⚠️ No se pudo obtener info del conductor, usando datos del usuario');
+      }
+    }
 
     const result = await routeOptimizerService.updateDeliveryStatus(
-      req.params.id,
-      req.params.orderId,
+      routeId,
+      orderId,
       status,
-      deliveryProof
+      deliveryProof,
+      driverInfo // AGREGAR: Pasar información del conductor
     );
 
     res.json({
@@ -555,49 +588,57 @@ router.patch('/:id/reoptimize', [
 }));
 router.get('/driver/history', authenticateToken, async (req, res) => {
   try {
-    const { start_date, end_date, status } = req.query
-    const driverId = req.user.driver_id || req.query.driverId
+    const { start_date, end_date, status } = req.query;
+    const driverId = req.user.driver_id || req.user.id || req.query.driverId;
+
+    console.log('📚 Obteniendo historial para conductor:', driverId);
 
     const query = {
-      'driver._id': driverId,
+      driver: driverId,
       status: { $in: ['completed', 'cancelled'] }
-    }
+    };
 
     if (start_date && end_date) {
-      query.completed_at = {
+      query.completedAt = {
         $gte: new Date(start_date),
         $lte: new Date(end_date)
-      }
+      };
     }
 
-    const routes = await Route.find(query)
+    // CORREGIR: Usar RoutePlan en lugar de Route
+    const routes = await RoutePlan.find(query)
       .populate('orders.order')
-      .sort({ completed_at: -1 })
-      .limit(100)
+      .populate('driver', 'name email full_name')
+      .sort({ completedAt: -1 })
+      .limit(100);
 
     // Extraer entregas individuales de las rutas
-    const deliveries = []
+    const deliveries = [];
     routes.forEach(route => {
       route.orders.forEach(orderItem => {
         if (orderItem.deliveryStatus === 'delivered' || orderItem.deliveryStatus === 'failed') {
           deliveries.push({
             ...orderItem.toObject(),
             routeId: route._id,
-            completedAt: orderItem.deliveredAt || route.completed_at
-          })
+            completedAt: orderItem.deliveredAt || route.completedAt,
+            driverInfo: route.driver // AGREGAR: Información del conductor
+          });
         }
-      })
-    })
+      });
+    });
 
     res.json({
       success: true,
       deliveries: deliveries.sort((a, b) => new Date(b.completedAt) - new Date(a.completedAt))
-    })
+    });
 
   } catch (error) {
-    console.error('Error obteniendo historial:', error)
-    res.status(500).json({ error: 'Error interno del servidor' })
+    console.error('❌ Error obteniendo historial:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Error interno del servidor',
+      details: error.message 
+    });
   }
 });
-
 module.exports = router;
