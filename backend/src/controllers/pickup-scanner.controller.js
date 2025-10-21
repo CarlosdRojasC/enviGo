@@ -59,7 +59,7 @@ async scanPackageForPickup(req, res) {
       }
 
       // MARCAR COMO "RETIRADO"
-      order.status = ORDER_STATUS.picked_up;
+      order.status = ORDER_STATUS.PiCKED_UP;
       order.pickup_time = new Date();
       order.pickup_driver_id = driverId;
       order.pickup_driver_name = driverName;
@@ -152,7 +152,7 @@ async getDriverPickupHistory(req, res) {
 
       const filter = {
         pickup_driver_id: driverId,
-        status: ORDER_STATUS.picked_up // Cambiado de WAREHOUSE_RECEIVED a RETIRADO
+        status: ORDER_STATUS.PiCKED_UP // Cambiado de WAREHOUSE_RECEIVED a RETIRADO
       };
 
       if (date_from || date_to) {

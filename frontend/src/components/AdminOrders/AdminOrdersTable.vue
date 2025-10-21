@@ -683,7 +683,7 @@ function getStatusName(status) {
     out_for_delivery: 'En Entrega',
     warehouse_received: 'Recibido en bodega',
     assigned: 'Asignado',
-    pickup: 'Retirado'
+    picked_up: 'Retirado'
   }
   return statusMap[status] || status
 }
