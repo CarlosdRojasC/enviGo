@@ -75,6 +75,15 @@ const orderSchema = new mongoose.Schema({
   payment_method: { type: String, default: 'credit_card' },
   
 
+  delivered_by_driver: {
+  driver_id: String,
+  driver_name: String, 
+  driver_email: String,
+  driver_phone: String,
+  delivery_timestamp: Date,
+  source: String
+},
+
   // Campos para Shipday
   shipday_order_id: { type: String }, // ID de la orden en Shipday
   shipday_driver_id: { type: String }, // ID del conductor asignado en Shipday

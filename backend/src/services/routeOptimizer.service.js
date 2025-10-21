@@ -395,7 +395,7 @@ const getActiveRouteForDriver = async (driverId) => {
  * Actualiza el estado de entrega de un pedido específico
  */
 const updateDeliveryStatus = async (routeId, orderId, status, deliveryProof = null, driverInfo = null) => {
- try {
+  try {
     console.log('📦 Actualizando estado de entrega en servicio:', {
       routeId,
       orderId,
@@ -421,7 +421,8 @@ const updateDeliveryStatus = async (routeId, orderId, status, deliveryProof = nu
 
     console.log('📦 Orden encontrada en ruta:', {
       currentStatus: orderItem.deliveryStatus,
-      newStatus: status
+      newStatus: status,
+      driverFromRoute: route.driver?.name || 'No asignado'
     });
 
     // Actualizar estado
@@ -429,25 +430,66 @@ const updateDeliveryStatus = async (routeId, orderId, status, deliveryProof = nu
     
     const now = new Date();
 
+    // ✅ MEJORADO: Función para determinar información del conductor
+    const getConductorInfo = () => {
+      // Prioridad 1: driverInfo pasado como parámetro
+      if (driverInfo) {
+        console.log('🔍 Usando driverInfo proporcionado:', driverInfo.name);
+        return {
+          id: driverInfo.id || driverInfo._id,
+          name: driverInfo.name || driverInfo.full_name,
+          email: driverInfo.email,
+          phone: driverInfo.phone,
+          source: 'parameter'
+        };
+      }
+
+      // Prioridad 2: Driver de la ruta
+      if (route.driver) {
+        console.log('🔍 Usando driver de la ruta:', route.driver.name);
+        return {
+          id: route.driver._id,
+          name: route.driver.full_name || route.driver.name,
+          email: route.driver.email,
+          phone: route.driver.phone,
+          source: 'route'
+        };
+      }
+
+      // Prioridad 3: Driver info existente en la orden
+      const existingOrder = orderItem.order;
+      if (existingOrder?.driver_info?.name) {
+        console.log('🔍 Usando driver_info de la orden:', existingOrder.driver_info.name);
+        return {
+          id: existingOrder.shipday_driver_id || existingOrder.assigned_driver_id || 'unknown',
+          name: existingOrder.driver_info.name,
+          email: existingOrder.driver_info.email,
+          phone: existingOrder.driver_info.phone,
+          source: 'order_existing'
+        };
+      }
+
+      console.warn('⚠️ No se pudo determinar información del conductor');
+      return {
+        id: 'unknown',
+        name: 'Conductor desconocido',
+        email: null,
+        phone: null,
+        source: 'unknown'
+      };
+    };
+
+    const conductorInfo = getConductorInfo();
+    
+    console.log('👨‍💼 Información del conductor determinada:', {
+      name: conductorInfo.name,
+      source: conductorInfo.source,
+      id: conductorInfo.id
+    });
+
     // Si es entrega exitosa, guardar prueba con información del conductor
     if (status === 'delivered') {
       console.log('✅ Procesando entrega exitosa');
-
-      // Determinar información del conductor
-      let conductorInfo = null;
-      if (driverInfo) {
-        conductorInfo = {
-          id: driverInfo.id,
-          name: driverInfo.name,
-          email: driverInfo.email
-        };
-      } else if (route.driver) {
-        conductorInfo = {
-          id: route.driver._id,
-          name: route.driver.full_name || route.driver.name,
-          email: route.driver.email
-        };
-      }
 
       // Guardar prueba de entrega en la ruta
       orderItem.deliveryProof = {
@@ -463,10 +505,34 @@ const updateDeliveryStatus = async (routeId, orderId, status, deliveryProof = nu
 
       orderItem.deliveredAt = now;
 
-      // Actualizar la orden principal en la colección Orders
+      // ✅ MEJORADO: Actualizar la orden principal con información completa del conductor
       const updateData = {
         status: 'delivered',
         delivery_date: now,
+        updated_at: now,
+        
+        // ✅ NUEVO: Campo específico para quien entregó
+        delivered_by_driver: {
+          driver_id: conductorInfo.id,
+          driver_name: conductorInfo.name,
+          driver_email: conductorInfo.email,
+          driver_phone: conductorInfo.phone,
+          delivery_timestamp: now,
+          source: conductorInfo.source
+        },
+
+        // ✅ MEJORADO: Actualizar driver_info si no existe o está incompleto
+        ...((!orderItem.order.driver_info?.name || conductorInfo.source === 'route') && {
+          driver_info: {
+            name: conductorInfo.name,
+            email: conductorInfo.email,
+            phone: conductorInfo.phone,
+            id: conductorInfo.id,
+            updated_from_route: true
+          }
+        }),
+
+        // ✅ MEJORADO: Proof of delivery con más información
         proof_of_delivery: {
           photo_urls: deliveryProof?.photos || [],
           photo_public_ids: [], // Se llenará si usas Cloudinary
@@ -474,42 +540,51 @@ const updateDeliveryStatus = async (routeId, orderId, status, deliveryProof = nu
           recipient_name: deliveryProof?.recipientName || 'No especificado',
           notes: deliveryProof?.comments || '',
           timestamp: now,
-          delivered_by: conductorInfo ? conductorInfo.name : 'Conductor desconocido',
-          delivered_by_id: conductorInfo ? conductorInfo.id : null,
-          delivered_by_email: conductorInfo ? conductorInfo.email : null,
+          delivered_by: conductorInfo.name,
+          delivered_by_id: conductorInfo.id,
+          delivered_by_email: conductorInfo.email,
           delivery_location: deliveryProof?.location,
-          delivery_method: deliveryProof?.deliveryMethod || 'driver_app'
-        },
-        updated_at: now
+          delivery_method: deliveryProof?.deliveryMethod || 'driver_app',
+          
+          // ✅ NUEVO: Información adicional para auditoría
+          delivery_context: {
+            route_id: routeId,
+            sequence_number: orderItem.sequenceNumber,
+            completed_via: 'route_optimizer'
+          }
+        }
       };
 
-      await Order.findByIdAndUpdate(orderId, updateData);
+      const updatedOrder = await Order.findByIdAndUpdate(orderId, updateData, { new: true });
 
-      console.log('✅ Entrega confirmada:', {
+      console.log('✅ Entrega confirmada y orden actualizada:', {
         orderId,
-        deliveredBy: conductorInfo?.name || 'Desconocido',
+        orderNumber: updatedOrder?.order_number,
+        deliveredBy: conductorInfo.name,
+        driverSource: conductorInfo.source,
         timestamp: now
       });
+
+      // ✅ NUEVO: Registrar en DriverHistory si hay un conductor válido
+      if (conductorInfo.id !== 'unknown') {
+        try {
+          const DriverHistoryService = require('./driverHistory.service');
+          await DriverHistoryService.recordDelivery(updatedOrder, {
+            driver_id: conductorInfo.id,
+            driver_name: conductorInfo.name,
+            driver_email: conductorInfo.email
+          });
+          console.log('📊 Entrega registrada en DriverHistory');
+        } catch (historyError) {
+          console.warn('⚠️ Error registrando en DriverHistory:', historyError.message);
+          // No fallar por esto
+        }
+      }
     }
 
     // Si es fallo, guardar información del fallo
     if (status === 'failed') {
       console.log('❌ Procesando entrega fallida');
-
-      let conductorInfo = null;
-      if (driverInfo) {
-        conductorInfo = {
-          id: driverInfo.id,
-          name: driverInfo.name,
-          email: driverInfo.email
-        };
-      } else if (route.driver) {
-        conductorInfo = {
-          id: route.driver._id,
-          name: route.driver.full_name || route.driver.name,
-          email: route.driver.email
-        };
-      }
 
       orderItem.deliveryProof = {
         comments: deliveryProof?.comments || 'Entrega fallida',
@@ -525,21 +600,63 @@ const updateDeliveryStatus = async (routeId, orderId, status, deliveryProof = nu
         status: 'failed',
         updated_at: now,
         failure_reason: deliveryProof?.comments || 'Entrega fallida',
-        attempted_by: conductorInfo ? conductorInfo.name : 'Conductor desconocido',
-        attempted_by_id: conductorInfo ? conductorInfo.id : null
+        attempted_by: conductorInfo.name,
+        attempted_by_id: conductorInfo.id,
+        attempted_by_email: conductorInfo.email,
+        
+        // ✅ NUEVO: También actualizar driver_info en caso de fallo
+        ...((!orderItem.order.driver_info?.name || conductorInfo.source === 'route') && {
+          driver_info: {
+            name: conductorInfo.name,
+            email: conductorInfo.email,
+            phone: conductorInfo.phone,
+            id: conductorInfo.id,
+            updated_from_route: true
+          }
+        })
+      });
+
+      console.log('❌ Fallo de entrega registrado:', {
+        orderId,
+        attemptedBy: conductorInfo.name,
+        reason: deliveryProof?.failureReason || 'No especificado'
       });
     }
 
-    // Verificar si todas las entregas están completadas
-    const allCompleted = route.orders.every(o => 
+    // ✅ MEJORADO: Verificar progreso de la ruta
+    const completedCount = route.orders.filter(o => 
       ['delivered', 'failed', 'cancelled'].includes(o.deliveryStatus)
-    );
+    ).length;
+    
+    const totalOrders = route.orders.length;
+    const progressPercentage = Math.round((completedCount / totalOrders) * 100);
+
+    console.log('📊 Progreso de la ruta:', {
+      completedCount,
+      totalOrders,
+      progressPercentage: `${progressPercentage}%`
+    });
+
+    // Verificar si todas las entregas están completadas
+    const allCompleted = completedCount === totalOrders;
 
     if (allCompleted && route.status !== 'completed') {
       route.status = 'completed';
       route.completedAt = now;
+      route.completionSummary = {
+        total_orders: totalOrders,
+        delivered: route.orders.filter(o => o.deliveryStatus === 'delivered').length,
+        failed: route.orders.filter(o => o.deliveryStatus === 'failed').length,
+        cancelled: route.orders.filter(o => o.deliveryStatus === 'cancelled').length,
+        completed_by: conductorInfo.name,
+        completion_date: now
+      };
       
-      console.log('🏁 Ruta completada:', routeId);
+      console.log('🏁 Ruta completada:', {
+        routeId,
+        completedBy: conductorInfo.name,
+        summary: route.completionSummary
+      });
     }
 
     await route.save();
@@ -548,7 +665,13 @@ const updateDeliveryStatus = async (routeId, orderId, status, deliveryProof = nu
 
     return {
       message: `Estado actualizado a ${status}`,
-      routePlan: route
+      routePlan: route,
+      driverInfo: conductorInfo,
+      progress: {
+        completed: completedCount,
+        total: totalOrders,
+        percentage: progressPercentage
+      }
     };
 
   } catch (error) {
