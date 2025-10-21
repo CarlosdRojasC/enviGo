@@ -86,7 +86,7 @@
               <span class="order-customer">{{ order.customer_name }}</span>
             </div>
             <div class="order-details">
-              <span class="order-date">{{ formatDate(order.delivery_date) }}</span>
+              <span class="order-date">{{ formatDate(order.created_at) }}</span>
               <span class="order-amount">${{ formatCurrency(order.shipping_cost) }}</span>
             </div>
           </div>
