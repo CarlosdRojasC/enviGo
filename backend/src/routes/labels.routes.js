@@ -1,4 +1,4 @@
-// backend/src/routes/labels.routes.js - Versión con QR grande abajo
+// backend/src/routes/labels.routes.js - Versión final optimizada con QR más pequeño
 
 const express = require('express');
 const router = express.Router();
@@ -21,20 +21,20 @@ router.post('/mark-printed/:orderId', labelController.markPrinted);
 router.get('/find/:code', labelController.findByCode);
 router.get('/stats', labelController.getStats);
 
-// Función para generar QR más grande
-async function generateQRCode(text, size = 240) {
+// 🔧 Función OPTIMIZADA: QR más pequeño pero legible
+async function generateQRCode(text, size = 80) {
   try {
     const qrBuffer = await QRCode.toBuffer(text, {
       width: size,
-      margin: 3, // Margen más grande
+      margin: 2, // Margen reducido
       color: {
         dark: '#000000',
         light: '#FFFFFF'
       },
-      errorCorrectionLevel: 'H', // Nivel alto de corrección de errores
+      errorCorrectionLevel: 'M', // Nivel medio es suficiente
       type: 'png',
       quality: 1.0,
-      scale: 8 // Escala alta para mejor definición
+      scale: 6 // Escala reducida pero suficiente
     });
     return qrBuffer;
   } catch (error) {
@@ -43,65 +43,67 @@ async function generateQRCode(text, size = 240) {
   }
 }
 
-// Header simple sin QR
-function drawSimpleHeader(doc, order, x, y, width) {
+// 🔧 Header COMPACTO con mejor distribución
+function drawCompactHeader(doc, order, x, y, width) {
   const companyName = order.company_id?.name || order.company_name || 'enviGo';
   const uniqueCode = order.envigo_label?.unique_code || order._id.toString().slice(-6);
 
-  // Nombre de la empresa
+  // Nombre de la empresa (más pequeño)
   doc.font('Helvetica-Bold')
-     .fontSize(16)
+     .fontSize(13) // Reducido de 16 a 13
      .fillColor('#111827')
      .text(companyName, x, y, {
-       width: width,
-       align: 'center'
+       width: width * 0.65,
+       align: 'left'
      });
 
-  // Línea divisoria
-  doc.moveTo(x + 40, y + 25)
-     .lineTo(x + width - 40, y + 25)
-     .lineWidth(1)
+  // Código único a la derecha
+  doc.font('Helvetica-Bold')
+     .fontSize(11) // Reducido de 18 a 11
+     .fillColor('#dc2626')
+     .text(`Pedido: ${uniqueCode}`, x + width * 0.35, y, {
+       width: width * 0.65,
+       align: 'right'
+     });
+
+  // Línea divisoria más fina
+  doc.moveTo(x, y + 22) // Más arriba
+     .lineTo(x + width, y + 22)
+     .lineWidth(0.5) // Más fina
      .strokeColor('#d1d5db')
      .stroke();
-
-  // Código único destacado
-  doc.font('Helvetica-Bold')
-     .fontSize(18)
-     .fillColor('#1f2937')
-     .text(`Pedido: ${uniqueCode}`, x, y + 35, {
-       width: width,
-       align: 'center'
-     });
 }
 
-// Comuna destacada (sin cambios)
-function drawCommune(doc, order, x, y, width) {
+// 🔧 Comuna MÁS COMPACTA
+function drawCompactCommune(doc, order, x, y, width) {
   const commune = order.shipping_commune || 'SIN COMUNA';
   
-  doc.rect(x, y - 5, width, 35)
+  // Rectángulo más pequeño
+  const rectHeight = 28; // Reducido de 35 a 28
+  doc.rect(x, y, width, rectHeight)
      .fillColor('#f8fafc')
      .fill();
 
-  doc.rect(x, y - 5, width, 35)
+  doc.rect(x, y, width, rectHeight)
      .lineWidth(1)
      .strokeColor('#e2e8f0')
      .stroke();
 
   doc.font('Helvetica-Bold')
-     .fontSize(18)
+     .fontSize(15) // Reducido de 18 a 15
      .fillColor('#1f2937')
-     .text(commune.toUpperCase(), x, y + 8, {
+     .text(commune.toUpperCase(), x, y + 6, { // Ajustado centrado
        width: width,
        align: 'center'
      });
 }
 
-// Información del cliente (sin cambios)
-function drawCustomerInfo(doc, order, x, y, width) {
-  const lineHeight = 22;
+// 🔧 Info cliente MÁS COMPACTA
+function drawCompactCustomerInfo(doc, order, x, y, width) {
+  const lineHeight = 16; // Reducido de 22 a 16
   let currentY = y;
 
-  function addField(label, value, fontSize = 12) {
+  function addField(label, value, fontSize = 10) { // Reducido de 12 a 10
     if (!value || value === '') return;
     
     doc.font('Helvetica-Bold')
@@ -112,46 +114,46 @@ function drawCustomerInfo(doc, order, x, y, width) {
     doc.font('Helvetica')
        .fontSize(fontSize)
        .fillColor('#111827')
-       .text(value, x + 80, currentY, {
-         width: width - 80,
-         lineGap: 2
+       .text(value, x + 60, currentY, { // Reducido de 80 a 60
+         width: width - 60,
+         lineGap: 1
        });
     
     currentY += lineHeight;
   }
 
-  addField('Cliente', order.customer_name, 13);
-  addField('Teléfono', order.customer_phone, 12);
-  addField('Dirección', order.shipping_address, 12);
+  addField('Cliente', order.customer_name, 11); // Ligeramente más grande para legibilidad
+  addField('Teléfono', order.customer_phone, 10);
+  addField('Dirección', order.shipping_address, 10);
   
   if (order.comment && order.comment.trim()) {
-    currentY += 5;
-    addField('Comentario', order.comment, 11);
+    currentY += 3; // Reducido espaciado
+    addField('Comentario', order.comment, 9);
   }
 }
 
-// NUEVA función: QR Code grande abajo
-function drawLargeQRCode(doc, order, qrBuffer, x, y, width) {
+// 🔧 QR Code OPTIMIZADO - Tamaño perfecto
+function drawOptimizedQRCode(doc, order, qrBuffer, x, y, width) {
   if (!qrBuffer) return;
 
-  // QR más grande y mejor posicionado
-  const qrSize = 120; // Aumentado de 100 a 120px
+  // QR tamaño óptimo: ni muy grande ni muy pequeño
+  const qrSize = 75; // Reducido de 120 a 75px
   const qrX = x + (width - qrSize) / 2;
   
   // Fondo blanco para el QR (mejor contraste)
-  doc.rect(qrX - 5, y + 15, qrSize + 10, qrSize + 10)
+  doc.rect(qrX - 3, y + 10, qrSize + 6, qrSize + 6)
      .fillColor('#ffffff')
      .fill();
 
   // Borde sutil alrededor del QR
-  doc.rect(qrX - 5, y + 15, qrSize + 10, qrSize + 10)
-     .lineWidth(1)
+  doc.rect(qrX - 3, y + 10, qrSize + 6, qrSize + 6)
+     .lineWidth(0.5)
      .strokeColor('#e5e7eb')
      .stroke();
 
-  // Título del QR
+  // Título del QR más pequeño
   doc.font('Helvetica-Bold')
-     .fontSize(12)
+     .fontSize(10) // Reducido de 12 a 10
      .fillColor('#374151')
      .text('CÓDIGO QR PARA RECOGIDA', x, y, {
        width: width,
@@ -159,41 +161,33 @@ function drawLargeQRCode(doc, order, qrBuffer, x, y, width) {
      });
 
   // Insertar el QR
-  doc.image(qrBuffer, qrX, y + 20, { 
+  doc.image(qrBuffer, qrX, y + 13, { 
     width: qrSize, 
     height: qrSize 
   });
 
-  // Order number grande y destacado debajo del QR
+  // Order number debajo del QR
   const displayCode = order.order_number || 'Sin código';
   doc.font('Helvetica-Bold')
-     .fontSize(16) // Más grande
+     .fontSize(12) // Reducido de 16 a 12
      .fillColor('#1f2937')
-     .text(displayCode, x, y + 20 + qrSize + 15, {
+     .text(displayCode, x, y + 13 + qrSize + 8, {
        width: width,
        align: 'center'
      });
 
-  // Instrucciones más claras
+  // Instrucciones más compactas
   doc.font('Helvetica')
-     .fontSize(9)
+     .fontSize(8) // Reducido de 9 a 8
      .fillColor('#6b7280')
-     .text('Escanear con la app del conductor', x, y + 20 + qrSize + 40, {
-       width: width,
-       align: 'center'
-     });
-     
-  doc.font('Helvetica')
-     .fontSize(8)
-     .fillColor('#9ca3af')
-     .text('O ingresar el código manualmente', x, y + 20 + qrSize + 55, {
+     .text('Escanear con la app del conductor', x, y + 13 + qrSize + 28, {
        width: width,
        align: 'center'
      });
 }
 
-// Footer simple (sin cambios)
-function drawSimpleFooter(doc, order, x, y, width) {
+// 🔧 Footer COMPACTO
+function drawCompactFooter(doc, order, x, y, width) {
   doc.moveTo(x, y)
      .lineTo(x + width, y)
      .lineWidth(0.5)
@@ -201,9 +195,9 @@ function drawSimpleFooter(doc, order, x, y, width) {
      .stroke();
 
   doc.font('Helvetica-Bold')
-     .fontSize(14)
+     .fontSize(11) // Reducido de 14 a 11
      .fillColor('#374151')
-     .text('¡Gracias por tu confianza!', x, y + 20, {
+     .text('¡Gracias por tu confianza!', x, y + 12, {
        width: width,
        align: 'center'
      });
@@ -213,15 +207,15 @@ function drawSimpleFooter(doc, order, x, y, width) {
                  'www.envigo.cl';
 
   doc.font('Helvetica')
-     .fontSize(10)
+     .fontSize(8) // Reducido de 10 a 8
      .fillColor('#9ca3af')
-     .text(website.replace(/^https?:\/\//, ''), x, y + 45, {
+     .text(website.replace(/^https?:\/\//, ''), x, y + 28, {
        width: width,
        align: 'center'
      });
 }
 
-// ENDPOINT ACTUALIZADO: PDF individual con QR grande
+// 🚀 ENDPOINT OPTIMIZADO: PDF individual con todo en una página
 router.post('/print-pdf/:orderId', async (req, res) => {
   try {
     const orderId = req.params.orderId;
@@ -241,10 +235,10 @@ router.post('/print-pdf/:orderId', async (req, res) => {
       return res.status(400).json({ error: 'El pedido no tiene order_number' });
     }
 
-    console.log(`📱 Generando QR para order_number: ${qrText}`);
+    console.log(`📱 Generando QR optimizado para order_number: ${qrText}`);
 
-    // QR optimizado para escaneo
-    const qrBuffer = await generateQRCode(qrText, 280); // Tamaño más grande
+    // QR tamaño óptimo
+    const qrBuffer = await generateQRCode(qrText, 100);
 
     const doc = new PDFDocument({
       size: [283.5, 425.25], // 10x15 cm exacto
@@ -264,42 +258,42 @@ router.post('/print-pdf/:orderId', async (req, res) => {
        .fillColor('#ffffff')
        .fill();
 
-    // Borde perimetral
-    doc.rect(8, 8, pageW - 16, pageH - 16)
+    // Borde perimetral más fino
+    doc.rect(6, 6, pageW - 12, pageH - 12)
        .lineWidth(0.5)
        .strokeColor('#e5e7eb')
        .stroke();
 
-    const margin = 20;
-    let y = 25;
+    const margin = 16; // Reducido de 20 a 16
+    let y = 18; // Reducido de 25 a 18
 
-    // Header
-    drawSimpleHeader(doc, order, margin, y, pageW - margin * 2);
-    y += 70; // Reducido para dar más espacio al QR
+    // 📍 Header compacto
+    drawCompactHeader(doc, order, margin, y, pageW - margin * 2);
+    y += 35; // Reducido de 70 a 35
 
-    // Comuna
-    drawCommune(doc, order, margin, y, pageW - margin * 2);
-    y += 45; // Reducido
+    // 🏘️ Comuna compacta
+    drawCompactCommune(doc, order, margin, y, pageW - margin * 2);
+    y += 38; // Reducido de 45 a 38
 
-    // Info cliente (más compacta)
-    drawCustomerInfo(doc, order, margin, y, pageW - margin * 2);
-    y += 90; // Reducido
+    // 👤 Info cliente compacta
+    drawCompactCustomerInfo(doc, order, margin, y, pageW - margin * 2);
+    y += 70; // Reducido de 90 a 70
 
-    // QR CODE GRANDE Y OPTIMIZADO
-    drawLargeQRCode(doc, order, qrBuffer, margin, y, pageW - margin * 2);
+    // 📱 QR CODE optimizado
+    drawOptimizedQRCode(doc, order, qrBuffer, margin, y, pageW - margin * 2);
     
-    // Footer en la parte inferior
-    drawSimpleFooter(doc, order, margin, pageH - 60, pageW - margin * 2);
+    // 🙏 Footer compacto en la parte inferior
+    drawCompactFooter(doc, order, margin, pageH - 50, pageW - margin * 2);
 
     doc.end();
 
   } catch (error) {
-    console.error('Error generando etiqueta:', error);
+    console.error('Error generando etiqueta optimizada:', error);
     res.status(500).json({ error: 'Error interno al generar el PDF.' });
   }
 });
 
-// ENDPOINT ACTUALIZADO: PDF masivo con QR grande
+// 🚀 ENDPOINT OPTIMIZADO: PDF masivo con etiquetas compactas
 router.post('/print-bulk-pdf', async (req, res) => {
   try {
     const { orderIds } = req.body;
@@ -324,16 +318,16 @@ router.post('/print-bulk-pdf', async (req, res) => {
     });
 
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `inline; filename=etiquetas-bulk-qr-grande.pdf`);
+    res.setHeader('Content-Disposition', `inline; filename=etiquetas-optimizadas-bulk.pdf`);
     doc.pipe(res);
 
-    // Generar una etiqueta por página
+    // Generar una etiqueta optimizada por página
     for (const order of orders) {
-      if (!order.envigo_label) continue;
+      if (!order.envigo_label || !order.order_number) continue;
 
-      // Generar QR para cada etiqueta
+      // Generar QR optimizado para cada etiqueta
       const qrText = order.order_number;
-      const qrBuffer = await generateQRCode(qrText, 200);
+      const qrBuffer = await generateQRCode(qrText, 100);
 
       doc.addPage();
 
@@ -345,38 +339,38 @@ router.post('/print-bulk-pdf', async (req, res) => {
          .fillColor('#ffffff')
          .fill();
 
-      // Borde perimetral
-      doc.rect(8, 8, pageW - 16, pageH - 16)
+      // Borde perimetral más fino
+      doc.rect(6, 6, pageW - 12, pageH - 12)
          .lineWidth(0.5)
          .strokeColor('#e5e7eb')
          .stroke();
 
-      const margin = 20;
-      let y = 25;
+      const margin = 16;
+      let y = 18;
 
-      // Header simple
-      drawSimpleHeader(doc, order, margin, y, pageW - margin * 2);
-      y += 80;
+      // Header compacto
+      drawCompactHeader(doc, order, margin, y, pageW - margin * 2);
+      y += 35;
 
-      // Comuna
-      drawCommune(doc, order, margin, y, pageW - margin * 2);
-      y += 55;
+      // Comuna compacta
+      drawCompactCommune(doc, order, margin, y, pageW - margin * 2);
+      y += 38;
 
-      // Info cliente
-      drawCustomerInfo(doc, order, margin, y, pageW - margin * 2);
-      y += 110;
+      // Info cliente compacta
+      drawCompactCustomerInfo(doc, order, margin, y, pageW - margin * 2);
+      y += 70;
 
-      // QR CODE GRANDE
-      drawLargeQRCode(doc, order, qrBuffer, margin, y, pageW - margin * 2);
+      // QR CODE optimizado
+      drawOptimizedQRCode(doc, order, qrBuffer, margin, y, pageW - margin * 2);
       
-      // Footer
-      drawSimpleFooter(doc, order, margin, pageH - 80, pageW - margin * 2);
+      // Footer compacto
+      drawCompactFooter(doc, order, margin, pageH - 50, pageW - margin * 2);
     }
 
     doc.end();
 
   } catch (error) {
-    console.error('Error generando etiquetas masivas con QR grande:', error);
+    console.error('Error generando etiquetas masivas optimizadas:', error);
     res.status(500).json({ error: 'Error interno al generar el PDF masivo.' });
   }
 });
