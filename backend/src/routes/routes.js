@@ -313,6 +313,7 @@ router.patch('/:id/orders/:orderId/status', [
       orderId,
       status,
       deliveryProof,
+      driverInfo  
     );
 
     res.json({

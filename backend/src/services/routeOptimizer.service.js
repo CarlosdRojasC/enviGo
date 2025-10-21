@@ -394,9 +394,20 @@ const getActiveRouteForDriver = async (driverId) => {
 /**
  * Actualiza el estado de entrega de un pedido específico
  */
-const updateDeliveryStatus = async (routeId, orderId, status, deliveryProof = null) => {
+const updateDeliveryStatus = async (routeId, orderId, status, deliveryProof = null, driverInfo = null) => {
  try {
-    const route = await RoutePlan.findById(routeId).populate('orders.order');
+    console.log('📦 Actualizando estado de entrega en servicio:', {
+      routeId,
+      orderId,
+      status,
+      hasDeliveryProof: !!deliveryProof,
+      hasDriverInfo: !!driverInfo
+    });
+
+    const RoutePlan = require('../models/RoutePlan');
+    const Order = require('../models/Order');
+    
+    const route = await RoutePlan.findById(routeId).populate('orders.order driver');
     
     if (!route) {
       throw new Error('Ruta no encontrada');
@@ -408,78 +419,114 @@ const updateDeliveryStatus = async (routeId, orderId, status, deliveryProof = nu
       throw new Error('Orden no encontrada en la ruta');
     }
 
+    console.log('📦 Orden encontrada en ruta:', {
+      currentStatus: orderItem.deliveryStatus,
+      newStatus: status
+    });
+
     // Actualizar estado
     orderItem.deliveryStatus = status;
     
     const now = new Date();
 
     // Si es entrega exitosa, guardar prueba con información del conductor
-    if (status === 'delivered' && deliveryProof && driverInfo) {
-      orderItem.deliveryProof = {
-        photos: deliveryProof.photos || [],
-        photo: deliveryProof.photo || (deliveryProof.photos && deliveryProof.photos[0]) || null,
-        recipientName: deliveryProof.recipientName || 'No especificado',
-        comments: deliveryProof.comments || '',
-        location: deliveryProof.location || null,
-        timestamp: now,
-        deliveredBy: driverInfo ? {
+    if (status === 'delivered') {
+      console.log('✅ Procesando entrega exitosa');
+
+      // Determinar información del conductor
+      let conductorInfo = null;
+      if (driverInfo) {
+        conductorInfo = {
           id: driverInfo.id,
           name: driverInfo.name,
           email: driverInfo.email
-        } : null,
-        deliveryMethod: deliveryProof.deliveryMethod || 'driver_app'
+        };
+      } else if (route.driver) {
+        conductorInfo = {
+          id: route.driver._id,
+          name: route.driver.full_name || route.driver.name,
+          email: route.driver.email
+        };
+      }
+
+      // Guardar prueba de entrega en la ruta
+      orderItem.deliveryProof = {
+        photos: deliveryProof?.photos || [],
+        photo: deliveryProof?.photo || (deliveryProof?.photos && deliveryProof.photos[0]) || null,
+        recipientName: deliveryProof?.recipientName || 'No especificado',
+        comments: deliveryProof?.comments || '',
+        location: deliveryProof?.location || null,
+        timestamp: now,
+        deliveredBy: conductorInfo,
+        deliveryMethod: deliveryProof?.deliveryMethod || 'driver_app'
       };
 
       orderItem.deliveredAt = now;
 
-      // IMPORTANTE: También actualizar la orden principal en la colección Orders
-      const Order = require('../models/Order');
-      await Order.findByIdAndUpdate(orderId, {
+      // Actualizar la orden principal en la colección Orders
+      const updateData = {
         status: 'delivered',
         delivery_date: now,
         proof_of_delivery: {
-          photo_urls: deliveryProof.photos || [],
-          photo_url: deliveryProof.photo || (deliveryProof.photos && deliveryProof.photos[0]) || null,
-          recipient_name: deliveryProof.recipientName || 'No especificado',
-          notes: deliveryProof.comments || '',
+          photo_urls: deliveryProof?.photos || [],
+          photo_public_ids: [], // Se llenará si usas Cloudinary
+          photo_url: deliveryProof?.photo || (deliveryProof?.photos && deliveryProof.photos[0]) || null,
+          recipient_name: deliveryProof?.recipientName || 'No especificado',
+          notes: deliveryProof?.comments || '',
           timestamp: now,
-          delivered_by: driverInfo ? driverInfo.name : 'Desconocido',
-          delivered_by_id: driverInfo ? driverInfo.id : null,
-          delivered_by_email: driverInfo ? driverInfo.email : null,
-          delivery_location: deliveryProof.location,
-          delivery_method: deliveryProof.deliveryMethod || 'driver_app'
+          delivered_by: conductorInfo ? conductorInfo.name : 'Conductor desconocido',
+          delivered_by_id: conductorInfo ? conductorInfo.id : null,
+          delivered_by_email: conductorInfo ? conductorInfo.email : null,
+          delivery_location: deliveryProof?.location,
+          delivery_method: deliveryProof?.deliveryMethod || 'driver_app'
         },
         updated_at: now
-      });
+      };
+
+      await Order.findByIdAndUpdate(orderId, updateData);
 
       console.log('✅ Entrega confirmada:', {
         orderId,
-        deliveredBy: driverInfo?.name || 'Desconocido',
+        deliveredBy: conductorInfo?.name || 'Desconocido',
         timestamp: now
       });
     }
 
     // Si es fallo, guardar información del fallo
-    if (status === 'failed' && deliveryProof) {
-      orderItem.deliveryProof = {
-        comments: deliveryProof.comments || 'Entrega fallida',
-        timestamp: now,
-        failureReason: deliveryProof.failureReason || 'No especificado',
-        attemptedBy: driverInfo ? {
+    if (status === 'failed') {
+      console.log('❌ Procesando entrega fallida');
+
+      let conductorInfo = null;
+      if (driverInfo) {
+        conductorInfo = {
           id: driverInfo.id,
           name: driverInfo.name,
           email: driverInfo.email
-        } : null
+        };
+      } else if (route.driver) {
+        conductorInfo = {
+          id: route.driver._id,
+          name: route.driver.full_name || route.driver.name,
+          email: route.driver.email
+        };
+      }
+
+      orderItem.deliveryProof = {
+        comments: deliveryProof?.comments || 'Entrega fallida',
+        timestamp: now,
+        failureReason: deliveryProof?.failureReason || 'No especificado',
+        attemptedBy: conductorInfo
       };
 
       orderItem.attemptedAt = now;
 
       // Actualizar orden principal
-      const Order = require('../models/Order');
       await Order.findByIdAndUpdate(orderId, {
         status: 'failed',
         updated_at: now,
-        failure_reason: deliveryProof.comments || 'Entrega fallida'
+        failure_reason: deliveryProof?.comments || 'Entrega fallida',
+        attempted_by: conductorInfo ? conductorInfo.name : 'Conductor desconocido',
+        attempted_by_id: conductorInfo ? conductorInfo.id : null
       });
     }
 
@@ -497,6 +544,8 @@ const updateDeliveryStatus = async (routeId, orderId, status, deliveryProof = nu
 
     await route.save();
 
+    console.log('💾 Ruta guardada exitosamente');
+
     return {
       message: `Estado actualizado a ${status}`,
       routePlan: route
@@ -507,6 +556,7 @@ const updateDeliveryStatus = async (routeId, orderId, status, deliveryProof = nu
     throw error;
   }
 };
+
 
 /**
  * Procesa actualizaciones offline del conductor
