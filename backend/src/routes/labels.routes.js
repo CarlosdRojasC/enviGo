@@ -213,7 +213,7 @@ router.post('/print-pdf/:orderId', async (req, res) => {
     }
 
     // Generar código QR más grande
-    const qrText = order.tracking_code || order.envigo_label.unique_code || order._id;
+    const qrText = order.order_number;
     const qrBuffer = await generateQRCode(qrText, 200);
 
     const doc = new PDFDocument({
@@ -302,7 +302,7 @@ router.post('/print-bulk-pdf', async (req, res) => {
       if (!order.envigo_label) continue;
 
       // Generar QR para cada etiqueta
-      const qrText = order.tracking_code || order.envigo_label.unique_code || order._id;
+      const qrText = order.order_number;
       const qrBuffer = await generateQRCode(qrText, 200);
 
       doc.addPage();

@@ -6,44 +6,34 @@ const { ORDER_STATUS, ERRORS } = require('../config/constants');
 class PickupScannerController {
   
   // Método principal: Escanear QR y marcar como recogido
-  async scanPackageForPickup(req, res) {
+async scanPackageForPickup(req, res) {
     try {
       const { code } = req.body;
       const driverId = req.user.driver_id || req.user._id;
       const driverName = req.user.full_name || req.user.name || 'Conductor';
 
-      // Verificar que es un conductor (opcional, puedes comentar esta línea si no la necesitas)
-      if (req.user.role && req.user.role !== 'driver') {
-        return res.status(403).json({
-          success: false,
-          error: 'Solo los conductores pueden escanear paquetes'
-        });
-      }
-
-      console.log(`📱 Conductor ${driverName} escaneando código: ${code}`);
+      console.log(`📱 Conductor ${driverName} escaneando código: "${code}"`);
       
-      // Buscar el pedido por código (tracking_code, order_number, etc.)
-      const order = await Order.findOne({
-        $or: [
-          { tracking_code: code },
-          { order_number: code },
-          { _id: code }
-        ]
-      }).populate('company_id', 'name');
+      // ✅ BUSCAR ÚNICAMENTE POR ORDER_NUMBER
+      const order = await Order.findOne({ order_number: code })
+        .populate('company_id', 'name');
 
       if (!order) {
+        console.log(`❌ No se encontró pedido con order_number: "${code}"`);
         return res.status(404).json({
           success: false,
-          error: 'Código no encontrado en el sistema'
+          error: `Pedido "${code}" no encontrado. Verifica que el código sea correcto.`
         });
       }
+
+      console.log(`✅ Pedido encontrado: ${order.order_number} (${order.customer_name})`);
 
       // Verificar que el pedido esté en un estado válido para recogida
       const validStatuses = ['pending', 'ready_for_pickup', 'processing'];
       if (!validStatuses.includes(order.status)) {
         return res.status(400).json({
           success: false,
-          error: `El paquete no está disponible para recogida (estado actual: ${order.status})`
+          error: `El pedido ${order.order_number} no está disponible para recogida (estado: ${order.status})`
         });
       }
 
@@ -51,7 +41,7 @@ class PickupScannerController {
       if (order.status === 'warehouse_received') {
         return res.status(400).json({
           success: false,
-          error: 'Este paquete ya fue recogido',
+          error: `El pedido ${order.order_number} ya fue recogido`,
           pickup_info: {
             pickup_time: order.pickup_time,
             pickup_driver: order.pickup_driver_name
@@ -68,14 +58,14 @@ class PickupScannerController {
 
       await order.save();
 
-      console.log(`✅ Paquete ${order.tracking_code} marcado como recogido por ${driverName}`);
+      console.log(`✅ Pedido ${order.order_number} marcado como recogido por ${driverName}`);
 
       res.json({
         success: true,
-        message: `Paquete ${order.tracking_code} recogido correctamente`,
+        message: `Pedido ${order.order_number} recogido correctamente`,
         package: {
           order_id: order._id,
-          tracking_code: order.tracking_code,
+          order_number: order.order_number,
           customer_name: order.customer_name,
           company: order.company_id?.name,
           pickup_time: order.pickup_time,
@@ -87,13 +77,58 @@ class PickupScannerController {
       console.error('❌ Error escaneando paquete:', error);
       res.status(500).json({ 
         success: false, 
-        error: 'Error del servidor' 
+        error: 'Error del servidor'
+      });
+    }
+  }
+
+    async validateCode(req, res) {
+    try {
+      const { code } = req.body;
+
+      console.log(`🔍 Validando order_number: "${code}"`);
+      
+      // ✅ BUSCAR ÚNICAMENTE POR ORDER_NUMBER
+      const order = await Order.findOne({ order_number: code })
+        .populate('company_id', 'name');
+
+      if (!order) {
+        return res.status(404).json({
+          success: false,
+          error: `Pedido "${code}" no encontrado`
+        });
+      }
+
+      const canPickup = ['pending', 'ready_for_pickup', 'processing'].includes(order.status);
+      const alreadyPickedUp = order.status === 'warehouse_received';
+
+      res.json({
+        success: true,
+        package: {
+          order_number: order.order_number,
+          customer_name: order.customer_name,
+          company: order.company_id?.name,
+          status: order.status,
+          can_pickup: canPickup,
+          already_picked_up: alreadyPickedUp,
+          pickup_info: alreadyPickedUp ? {
+            pickup_time: order.pickup_time,
+            pickup_driver: order.pickup_driver_name
+          } : null
+        }
+      });
+
+    } catch (error) {
+      console.error('❌ Error validando código:', error);
+      res.status(500).json({ 
+        success: false, 
+        error: 'Error del servidor'
       });
     }
   }
 
   // Método para obtener historial de paquetes recogidos por el conductor
-  async getDriverPickupHistory(req, res) {
+ async getDriverPickupHistory(req, res) {
     try {
       const driverId = req.user.driver_id || req.user._id;
       const { page = 1, limit = 20, date_from, date_to } = req.query;
@@ -103,7 +138,6 @@ class PickupScannerController {
         status: ORDER_STATUS.WAREHOUSE_RECEIVED
       };
 
-      // Filtrar por fechas si se proporcionan
       if (date_from || date_to) {
         filter.pickup_time = {};
         if (date_from) filter.pickup_time.$gte = new Date(date_from);
@@ -112,7 +146,7 @@ class PickupScannerController {
 
       const orders = await Order.find(filter)
         .populate('company_id', 'name')
-        .select('tracking_code customer_name pickup_time company_id total_amount')
+        .select('order_number customer_name pickup_time company_id total_amount')
         .sort({ pickup_time: -1 })
         .limit(limit * 1)
         .skip((page - 1) * limit);
@@ -140,12 +174,11 @@ class PickupScannerController {
   }
 
   // Método para obtener estadísticas de recogidas del conductor
-  async getDriverPickupStats(req, res) {
+async getDriverPickupStats(req, res) {
     try {
       const driverId = req.user.driver_id || req.user._id;
       const { timeframe = '7d' } = req.query;
 
-      // Calcular fecha de inicio
       const now = new Date();
       let startDate;
       
@@ -163,7 +196,6 @@ class PickupScannerController {
           startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
       }
 
-      // Obtener estadísticas
       const stats = await Order.aggregate([
         {
           $match: {
@@ -203,56 +235,6 @@ class PickupScannerController {
 
     } catch (error) {
       console.error('❌ Error obteniendo estadísticas:', error);
-      res.status(500).json({ 
-        success: false, 
-        error: 'Error del servidor' 
-      });
-    }
-  }
-
-  // Método para validar un código antes de escanearlo
-  async validateCode(req, res) {
-    try {
-      const { code } = req.body;
-
-      console.log(`🔍 Validando código: ${code}`);
-      
-      const order = await Order.findOne({
-        $or: [
-          { tracking_code: code },
-          { order_number: code },
-          { _id: code }
-        ]
-      }).populate('company_id', 'name');
-
-      if (!order) {
-        return res.status(404).json({
-          success: false,
-          error: 'Código no encontrado'
-        });
-      }
-
-      const canPickup = ['pending', 'ready_for_pickup', 'processing'].includes(order.status);
-      const alreadyPickedUp = order.status === 'warehouse_received';
-
-      res.json({
-        success: true,
-        package: {
-          tracking_code: order.tracking_code,
-          customer_name: order.customer_name,
-          company: order.company_id?.name,
-          status: order.status,
-          can_pickup: canPickup,
-          already_picked_up: alreadyPickedUp,
-          pickup_info: alreadyPickedUp ? {
-            pickup_time: order.pickup_time,
-            pickup_driver: order.pickup_driver_name
-          } : null
-        }
-      });
-
-    } catch (error) {
-      console.error('❌ Error validando código:', error);
       res.status(500).json({ 
         success: false, 
         error: 'Error del servidor' 

@@ -1,45 +1,50 @@
-<!-- frontend/src/driver/components/PickupScanner.vue -->
+<!-- frontend/src/driver/components/PickupScanner.vue - Versión mejorada -->
 <template>
   <div class="pickup-scanner p-4">
     <!-- Header -->
     <div class="mb-6">
-      <h1 class="text-2xl font-bold text-gray-900 mb-2">📱 Scanner de Recogidas</h1>
+      <h1 class="text-2xl font-bold text-gray-900 mb-2">Scanner de Recogidas</h1>
       <p class="text-gray-600">
-        Escanea el código QR de cualquier etiqueta para marcarla como recogida
+        Escanea el código QR o ingresa el número de pedido manualmente
       </p>
     </div>
 
-    <!-- Botón principal de escaneo -->
-    <div class="text-center mb-8">
-      <button 
-        @click="showScanner = true"
-        class="w-full py-6 bg-green-600 text-white rounded-2xl text-xl font-semibold hover:bg-green-700 transition-colors shadow-lg"
-      >
-        <span class="text-3xl block mb-2">📱</span>
-        Escanear Código QR
-      </button>
-    </div>
-
-    <!-- Entrada manual alternativa -->
-    <div class="mb-8 p-4 bg-gray-50 rounded-xl">
-      <h3 class="font-medium text-gray-900 mb-3">O ingresa el código manualmente:</h3>
+    <!-- Entrada manual PRIMERA (más fácil) -->
+    <div class="mb-8 p-4 bg-blue-50 border border-blue-200 rounded-xl">
+      <h3 class="font-medium text-blue-900 mb-3">Ingresa el número de pedido:</h3>
       <div class="flex gap-2">
         <input 
           v-model="manualCode"
           type="text"
-          placeholder="Código de seguimiento"
-          class="flex-1 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+          placeholder="Ej: P1808"
+          class="flex-1 p-3 border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-lg font-mono"
           @keyup.enter="processManualCode"
           :disabled="isProcessing"
+          autofocus
         >
         <button 
           @click="processManualCode"
           :disabled="!manualCode.trim() || isProcessing"
-          class="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+          class="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
         >
-          {{ isProcessing ? '⏳' : '✅' }}
+          {{ isProcessing ? 'Procesando...' : 'Procesar' }}
         </button>
       </div>
+      <p class="text-sm text-blue-600 mt-2">
+        El código está impreso debajo del QR en la etiqueta
+      </p>
+    </div>
+
+    <!-- Botón de escaneo QR (secundario) -->
+    <div class="text-center mb-8">
+      <p class="text-gray-600 mb-4">O si prefieres escanear:</p>
+      <button 
+        @click="showScanner = true"
+        class="w-full py-4 bg-green-600 text-white rounded-xl text-lg font-semibold hover:bg-green-700 transition-colors shadow-lg"
+      >
+        <span class="text-2xl block mb-1">📱</span>
+        Escanear Código QR
+      </button>
     </div>
 
     <!-- Historial de escaneos recientes -->
@@ -52,7 +57,7 @@
           class="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-lg"
         >
           <div class="flex-1">
-            <p class="font-medium text-green-800">{{ scan.tracking_code }}</p>
+            <p class="font-bold text-green-800 text-lg">{{ scan.order_number }}</p>
             <p class="text-sm text-green-600">{{ scan.customer_name || 'Cliente no especificado' }}</p>
             <p class="text-xs text-green-500">{{ formatTime(scan.pickup_time) }}</p>
           </div>
@@ -73,13 +78,13 @@
       </div>
     </div>
 
-    <!-- Modal del Scanner -->
-    <div v-if="showScanner" class="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
+    <!-- Modal del Scanner MEJORADO -->
+    <div v-if="showScanner" class="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50 p-4">
       <div class="bg-white rounded-2xl max-w-md w-full overflow-hidden">
         <div class="p-4 border-b border-gray-200 flex justify-between items-center">
-          <h3 class="text-lg font-semibold text-gray-900">📱 Scanner QR</h3>
+          <h3 class="text-lg font-semibold text-gray-900">Scanner QR</h3>
           <button 
-            @click="showScanner = false"
+            @click="closeScanner"
             class="p-2 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100 transition-colors"
           >
             ✕
@@ -113,7 +118,7 @@
             </button>
           </div>
 
-          <!-- Scanner activo -->
+          <!-- Scanner activo MEJORADO -->
           <div v-else-if="cameraPermission" class="space-y-4">
             <div class="relative bg-black rounded-lg overflow-hidden">
               <video 
@@ -121,23 +126,57 @@
                 autoplay
                 muted
                 playsinline
-                class="w-full h-64 object-cover"
+                class="w-full h-80 object-cover"
               ></video>
               
-              <!-- Marco de escaneo -->
+              <!-- Marco de escaneo más grande -->
               <div class="absolute inset-0 flex items-center justify-center">
-                <div class="w-48 h-48 border-2 border-green-400 rounded-lg relative">
-                  <div class="absolute top-0 left-0 w-6 h-6 border-t-4 border-l-4 border-green-400 -translate-x-2 -translate-y-2"></div>
-                  <div class="absolute top-0 right-0 w-6 h-6 border-t-4 border-r-4 border-green-400 translate-x-2 -translate-y-2"></div>
-                  <div class="absolute bottom-0 left-0 w-6 h-6 border-b-4 border-l-4 border-green-400 -translate-x-2 translate-y-2"></div>
-                  <div class="absolute bottom-0 right-0 w-6 h-6 border-b-4 border-r-4 border-green-400 translate-x-2 translate-y-2"></div>
+                <div class="relative">
+                  <!-- Marco más grande para mejor escaneo -->
+                  <div class="w-56 h-56 border-2 border-green-400 rounded-lg relative bg-transparent">
+                    <!-- Esquinas más prominentes -->
+                    <div class="absolute -top-1 -left-1 w-8 h-8 border-t-4 border-l-4 border-green-400"></div>
+                    <div class="absolute -top-1 -right-1 w-8 h-8 border-t-4 border-r-4 border-green-400"></div>
+                    <div class="absolute -bottom-1 -left-1 w-8 h-8 border-b-4 border-l-4 border-green-400"></div>
+                    <div class="absolute -bottom-1 -right-1 w-8 h-8 border-b-4 border-r-4 border-green-400"></div>
+                    
+                    <!-- Línea de escaneo animada -->
+                    <div class="absolute top-0 left-0 w-full h-1 bg-green-400 animate-pulse opacity-70"></div>
+                    <div class="absolute top-1/2 left-0 w-full h-0.5 bg-green-400 animate-pulse"></div>
+                  </div>
                 </div>
+              </div>
+              
+              <!-- Controles de cámara -->
+              <div class="absolute bottom-4 left-4 right-4 flex justify-center space-x-4">
+                <button 
+                  @click="toggleFlash"
+                  class="p-3 bg-black bg-opacity-50 text-white rounded-full hover:bg-opacity-70 transition-colors"
+                >
+                  <span v-if="flashOn">🔦</span>
+                  <span v-else>💡</span>
+                </button>
+                <button 
+                  @click="switchCamera"
+                  class="p-3 bg-black bg-opacity-50 text-white rounded-full hover:bg-opacity-70 transition-colors"
+                >
+                  🔄
+                </button>
               </div>
             </div>
 
-            <p class="text-center text-gray-600">
-              Enfoca el código QR de la etiqueta
-            </p>
+            <!-- Instrucciones mejoradas -->
+            <div class="text-center space-y-2">
+              <p class="text-gray-700 font-medium">
+                Enfoca el código QR de la etiqueta
+              </p>
+              <p class="text-sm text-gray-500">
+                Mantén el teléfono a 10-15cm de distancia
+              </p>
+              <p class="text-xs text-gray-400">
+                Si no funciona, usa el código impreso debajo del QR
+              </p>
+            </div>
 
             <!-- Estado de escaneo -->
             <div v-if="isScanning" class="text-center">
@@ -173,10 +212,13 @@ const manualCode = ref('')
 const recentScans = ref([])
 const notification = ref(null)
 const todayStats = ref({ count: 0, companies: 0 })
+const flashOn = ref(false)
+const facingMode = ref('environment') // 'user' para frontal, 'environment' para trasera
 
 // Referencias
 const videoElement = ref(null)
 let stream = null
+let qrDetectionInterval = null
 
 // Computed
 const notificationClass = computed(() => {
@@ -189,7 +231,7 @@ const notificationClass = computed(() => {
   return classes[notification.value.type] || 'bg-gray-500'
 })
 
-// Métodos
+// Métodos de cámara mejorados
 const requestCameraPermission = async () => {
   try {
     scannerError.value = ''
@@ -198,10 +240,19 @@ const requestCameraPermission = async () => {
       stream.getTracks().forEach(track => track.stop())
     }
     
-    stream = await navigator.mediaDevices.getUserMedia({ 
-      video: { facingMode: 'environment' }
-    })
+    // Configuración mejorada de la cámara
+    const constraints = {
+      video: {
+        facingMode: facingMode.value,
+        width: { ideal: 1280 },
+        height: { ideal: 720 },
+        focusMode: 'continuous',
+        exposureMode: 'continuous',
+        whiteBalanceMode: 'continuous'
+      }
+    }
     
+    stream = await navigator.mediaDevices.getUserMedia(constraints)
     cameraPermission.value = true
     await nextTick()
     initCamera()
@@ -210,9 +261,11 @@ const requestCameraPermission = async () => {
     console.error('Error accediendo a la cámara:', error)
     
     if (error.name === 'NotAllowedError') {
-      scannerError.value = 'Permiso de cámara denegado'
+      scannerError.value = 'Permiso de cámara denegado. Permite el acceso e intenta de nuevo.'
+    } else if (error.name === 'NotFoundError') {
+      scannerError.value = 'No se encontró cámara. Usa el ingreso manual.'
     } else {
-      scannerError.value = 'Error al acceder a la cámara'
+      scannerError.value = 'Error de cámara. Usa el ingreso manual como alternativa.'
     }
     
     cameraPermission.value = false
@@ -222,7 +275,69 @@ const requestCameraPermission = async () => {
 const initCamera = () => {
   if (videoElement.value && stream) {
     videoElement.value.srcObject = stream
+    
+    videoElement.value.onloadedmetadata = () => {
+      // Configurar calidad de video
+      const track = stream.getVideoTracks()[0]
+      if (track) {
+        const capabilities = track.getCapabilities()
+        if (capabilities.focusMode && capabilities.focusMode.includes('continuous')) {
+          track.applyConstraints({
+            advanced: [{ focusMode: 'continuous' }]
+          })
+        }
+      }
+      
+      startQRDetection()
+    }
   }
+}
+
+// Simulación de detección QR (en producción usar jsQR)
+const startQRDetection = () => {
+  if (qrDetectionInterval) {
+    clearInterval(qrDetectionInterval)
+  }
+  
+  // Simular detección cada segundo
+  qrDetectionInterval = setInterval(() => {
+    if (isScanning.value) return
+    // Aquí iría la implementación real con jsQR
+  }, 1000)
+}
+
+const toggleFlash = async () => {
+  if (stream) {
+    const track = stream.getVideoTracks()[0]
+    if (track && track.getCapabilities().torch) {
+      try {
+        await track.applyConstraints({
+          advanced: [{ torch: !flashOn.value }]
+        })
+        flashOn.value = !flashOn.value
+      } catch (error) {
+        console.error('Error controlando flash:', error)
+      }
+    }
+  }
+}
+
+const switchCamera = async () => {
+  facingMode.value = facingMode.value === 'environment' ? 'user' : 'environment'
+  await requestCameraPermission()
+}
+
+const closeScanner = () => {
+  showScanner.value = false
+  if (stream) {
+    stream.getTracks().forEach(track => track.stop())
+    stream = null
+  }
+  if (qrDetectionInterval) {
+    clearInterval(qrDetectionInterval)
+  }
+  cameraPermission.value = false
+  flashOn.value = false
 }
 
 const processQRCode = async (code) => {
@@ -241,8 +356,8 @@ const processQRCode = async (code) => {
       
       // Agregar a escaneos recientes
       recentScans.value.unshift(packageData)
-      if (recentScans.value.length > 10) {
-        recentScans.value = recentScans.value.slice(0, 10)
+      if (recentScans.value.length > 5) {
+        recentScans.value = recentScans.value.slice(0, 5)
       }
       
       // Actualizar estadísticas
@@ -251,10 +366,10 @@ const processQRCode = async (code) => {
       // Emitir evento
       emit('package-scanned', packageData)
       
-      showNotification(`Paquete ${packageData.tracking_code} recogido correctamente`, 'success')
+      showNotification(`Pedido ${packageData.order_number} recogido correctamente`, 'success')
       
       // Cerrar scanner y limpiar código manual
-      showScanner.value = false
+      closeScanner()
       manualCode.value = ''
     }
     
@@ -306,19 +421,12 @@ const formatTime = (date) => {
   })
 }
 
-const cleanup = () => {
-  if (stream) {
-    stream.getTracks().forEach(track => track.stop())
-    stream = null
-  }
-}
-
 // Lifecycle
 onMounted(() => {
   loadTodayStats()
 })
 
 onBeforeUnmount(() => {
-  cleanup()
+  closeScanner()
 })
 </script>
