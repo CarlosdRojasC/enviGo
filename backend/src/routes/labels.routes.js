@@ -29,6 +29,26 @@ router.get('/find/:code', labelController.findByCode);
 // Obtener estadísticas de etiquetas
 router.get('/stats', labelController.getStats);
 
+// 🆕 FUNCIÓN: Generar código QR
+async function generateQRCode(text, size = 120) {
+  try {
+    const qrBuffer = await QRCode.toBuffer(text, {
+      width: size,
+      margin: 1,
+      color: {
+        dark: '#000000',
+        light: '#FFFFFF'
+      },
+      errorCorrectionLevel: 'M'
+    });
+    return qrBuffer;
+  } catch (error) {
+    console.error('Error generando QR:', error);
+    return null;
+  }
+}
+
+// 🆕 ACTUALIZADA: Endpoint para PDF individual con QR
 router.post('/print-pdf/:orderId', async (req, res) => {
   try {
     const orderId = req.params.orderId;
@@ -40,6 +60,10 @@ router.post('/print-pdf/:orderId', async (req, res) => {
     if (!order || !order.envigo_label) {
       return res.status(404).json({ error: 'Pedido o etiqueta no encontrada' });
     }
+
+    // 🆕 Generar código QR
+    const qrText = order.tracking_code || order.envigo_label.unique_code || order._id;
+    const qrBuffer = await generateQRCode(qrText, 120);
 
     const doc = new PDFDocument({
       size: [283.5, 425.25], // 10x15 cm exacto
@@ -68,8 +92,8 @@ router.post('/print-pdf/:orderId', async (req, res) => {
     const margin = 20;
     let y = 25;
 
-    // 📍 HEADER - Nombre empresa y código único
-    drawSimpleHeader(doc, order, margin, y, pageW - margin * 2);
+    // 📍 HEADER - Nombre empresa y código único CON QR
+    await drawSimpleHeaderWithQR(doc, order, margin, y, pageW - margin * 2, qrBuffer);
     y += 80;
 
     // 🏘️ COMUNA DESTACADA
@@ -90,7 +114,72 @@ router.post('/print-pdf/:orderId', async (req, res) => {
   }
 });
 
-// 📍 FUNCIÓN: Header simple con empresa y código
+// 🆕 ACTUALIZADA: Header con código QR
+async function drawSimpleHeaderWithQR(doc, order, x, y, width, qrBuffer) {
+  const companyName = order.company_id?.name || order.company_name || 'enviGo';
+  const uniqueCode = order.envigo_label?.unique_code || order._id.toString().slice(-6);
+
+  // Fondo del header
+  doc.rect(x, y, width, 70)
+     .fillColor('#f8fafc')
+     .fill();
+
+  // Borde del header
+  doc.rect(x, y, width, 70)
+     .lineWidth(1)
+     .strokeColor('#e5e7eb')
+     .stroke();
+
+  // LADO IZQUIERDO: Información de la empresa
+  const leftWidth = width - 60; // Dejar espacio para el QR
+
+  // Nombre de la empresa
+  doc.font('Helvetica-Bold')
+     .fontSize(16)
+     .fillColor('#111827')
+     .text(companyName, x + 10, y + 15, {
+       width: leftWidth,
+       align: 'left'
+     });
+
+  // Código único
+  doc.font('Helvetica')
+     .fontSize(12)
+     .fillColor('#6b7280')
+     .text(`Código: ${uniqueCode}`, x + 10, y + 40, {
+       width: leftWidth,
+       align: 'left'
+     });
+
+  // LADO DERECHO: Código QR
+  if (qrBuffer) {
+    const qrSize = 50;
+    const qrX = x + width - qrSize - 10;
+    const qrY = y + 10;
+    
+    doc.image(qrBuffer, qrX, qrY, { 
+      width: qrSize, 
+      height: qrSize 
+    });
+  } else {
+    // Placeholder si no se pudo generar el QR
+    const qrSize = 50;
+    const qrX = x + width - qrSize - 10;
+    const qrY = y + 10;
+    
+    doc.rect(qrX, qrY, qrSize, qrSize)
+       .lineWidth(1)
+       .strokeColor('#d1d5db')
+       .stroke();
+
+    doc.fillColor('#9ca3af')
+       .font('Helvetica')
+       .fontSize(8)
+       .text('QR', qrX + qrSize/2 - 8, qrY + qrSize/2 - 4);
+  }
+}
+
+// 📍 FUNCIÓN ORIGINAL: Header simple (mantenemos para compatibilidad)
 function drawSimpleHeader(doc, order, x, y, width) {
   const companyName = order.company_id?.name || order.company_name || 'enviGo';
   const uniqueCode = order.envigo_label?.unique_code || order._id.toString().slice(-6);
@@ -121,7 +210,7 @@ function drawSimpleHeader(doc, order, x, y, width) {
      });
 }
 
-// 🏘️ FUNCIÓN: Comuna destacada (igual que antes)
+// 🏘️ FUNCIÓN: Comuna destacada (sin cambios)
 function drawCommune(doc, order, x, y, width) {
   const commune = order.shipping_commune || 'SIN COMUNA';
   
@@ -146,7 +235,7 @@ function drawCommune(doc, order, x, y, width) {
      });
 }
 
-// 👤 FUNCIÓN: Información del cliente
+// 👤 FUNCIÓN: Información del cliente (sin cambios)
 function drawCustomerInfo(doc, order, x, y, width) {
   const lineHeight = 22;
   let currentY = y;
@@ -182,7 +271,7 @@ function drawCustomerInfo(doc, order, x, y, width) {
   }
 }
 
-// 🙏 FUNCIÓN: Footer simple
+// 🙏 FUNCIÓN: Footer simple (sin cambios)
 function drawSimpleFooter(doc, order, x, y, width) {
   // Línea divisoria superior
   doc.moveTo(x, y)
@@ -214,7 +303,7 @@ function drawSimpleFooter(doc, order, x, y, width) {
      });
 }
 
-// ==================== ETIQUETAS MASIVAS SIMPLES ====================
+// 🆕 ACTUALIZADO: Etiquetas masivas con QR
 router.post('/print-bulk-pdf', async (req, res) => {
   try {
     const { orderIds } = req.body;
@@ -239,12 +328,16 @@ router.post('/print-bulk-pdf', async (req, res) => {
     });
 
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `inline; filename=etiquetas-simples-bulk.pdf`);
+    res.setHeader('Content-Disposition', `inline; filename=etiquetas-bulk-qr.pdf`);
     doc.pipe(res);
 
     // Generar una etiqueta por página
     for (const order of orders) {
       if (!order.envigo_label) continue;
+
+      // 🆕 Generar QR para cada etiqueta
+      const qrText = order.tracking_code || order.envigo_label.unique_code || order._id;
+      const qrBuffer = await generateQRCode(qrText, 120);
 
       doc.addPage();
 
@@ -265,8 +358,8 @@ router.post('/print-bulk-pdf', async (req, res) => {
       const margin = 20;
       let y = 25;
 
-      // Header
-      drawSimpleHeader(doc, order, margin, y, pageW - margin * 2);
+      // Header CON QR
+      await drawSimpleHeaderWithQR(doc, order, margin, y, pageW - margin * 2, qrBuffer);
       y += 80;
 
       // Comuna
@@ -294,6 +387,4 @@ router.get(
     labelController.downloadProofOfDelivery
 );
 
-
 module.exports = router;
-

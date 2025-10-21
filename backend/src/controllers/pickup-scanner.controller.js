@@ -1,6 +1,6 @@
 // backend/src/controllers/pickup-scanner.controller.js
 
-const Order = require('../models/order.model');
+const Order = require('../models/Order');
 const { ORDER_STATUS, ERRORS } = require('../config/constants');
 
 class PickupScannerController {
