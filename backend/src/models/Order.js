@@ -164,6 +164,7 @@ location: {
     'shipped',
     'delivered',
     'cancelled',
+    'picked_up',
     'facturado'  ],
     default: 'pending' 
   },
