@@ -273,7 +273,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { apiService } from '../services/api'
+import { apiService } from '../../services/api'
 
 // Props
 const props = defineProps({
