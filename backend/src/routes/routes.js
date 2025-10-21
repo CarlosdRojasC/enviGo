@@ -313,7 +313,6 @@ router.patch('/:id/orders/:orderId/status', [
       orderId,
       status,
       deliveryProof,
-      driverInfo // AGREGAR: Pasar información del conductor
     );
 
     res.json({

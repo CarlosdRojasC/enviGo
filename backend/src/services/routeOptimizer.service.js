@@ -414,7 +414,7 @@ const updateDeliveryStatus = async (routeId, orderId, status, deliveryProof = nu
     const now = new Date();
 
     // Si es entrega exitosa, guardar prueba con información del conductor
-    if (status === 'delivered' && deliveryProof) {
+    if (status === 'delivered' && deliveryProof && driverInfo) {
       orderItem.deliveryProof = {
         photos: deliveryProof.photos || [],
         photo: deliveryProof.photo || (deliveryProof.photos && deliveryProof.photos[0]) || null,
