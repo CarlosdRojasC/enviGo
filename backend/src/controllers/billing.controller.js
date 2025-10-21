@@ -181,7 +181,7 @@ async generateUniqueInvoiceNumber(session = null) {
           const orders = await Order.find({
             company_id: company._id,
             status: 'delivered',
-            order_date: {
+            created_at: {
               $gte: new Date(period_start),
               $lte: new Date(period_end)
             }
@@ -285,7 +285,7 @@ async generateUniqueInvoiceNumber(session = null) {
 
         const orders = await Order.find({
           company_id: company._id,
-          order_date: {
+          created_at: {
             $gte: new Date(period_start),
             $lte: new Date(period_end)
           }
