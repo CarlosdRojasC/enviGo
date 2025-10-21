@@ -56,72 +56,93 @@ router.post('/driver/:driverId/pay-all',
 // ==================== RUTAS QUE HAY QUE IMPLEMENTAR DESPUÉS ====================
 // (Comentadas hasta que implementemos los métodos en el controlador)
 
-/*
-router.get('/global-payment-summary', 
-  authenticateToken, 
-  isAdmin, 
-  driverHistoryController.getGlobalPaymentSummary  // ❌ NO EXISTE
-);
+router.get('/driver/:driverId', [
+  authenticateToken,
+  // Permitir que conductores vean su propio historial O que admins/managers vean cualquier historial
+  async (req, res, next) => {
+    const { driverId } = req.params;
+    const userRole = req.user.role;
+    const userId = req.user.id;
 
-router.get('/all-active-drivers', 
-  authenticateToken, 
-  isAdmin, 
-  driverHistoryController.getAllActiveDrivers  // ❌ NO EXISTE
-);
+    // Admins pueden ver cualquier historial
+    if (['admin', 'manager'].includes(userRole)) {
+      return next();
+    }
 
-router.get('/export-excel', 
-  authenticateToken, 
-  isAdmin, 
-  driverHistoryController.exportToExcel  // ❌ NO EXISTE
-);
+    // Conductores solo pueden ver su propio historial
+    if (userRole === 'driver' && userId === driverId) {
+      return next();
+    }
 
-router.get('/company/:companyId/deliveries', 
-  authenticateToken, 
-  isAdminOrCompanyOwner, 
-  driverHistoryController.getCompanyDeliveries  // ❌ NO EXISTE
-);
+    // Company owners pueden ver conductores de su empresa (requiere lógica adicional)
+    if (userRole === 'company_owner') {
+      // Aquí podrías agregar lógica para verificar que el conductor pertenece a la empresa
+      return next();
+    }
 
-router.get('/company/:companyId/active-drivers', 
-  authenticateToken, 
-  isAdminOrCompanyOwner, 
-  driverHistoryController.getActiveDrivers  // ❌ NO EXISTE
-);
+    return res.status(403).json({
+      success: false,
+      error: 'No tienes permisos para ver este historial'
+    });
+  }
+], driverHistoryController.getDriverHistory);
 
-router.get('/company/:companyId/monthly-report', 
-  authenticateToken, 
-  isAdminOrCompanyOwner, 
-  driverHistoryController.getMonthlyPaymentReport  // ❌ NO EXISTE
-);
+/**
+ * GET /api/driver-history/driver/:driverId/stats
+ * Obtener estadísticas de entregas de un conductor específico
+ */
+router.get('/driver/:driverId/stats', [
+  authenticateToken,
+  // Misma lógica de permisos que arriba
+  async (req, res, next) => {
+    const { driverId } = req.params;
+    const userRole = req.user.role;
+    const userId = req.user.id;
 
-router.get('/company/:companyId/stats', 
-  authenticateToken, 
-  isAdminOrCompanyOwner, 
-  driverHistoryController.getCompanyDeliveryStats  // ❌ NO EXISTE
-);
+    if (['admin', 'manager'].includes(userRole)) {
+      return next();
+    }
 
-router.get('/driver/:driverId', 
-  authenticateToken, 
-  isAdmin, 
-  driverHistoryController.getDriverHistory  // ❌ NO EXISTE
-);
+    if (userRole === 'driver' && userId === driverId) {
+      return next();
+    }
 
-router.get('/driver/:driverId/pending', 
-  authenticateToken, 
-  isAdmin, 
-  driverHistoryController.getPendingPayments  // ❌ NO EXISTE
-);
+    if (userRole === 'company_owner') {
+      return next();
+    }
 
-router.post('/driver/:driverId/pay-all', 
-  authenticateToken, 
-  isAdmin, 
-  driverHistoryController.payAllPendingToDriver  // ❌ NO EXISTE
-);
+    return res.status(403).json({
+      success: false,
+      error: 'No tienes permisos para ver estas estadísticas'
+    });
+  }
+], driverHistoryController.getDriverStats);
 
-router.post('/mark-paid', 
-  authenticateToken, 
-  isAdmin, 
-  driverHistoryController.markDeliveriesAsPaid  // ❌ NO EXISTE
-);
-*/
+/**
+ * GET /api/driver-history/driver/:driverId/pending
+ * Obtener entregas pendientes de pago de un conductor
+ */
+router.get('/driver/:driverId/pending', [
+  authenticateToken,
+  // Solo admins y el propio conductor pueden ver pagos pendientes
+  async (req, res, next) => {
+    const { driverId } = req.params;
+    const userRole = req.user.role;
+    const userId = req.user.id;
+
+    if (['admin'].includes(userRole)) {
+      return next();
+    }
+
+    if (userRole === 'driver' && userId === driverId) {
+      return next();
+    }
+
+    return res.status(403).json({
+      success: false,
+      error: 'No tienes permisos para ver información de pagos'
+    });
+  }
+], driverHistoryController.getDriverPendingPayments);
 
 module.exports = router;

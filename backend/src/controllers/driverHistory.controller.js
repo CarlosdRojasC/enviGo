@@ -546,6 +546,387 @@ async payAllPendingToDriver(req, res) {
     });
   }
 }
+  async getDriverHistory(req, res) {
+    try {
+      const { driverId } = req.params;
+      const { 
+        start_date, 
+        end_date, 
+        status = 'completed', 
+        limit = 100 
+      } = req.query;
+
+      console.log('📚 Obteniendo historial para conductor:', {
+        driverId,
+        start_date,
+        end_date,
+        status
+      });
+
+      // 1. BUSCAR EN ROUTEPLANS (entregas del optimizador de rutas)
+      const RoutePlan = require('../models/RoutePlan');
+      
+      const routeQuery = {
+        driver: driverId,
+        status: { $in: ['completed', 'in_progress'] }
+      };
+
+      if (start_date || end_date) {
+        routeQuery.createdAt = {};
+        if (start_date) routeQuery.createdAt.$gte = new Date(start_date);
+        if (end_date) routeQuery.createdAt.$lte = new Date(end_date);
+      }
+
+      const routePlans = await RoutePlan.find(routeQuery)
+        .populate('orders.order', 'order_number customer_name shipping_address customer_phone')
+        .populate('driver', 'full_name name email')
+        .sort({ createdAt: -1 })
+        .limit(parseInt(limit))
+        .lean();
+
+      console.log(`📊 Rutas encontradas: ${routePlans.length}`);
+
+      // 2. EXTRAER ENTREGAS DE LAS RUTAS
+      const deliveries = [];
+      
+      routePlans.forEach(route => {
+        route.orders?.forEach(orderItem => {
+          if (['delivered', 'failed', 'cancelled'].includes(orderItem.deliveryStatus)) {
+            deliveries.push({
+              _id: `route_${route._id}_${orderItem.order._id}`,
+              order: {
+                _id: orderItem.order._id,
+                order_number: orderItem.order.order_number,
+                customer_name: orderItem.order.customer_name,
+                shipping_address: orderItem.order.shipping_address,
+                customer_phone: orderItem.order.customer_phone
+              },
+              deliveryStatus: orderItem.deliveryStatus,
+              completedAt: orderItem.deliveredAt || orderItem.attemptedAt || route.createdAt,
+              deliveryProof: orderItem.deliveryProof || null,
+              route_id: route._id,
+              sequence_number: orderItem.sequenceNumber,
+              source: 'route_optimizer'
+            });
+          }
+        });
+      });
+
+      // 3. TAMBIÉN BUSCAR EN ÓRDENES DIRECTAS (Shipday, Circuit, manuales)
+      const Order = require('../models/Order');
+      
+      const orderQuery = {
+        status: { $in: ['delivered', 'invoiced'] },
+        $or: [
+          { shipday_driver_id: driverId },
+          { assigned_driver_id: driverId },
+          { 'delivered_by_driver.driver_id': driverId },
+          { 'driver_info.id': driverId }
+        ]
+      };
+
+      if (start_date || end_date) {
+        orderQuery.delivery_date = {};
+        if (start_date) orderQuery.delivery_date.$gte = new Date(start_date);
+        if (end_date) orderQuery.delivery_date.$lte = new Date(end_date);
+      }
+
+      const directOrders = await Order.find(orderQuery)
+        .select('_id order_number customer_name shipping_address customer_phone delivery_date proof_of_delivery delivered_by_driver')
+        .sort({ delivery_date: -1 })
+        .limit(parseInt(limit))
+        .lean();
+
+      console.log(`📦 Órdenes directas encontradas: ${directOrders.length}`);
+
+      // 4. AGREGAR ÓRDENES DIRECTAS A LAS ENTREGAS
+      directOrders.forEach(order => {
+        // Evitar duplicados
+        const existsInRoutes = deliveries.some(d => d.order._id.toString() === order._id.toString());
+        
+        if (!existsInRoutes) {
+          deliveries.push({
+            _id: `order_${order._id}`,
+            order: {
+              _id: order._id,
+              order_number: order.order_number,
+              customer_name: order.customer_name,
+              shipping_address: order.shipping_address,
+              customer_phone: order.customer_phone
+            },
+            deliveryStatus: 'delivered', // Las órdenes directas entregadas
+            completedAt: order.delivery_date,
+            deliveryProof: this.convertProofOfDelivery(order.proof_of_delivery),
+            route_id: null,
+            sequence_number: null,
+            source: 'direct_order'
+          });
+        }
+      });
+
+      // 5. ORDENAR POR FECHA MÁS RECIENTE
+      deliveries.sort((a, b) => new Date(b.completedAt) - new Date(a.completedAt));
+
+      // 6. CALCULAR ESTADÍSTICAS
+      const stats = {
+        total: deliveries.length,
+        delivered: deliveries.filter(d => d.deliveryStatus === 'delivered').length,
+        failed: deliveries.filter(d => d.deliveryStatus === 'failed').length,
+        cancelled: deliveries.filter(d => d.deliveryStatus === 'cancelled').length
+      };
+
+      console.log('✅ Historial compilado:', {
+        total_deliveries: deliveries.length,
+        sources: {
+          route_optimizer: deliveries.filter(d => d.source === 'route_optimizer').length,
+          direct_orders: deliveries.filter(d => d.source === 'direct_order').length
+        },
+        stats
+      });
+
+      res.json({
+        success: true,
+        data: {
+          deliveries,
+          stats,
+          driver_id: driverId,
+          period: { start_date, end_date },
+          total_found: deliveries.length
+        }
+      });
+
+    } catch (error) {
+      console.error('❌ Error obteniendo historial del conductor:', error);
+      res.status(500).json({
+        success: false,
+        error: error.message
+      });
+    }
+  }
+
+  /**
+   * ✅ NUEVO: Obtener estadísticas de un conductor
+   */
+  async getDriverStats(req, res) {
+    try {
+      const { driverId } = req.params;
+      const { period = '30d' } = req.query;
+
+      console.log('📊 Obteniendo estadísticas del conductor:', { driverId, period });
+
+      // Calcular fechas
+      const endDate = new Date();
+      const startDate = new Date();
+      
+      switch (period) {
+        case '7d':
+          startDate.setDate(endDate.getDate() - 7);
+          break;
+        case '30d':
+          startDate.setDate(endDate.getDate() - 30);
+          break;
+        case '90d':
+          startDate.setDate(endDate.getDate() - 90);
+          break;
+        default:
+          startDate.setDate(endDate.getDate() - 30);
+      }
+
+      // Reutilizar la lógica del método anterior
+      const historyData = await this.getDriverHistoryData(driverId, startDate, endDate);
+      const deliveries = historyData.deliveries;
+
+      // Calcular estadísticas detalladas
+      const stats = {
+        period,
+        total_deliveries: deliveries.length,
+        successful_deliveries: deliveries.filter(d => d.deliveryStatus === 'delivered').length,
+        failed_deliveries: deliveries.filter(d => d.deliveryStatus === 'failed').length,
+        success_rate: deliveries.length > 0 ? 
+          Math.round((deliveries.filter(d => d.deliveryStatus === 'delivered').length / deliveries.length) * 100) : 0,
+        estimated_earnings: deliveries.filter(d => d.deliveryStatus === 'delivered').length * 1700,
+        
+        // Estadísticas por día
+        daily_average: deliveries.length > 0 ? 
+          Math.round(deliveries.length / Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24))) : 0,
+        
+        // Fuentes de entregas
+        sources: {
+          route_optimizer: deliveries.filter(d => d.source === 'route_optimizer').length,
+          direct_orders: deliveries.filter(d => d.source === 'direct_order').length
+        }
+      };
+
+      res.json({
+        success: true,
+        data: stats
+      });
+
+    } catch (error) {
+      console.error('❌ Error obteniendo estadísticas del conductor:', error);
+      res.status(500).json({
+        success: false,
+        error: error.message
+      });
+    }
+  }
+
+  /**
+   * ✅ NUEVO: Obtener entregas pendientes de pago de un conductor
+   */
+  async getDriverPendingPayments(req, res) {
+    try {
+      const { driverId } = req.params;
+      
+      console.log('💰 Obteniendo pagos pendientes del conductor:', driverId);
+
+      // Buscar en DriverHistory
+      const DriverHistory = require('../models/DriveryHistory');
+      const pendingHistory = await DriverHistory.find({
+        driver_id: driverId,
+        payment_status: 'pending'
+      }).sort({ delivered_at: -1 });
+
+      // También buscar en Orders directamente
+      const Order = require('../models/Order');
+      const pendingOrders = await Order.find({
+        status: { $in: ['delivered', 'invoiced'] },
+        $or: [
+          { shipday_driver_id: driverId },
+          { 'delivered_by_driver.driver_id': driverId }
+        ],
+        $or: [
+          { isPaid: { $exists: false } },
+          { isPaid: false }
+        ]
+      }).select('_id order_number customer_name delivery_date shipping_address')
+        .sort({ delivery_date: -1 });
+
+      const totalPending = (pendingHistory.length * 1700) + (pendingOrders.length * 1700);
+
+      res.json({
+        success: true,
+        data: {
+          driver_id: driverId,
+          pending_from_history: pendingHistory.length,
+          pending_from_orders: pendingOrders.length,
+          total_pending_deliveries: pendingHistory.length + pendingOrders.length,
+          total_pending_amount: totalPending,
+          deliveries: [
+            ...pendingHistory.map(h => ({
+              _id: h._id,
+              order_number: h.order_number,
+              customer_name: h.customer_name,
+              delivered_at: h.delivered_at,
+              payment_amount: h.payment_amount,
+              source: 'driver_history'
+            })),
+            ...pendingOrders.map(o => ({
+              _id: o._id,
+              order_number: o.order_number,
+              customer_name: o.customer_name,
+              delivered_at: o.delivery_date,
+              payment_amount: 1700,
+              source: 'order_direct'
+            }))
+          ]
+        }
+      });
+
+    } catch (error) {
+      console.error('❌ Error obteniendo pagos pendientes:', error);
+      res.status(500).json({
+        success: false,
+        error: error.message
+      });
+    }
+  }
+
+  /**
+   * ✅ HELPER: Método auxiliar para obtener datos de historial (reutilizable)
+   */
+  async getDriverHistoryData(driverId, startDate, endDate) {
+    const RoutePlan = require('../models/RoutePlan');
+    const Order = require('../models/Order');
+    
+    // Buscar en rutas
+    const routeQuery = {
+      driver: driverId,
+      status: { $in: ['completed', 'in_progress'] },
+      createdAt: { $gte: startDate, $lte: endDate }
+    };
+
+    const routePlans = await RoutePlan.find(routeQuery)
+      .populate('orders.order', 'order_number customer_name shipping_address customer_phone')
+      .lean();
+
+    const deliveries = [];
+
+    // Extraer entregas de rutas
+    routePlans.forEach(route => {
+      route.orders?.forEach(orderItem => {
+        if (['delivered', 'failed', 'cancelled'].includes(orderItem.deliveryStatus)) {
+          deliveries.push({
+            _id: `route_${route._id}_${orderItem.order._id}`,
+            order: orderItem.order,
+            deliveryStatus: orderItem.deliveryStatus,
+            completedAt: orderItem.deliveredAt || orderItem.attemptedAt || route.createdAt,
+            deliveryProof: orderItem.deliveryProof,
+            source: 'route_optimizer'
+          });
+        }
+      });
+    });
+
+    // Buscar órdenes directas
+    const orderQuery = {
+      status: { $in: ['delivered', 'invoiced'] },
+      delivery_date: { $gte: startDate, $lte: endDate },
+      $or: [
+        { shipday_driver_id: driverId },
+        { assigned_driver_id: driverId },
+        { 'delivered_by_driver.driver_id': driverId }
+      ]
+    };
+
+    const directOrders = await Order.find(orderQuery)
+      .select('_id order_number customer_name shipping_address customer_phone delivery_date proof_of_delivery')
+      .lean();
+
+    // Agregar órdenes directas
+    directOrders.forEach(order => {
+      const existsInRoutes = deliveries.some(d => d.order._id.toString() === order._id.toString());
+      
+      if (!existsInRoutes) {
+        deliveries.push({
+          _id: `order_${order._id}`,
+          order: order,
+          deliveryStatus: 'delivered',
+          completedAt: order.delivery_date,
+          deliveryProof: this.convertProofOfDelivery(order.proof_of_delivery),
+          source: 'direct_order'
+        });
+      }
+    });
+
+    return { deliveries };
+  }
+
+  /**
+   * ✅ HELPER: Convertir proof_of_delivery al formato esperado por el frontend
+   */
+  convertProofOfDelivery(proof) {
+    if (!proof) return null;
+
+    return {
+      recipientName: proof.recipient_name || 'Sin receptor',
+      comments: proof.notes || '',
+      photos: proof.photo_urls || (proof.photo_url ? [proof.photo_url] : []),
+      photo: proof.photo_url || null,
+      location: proof.delivery_location || null,
+      timestamp: proof.timestamp || proof.delivery_timestamp
+    };
+  }
 
 
 }

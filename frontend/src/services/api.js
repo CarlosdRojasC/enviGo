@@ -1069,6 +1069,19 @@ const routes = {
   },
 
   // Obtener historial de rutas de un conductor
+  // ✅ NUEVO: Obtener historial específico de entregas de un conductor
+  getDriverDeliveryHistory: (driverId, params = {}) => {
+    console.log(`📚 API: Obteniendo historial de entregas del conductor ${driverId}`);
+    return api.get(`/driver-history/driver/${driverId}`, { params });
+  },
+
+  // ✅ NUEVO: Obtener estadísticas de entregas de un conductor  
+  getDriverDeliveryStats: (driverId, params = {}) => {
+    console.log(`📊 API: Obteniendo estadísticas de entregas del conductor ${driverId}`);
+    return api.get(`/driver-history/driver/${driverId}/stats`, { params });
+  },
+
+  // Mantener el método existente para historial de rutas
   getDriverHistory: (driverId, params = {}) => {
     console.log(`📚 API: Obteniendo historial de rutas del conductor ${driverId}`);
     return api.get('/routes', { 

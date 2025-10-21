@@ -354,59 +354,126 @@ const loadHistory = async () => {
     // Calcular fechas basadas en el filtro
     const { startDate, endDate } = getDateRange(periodFilter.value)
     
-    // Llamar a tu API para obtener el historial
-    const response = await apiService.routes.getDriverHistory(props.driverId, {
+    console.log('📚 Cargando historial de entregas para conductor:', {
+      driverId: props.driverId,
+      period: periodFilter.value,
+      startDate: startDate.toISOString(),
+      endDate: endDate.toISOString()
+    })
+    
+    // ✅ CAMBIO PRINCIPAL: Usar el endpoint correcto para historial de entregas
+    const response = await apiService.routes.getDriverDeliveryHistory(props.driverId, {
       start_date: startDate.toISOString(),
       end_date: endDate.toISOString(),
       status: 'completed' // Solo entregas completadas (delivered, failed, etc.)
     })
     
-    deliveryHistory.value = response.data.deliveries || []
-    
-    console.log(`Historial cargado: ${deliveryHistory.value.length} entregas`)
+    // ✅ MEJORADO: Manejar la respuesta del nuevo endpoint
+    if (response.data.success) {
+      deliveryHistory.value = response.data.data.deliveries || []
+      
+      console.log(`✅ Historial cargado exitosamente:`, {
+        deliveries: deliveryHistory.value.length,
+        sources: {
+          route_optimizer: deliveryHistory.value.filter(d => d.source === 'route_optimizer').length,
+          direct_orders: deliveryHistory.value.filter(d => d.source === 'direct_order').length
+        },
+        stats: response.data.data.stats
+      })
+    } else {
+      console.warn('⚠️ Respuesta sin éxito del servidor:', response.data)
+      deliveryHistory.value = []
+    }
     
   } catch (error) {
-    console.error('Error cargando historial:', error)
-    // En caso de error, usar datos mock para desarrollo
-    loadMockHistory()
+    console.error('❌ Error cargando historial de entregas:', {
+      status: error.response?.status,
+      message: error.response?.data?.error || error.message,
+      driverId: props.driverId
+    })
+    
+    // ✅ MEJORADO: Fallback más realista en lugar de mock data
+    if (error.response?.status === 404) {
+      console.log('📭 No se encontró historial para este conductor')
+      deliveryHistory.value = []
+    } else {
+      // Solo usar mock data en desarrollo
+      if (import.meta.env.DEV) {
+        console.log('🧪 Usando datos mock para desarrollo')
+        loadMockHistory()
+      } else {
+        deliveryHistory.value = []
+      }
+    }
   } finally {
     isLoading.value = false
   }
 }
 
+const loadDriverStats = async () => {
+  try {
+    console.log('📊 Cargando estadísticas del conductor:', props.driverId)
+    
+    const response = await apiService.routes.getDriverDeliveryStats(props.driverId, {
+      period: periodFilter.value
+    })
+    
+    if (response.data.success) {
+      console.log('✅ Estadísticas del conductor cargadas:', response.data.data)
+      // Puedes usar estas estadísticas para mostrar información adicional
+      return response.data.data
+    }
+  } catch (error) {
+    console.warn('⚠️ No se pudieron cargar las estadísticas del conductor:', error.message)
+  }
+  
+  return null
+}
+
+// ✅ MEJORADO: Mock data más realista para desarrollo
 const loadMockHistory = () => {
-  // Datos mock para desarrollo
+  console.log('🧪 Generando datos mock para desarrollo')
+  
   const mockDeliveries = []
   const statuses = ['delivered', 'failed']
+  const sources = ['route_optimizer', 'direct_order']
   
-  for (let i = 0; i < 20; i++) {
+  for (let i = 0; i < 15; i++) {
     const date = new Date()
     date.setDate(date.getDate() - Math.floor(Math.random() * 30))
     
+    const status = statuses[Math.floor(Math.random() * statuses.length)]
+    const source = sources[Math.floor(Math.random() * sources.length)]
+    
     mockDeliveries.push({
+      _id: `mock_${source}_${i}`,
       order: {
-        _id: `mock_${i}`,
+        _id: `order_mock_${i}`,
         order_number: `ORD-${1000 + i}`,
-        customer_name: `Cliente ${i + 1}`,
-        shipping_address: `Dirección de ejemplo ${i + 1}, Santiago`,
+        customer_name: `Cliente Mock ${i + 1}`,
+        shipping_address: `Dirección de ejemplo ${i + 1}, Santiago, Chile`,
         customer_phone: '+56912345678'
       },
-      deliveryStatus: statuses[Math.floor(Math.random() * statuses.length)],
+      deliveryStatus: status,
       completedAt: date.toISOString(),
-      deliveryProof: {
-        recipientName: `Receptor ${i + 1}`,
-        comments: Math.random() > 0.5 ? `Comentario de entrega ${i + 1}` : '',
-        photos: ['data:image/jpeg;base64,mock_photo_data'],
+      source: source,
+      route_id: source === 'route_optimizer' ? `route_mock_${i}` : null,
+      sequence_number: source === 'route_optimizer' ? Math.floor(Math.random() * 10) + 1 : null,
+      deliveryProof: status === 'delivered' ? {
+        recipientName: `Receptor Mock ${i + 1}`,
+        comments: Math.random() > 0.7 ? `Entrega exitosa. Comentario ${i + 1}` : '',
+        photos: Math.random() > 0.5 ? ['data:image/jpeg;base64,mock_photo_data'] : [],
+        photo: Math.random() > 0.5 ? 'data:image/jpeg;base64,mock_photo_data' : null,
         location: {
           latitude: -33.4489 + (Math.random() - 0.5) * 0.1,
           longitude: -70.6693 + (Math.random() - 0.5) * 0.1
         }
+      } : {
+        comments: 'Entrega fallida - Cliente ausente',
+        failureReason: 'Cliente no se encontraba en el domicilio'
       }
     })
   }
-  
-  deliveryHistory.value = mockDeliveries
-}
 
 const getDateRange = (period) => {
   const now = new Date()
