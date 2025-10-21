@@ -38,26 +38,37 @@ async function generateQRCode(text, size = 100) {
 function drawHeader(doc, order, x, y, width) {
   const companyName = order.company_id?.name || order.company_name || 'enviGo';
   const uniqueCode = order.envigo_label?.unique_code || order._id.toString().slice(-6);
+  const orderNumber = order.order_number ? `PEDIDO ${order.order_number}` : `ID ${uniqueCode}`;
 
-  // Fondo sutil
-  doc.roundedRect(x, y, width, 36, 4)
+  // Fondo con borde redondeado
+  doc.roundedRect(x, y, width, 48, 6)
     .fillColor('#f8fafc')
-    .fill();
-
-  doc.font('Helvetica-Bold')
-    .fontSize(14)
-    .fillColor('#1e293b')
-    .text(companyName, x + 10, y + 9, { width: width * 0.6 });
-
-  doc.font('Helvetica-Bold')
-    .fontSize(11)
-    .fillColor('#dc2626')
-    .text(`PEDIDO ${uniqueCode}`, x, y + 9, { align: 'right', width: width - 10 });
-
-  // Línea divisoria
-  doc.moveTo(x, y + 36)
-    .lineTo(x + width, y + 36)
     .strokeColor('#e2e8f0')
+    .lineWidth(0.6)
+    .fillAndStroke();
+
+  // Nombre de empresa (alineado a la izquierda)
+  doc.font('Helvetica-Bold')
+    .fontSize(13)
+    .fillColor('#0f172a')
+    .text(companyName, x + 12, y + 10, {
+      width: width - 24,
+      align: 'left'
+    });
+
+  // Código del pedido (alineado a la derecha y más pequeño)
+  doc.font('Helvetica-Bold')
+    .fontSize(10.5)
+    .fillColor('#2563eb')
+    .text(orderNumber, x + 12, y + 26, {
+      width: width - 24,
+      align: 'right'
+    });
+
+  // Línea divisoria inferior
+  doc.moveTo(x, y + 48)
+    .lineTo(x + width, y + 48)
+    .strokeColor('#dbeafe')
     .lineWidth(0.8)
     .stroke();
 }

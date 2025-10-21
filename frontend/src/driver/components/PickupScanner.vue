@@ -1,4 +1,4 @@
-<!-- frontend/src/driver/components/PickupScanner.vue - Scanner QR real -->
+<!-- frontend/src/driver/components/PickupScanner.vue - Scanner QR con sonidos -->
 <template>
   <div class="pickup-scanner p-4">
     <!-- Header -->
@@ -6,6 +6,24 @@
       <h1 class="text-2xl font-bold text-gray-900 mb-2">Scanner de Recogidas</h1>
       <p class="text-gray-600">
         Escanea los códigos QR para procesar múltiples paquetes rápidamente
+      </p>
+    </div>
+
+    <!-- 🔊 Control de Sonido -->
+    <div class="mb-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
+      <div class="flex items-center justify-between">
+        <span class="text-sm font-medium text-blue-800">Sonidos de confirmación:</span>
+        <button 
+          @click="toggleSound"
+          :class="['px-3 py-1 rounded-full text-sm font-medium transition-colors', 
+                   soundEnabled ? 'bg-green-500 text-white' : 'bg-gray-300 text-gray-700']"
+        >
+          <span class="mr-1">{{ soundEnabled ? '🔊' : '🔇' }}</span>
+          {{ soundEnabled ? 'Activado' : 'Silenciado' }}
+        </button>
+      </div>
+      <p class="text-xs text-blue-600 mt-1">
+        {{ soundEnabled ? 'Escucharás un "beep" cuando se escanee exitosamente' : 'Los sonidos están desactivados' }}
       </p>
     </div>
 
@@ -93,12 +111,19 @@
           </button>
         </div>
         
-        <!-- Estado de procesamiento -->
+        <!-- Estado de procesamiento con efecto visual -->
         <div v-if="isProcessing" class="absolute bottom-4 left-4 right-4">
-          <div class="bg-blue-600 bg-opacity-90 text-white px-4 py-2 rounded-lg text-center">
-            <div class="animate-spin inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full mr-2"></div>
-            Procesando: {{ currentCode }}
+          <div :class="['text-white px-4 py-2 rounded-lg text-center transition-all duration-300',
+                       processingSuccess ? 'bg-green-600 bg-opacity-90' : 'bg-blue-600 bg-opacity-90']">
+            <div v-if="!processingSuccess" class="animate-spin inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full mr-2"></div>
+            <span v-if="processingSuccess" class="text-2xl mr-2">✅</span>
+            {{ processingSuccess ? '¡Procesado!' : `Procesando: ${currentCode}` }}
           </div>
+        </div>
+
+        <!-- 🎯 Indicador visual de escaneo exitoso -->
+        <div v-if="scanSuccess" class="absolute inset-0 bg-green-500 bg-opacity-30 flex items-center justify-center pointer-events-none">
+          <div class="text-white text-6xl animate-bounce">✅</div>
         </div>
       </div>
       
@@ -110,6 +135,7 @@
           <li>• Asegúrate de tener buena iluminación</li>
           <li>• El QR debe estar completamente dentro del marco</li>
           <li>• Si no funciona, usa el flash o cambia de cámara</li>
+          <li v-if="soundEnabled">• 🔊 Escucharás un "beep" al escanear exitosamente</li>
         </ul>
       </div>
     </div>
@@ -188,9 +214,21 @@
       </div>
     </div>
 
+    <!-- 🔊 Elementos de audio (ocultos) -->
+    <audio ref="successSound" preload="auto">
+      <source :src="successSoundUrl" type="audio/mpeg">
+      <source :src="successSoundUrlOgg" type="audio/ogg">
+    </audio>
+    
+    <audio ref="errorSound" preload="auto">
+      <source :src="errorSoundUrl" type="audio/mpeg">
+      <source :src="errorSoundUrlOgg" type="audio/ogg">
+    </audio>
+
     <!-- Notificación -->
     <div v-if="notification" 
          :class="['fixed top-4 right-4 z-50 px-4 py-3 rounded-lg shadow-lg text-white font-medium transition-all duration-300', notificationClass]">
+      <span v-if="notification.type === 'success'" class="mr-2">🔊</span>
       {{ notification.message }}
     </div>
   </div>
@@ -209,10 +247,24 @@ const emit = defineEmits(['package-scanned'])
 const showScanner = ref(false)
 const isScanning = ref(false)
 const isProcessing = ref(false)
+const processingSuccess = ref(false)
+const scanSuccess = ref(false)
 const currentCode = ref('')
 const manualCode = ref('')
 const recentScans = ref([])
 const notification = ref(null)
+
+// 🔊 Estados de audio
+const soundEnabled = ref(true)
+const successSound = ref(null)
+const errorSound = ref(null)
+
+// URLs de sonidos (puedes usar sonidos en línea o locales)
+const successSoundUrl = ref('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhCDuFyfDdiyAEG3LN9+WCRA') // Sonido de éxito simple
+const successSoundUrlOgg = ref('data:audio/ogg;base64,T2dnUwACAAAAAAAAAADqnjMlAAAAALvDuUsBHgF2b3JiaXMAAAAAAUAfAABAHwAAQB8AABAAAABfAQ==') // Fallback OGG
+
+const errorSoundUrl = ref('data:audio/wav;base64,UklGRj4DAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YRoDAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj') // Sonido de error
+const errorSoundUrlOgg = ref('data:audio/ogg;base64,T2dnUwACAAAAAAAAAADqnjMlAAAAABYbR8sBHgF2b3JiaXMAAAAAAUAfAABAHwAAQB8AAEAfAAA=') // Fallback OGG error
 
 // Estados de cámara
 const cameraPermission = ref(false)
@@ -242,7 +294,83 @@ const notificationClass = computed(() => {
   return classes[notification.value.type] || 'bg-gray-500'
 })
 
-// Métodos principales
+// 🔊 Métodos de audio
+const toggleSound = () => {
+  soundEnabled.value = !soundEnabled.value
+  localStorage.setItem('scanner_sound_enabled', soundEnabled.value.toString())
+  
+  if (soundEnabled.value) {
+    showNotification('Sonidos activados 🔊', 'success')
+    playSuccessSound() // Sonido de prueba
+  } else {
+    showNotification('Sonidos desactivados 🔇', 'warning')
+  }
+}
+
+const playSuccessSound = () => {
+  if (!soundEnabled.value) return
+  
+  try {
+    // Intentar reproducir el sonido nativo del navegador
+    playBeepSound()
+    
+    // Fallback: usar el elemento audio
+    if (successSound.value) {
+      successSound.value.currentTime = 0
+      successSound.value.play().catch(console.warn)
+    }
+  } catch (error) {
+    console.warn('No se pudo reproducir sonido de éxito:', error)
+  }
+}
+
+const playErrorSound = () => {
+  if (!soundEnabled.value) return
+  
+  try {
+    // Sonido de error más grave
+    playBeepSound(400, 200) // Frecuencia más baja, duración más corta
+    
+    // Fallback: usar el elemento audio
+    if (errorSound.value) {
+      errorSound.value.currentTime = 0
+      errorSound.value.play().catch(console.warn)
+    }
+  } catch (error) {
+    console.warn('No se pudo reproducir sonido de error:', error)
+  }
+}
+
+const playBeepSound = (frequency = 800, duration = 200) => {
+  try {
+    // Crear contexto de audio
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)()
+    
+    // Crear oscilador
+    const oscillator = audioContext.createOscillator()
+    const gainNode = audioContext.createGain()
+    
+    // Configurar sonido
+    oscillator.connect(gainNode)
+    gainNode.connect(audioContext.destination)
+    
+    oscillator.frequency.value = frequency
+    oscillator.type = 'sine'
+    
+    // Configurar volumen con fade out
+    gainNode.gain.setValueAtTime(0.3, audioContext.currentTime)
+    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + duration / 1000)
+    
+    // Reproducir
+    oscillator.start(audioContext.currentTime)
+    oscillator.stop(audioContext.currentTime + duration / 1000)
+    
+  } catch (error) {
+    console.warn('No se pudo generar beep:', error)
+  }
+}
+
+// Métodos principales (sin cambios en la lógica, solo agregar sonidos)
 const startScanning = async () => {
   try {
     showScanner.value = true
@@ -254,6 +382,7 @@ const startScanning = async () => {
   } catch (error) {
     console.error('Error iniciando scanner:', error)
     showNotification('Error al iniciar la cámara', 'error')
+    playErrorSound()
     stopScanning()
   }
 }
@@ -298,6 +427,7 @@ const requestCameraPermission = async () => {
     console.error('Error accediendo a la cámara:', error)
     scannerError.value = 'No se pudo acceder a la cámara'
     showNotification('Error de cámara. Usa el ingreso manual.', 'error')
+    playErrorSound()
   }
 }
 
@@ -367,6 +497,7 @@ const processQRCode = async (code) => {
   const cleanCode = code.trim()
   currentCode.value = cleanCode
   isProcessing.value = true
+  processingSuccess.value = false
   
   try {
     console.log('Procesando QR:', cleanCode)
@@ -375,6 +506,11 @@ const processQRCode = async (code) => {
     
     if (response.data.success) {
       const packageData = response.data.package
+      
+      // 🎉 ÉXITO: Mostrar efectos visuales y sonoros
+      processingSuccess.value = true
+      scanSuccess.value = true
+      playSuccessSound() // 🔊 Sonido de éxito
       
       // Actualizar estadísticas de sesión
       sessionStats.value.scanned++
@@ -392,18 +528,27 @@ const processQRCode = async (code) => {
       // Emitir evento
       emit('package-scanned', packageData)
       
-      showNotification(`${packageData.order_number} - ${packageData.customer_name}`, 'success')
+      showNotification(`✅ ${packageData.order_number} - ${packageData.customer_name}`, 'success')
+      
+      // Limpiar efectos visuales después de un momento
+      setTimeout(() => {
+        scanSuccess.value = false
+      }, 1000)
       
       // Breve pausa antes de continuar escaneando
       setTimeout(() => {
         currentCode.value = ''
         isProcessing.value = false
+        processingSuccess.value = false
       }, 1500)
       
     }
     
   } catch (error) {
     console.error('Error procesando QR:', error)
+    
+    // ❌ ERROR: Sonido y efectos de error
+    playErrorSound() // 🔊 Sonido de error
     
     sessionStats.value.errors++
     
@@ -412,11 +557,12 @@ const processQRCode = async (code) => {
       errorMessage = error.response.data.error
     }
     
-    showNotification(errorMessage, 'error')
+    showNotification(`❌ ${errorMessage}`, 'error')
     
     setTimeout(() => {
       currentCode.value = ''
       isProcessing.value = false
+      processingSuccess.value = false
     }, 2000)
   }
 }
@@ -487,6 +633,12 @@ const formatTime = (date) => {
 // Lifecycle
 onMounted(() => {
   loadTodayStats()
+  
+  // 🔊 Cargar preferencia de sonido del localStorage
+  const savedSoundPreference = localStorage.getItem('scanner_sound_enabled')
+  if (savedSoundPreference !== null) {
+    soundEnabled.value = savedSoundPreference === 'true'
+  }
 })
 
 onBeforeUnmount(() => {
