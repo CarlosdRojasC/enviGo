@@ -840,6 +840,7 @@ getDeliveredOrders: (params) => {
         responseType: 'blob' // Importante para descargar archivos
       });
     }
+    
 }
 // Servicios de Shipday
 const shipday = {

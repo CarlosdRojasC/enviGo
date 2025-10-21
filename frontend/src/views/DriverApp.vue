@@ -133,10 +133,10 @@
       />
 
       <!-- Vista: Historial -->
-      <!-- <DeliveryHistory 
+      <DeliveryHistory 
         v-if="currentView === 'history'"
         :driver-id="driverId"
-      /> -->
+      />
 
       <!-- Vista: Configuración -->
       <!-- <DriverSettings 
@@ -167,6 +167,7 @@ import ActiveRoute from '../driver/pages/ActiveRoute.vue'
 import DeliveriesList from '../driver/pages/DeliveriesList.vue'
 import RouteMap from '../driver/pages/RouteMap.vue'
 import DeliveryProofModal from '../driver/pages/DeliveryProofModal.vue'
+import DeliveryHistory from '../driver/pages/DeliveryHistory.vue'
 
 const router = useRouter()
 

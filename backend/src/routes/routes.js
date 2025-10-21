@@ -553,5 +553,51 @@ router.patch('/:id/reoptimize', [
     });
   }
 }));
+router.get('/driver/history', auth, async (req, res) => {
+  try {
+    const { start_date, end_date, status } = req.query
+    const driverId = req.user.driver_id || req.query.driverId
+
+    const query = {
+      'driver._id': driverId,
+      status: { $in: ['completed', 'cancelled'] }
+    }
+
+    if (start_date && end_date) {
+      query.completed_at = {
+        $gte: new Date(start_date),
+        $lte: new Date(end_date)
+      }
+    }
+
+    const routes = await Route.find(query)
+      .populate('orders.order')
+      .sort({ completed_at: -1 })
+      .limit(100)
+
+    // Extraer entregas individuales de las rutas
+    const deliveries = []
+    routes.forEach(route => {
+      route.orders.forEach(orderItem => {
+        if (orderItem.deliveryStatus === 'delivered' || orderItem.deliveryStatus === 'failed') {
+          deliveries.push({
+            ...orderItem.toObject(),
+            routeId: route._id,
+            completedAt: orderItem.deliveredAt || route.completed_at
+          })
+        }
+      })
+    })
+
+    res.json({
+      success: true,
+      deliveries: deliveries.sort((a, b) => new Date(b.completedAt) - new Date(a.completedAt))
+    })
+
+  } catch (error) {
+    console.error('Error obteniendo historial:', error)
+    res.status(500).json({ error: 'Error interno del servidor' })
+  }
+});
 
 module.exports = router;
