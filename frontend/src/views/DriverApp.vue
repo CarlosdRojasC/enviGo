@@ -487,9 +487,9 @@ onMounted(() => {
   window.addEventListener('offline', updateConnectionStatus)
   
   // Check for active route periodically - PRESERVANDO ESTADO
-  setInterval(() => {
-    checkForActiveRoute(true) // true = preservar estado de búsqueda
-  }, 30000) // Every 30 seconds
+  // setInterval(() => {
+  //   checkForActiveRoute(true) // true = preservar estado de búsqueda
+  // }, 30000) // Every 30 seconds
 })
 
 
