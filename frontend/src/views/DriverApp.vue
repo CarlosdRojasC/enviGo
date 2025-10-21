@@ -304,30 +304,6 @@ const checkForActiveRoute = async (preserveSearchState = false) => {
   }
 }
 
-// Nuevos métodos para recogidas
-const loadPickupRoutes = async () => {
-  isPickupsLoading.value = true
-  
-  try {
-    console.log('🔍 Cargando rutas de recogida...')
-    // 🆕 Corregir la llamada API
-    const response = await apiService.pickups.getByDriver()
-    
-    pickupRoutes.value = response.data.pickups || []
-    
-    console.log('✅ Rutas de recogida cargadas:', {
-      count: pickupRoutes.value.length,
-      pending: pickupRoutes.value.filter(r => r.status === 'pending').length,
-      inProgress: pickupRoutes.value.filter(r => r.status === 'in_progress').length
-    })
-    
-  } catch (error) {
-    console.error('❌ Error cargando rutas de recogida:', error)
-    showNotification('Error al cargar las rutas de recogida', 'error')
-  } finally {
-    isPickupsLoading.value = false
-  }
-}
 
 
 const handlePackageScanned = async (scanData) => {
