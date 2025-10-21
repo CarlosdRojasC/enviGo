@@ -553,7 +553,7 @@ router.patch('/:id/reoptimize', [
     });
   }
 }));
-router.get('/driver/history', auth, async (req, res) => {
+router.get('/driver/history', authenticateToken, async (req, res) => {
   try {
     const { start_date, end_date, status } = req.query
     const driverId = req.user.driver_id || req.query.driverId
