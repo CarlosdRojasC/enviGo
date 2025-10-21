@@ -159,7 +159,7 @@
 
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
-import { apiService } from '@/services/api'
+import { apiService } from '../../services/api'
 
 const emit = defineEmits(['package-scanned'])
 
