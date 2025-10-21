@@ -376,10 +376,11 @@ const confirmDelivery = async (deliveryData) => {
       }
       
       // Enviar al servidor usando endpoint específico para drivers
-      await apiService.routes.confirmDeliveryWithPhotos(
+      await apiService.routes.updateOrderStatus(
         activeRoute.value._id,
         selectedOrder.value.order._id,
-        formData
+        'delivered',
+        deliveryProof
       )
       
       console.log('✅ Entrega confirmada en el servidor')
