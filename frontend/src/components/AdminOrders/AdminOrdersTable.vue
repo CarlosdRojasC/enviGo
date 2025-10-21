@@ -682,7 +682,8 @@ function getStatusName(status) {
     ready_for_pickup: 'Listo para recoger',
     out_for_delivery: 'En Entrega',
     warehouse_received: 'Recibido en bodega',
-    assigned: 'Asignado'
+    assigned: 'Asignado',
+    pickup: 'Retirado'
   }
   return statusMap[status] || status
 }
@@ -701,7 +702,9 @@ function getStatusBadgeClass(status) {
     out_for_delivery: 'bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200',
     delivered: 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200',
     invoiced: 'bg-emerald-100 dark:bg-emerald-900 text-emerald-800 dark:text-emerald-200',
-    cancelled: 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200'
+    cancelled: 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200',
+    pickup: 'bg-teal-100 dark:bg-teal-900 text-teal-800 dark:text-teal-200'
+
   }
   return classes[status] || 'bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-gray-200'
 }
