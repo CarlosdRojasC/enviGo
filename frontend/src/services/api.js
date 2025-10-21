@@ -1145,7 +1145,6 @@ export const apiService = {
   drivers,
   billing,
   dashboard,
-  scanner,
   users,
   shipday,
   notifications,
