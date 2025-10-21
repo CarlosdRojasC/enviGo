@@ -14,43 +14,52 @@ async scanPackageForPickup(req, res) {
 
       console.log(`📱 Conductor ${driverName} escaneando código: "${code}"`);
       
-      // ✅ BUSCAR ÚNICAMENTE POR ORDER_NUMBER
-      const order = await Order.findOne({ order_number: code })
+      // Validar que el código no esté vacío o sea undefined
+      if (!code || code === 'undefined' || code.trim() === '') {
+        console.log('❌ Código vacío o undefined recibido');
+        return res.status(400).json({
+          success: false,
+          error: 'Por favor ingresa un código válido'
+        });
+      }
+
+      // Buscar el pedido por order_number (que es lo que contiene el QR)
+      const order = await Order.findOne({ order_number: code.trim() })
         .populate('company_id', 'name');
 
       if (!order) {
         console.log(`❌ No se encontró pedido con order_number: "${code}"`);
         return res.status(404).json({
           success: false,
-          error: `Pedido "${code}" no encontrado. Verifica que el código sea correcto.`
+          error: `Pedido "${code}" no encontrado. Verifica el código.`
         });
       }
 
       console.log(`✅ Pedido encontrado: ${order.order_number} (${order.customer_name})`);
 
-      // Verificar que el pedido esté en un estado válido para recogida
+      // Verificar estado válido para recogida
       const validStatuses = ['pending', 'ready_for_pickup', 'processing'];
       if (!validStatuses.includes(order.status)) {
+        // Si ya está retirado, informar quién y cuándo
+        if (order.status === 'picked_up') {
+          return res.status(400).json({
+            success: false,
+            error: `El pedido ${order.order_number} ya fue retirado`,
+            pickup_info: {
+              pickup_time: order.pickup_time,
+              pickup_driver: order.pickup_driver_name
+            }
+          });
+        }
+        
         return res.status(400).json({
           success: false,
           error: `El pedido ${order.order_number} no está disponible para recogida (estado: ${order.status})`
         });
       }
 
-      // Verificar que no esté ya recogido
-      if (order.status === 'warehouse_received') {
-        return res.status(400).json({
-          success: false,
-          error: `El pedido ${order.order_number} ya fue recogido`,
-          pickup_info: {
-            pickup_time: order.pickup_time,
-            pickup_driver: order.pickup_driver_name
-          }
-        });
-      }
-
-      // Marcar como recogido
-      order.status = ORDER_STATUS.WAREHOUSE_RECEIVED;
+      // MARCAR COMO "RETIRADO"
+      order.status = ORDER_STATUS.picked_up;
       order.pickup_time = new Date();
       order.pickup_driver_id = driverId;
       order.pickup_driver_name = driverName;
@@ -58,18 +67,19 @@ async scanPackageForPickup(req, res) {
 
       await order.save();
 
-      console.log(`✅ Pedido ${order.order_number} marcado como recogido por ${driverName}`);
+      console.log(`✅ Pedido ${order.order_number} marcado como RETIRADO por ${driverName}`);
 
       res.json({
         success: true,
-        message: `Pedido ${order.order_number} recogido correctamente`,
+        message: `Pedido ${order.order_number} retirado correctamente`,
         package: {
           order_id: order._id,
           order_number: order.order_number,
           customer_name: order.customer_name,
           company: order.company_id?.name,
           pickup_time: order.pickup_time,
-          pickup_driver: driverName
+          pickup_driver: driverName,
+          status: 'picked_up'
         }
       });
 
@@ -82,14 +92,21 @@ async scanPackageForPickup(req, res) {
     }
   }
 
-    async validateCode(req, res) {
+
+async validateCode(req, res) {
     try {
       const { code } = req.body;
 
       console.log(`🔍 Validando order_number: "${code}"`);
       
-      // ✅ BUSCAR ÚNICAMENTE POR ORDER_NUMBER
-      const order = await Order.findOne({ order_number: code })
+      if (!code || code === 'undefined' || code.trim() === '') {
+        return res.status(400).json({
+          success: false,
+          error: 'Código vacío'
+        });
+      }
+      
+      const order = await Order.findOne({ order_number: code.trim() })
         .populate('company_id', 'name');
 
       if (!order) {
@@ -100,7 +117,7 @@ async scanPackageForPickup(req, res) {
       }
 
       const canPickup = ['pending', 'ready_for_pickup', 'processing'].includes(order.status);
-      const alreadyPickedUp = order.status === 'warehouse_received';
+      const alreadyPickedUp = order.status === 'picked_up';
 
       res.json({
         success: true,
@@ -128,14 +145,14 @@ async scanPackageForPickup(req, res) {
   }
 
   // Método para obtener historial de paquetes recogidos por el conductor
- async getDriverPickupHistory(req, res) {
+async getDriverPickupHistory(req, res) {
     try {
       const driverId = req.user.driver_id || req.user._id;
       const { page = 1, limit = 20, date_from, date_to } = req.query;
 
       const filter = {
         pickup_driver_id: driverId,
-        status: ORDER_STATUS.WAREHOUSE_RECEIVED
+        status: ORDER_STATUS.picked_up // Cambiado de WAREHOUSE_RECEIVED a RETIRADO
       };
 
       if (date_from || date_to) {
@@ -201,7 +218,7 @@ async getDriverPickupStats(req, res) {
           $match: {
             pickup_driver_id: driverId,
             pickup_time: { $gte: startDate },
-            status: ORDER_STATUS.WAREHOUSE_RECEIVED
+            status: ORDER_STATUS.picked_up
           }
         },
         {

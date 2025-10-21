@@ -24,6 +24,7 @@ module.exports = {
 PENDING: 'pending',
   READY_FOR_PICKUP: 'ready_for_pickup', 
   WAREHOUSE_RECEIVED: 'warehouse_received',  // 🆕 CRÍTICO
+  PiCKED_UP: 'picked_up',                  // 🆕 CRÍTICO
   PROCESSING: 'processing',
   ASSIGNED: 'assigned',                      // 🆕 CRÍTICO
   OUT_FOR_DELIVERY: 'out_for_delivery',     // 🆕 CRÍTICO

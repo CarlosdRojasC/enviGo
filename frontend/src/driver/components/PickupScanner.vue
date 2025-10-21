@@ -343,13 +343,19 @@ const closeScanner = () => {
 const processQRCode = async (code) => {
   if (isProcessing.value) return
   
+  // Validación adicional
+  if (!code || code === 'undefined' || typeof code !== 'string' || code.trim() === '') {
+    showNotification('Código inválido', 'error')
+    return
+  }
+  
   isProcessing.value = true
   isScanning.value = true
   
   try {
-    console.log('Procesando código:', code)
+    console.log('Procesando código válido:', code.trim())
     
-    const response = await apiService.pickupScanner.scanPackage(code)
+    const response = await apiService.pickupScanner.scanPackage(code.trim())
     
     if (response.data.success) {
       const packageData = response.data.package
@@ -366,7 +372,7 @@ const processQRCode = async (code) => {
       // Emitir evento
       emit('package-scanned', packageData)
       
-      showNotification(`Pedido ${packageData.order_number} recogido correctamente`, 'success')
+      showNotification(`Pedido ${packageData.order_number} retirado correctamente`, 'success')
       
       // Cerrar scanner y limpiar código manual
       closeScanner()
@@ -389,10 +395,16 @@ const processQRCode = async (code) => {
 }
 
 const processManualCode = () => {
-  const code = manualCode.value.trim()
-  if (code) {
-    processQRCode(code)
+  // Validar que el código no esté vacío
+  const code = manualCode.value?.trim()
+  
+  if (!code || code === '' || code === 'undefined') {
+    showNotification('Por favor ingresa un código válido', 'warning')
+    return
   }
+  
+  console.log('Enviando código:', code)
+  processQRCode(code)
 }
 
 const loadTodayStats = async () => {
