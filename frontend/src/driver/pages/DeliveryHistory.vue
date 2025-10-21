@@ -430,7 +430,7 @@ const loadDriverStats = async () => {
   return null
 }
 
-// ✅ MEJORADO: Mock data más realista para desarrollo
+// ✅ CORREGIDO: Mock data más realista para desarrollo
 const loadMockHistory = () => {
   console.log('🧪 Generando datos mock para desarrollo')
   
@@ -474,7 +474,12 @@ const loadMockHistory = () => {
       }
     })
   }
+  
+  deliveryHistory.value = mockDeliveries
+  console.log('✅ Datos mock cargados:', deliveryHistory.value.length, 'entregas')
+}
 
+// ✅ CORREGIDO: Función getDateRange movida al lugar correcto
 const getDateRange = (period) => {
   const now = new Date()
   const startDate = new Date()
