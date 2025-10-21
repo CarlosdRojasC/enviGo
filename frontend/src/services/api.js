@@ -958,49 +958,60 @@ const labels = {
   }
 }
 const pickups = {
-  // Obtener todos los retiros (con filtros opcionales)
+  // Obtener todas las recogidas (admin)
   getAll: (params = {}) => {
-    console.log('API: Obteniendo todas las rutas de retiro', params);
+    console.log('📋 API: Obteniendo todas las recogidas', params);
     return api.get('/pickups', { params });
   },
 
-  // Obtener un retiro por su ID
-  getById: (id) => {
-    console.log('API: Obteniendo retiro por ID:', id);
-    return api.get(`/pickups/${id}`);
+  // Obtener recogidas del conductor actual (para DriverApp)
+  getByDriver: () => {
+    console.log('🚚 API: Obteniendo recogidas del conductor actual');
+    return api.get('/pickups/driver/assigned');
   },
 
-  // Asignar un conductor a un retiro
+  // Actualizar estado de recogida
+  updateStatus: (pickupId, status, additionalData = {}) => {
+    console.log(`📋 API: Actualizando estado de recogida ${pickupId} a ${status}`);
+    return api.patch(`/pickups/${pickupId}/status`, { 
+      status, 
+      ...additionalData 
+    });
+  },
+
+  // Asignar conductor a recogida
   assignDriver: (pickupId, driverId) => {
-    console.log(`API: Asignando conductor ${driverId} a retiro ${pickupId}`);
+    console.log(`👤 API: Asignando conductor ${driverId} a recogida ${pickupId}`);
     return api.patch(`/pickups/${pickupId}/assign`, { driver_id: driverId });
-  },
-
-  // Actualizar el estado de un retiro
-  updateStatus: (pickupId, status) => {
-    console.log(`API: Actualizando estado de retiro ${pickupId} a ${status}`);
-    return api.patch(`/pickups/${pickupId}/status`, { status });
   }
 };
 
-const scanner = {
-  // Obtener clientes disponibles para scanner
-  getClients: () => api.get('/driver-scanner/public-clients'),
-  
-  // Procesar código ML
-  processMLBarcode: (formData) => api.post('/driver-scanner/process-ml-barcode', formData, {
-    headers: { 'Content-Type': 'multipart/form-data' }
-  }),
-  
-  // Finalizar sesión
-  finalizeSession: (sessionData) => api.post('/driver-scanner/finalize-session', sessionData),
-  
-  // Stats ML para dashboard
-  getMLStats: (companyId = null) => {
-    const endpoint = companyId ? `/driver-scanner/stats/${companyId}` : '/driver-scanner/stats'
-    return api.get(endpoint)
+// 🆕 Servicios para scanner de recogidas (agregar después de pickups)
+const pickupScanner = {
+  // Escanear código y marcar como recogido
+  scanPackage: (code) => {
+    console.log('📱 API: Escaneando paquete:', code);
+    return api.post('/pickup-scanner/scan', { code });
+  },
+
+  // Validar código antes de escanear
+  validateCode: (code) => {
+    console.log('🔍 API: Validando código:', code);
+    return api.post('/pickup-scanner/validate', { code });
+  },
+
+  // Obtener historial de recogidas del conductor
+  getHistory: (params = {}) => {
+    console.log('📚 API: Obteniendo historial de recogidas');
+    return api.get('/pickup-scanner/history', { params });
+  },
+
+  // Obtener estadísticas del conductor
+  getStats: (timeframe = '7d') => {
+    console.log('📊 API: Obteniendo estadísticas de recogidas');
+    return api.get(`/pickup-scanner/stats?timeframe=${timeframe}`);
   }
-}
+};
 const contact = {
   send: (contactData) => api.post('/contact', contactData)
 }
@@ -1144,6 +1155,7 @@ export const apiService = {
   jumpseller,
   labels,
   pickups,
+  pickupScanner,
   collections,
   contact,
   routes

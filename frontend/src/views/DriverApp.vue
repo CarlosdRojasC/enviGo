@@ -78,18 +78,6 @@
             <span>Entregas</span>
           </button>
 
-          <!-- Nueva pestaña de Recogidas -->
-          <button 
-            @click="currentView = 'pickups'"
-            :class="currentView === 'pickups' ? 'text-green-600 bg-green-50' : 'text-gray-500'"
-            class="flex flex-col items-center py-3 px-3 text-xs font-medium transition-colors rounded-lg relative"
-          >
-            <span class="text-lg mb-1">📋</span>
-            <span>Recogidas</span>
-            <span v-if="pendingPickupsCount > 0" class="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
-              {{ pendingPickupsCount }}
-            </span>
-          </button>
           
           <button 
             @click="currentView = 'map'"
@@ -110,13 +98,13 @@
             <span>Historial</span>
           </button>
           <button 
-  @click="currentView = 'pickup-scanner'"
-  :class="currentView === 'pickup-scanner' ? 'text-green-600 bg-green-50' : 'text-gray-500'"
-  class="flex flex-col items-center py-3 px-3 text-xs font-medium transition-colors rounded-lg"
->
-  <span class="text-lg mb-1">📱</span>
-  <span>Scanner</span>
-</button>
+        @click="currentView = 'pickup-scanner'"
+        :class="currentView === 'pickup-scanner' ? 'text-green-600 bg-green-50' : 'text-gray-500'"
+        class="flex flex-col items-center py-3 px-3 text-xs font-medium transition-colors rounded-lg"
+      >
+        <span class="text-lg mb-1">📱</span>
+        <span>Scanner</span>
+      </button>
         </div>
       </div>
     </nav>
@@ -148,15 +136,10 @@
       />
 
       <!-- Nueva Vista: Recogidas con QR -->
-      <PickupsView 
-        v-if="currentView === 'pickups'"
-        :pickup-routes="pickupRoutes"
-        :is-loading="isPickupsLoading"
-        @start-pickup="startPickup"
-        @complete-pickup="completePickup"
-        @scan-qr="showQRScanner = true"
-        @refresh-pickups="loadPickupRoutes"
-      />
+      <PickupScanner 
+    v-if="currentView === 'pickup-scanner'"
+    @package-scanned="handlePackageScanned"
+  />
 
       <!-- Vista: Mapa -->
       <RouteMap 
@@ -181,13 +164,6 @@
       @confirm="confirmDelivery"
     />
 
-    <!-- Modal del Scanner QR -->
-    <QRScannerModal 
-      v-if="showQRScanner"
-      :pickup-routes="pickupRoutes"
-      @close="showQRScanner = false"
-      @package-scanned="handlePackageScanned"
-    />
 
     <!-- Notificación Toast -->
     <div v-if="notification" 
@@ -210,8 +186,7 @@ import DeliveryProofModal from '../driver/pages/DeliveryProofModal.vue'
 import DeliveryHistory from '../driver/pages/DeliveryHistory.vue'
 
 // Nuevos componentes para recogidas
-import PickupsView from '../driver/pages/PickupsView.vue'
-import QRScannerModal from '../driver/components/QRScannerModal.vue'
+import PickupScanner from '../driver/components/PickupScanner.vue'
 
 const router = useRouter()
 
@@ -335,6 +310,7 @@ const loadPickupRoutes = async () => {
   
   try {
     console.log('🔍 Cargando rutas de recogida...')
+    // 🆕 Corregir la llamada API
     const response = await apiService.pickups.getByDriver()
     
     pickupRoutes.value = response.data.pickups || []
@@ -353,120 +329,33 @@ const loadPickupRoutes = async () => {
   }
 }
 
-const startPickup = async (route) => {
-  try {
-    console.log('🚀 Iniciando recogida:', route._id)
-    
-    await apiService.pickups.updateStatus(route._id, 'in_progress')
-    
-    // Actualizar localmente
-    const routeIndex = pickupRoutes.value.findIndex(r => r._id === route._id)
-    if (routeIndex !== -1) {
-      pickupRoutes.value[routeIndex].status = 'in_progress'
-    }
-    
-    showNotification('Recogida iniciada correctamente', 'success')
-    
-  } catch (error) {
-    console.error('❌ Error iniciando recogida:', error)
-    showNotification('Error al iniciar la recogida', 'error')
-  }
-}
-
-const completePickup = async (route) => {
-  try {
-    console.log('✅ Completando recogida:', route._id)
-    
-    if (!route.scanned_packages || route.scanned_packages.length === 0) {
-      showNotification('Debes escanear al menos un paquete para completar la recogida', 'warning')
-      return
-    }
-    
-    const completionData = {
-      collected_packages: route.scanned_packages.length,
-      scanned_packages: route.scanned_packages,
-      completion_time: new Date().toISOString()
-    }
-    
-    await apiService.pickups.completePickup(route._id, completionData)
-    
-    // Actualizar localmente
-    const routeIndex = pickupRoutes.value.findIndex(r => r._id === route._id)
-    if (routeIndex !== -1) {
-      pickupRoutes.value[routeIndex].status = 'completed'
-      pickupRoutes.value[routeIndex].collected_packages = completionData.collected_packages
-    }
-    
-    showNotification(`Recogida completada: ${completionData.collected_packages} paquetes recogidos`, 'success')
-    
-  } catch (error) {
-    console.error('❌ Error completando recogida:', error)
-    showNotification('Error al completar la recogida', 'error')
-  }
-}
 
 const handlePackageScanned = async (scanData) => {
   try {
     console.log('📱 Procesando paquete escaneado:', scanData)
     
-    const { code, routeId } = scanData
+    const { code } = scanData
     
-    // Buscar el pedido por código
-    const orderResponse = await apiService.labels.findByCode(code)
-    const order = orderResponse.data
+    // 🆕 Usar el servicio pickupScanner
+    const response = await apiService.pickupScanner.scanPackage(code)
     
-    if (!order) {
-      showNotification('Código no encontrado en el sistema', 'error')
-      return
-    }
-    
-    // Verificar que pertenece a la empresa de la recogida
-    const route = pickupRoutes.value.find(r => r._id === routeId)
-    if (!route) {
-      showNotification('Ruta de recogida no encontrada', 'error')
-      return
-    }
-    
-    if (order.company_id !== route.company._id) {
-      showNotification('Este paquete no pertenece a la empresa de esta recogida', 'error')
-      return
-    }
-    
-    // Verificar que no esté ya escaneado
-    if (route.scanned_packages?.some(pkg => pkg.order_id === order._id)) {
-      showNotification('Este paquete ya fue escaneado', 'warning')
-      return
-    }
-    
-    // Actualizar estado del pedido
-    await apiService.orders.updateStatusForPickup(order._id, 'warehouse_received', {
-      pickup_route_id: routeId,
-      driver_id: driverId.value,
-      pickup_time: new Date().toISOString()
-    })
-    
-    // Agregar a la lista de paquetes escaneados
-    const routeIndex = pickupRoutes.value.findIndex(r => r._id === routeId)
-    if (routeIndex !== -1) {
-      if (!pickupRoutes.value[routeIndex].scanned_packages) {
-        pickupRoutes.value[routeIndex].scanned_packages = []
-      }
+    if (response.data.success) {
+      const packageData = response.data.package
+      showNotification(`Paquete ${packageData.tracking_code} recogido correctamente`, 'success')
       
-      pickupRoutes.value[routeIndex].scanned_packages.push({
-        order_id: order._id,
-        tracking_code: order.tracking_code,
-        customer_name: order.customer_name,
-        scanned_at: new Date().toISOString()
-      })
-      
-      pickupRoutes.value[routeIndex].collected_packages = pickupRoutes.value[routeIndex].scanned_packages.length
+      // Recargar las recogidas para actualizar los contadores
+      await loadPickupRoutes()
     }
-    
-    showNotification(`Paquete ${order.tracking_code} recogido correctamente`, 'success')
     
   } catch (error) {
     console.error('❌ Error procesando paquete escaneado:', error)
-    showNotification('Error al procesar el código escaneado', 'error')
+    
+    let errorMessage = 'Error al procesar el código escaneado'
+    if (error.response?.data?.error) {
+      errorMessage = error.response.data.error
+    }
+    
+    showNotification(errorMessage, 'error')
   }
 }
 
