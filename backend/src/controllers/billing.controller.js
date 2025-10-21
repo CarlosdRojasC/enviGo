@@ -1466,7 +1466,7 @@ async getInvoiceableOrders(req, res) {
     if (startDate && endDate) {
       const start = new Date(`${startDate}T00:00:00.000Z`);
       const end   = new Date(`${endDate}T23:59:59.999Z`);
-      query.delivery_date = { $gte: start, $lte: end };
+      query.created_at = { $gte: start, $lte: end }; 
       console.log(`📦 Buscando pedidos facturables para empresa ${companyId} entre ${startDate} y ${endDate}`);
     } else {
       console.log(`📦 Buscando TODOS los pedidos facturables para empresa ${companyId}`);
