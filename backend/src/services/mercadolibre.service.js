@@ -586,10 +586,11 @@ static async createOrderFromApiData(fullOrder, channel, accessToken) {
 
   console.log(`\n📦 [ML Order] Procesando pedido (order=${orderId}, pack=${packId || 'N/A'}, shipping=${shippingId})`);
 
-  // Obtener todos los items (lógica existente de packs)
+  // =====================================================
+  // 1️⃣ Obtener todos los ítems (si pertenece a un pack)
+  // =====================================================
   let allItems = [];
   if (packId) {
-    // ... lógica existente para packs ...
     console.log(`🔗 [ML Pack] Pedido pertenece al pack ${packId}, obteniendo órdenes del pack...`);
     try {
       const { data: packData } = await axios.get(`${this.API_BASE_URL}/packs/${packId}`, {
@@ -638,50 +639,55 @@ static async createOrderFromApiData(fullOrder, channel, accessToken) {
     }));
   }
 
+  // =====================================================
+  // 2️⃣ Datos base y cálculos
+  // =====================================================
   const totalAmount = allItems.reduce((sum, it) => sum + (it.subtotal || 0), 0);
   const shippingCost = fullOrder.shipping?.cost || 0;
   const newStatus = this.mapOrderStatus(fullOrder);
 
-  // ✅ Buscar pedido existente
+  // =====================================================
+  // 3️⃣ Buscar pedido existente
+  // =====================================================
   let order = await Order.findOne({
     channel_id: channel._id,
     external_order_id: externalOrderId
   });
 
   if (order) {
-    console.log(`🔁 [ML Order] Pedido existente encontrado con estado: ${order.status}`);
-    
-    // ✅ NUEVA LÓGICA: No sobrescribir estados finales
+    console.log(`🔁 [ML Order] Pedido existente encontrado con estado actual: ${order.status}`);
+
     const finalStates = ['delivered', 'cancelled'];
-    
+
+    // 🧠 1. No tocar pedidos entregados o cancelados
     if (finalStates.includes(order.status)) {
-      console.log(`⚠️ [ML Order] Pedido ya está en estado final (${order.status}). Solo se actualizarán items y montos, NO el estado.`);
-      
-      // Actualizar solo items y montos, preservar el estado
-      order.items = allItems;
-      order.total_amount = totalAmount;
-      order.shipping_cost = shippingCost;
-      order.raw_data = [...(order.raw_data || []), fullOrder];
-      order.updated_at = new Date();
-      
-    } else {
-      console.log(`🔄 [ML Order] Actualizando pedido completamente. Estado: ${order.status} → ${newStatus}`);
-      
-      // Actualizar todo incluyendo el estado
-      order.items = allItems;
-      order.total_amount = totalAmount;
-      order.shipping_cost = shippingCost;
-      order.status = newStatus;
-      order.raw_data = [...(order.raw_data || []), fullOrder];
-      order.updated_at = new Date();
+      console.log(`⚠️ [ML Order] Pedido en estado final (${order.status}). No se modifica el estado.`);
     }
-    
+    // 🧠 2. Validar si la transición es válida (no retroceder)
+    else if (!this.isValidStatusTransition(order.status, newStatus)) {
+      console.log(`⚠️ [ML Order] Transición inválida: ${order.status} → ${newStatus}. Se mantiene el estado actual.`);
+    }
+    // 🧠 3. Si es válido y más avanzado, actualizar
+    else {
+      console.log(`🔄 [ML Order] Estado válido. Actualizando: ${order.status} → ${newStatus}`);
+      order.status = newStatus;
+    }
+
+    // Actualizar información siempre (aunque no cambie el estado)
+    order.items = allItems;
+    order.total_amount = totalAmount;
+    order.shipping_cost = shippingCost;
+    order.raw_data = [...(order.raw_data || []), fullOrder];
+    order.updated_at = new Date();
+
     await order.save();
-    console.log(`💾 [ML Order] Actualizado correctamente (shipping=${shippingId}).`);
+    console.log(`💾 [ML Order] Pedido ${order.order_number} actualizado correctamente (${shippingId}).`);
     return order;
   }
 
-  // Crear nuevo pedido (lógica existente)
+  // =====================================================
+  // 4️⃣ Crear nuevo pedido
+  // =====================================================
   const shippingInfo = await this.getShippingInfo(fullOrder, accessToken);
 
   const newOrder = new Order({
@@ -702,7 +708,7 @@ static async createOrderFromApiData(fullOrder, channel, accessToken) {
     total_amount: totalAmount,
     shipping_cost: shippingCost,
     currency: fullOrder.currency_id,
-    status: newStatus,
+    status: newStatus || 'pending',
     order_date: new Date(fullOrder.date_created),
     items: allItems,
     raw_data: [fullOrder],

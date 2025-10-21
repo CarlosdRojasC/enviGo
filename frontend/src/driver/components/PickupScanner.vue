@@ -488,77 +488,73 @@ const detectQRCode = () => {
 
 const processQRCode = async (code) => {
   if (isProcessing.value) return
-  
+
   // Validar código
-  if (!code || typeof code !== 'string' || code.trim() === '') {
-    return
-  }
-  
-  const cleanCode = code.trim()
+  if (!code || typeof code !== 'string' || code.trim() === '') return
+
+  let cleanCode = code.trim()
   currentCode.value = cleanCode
   isProcessing.value = true
   processingSuccess.value = false
-  
+
   try {
-    console.log('Procesando QR:', cleanCode)
-    
+    console.log('📦 Procesando QR escaneado:', cleanCode)
+
+    // 🔍 1️⃣ Intentar detectar si es JSON (Mercado Libre)
+    let parsed
+    try {
+      parsed = JSON.parse(cleanCode)
+    } catch (e) {
+      parsed = null
+    }
+
+    // Si es un QR JSON de Mercado Libre, usar el campo "id" como código
+    if (parsed && parsed.id) {
+      console.log('🟡 QR de Mercado Libre detectado:', parsed)
+      cleanCode = parsed.id.toString()
+    }
+
+    // 2️⃣ Llamar al backend (buscar por order_number, external_order_id o ml_shipping_id)
     const response = await apiService.pickupScanner.scanPackage(cleanCode)
-    
+
     if (response.data.success) {
       const packageData = response.data.package
-      
-      // 🎉 ÉXITO: Mostrar efectos visuales y sonoros
+
+      // 🎉 Éxito visual y sonoro
       processingSuccess.value = true
       scanSuccess.value = true
-      playSuccessSound() // 🔊 Sonido de éxito
-      
-      // Actualizar estadísticas de sesión
+      playSuccessSound()
+
       sessionStats.value.scanned++
       updateSessionRate()
-      
-      // Agregar a escaneos recientes
+
       recentScans.value.unshift(packageData)
-      if (recentScans.value.length > 10) {
-        recentScans.value = recentScans.value.slice(0, 10)
-      }
-      
-      // Actualizar estadísticas
+      if (recentScans.value.length > 10) recentScans.value = recentScans.value.slice(0, 10)
+
       loadTodayStats()
-      
-      // Emitir evento
       emit('package-scanned', packageData)
-      
+
       showNotification(`✅ ${packageData.order_number} - ${packageData.customer_name}`, 'success')
-      
-      // Limpiar efectos visuales después de un momento
-      setTimeout(() => {
-        scanSuccess.value = false
-      }, 1000)
-      
-      // Breve pausa antes de continuar escaneando
+
+      setTimeout(() => (scanSuccess.value = false), 1000)
       setTimeout(() => {
         currentCode.value = ''
         isProcessing.value = false
         processingSuccess.value = false
       }, 1500)
-      
+    } else {
+      throw new Error(response.data.error || 'Error desconocido')
     }
-    
+
   } catch (error) {
-    console.error('Error procesando QR:', error)
-    
-    // ❌ ERROR: Sonido y efectos de error
-    playErrorSound() // 🔊 Sonido de error
-    
+    console.error('❌ Error procesando QR:', error)
+    playErrorSound()
+
     sessionStats.value.errors++
-    
-    let errorMessage = 'Error al procesar'
-    if (error.response?.data?.error) {
-      errorMessage = error.response.data.error
-    }
-    
+    const errorMessage = error.response?.data?.error || error.message || 'Error al procesar'
+
     showNotification(`❌ ${errorMessage}`, 'error')
-    
+
     setTimeout(() => {
       currentCode.value = ''
       isProcessing.value = false
@@ -566,6 +562,7 @@ const processQRCode = async (code) => {
     }, 2000)
   }
 }
+
 
 const processManualCode = () => {
   const code = manualCode.value.trim()
