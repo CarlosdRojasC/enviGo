@@ -59,43 +59,64 @@
     <!-- Navegación inferior (móvil first) -->
     <nav class="bg-white border-t border-gray-200 fixed bottom-0 left-0 right-0 z-10 md:relative md:border-t-0 md:border-b">
       <div class="max-w-7xl mx-auto px-4">
-        <div class="flex justify-around md:justify-start md:space-x-8">
+        <div class="flex justify-around md:justify-start md:space-x-4">
           <button 
             @click="currentView = 'active-route'"
             :class="currentView === 'active-route' ? 'text-blue-600 bg-blue-50' : 'text-gray-500'"
-            class="flex flex-col items-center py-3 px-4 text-sm font-medium transition-colors rounded-lg"
+            class="flex flex-col items-center py-3 px-3 text-xs font-medium transition-colors rounded-lg"
           >
-            <span class="text-xl mb-1">🚚</span>
+            <span class="text-lg mb-1">🚚</span>
             <span>Mi Ruta</span>
           </button>
           
           <button 
             @click="currentView = 'deliveries'"
             :class="currentView === 'deliveries' ? 'text-blue-600 bg-blue-50' : 'text-gray-500'"
-            class="flex flex-col items-center py-3 px-4 text-sm font-medium transition-colors rounded-lg"
+            class="flex flex-col items-center py-3 px-3 text-xs font-medium transition-colors rounded-lg"
           >
-            <span class="text-xl mb-1">📦</span>
+            <span class="text-lg mb-1">📦</span>
             <span>Entregas</span>
+          </button>
+
+          <!-- Nueva pestaña de Recogidas -->
+          <button 
+            @click="currentView = 'pickups'"
+            :class="currentView === 'pickups' ? 'text-green-600 bg-green-50' : 'text-gray-500'"
+            class="flex flex-col items-center py-3 px-3 text-xs font-medium transition-colors rounded-lg relative"
+          >
+            <span class="text-lg mb-1">📋</span>
+            <span>Recogidas</span>
+            <span v-if="pendingPickupsCount > 0" class="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+              {{ pendingPickupsCount }}
+            </span>
           </button>
           
           <button 
             @click="currentView = 'map'"
             :class="currentView === 'map' ? 'text-blue-600 bg-blue-50' : 'text-gray-500'"
-            class="flex flex-col items-center py-3 px-4 text-sm font-medium transition-colors rounded-lg"
+            class="flex flex-col items-center py-3 px-3 text-xs font-medium transition-colors rounded-lg"
             :disabled="!activeRoute"
           >
-            <span class="text-xl mb-1">🗺️</span>
+            <span class="text-lg mb-1">🗺️</span>
             <span>Mapa</span>
           </button>
           
           <button 
             @click="currentView = 'history'"
             :class="currentView === 'history' ? 'text-blue-600 bg-blue-50' : 'text-gray-500'"
-            class="flex flex-col items-center py-3 px-4 text-sm font-medium transition-colors rounded-lg"
+            class="flex flex-col items-center py-3 px-3 text-xs font-medium transition-colors rounded-lg"
           >
-            <span class="text-xl mb-1">📚</span>
+            <span class="text-lg mb-1">📚</span>
             <span>Historial</span>
           </button>
+          <button 
+  @click="currentView = 'pickup-scanner'"
+  :class="currentView === 'pickup-scanner' ? 'text-green-600 bg-green-50' : 'text-gray-500'"
+  class="flex flex-col items-center py-3 px-3 text-xs font-medium transition-colors rounded-lg"
+>
+  <span class="text-lg mb-1">📱</span>
+  <span>Scanner</span>
+</button>
         </div>
       </div>
     </nav>
@@ -115,16 +136,28 @@
 
       <!-- Vista: Lista de Entregas -->
       <DeliveriesList 
-  v-if="currentView === 'deliveries'"
-  :orders="sortedOrders"
-  :is-loading="isLoading"
-  :search-query="searchQuery"
-  :status-filter="statusFilter"
-  @select-delivery="openDeliveryProof"
-  @mark-in-progress="markInProgress"
-  @update-search="searchQuery = $event"
-  @update-status-filter="statusFilter = $event"
-/>
+        v-if="currentView === 'deliveries'"
+        :orders="sortedOrders"
+        :is-loading="isLoading"
+        :search-query="searchQuery"
+        :status-filter="statusFilter"
+        @select-delivery="openDeliveryProof"
+        @mark-in-progress="markInProgress"
+        @update-search="searchQuery = $event"
+        @update-status-filter="statusFilter = $event"
+      />
+
+      <!-- Nueva Vista: Recogidas con QR -->
+      <PickupsView 
+        v-if="currentView === 'pickups'"
+        :pickup-routes="pickupRoutes"
+        :is-loading="isPickupsLoading"
+        @start-pickup="startPickup"
+        @complete-pickup="completePickup"
+        @scan-qr="showQRScanner = true"
+        @refresh-pickups="loadPickupRoutes"
+      />
+
       <!-- Vista: Mapa -->
       <RouteMap 
         v-if="currentView === 'map'"
@@ -137,13 +170,6 @@
         v-if="currentView === 'history'"
         :driver-id="driverId"
       />
-
-      <!-- Vista: Configuración -->
-      <!-- <DriverSettings 
-        v-if="currentView === 'settings'"
-        @logout="logout"
-        @back="currentView = 'active-route'"
-      /> -->
     </main>
 
     <!-- Modal de Prueba de Entrega -->
@@ -154,6 +180,20 @@
       @close="closeDeliveryProof"
       @confirm="confirmDelivery"
     />
+
+    <!-- Modal del Scanner QR -->
+    <QRScannerModal 
+      v-if="showQRScanner"
+      :pickup-routes="pickupRoutes"
+      @close="showQRScanner = false"
+      @package-scanned="handlePackageScanned"
+    />
+
+    <!-- Notificación Toast -->
+    <div v-if="notification" 
+         :class="['fixed top-4 right-4 z-50 px-4 py-3 rounded-lg shadow-lg text-white font-medium transition-all duration-300', notificationClass]">
+      {{ notification.message }}
+    </div>
   </div>
 </template>
 
@@ -162,16 +202,20 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { apiService } from '../services/api'
 
-// Componentes
+// Componentes existentes
 import ActiveRoute from '../driver/pages/ActiveRoute.vue'
 import DeliveriesList from '../driver/pages/DeliveriesList.vue'
 import RouteMap from '../driver/pages/RouteMap.vue'
 import DeliveryProofModal from '../driver/pages/DeliveryProofModal.vue'
 import DeliveryHistory from '../driver/pages/DeliveryHistory.vue'
 
+// Nuevos componentes para recogidas
+import PickupsView from '../driver/pages/PickupsView.vue'
+import QRScannerModal from '../driver/components/QRScannerModal.vue'
+
 const router = useRouter()
 
-// Estado principal
+// Estado principal existente
 const currentView = ref('active-route')
 const activeRoute = ref(null)
 const isLoading = ref(false)
@@ -183,6 +227,12 @@ const isSubmitting = ref(false)
 const searchQuery = ref('')
 const statusFilter = ref('')
 
+// Nuevos estados para recogidas
+const pickupRoutes = ref([])
+const isPickupsLoading = ref(false)
+const showQRScanner = ref(false)
+const notification = ref(null)
+
 // Datos del conductor
 const driverId = ref(null)
 const driverName = ref('Conductor')
@@ -193,7 +243,7 @@ const driverInitials = computed(() => {
 // Datos offline
 const offlineUpdates = ref([])
 
-// Computed properties
+// Computed properties existentes
 const sortedOrders = computed(() => {
   if (!activeRoute.value?.orders) return []
   return [...activeRoute.value.orders].sort((a, b) => a.sequenceNumber - b.sequenceNumber)
@@ -203,19 +253,38 @@ const hasOfflineData = computed(() => {
   return offlineUpdates.value.length > 0
 })
 
-// Métodos principales
+// Nuevas computed properties para recogidas
+const pendingPickupsCount = computed(() => {
+  return pickupRoutes.value.filter(route => 
+    route.status === 'pending' || route.status === 'in_progress'
+  ).length
+})
+
+const notificationClass = computed(() => {
+  if (!notification.value) return ''
+  
+  const classes = {
+    'success': 'bg-green-500',
+    'error': 'bg-red-500',
+    'warning': 'bg-yellow-500',
+    'info': 'bg-blue-500'
+  }
+  
+  return classes[notification.value.type] || 'bg-gray-500'
+})
+
+// Métodos existentes
 const refreshData = async () => {
   await checkForActiveRoute(true)
+  await loadPickupRoutes()
 }
 
 const checkForActiveRoute = async (preserveSearchState = false) => {
-  // No mostrar loading si es actualización automática
   isLoading.value = !preserveSearchState
   
   try {
     console.log('🔍 Verificando ruta activa del conductor...')
     
-    // Preservar estado de búsqueda antes de la actualización
     const savedSearchQuery = preserveSearchState ? searchQuery.value : ''
     const savedStatusFilter = preserveSearchState ? statusFilter.value : ''
     
@@ -227,7 +296,6 @@ const checkForActiveRoute = async (preserveSearchState = false) => {
       driverName.value = activeRoute.value.driver?.full_name || activeRoute.value.driver?.name || 'Conductor'
       driverId.value = activeRoute.value.driver?._id
       
-      // Restaurar estado de búsqueda después de la actualización
       if (preserveSearchState) {
         searchQuery.value = savedSearchQuery
         statusFilter.value = savedStatusFilter
@@ -248,19 +316,161 @@ const checkForActiveRoute = async (preserveSearchState = false) => {
     console.error('❌ Error obteniendo ruta activa:', error)
     
     if (error.response?.status === 401) {
-      alert('Tu sesión ha expirado. Por favor inicia sesión nuevamente.')
+      showNotification('Tu sesión ha expirado. Por favor inicia sesión nuevamente.', 'error')
       logout()
       return
     }
     
     if (connectionStatus.value === 'online') {
-      alert(`Error al obtener la ruta activa: ${error.message || 'Error desconocido'}`)
+      showNotification(`Error al obtener la ruta activa: ${error.message || 'Error desconocido'}`, 'error')
     }
   } finally {
     isLoading.value = false
   }
 }
 
+// Nuevos métodos para recogidas
+const loadPickupRoutes = async () => {
+  isPickupsLoading.value = true
+  
+  try {
+    console.log('🔍 Cargando rutas de recogida...')
+    const response = await apiService.pickups.getByDriver()
+    
+    pickupRoutes.value = response.data.pickups || []
+    
+    console.log('✅ Rutas de recogida cargadas:', {
+      count: pickupRoutes.value.length,
+      pending: pickupRoutes.value.filter(r => r.status === 'pending').length,
+      inProgress: pickupRoutes.value.filter(r => r.status === 'in_progress').length
+    })
+    
+  } catch (error) {
+    console.error('❌ Error cargando rutas de recogida:', error)
+    showNotification('Error al cargar las rutas de recogida', 'error')
+  } finally {
+    isPickupsLoading.value = false
+  }
+}
+
+const startPickup = async (route) => {
+  try {
+    console.log('🚀 Iniciando recogida:', route._id)
+    
+    await apiService.pickups.updateStatus(route._id, 'in_progress')
+    
+    // Actualizar localmente
+    const routeIndex = pickupRoutes.value.findIndex(r => r._id === route._id)
+    if (routeIndex !== -1) {
+      pickupRoutes.value[routeIndex].status = 'in_progress'
+    }
+    
+    showNotification('Recogida iniciada correctamente', 'success')
+    
+  } catch (error) {
+    console.error('❌ Error iniciando recogida:', error)
+    showNotification('Error al iniciar la recogida', 'error')
+  }
+}
+
+const completePickup = async (route) => {
+  try {
+    console.log('✅ Completando recogida:', route._id)
+    
+    if (!route.scanned_packages || route.scanned_packages.length === 0) {
+      showNotification('Debes escanear al menos un paquete para completar la recogida', 'warning')
+      return
+    }
+    
+    const completionData = {
+      collected_packages: route.scanned_packages.length,
+      scanned_packages: route.scanned_packages,
+      completion_time: new Date().toISOString()
+    }
+    
+    await apiService.pickups.completePickup(route._id, completionData)
+    
+    // Actualizar localmente
+    const routeIndex = pickupRoutes.value.findIndex(r => r._id === route._id)
+    if (routeIndex !== -1) {
+      pickupRoutes.value[routeIndex].status = 'completed'
+      pickupRoutes.value[routeIndex].collected_packages = completionData.collected_packages
+    }
+    
+    showNotification(`Recogida completada: ${completionData.collected_packages} paquetes recogidos`, 'success')
+    
+  } catch (error) {
+    console.error('❌ Error completando recogida:', error)
+    showNotification('Error al completar la recogida', 'error')
+  }
+}
+
+const handlePackageScanned = async (scanData) => {
+  try {
+    console.log('📱 Procesando paquete escaneado:', scanData)
+    
+    const { code, routeId } = scanData
+    
+    // Buscar el pedido por código
+    const orderResponse = await apiService.labels.findByCode(code)
+    const order = orderResponse.data
+    
+    if (!order) {
+      showNotification('Código no encontrado en el sistema', 'error')
+      return
+    }
+    
+    // Verificar que pertenece a la empresa de la recogida
+    const route = pickupRoutes.value.find(r => r._id === routeId)
+    if (!route) {
+      showNotification('Ruta de recogida no encontrada', 'error')
+      return
+    }
+    
+    if (order.company_id !== route.company._id) {
+      showNotification('Este paquete no pertenece a la empresa de esta recogida', 'error')
+      return
+    }
+    
+    // Verificar que no esté ya escaneado
+    if (route.scanned_packages?.some(pkg => pkg.order_id === order._id)) {
+      showNotification('Este paquete ya fue escaneado', 'warning')
+      return
+    }
+    
+    // Actualizar estado del pedido
+    await apiService.orders.updateStatusForPickup(order._id, 'warehouse_received', {
+      pickup_route_id: routeId,
+      driver_id: driverId.value,
+      pickup_time: new Date().toISOString()
+    })
+    
+    // Agregar a la lista de paquetes escaneados
+    const routeIndex = pickupRoutes.value.findIndex(r => r._id === routeId)
+    if (routeIndex !== -1) {
+      if (!pickupRoutes.value[routeIndex].scanned_packages) {
+        pickupRoutes.value[routeIndex].scanned_packages = []
+      }
+      
+      pickupRoutes.value[routeIndex].scanned_packages.push({
+        order_id: order._id,
+        tracking_code: order.tracking_code,
+        customer_name: order.customer_name,
+        scanned_at: new Date().toISOString()
+      })
+      
+      pickupRoutes.value[routeIndex].collected_packages = pickupRoutes.value[routeIndex].scanned_packages.length
+    }
+    
+    showNotification(`Paquete ${order.tracking_code} recogido correctamente`, 'success')
+    
+  } catch (error) {
+    console.error('❌ Error procesando paquete escaneado:', error)
+    showNotification('Error al procesar el código escaneado', 'error')
+  }
+}
+
+// Métodos existentes (sin cambios)
 const startRoute = async () => {
   try {
     console.log('🚀 Iniciando ruta:', activeRoute.value._id)
@@ -269,10 +479,10 @@ const startRoute = async () => {
     console.log('✅ Ruta iniciada:', response.data)
     
     await checkForActiveRoute()
-    alert('¡Ruta iniciada! Puedes comenzar con las entregas.')
+    showNotification('¡Ruta iniciada! Puedes comenzar con las entregas.', 'success')
   } catch (error) {
     console.error('❌ Error iniciando ruta:', error)
-    alert(`Error al iniciar la ruta: ${error.message || 'Error desconocido'}`)
+    showNotification(`Error al iniciar la ruta: ${error.message || 'Error desconocido'}`, 'error')
   }
 }
 
@@ -286,7 +496,6 @@ const markInProgress = async (orderItem) => {
       )
       await checkForActiveRoute()
     } else {
-      // Guardar para sincronización offline
       addOfflineUpdate(orderItem.order._id, 'status_update', {
         status: 'in_progress'
       })
@@ -294,7 +503,7 @@ const markInProgress = async (orderItem) => {
     }
   } catch (error) {
     console.error('❌ Error actualizando estado:', error)
-    alert('Error al actualizar el estado')
+    showNotification('Error al actualizar el estado', 'error')
   }
 }
 
@@ -320,9 +529,8 @@ const confirmDelivery = async (deliveryData) => {
       hasComments: !!deliveryData.comments
     })
     
-    // Preparar datos de entrega con múltiples fotos
     const deliveryProof = {
-      photos: deliveryData.photos || [], // Array de fotos en base64
+      photos: deliveryData.photos || [],
       recipientName: deliveryData.recipientName,
       comments: deliveryData.comments || '',
       location: deliveryData.location,
@@ -333,17 +541,14 @@ const confirmDelivery = async (deliveryData) => {
     if (connectionStatus.value === 'online') {
       console.log('🌐 Modo online: enviando al servidor...')
       
-      // Crear FormData para envío de múltiples archivos
       const formData = new FormData()
       formData.append('recipient_name', deliveryProof.recipientName)
       formData.append('notes', deliveryProof.comments)
       
-      // Convertir fotos base64 a archivos y agregarlas al FormData
       if (deliveryProof.photos && deliveryProof.photos.length > 0) {
         deliveryProof.photos.forEach((photoBase64, index) => {
           try {
-            // Convertir base64 a blob
-            const base64Data = photoBase64.split(',')[1] // Remover prefijo data:image/...
+            const base64Data = photoBase64.split(',')[1]
             const byteCharacters = atob(base64Data)
             const byteArrays = []
             
@@ -368,14 +573,12 @@ const confirmDelivery = async (deliveryData) => {
         })
       }
       
-      // Agregar ubicación si está disponible
       if (deliveryProof.location) {
         formData.append('latitude', deliveryProof.location.latitude)
         formData.append('longitude', deliveryProof.location.longitude)
         formData.append('accuracy', deliveryProof.location.accuracy)
       }
       
-      // Enviar al servidor usando endpoint específico para drivers
       await apiService.routes.updateOrderStatus(
         activeRoute.value._id,
         selectedOrder.value.order._id,
@@ -389,13 +592,11 @@ const confirmDelivery = async (deliveryData) => {
     } else {
       console.log('📴 Modo offline: guardando para sincronización...')
       
-      // Guardar para sincronización offline
       addOfflineUpdate(selectedOrder.value.order._id, 'delivery_confirmation', {
         status: 'delivered',
         deliveryProof
       })
       
-      // Actualizar localmente
       selectedOrder.value.deliveryStatus = 'delivered'
       selectedOrder.value.deliveryProof = deliveryProof
       
@@ -408,7 +609,7 @@ const confirmDelivery = async (deliveryData) => {
       ? '¡Entrega confirmada correctamente!' 
       : 'Entrega guardada. Se sincronizará cuando tengas conexión.'
     
-    alert(message)
+    showNotification(message, 'success')
     
   } catch (error) {
     console.error('❌ Error confirmando entrega:', error)
@@ -423,14 +624,21 @@ const confirmDelivery = async (deliveryData) => {
       errorMessage = 'Error de conexión. Intenta nuevamente.'
     }
     
-    alert(errorMessage)
+    showNotification(errorMessage, 'error')
   } finally {
     isSubmitting.value = false
   }
 }
 
+// Función para mostrar notificaciones
+const showNotification = (message, type = 'info') => {
+  notification.value = { message, type }
+  setTimeout(() => {
+    notification.value = null
+  }, 4000)
+}
 
-// Funciones auxiliares para offline
+// Funciones auxiliares para offline (sin cambios)
 const addOfflineUpdate = (orderId, type, data) => {
   offlineUpdates.value.push({
     orderId,
@@ -457,10 +665,10 @@ const syncOfflineData = async () => {
     offlineUpdates.value = []
     localStorage.removeItem('driverOfflineUpdates')
     await checkForActiveRoute()
-    alert('Datos sincronizados correctamente')
+    showNotification('Datos sincronizados correctamente', 'success')
   } catch (error) {
     console.error('❌ Error sincronizando:', error)
-    alert('Error al sincronizar datos')
+    showNotification('Error al sincronizar datos', 'error')
   } finally {
     isSyncing.value = false
   }
@@ -477,20 +685,12 @@ const logout = () => {
 
 // Lifecycle
 onMounted(() => {
-  // Carga inicial sin preservar estado (primera vez)
   checkForActiveRoute(false)
+  loadPickupRoutes()
   loadOfflineUpdates()
   updateConnectionStatus()
   
-  // Listen for connection changes
   window.addEventListener('online', updateConnectionStatus)
   window.addEventListener('offline', updateConnectionStatus)
-  
-  // Check for active route periodically - PRESERVANDO ESTADO
-  // setInterval(() => {
-  //   checkForActiveRoute(true) // true = preservar estado de búsqueda
-  // }, 30000) // Every 30 seconds
 })
-
-
 </script>

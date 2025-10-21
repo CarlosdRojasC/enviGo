@@ -141,10 +141,7 @@ paymentNote: {
   default: null 
 },
 
-  // 🆕 NUEVOS CAMPOS PARA SHIPDAY (datos de pickup)
-  pickup_address: { type: String }, // Dirección de recogida (restaurante/tienda)
-  pickup_city: { type: String },
-  pickup_phone: { type: String },
+
   
 location: {
     latitude: {
@@ -220,8 +217,36 @@ source: {
   type: String,
   enum: ['web', 'api', 'ml_scanner', 'shopify', 'woocommerce', 'jumpseller'],
   default: 'web'
-}
+},
+pickup_time: {
+  type: Date,
+  required: false
+},
+pickup_driver_id: {
+  type: mongoose.Schema.Types.ObjectId,
+  ref: 'Driver',
+  required: false
+},
+pickup_driver_name: {
+  type: String,
+  required: false
+},
+pickup_location: {
+  latitude: {
+    type: Number,
+    required: false
+  },
+  longitude: {
+    type: Number,
+    required: false
+  },
+  accuracy: {
+    type: Number,
+    required: false
+  }
+},
 });
+
 
 
 
@@ -378,5 +403,7 @@ orderSchema.index({ 'driver_info.name': 1 });
 orderSchema.index({ 'proof_of_delivery.photo_urls': 1 });
 orderSchema.index({ 'proof_of_delivery.signature_url': 1 });
 orderSchema.index({ 'proof_of_delivery.timestamp': -1 });
-
+orderSchema.index({ pickup_driver_id: 1, pickup_time: -1 });
+orderSchema.index({ tracking_code: 1 });
+orderSchema.index({ order_number: 1 });
 module.exports = mongoose.model('Order', orderSchema);
