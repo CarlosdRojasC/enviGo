@@ -36,6 +36,7 @@
             <option value="pending">Pendiente</option>
             <option value="processing">Procesando</option>
             <option value="ready_for_pickup">Listo para recoger</option>
+            <option value="picked_up">Retirado</option>
             <option value="warehouse_received">Recibido en bodega</option>
             <option value="assigned">Asignado</option>
             <option value="shipped">Enviado</option>

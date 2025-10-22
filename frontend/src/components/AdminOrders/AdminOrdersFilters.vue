@@ -34,6 +34,7 @@
           <option value="">Todos los estados</option>
           <option value="pending">Pendientes</option>
           <option value="ready_for_pickup">Listos para Retiro</option>
+          <option value="picked_up">Retirados</option>
           <option value="warehouse_received">Recibidos en Bodega</option>
           <option value="processing">Procesando</option>
           <option value="shipped">Enviados</option>
@@ -498,7 +499,8 @@ function getStatusDisplayName(status) {
     delivered: 'Entregado',
     cancelled: 'Cancelado',
     ready_for_pickup: 'Listo para recoger',
-    warehouse_received: 'Recibido en Bodega'
+    warehouse_received: 'Recibido en Bodega',
+    picked_up: 'Retirado'
   }
   return statusMap[status] || status
 }
