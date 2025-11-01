@@ -1112,6 +1112,7 @@ const shouldCreateInShipday = false;
       .populate('company_id', 'name')
       .populate('channel_id', 'channel_name')
       .sort({ created_at: -1 }) // Ordenar por fecha de creación descendente
+      .allowDiskUse(true) // ← Agregar esta línea
       .lean();
 
     if (orders.length === 0) {
