@@ -490,11 +490,10 @@ async exportOrders(req, res) {
 
     const filters = {};
 
-    // ✅ NUEVO: Si se proporcionan order_ids específicos
+    // --- 🎯 Filtros por IDs específicos ---
     if (order_ids) {
       let orderIdsArray;
-      
-      // Convertir a array (puede venir como string JSON o array)
+
       if (typeof order_ids === 'string') {
         try {
           orderIdsArray = JSON.parse(order_ids);
@@ -507,36 +506,30 @@ async exportOrders(req, res) {
         orderIdsArray = [order_ids];
       }
 
-      // Filtrar solo IDs válidos
       const validIds = orderIdsArray.filter(id => mongoose.Types.ObjectId.isValid(id));
-      
+
       if (validIds.length === 0) {
-        return res.status(400).json({ 
-          error: 'No se proporcionaron IDs de pedidos válidos' 
-        });
+        return res.status(400).json({ error: 'No se proporcionaron IDs de pedidos válidos' });
       }
 
-      console.log(`🎯 Exportando ${validIds.length} pedidos específicos`);
       filters._id = { $in: validIds.map(id => new mongoose.Types.ObjectId(id)) };
     }
 
-    // Filtros de seguridad por rol
+    // --- 🔐 Filtros por rol ---
     if (req.user.role !== 'admin') {
       filters.company_id = req.user.company_id;
     } else if (company_id && !order_ids) {
-      filters.company_id = company_id;
+      filters.company_id = new mongoose.Types.ObjectId(company_id);
     }
 
-    // Filtros adicionales (solo si NO hay order_ids específicos)
+    // --- 📅 Filtros adicionales ---
     if (!order_ids) {
       if (status) filters.status = status;
-      
       if (shipping_commune) {
         filters.shipping_commune = Array.isArray(shipping_commune) 
           ? { $in: shipping_commune } 
           : shipping_commune;
       }
-      
       if (date_from || date_to) {
         filters.order_date = {};
         if (date_from) filters.order_date.$gte = new Date(date_from);
@@ -544,17 +537,34 @@ async exportOrders(req, res) {
       }
     }
 
-    const orders = await Order.find(filters)
-      .populate('company_id', 'name address')
-      .populate('channel_id', 'channel_name')
-      .sort({ order_date: -1, shipping_commune: 1, shipping_address: 1 })
-      .allowDiskUse(true)
-      .lean();
+    // --- 🚀 Consulta con aggregate() y uso de disco ---
+    const orders = await Order.aggregate([
+      { $match: filters },
+      { $sort: { order_date: -1, shipping_commune: 1, shipping_address: 1 } },
+      {
+        $lookup: {
+          from: 'companies',
+          localField: 'company_id',
+          foreignField: '_id',
+          as: 'company_id'
+        }
+      },
+      { $unwind: { path: '$company_id', preserveNullAndEmptyArrays: true } },
+      {
+        $lookup: {
+          from: 'channels',
+          localField: 'channel_id',
+          foreignField: '_id',
+          as: 'channel_id'
+        }
+      },
+      { $unwind: { path: '$channel_id', preserveNullAndEmptyArrays: true } },
+    ])
+    .allowDiskUse(true)
+    .exec();
 
-    if (orders.length === 0) {
-      return res.status(404).json({ 
-        error: 'No se encontraron pedidos para exportar' 
-      });
+    if (!orders.length) {
+      return res.status(404).json({ error: 'No se encontraron pedidos para exportar' });
     }
 
     console.log(`✅ Exportando ${orders.length} pedidos`);
@@ -568,14 +578,17 @@ async exportOrders(req, res) {
 
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-
     res.send(excelBuffer);
-    
+
   } catch (error) {
     console.error('❌ Error exportando pedidos:', error);
-    res.status(500).json({ error: 'Error interno del servidor' });
+    res.status(500).json({ 
+      error: 'Error interno del servidor',
+      details: error.message
+    });
   }
 }
+
   async getStats(req, res) {
     try {
       const { company_id, date_from, date_to } = req.query;
