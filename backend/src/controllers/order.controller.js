@@ -1089,46 +1089,96 @@ const shouldCreateInShipday = false;
       res.status(500).json({ error: 'Error interno del servidor' });
     }
   }
-  async exportForDashboard(req, res) {
+// ✅ SOLUCIÓN en exportForDashboard
+
+async exportForDashboard(req, res) {
   try {
     const { date_from, date_to, company_id, status, channel_id } = req.query;
 
     const filters = {};
 
-    // Aplicar filtro de empresa según el rol del usuario
+    // ... (toda tu lógica de filtros es correcta)
     if (req.user.role !== 'admin') {
-      // Si no es admin, solo puede ver órdenes de su empresa
       filters.company_id = req.user.company_id;
     } else {
-      // Si es admin, puede filtrar por empresa específica
       if (company_id) {
-        filters.company_id = company_id;
+        filters.company_id = new mongoose.Types.ObjectId(company_id);
       }
     }
-
-    // Filtros adicionales
     if (status) {
       filters.status = status;
     }
-
     if (channel_id) {
-      filters.channel_id = channel_id;
+      filters.channel_id = new mongoose.Types.ObjectId(channel_id);
     }
-
     if (date_from || date_to) {
       filters.order_date = {};
       if (date_from) filters.order_date.$gte = new Date(date_from);
       if (date_to) filters.order_date.$lte = new Date(date_to);
     }
-
+    
     console.log('📊 Exportando pedidos para dashboard con filtros:', filters);
 
-    const orders = await Order.find(filters)
-      .populate('company_id', 'name')
-      .populate('channel_id', 'channel_name')
-      .sort({ created_at: -1 }) // Ordenar por fecha de creación descendente
-      .allowDiskUse(true) // ← Agregar esta línea
-      .lean();
+    // --- CAMBIO AQUÍ: Usar aggregate() en lugar de find() ---
+    const orders = await Order.aggregate([
+      // 1. Aplicar filtros primero
+      { $match: filters },
+
+      // 2. Ordenar
+      { $sort: { created_at: -1 } },
+
+      // 3. Replicar el .populate('company_id', 'name')
+      {
+        $lookup: {
+          from: 'companies', // El nombre de la colección de Companies
+          localField: 'company_id',
+          foreignField: '_id',
+          as: 'company_id_doc' // Nombre temporal
+        }
+      },
+      // $unwind para convertir el array de $lookup en un objeto
+      { $unwind: { path: '$company_id_doc', preserveNullAndEmptyArrays: true } },
+
+      // 4. Replicar el .populate('channel_id', 'channel_name')
+      {
+        $lookup: {
+          from: 'channels', // El nombre de la colección de Channels
+          localField: 'channel_id',
+          foreignField: '_id',
+          as: 'channel_id_doc' // Nombre temporal
+        }
+      },
+      { $unwind: { path: '$channel_id_doc', preserveNullAndEmptyArrays: true } },
+
+      // 5. Proyectar los campos para que coincidan con la estructura .lean()
+      //    (Esto es opcional pero recomendado para mantener la estructura)
+      {
+        $project: {
+          // ... (aquí debes incluir todos los campos de Order que necesites)
+          order_number: 1,
+          customer_name: 1,
+          shipping_address: 1,
+          shipping_commune: 1,
+          status: 1,
+          order_date: 1,
+          created_at: 1,
+          total_amount: 1,
+          
+          // Reconstruir los campos "populados"
+          company_id: {
+            _id: '$company_id_doc._id',
+            name: '$company_id_doc.name'
+          },
+          channel_id: {
+            _id: '$channel_id_doc._id',
+            channel_name: '$channel_id_doc.channel_name'
+          }
+        }
+      }
+    ])
+    .allowDiskUse(true) // <-- ¡Ahora sí funcionará!
+    .exec();
+    // ---------------------------------------------------------
 
     if (orders.length === 0) {
       return res.status(404).json({ 
@@ -1138,10 +1188,8 @@ const shouldCreateInShipday = false;
 
     console.log(`✅ Encontrados ${orders.length} pedidos para exportar`);
 
-    // Usar el nuevo método de ExcelService para dashboard
     const excelBuffer = await ExcelService.generateDashboardExport(orders);
 
-    // Configurar headers para descarga
     res.setHeader(
       'Content-Type',
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
@@ -1157,7 +1205,7 @@ const shouldCreateInShipday = false;
 
   } catch (error) {
     console.error('❌ Error exportando para dashboard:', error);
-    res.status(500).json({ error: 'Error interno del servidor' });
+    res.status(500).json({ error: 'Error interno del servidor', details: error.message });
   }
 }
 
