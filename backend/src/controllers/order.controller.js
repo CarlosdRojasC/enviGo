@@ -548,6 +548,7 @@ async exportOrders(req, res) {
       .populate('company_id', 'name address')
       .populate('channel_id', 'channel_name')
       .sort({ order_date: -1, shipping_commune: 1, shipping_address: 1 })
+      .allowDiskUse(true)
       .lean();
 
     if (orders.length === 0) {
