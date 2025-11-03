@@ -490,10 +490,11 @@ async exportOrders(req, res) {
 
     const filters = {};
 
-    // --- 🎯 Filtros por IDs específicos ---
+    // ✅ NUEVO: Si se proporcionan order_ids específicos
     if (order_ids) {
       let orderIdsArray;
-
+      
+      // Convertir a array (puede venir como string JSON o array)
       if (typeof order_ids === 'string') {
         try {
           orderIdsArray = JSON.parse(order_ids);
@@ -506,30 +507,36 @@ async exportOrders(req, res) {
         orderIdsArray = [order_ids];
       }
 
+      // Filtrar solo IDs válidos
       const validIds = orderIdsArray.filter(id => mongoose.Types.ObjectId.isValid(id));
-
+      
       if (validIds.length === 0) {
-        return res.status(400).json({ error: 'No se proporcionaron IDs de pedidos válidos' });
+        return res.status(400).json({ 
+          error: 'No se proporcionaron IDs de pedidos válidos' 
+        });
       }
 
+      console.log(`🎯 Exportando ${validIds.length} pedidos específicos`);
       filters._id = { $in: validIds.map(id => new mongoose.Types.ObjectId(id)) };
     }
 
-    // --- 🔐 Filtros por rol ---
+    // Filtros de seguridad por rol
     if (req.user.role !== 'admin') {
       filters.company_id = req.user.company_id;
     } else if (company_id && !order_ids) {
-      filters.company_id = new mongoose.Types.ObjectId(company_id);
+      filters.company_id = company_id;
     }
 
-    // --- 📅 Filtros adicionales ---
+    // Filtros adicionales (solo si NO hay order_ids específicos)
     if (!order_ids) {
       if (status) filters.status = status;
+      
       if (shipping_commune) {
         filters.shipping_commune = Array.isArray(shipping_commune) 
           ? { $in: shipping_commune } 
           : shipping_commune;
       }
+      
       if (date_from || date_to) {
         filters.order_date = {};
         if (date_from) filters.order_date.$gte = new Date(date_from);
@@ -537,34 +544,17 @@ async exportOrders(req, res) {
       }
     }
 
-    // --- 🚀 Consulta con aggregate() y uso de disco ---
-    const orders = await Order.aggregate([
-      { $match: filters },
-      { $sort: { order_date: -1, shipping_commune: 1, shipping_address: 1 } },
-      {
-        $lookup: {
-          from: 'companies',
-          localField: 'company_id',
-          foreignField: '_id',
-          as: 'company_id'
-        }
-      },
-      { $unwind: { path: '$company_id', preserveNullAndEmptyArrays: true } },
-      {
-        $lookup: {
-          from: 'channels',
-          localField: 'channel_id',
-          foreignField: '_id',
-          as: 'channel_id'
-        }
-      },
-      { $unwind: { path: '$channel_id', preserveNullAndEmptyArrays: true } },
-    ])
-    .allowDiskUse(true)
-    .exec();
+    const orders = await Order.find(filters)
+      .populate('company_id', 'name address')
+      .populate('channel_id', 'channel_name')
+            .allowDiskUse(true) 
+// ← Agregar esta líne
+      .lean();
 
-    if (!orders.length) {
-      return res.status(404).json({ error: 'No se encontraron pedidos para exportar' });
+    if (orders.length === 0) {
+      return res.status(404).json({ 
+        error: 'No se encontraron pedidos para exportar' 
+      });
     }
 
     console.log(`✅ Exportando ${orders.length} pedidos`);
@@ -578,18 +568,14 @@ async exportOrders(req, res) {
 
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-    res.send(excelBuffer);
 
+    res.send(excelBuffer);
+    
   } catch (error) {
     console.error('❌ Error exportando pedidos:', error);
-    res.status(500).json({ 
-      error: 'Error interno del servidor',
-      details: error.message
-    });
+    res.status(500).json({ error: 'Error interno del servidor' });
   }
 }
-
-
   async getStats(req, res) {
     try {
       const { company_id, date_from, date_to } = req.query;
@@ -1089,96 +1075,45 @@ const shouldCreateInShipday = false;
       res.status(500).json({ error: 'Error interno del servidor' });
     }
   }
-// ✅ SOLUCIÓN en exportForDashboard
-
-async exportForDashboard(req, res) {
+  async exportForDashboard(req, res) {
   try {
     const { date_from, date_to, company_id, status, channel_id } = req.query;
 
     const filters = {};
 
-    // ... (toda tu lógica de filtros es correcta)
+    // Aplicar filtro de empresa según el rol del usuario
     if (req.user.role !== 'admin') {
+      // Si no es admin, solo puede ver órdenes de su empresa
       filters.company_id = req.user.company_id;
     } else {
+      // Si es admin, puede filtrar por empresa específica
       if (company_id) {
-        filters.company_id = new mongoose.Types.ObjectId(company_id);
+        filters.company_id = company_id;
       }
     }
+
+    // Filtros adicionales
     if (status) {
       filters.status = status;
     }
+
     if (channel_id) {
-      filters.channel_id = new mongoose.Types.ObjectId(channel_id);
+      filters.channel_id = channel_id;
     }
+
     if (date_from || date_to) {
       filters.order_date = {};
       if (date_from) filters.order_date.$gte = new Date(date_from);
       if (date_to) filters.order_date.$lte = new Date(date_to);
     }
-    
+
     console.log('📊 Exportando pedidos para dashboard con filtros:', filters);
 
-    // --- CAMBIO AQUÍ: Usar aggregate() en lugar de find() ---
-    const orders = await Order.aggregate([
-      // 1. Aplicar filtros primero
-      { $match: filters },
-
-      // 2. Ordenar
-      { $sort: { created_at: -1 } },
-
-      // 3. Replicar el .populate('company_id', 'name')
-      {
-        $lookup: {
-          from: 'companies', // El nombre de la colección de Companies
-          localField: 'company_id',
-          foreignField: '_id',
-          as: 'company_id_doc' // Nombre temporal
-        }
-      },
-      // $unwind para convertir el array de $lookup en un objeto
-      { $unwind: { path: '$company_id_doc', preserveNullAndEmptyArrays: true } },
-
-      // 4. Replicar el .populate('channel_id', 'channel_name')
-      {
-        $lookup: {
-          from: 'channels', // El nombre de la colección de Channels
-          localField: 'channel_id',
-          foreignField: '_id',
-          as: 'channel_id_doc' // Nombre temporal
-        }
-      },
-      { $unwind: { path: '$channel_id_doc', preserveNullAndEmptyArrays: true } },
-
-      // 5. Proyectar los campos para que coincidan con la estructura .lean()
-      //    (Esto es opcional pero recomendado para mantener la estructura)
-      {
-        $project: {
-          // ... (aquí debes incluir todos los campos de Order que necesites)
-          order_number: 1,
-          customer_name: 1,
-          shipping_address: 1,
-          shipping_commune: 1,
-          status: 1,
-          order_date: 1,
-          created_at: 1,
-          total_amount: 1,
-          
-          // Reconstruir los campos "populados"
-          company_id: {
-            _id: '$company_id_doc._id',
-            name: '$company_id_doc.name'
-          },
-          channel_id: {
-            _id: '$channel_id_doc._id',
-            channel_name: '$channel_id_doc.channel_name'
-          }
-        }
-      }
-    ])
-    .allowDiskUse(true) // <-- ¡Ahora sí funcionará!
-    .exec();
-    // ---------------------------------------------------------
+    const orders = await Order.find(filters)
+      .populate('company_id', 'name')
+      .populate('channel_id', 'channel_name')
+      .allowDiskUse(true) // ← Agregar esta línea
+      .lean();
 
     if (orders.length === 0) {
       return res.status(404).json({ 
@@ -1188,8 +1123,10 @@ async exportForDashboard(req, res) {
 
     console.log(`✅ Encontrados ${orders.length} pedidos para exportar`);
 
+    // Usar el nuevo método de ExcelService para dashboard
     const excelBuffer = await ExcelService.generateDashboardExport(orders);
 
+    // Configurar headers para descarga
     res.setHeader(
       'Content-Type',
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
@@ -1205,7 +1142,7 @@ async exportForDashboard(req, res) {
 
   } catch (error) {
     console.error('❌ Error exportando para dashboard:', error);
-    res.status(500).json({ error: 'Error interno del servidor', details: error.message });
+    res.status(500).json({ error: 'Error interno del servidor' });
   }
 }
 
