@@ -589,6 +589,7 @@ async exportOrders(req, res) {
   }
 }
 
+
   async getStats(req, res) {
     try {
       const { company_id, date_from, date_to } = req.query;
