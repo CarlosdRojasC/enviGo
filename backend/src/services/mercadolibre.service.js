@@ -505,20 +505,26 @@ static async processWebhook(channelId, webhookData) {
       console.log(`🔍 [ML Webhook] Pedido existente encontrado (${existingOrder.order_number}) con estado: ${existingOrder.status}`);
       
       // ✅ NO ACTUALIZAR SI YA ESTÁ ENTREGADO O CANCELADO
-      if (existingOrder.status === 'delivered' || existingOrder.status === 'cancelled') {
+      if (existingOrder.status === 'delivered' || existingOrder.status === 'cancelled' || existingOrder.status === 'picked_up' || existingOrder.status === 'ready_for_pickup') {
         console.log(`⏭️ [ML Webhook] Pedido ${existingOrder.order_number} ya está ${existingOrder.status}. No se actualiza.`);
         return true;
       }
       
       // ✅ Solo actualizar si el nuevo estado es diferente y válido
       const newStatus = this.mapOrderStatus(mlOrder);
-      if (newStatus !== existingOrder.status) {
-        console.log(`🔄 [ML Webhook] Actualizando estado: ${existingOrder.status} → ${newStatus}`);
-        existingOrder.status = newStatus;
-        existingOrder.raw_data = [...(existingOrder.raw_data || []), mlOrder];
-        existingOrder.updated_at = new Date();
-        await existingOrder.save();
-      }
+
+if (newStatus !== existingOrder.status) {
+  if (!this.isValidStatusTransition(existingOrder.status, newStatus)) {
+    console.log(`⚠️ [ML Webhook] Transición inválida: ${existingOrder.status} → ${newStatus}. Se ignora.`);
+    return true; // no actualizamos si retrocede
+  }
+
+  console.log(`🔄 [ML Webhook] Actualizando estado: ${existingOrder.status} → ${newStatus}`);
+  existingOrder.status = newStatus;
+  existingOrder.raw_data = [...(existingOrder.raw_data || []), mlOrder];
+  existingOrder.updated_at = new Date();
+  await existingOrder.save();
+}
       
       return true;
     }
@@ -657,7 +663,7 @@ static async createOrderFromApiData(fullOrder, channel, accessToken) {
   if (order) {
     console.log(`🔁 [ML Order] Pedido existente encontrado con estado actual: ${order.status}`);
 
-    const finalStates = ['delivered', 'cancelled'];
+    const finalStates = ['delivered', 'cancelled', 'picked_up', 'ready_for_pickup'];
 
     // 🧠 1. No tocar pedidos entregados o cancelados
     if (finalStates.includes(order.status)) {
@@ -918,7 +924,7 @@ static async getShippingLabel(externalOrderId, channelId) {
     return 'Información de envío no disponible';
   }
 static isFinalStatus(status) {
-  const finalStates = ['delivered', 'cancelled'];
+  const finalStates = ['delivered', 'cancelled', 'picked_up', 'ready_for_pickup'];
   return finalStates.includes(status);
 }
 
@@ -933,7 +939,7 @@ static isValidStatusTransition(currentStatus, newStatus) {
   // Definir transiciones válidas
   const validTransitions = {
     'pending': ['ready_for_pickup', 'shipped', 'cancelled', 'delivered'],
-    'ready_for_pickup': ['shipped', 'cancelled', 'delivered'],
+    'ready_for_pickup': ['shipped', 'cancelled', 'delivered', 'picked_up'],
     'shipped': ['out_for_delivery', 'delivered', 'cancelled'],
     'out_for_delivery': ['delivered', 'cancelled'],
     'processing': ['ready_for_pickup', 'shipped', 'cancelled', 'delivered']
