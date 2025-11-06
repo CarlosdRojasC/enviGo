@@ -150,11 +150,12 @@ function drawFooter(doc, order, x, y, width) {
     .strokeColor('#e2e8f0')
     .lineWidth(0.5)
     .stroke();
+  const companyName = order.company_id?.name || order.company_name || 'tu empresa';
 
   doc.font('Helvetica-Bold')
     .fontSize(10)
     .fillColor('#334155')
-    .text('¡Gracias por confiar en enviGo!', x, y + 10, { width, align: 'center' });
+    .text(`¡Gracias por confiar en ${companyName}!`, x, y + 10, { width, align: 'center' });
 
   const website = order.company_id?.website || order.channel_id?.store_url || 'www.envigo.cl';
   doc.font('Helvetica')
