@@ -154,7 +154,7 @@ function drawFooter(doc, order, x, y, width) {
   doc.font('Helvetica-Bold')
     .fontSize(10)
     .fillColor('#334155')
-    .text('¡Gracias por confiar en enviGo!', x, y + 10, { width, align: 'center' });
+    .text('¡Gracias por confiar en ', order.company_id?.website, x, y + 10, { width, align: 'center' });
 
   const website = order.company_id?.website || order.channel_id?.store_url || 'www.envigo.cl';
   doc.font('Helvetica')
