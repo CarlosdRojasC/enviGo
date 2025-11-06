@@ -74,7 +74,6 @@ const limiter = rateLimit({
   max: 100
 });
 
-app.use('/api/', limiter);
 
 // Body parser
 app.use(express.json({ 
