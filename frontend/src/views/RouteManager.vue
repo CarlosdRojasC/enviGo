@@ -44,14 +44,6 @@
       </div>
     </div>
 
-    <!-- Debug info (temporal) -->
-    <div v-if="routes.length > 0" class="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
-      <details>
-        <summary class="cursor-pointer font-semibold text-yellow-800">🔍 Debug - Datos de la primera ruta</summary>
-        <pre class="mt-2 text-xs text-yellow-700 overflow-auto max-h-40">{{ JSON.stringify(routes[0], null, 2) }}</pre>
-      </details>
-    </div>
-
     <!-- Routes Table -->
     <div class="bg-white rounded-xl shadow-sm overflow-hidden">
       <div class="p-6 border-b border-gray-200 flex justify-between items-center">
@@ -101,17 +93,12 @@
               <td class="px-6 py-4 font-medium text-gray-800">#{{ route._id.slice(-6).toUpperCase() }}</td>
               <td class="px-6 py-4">
                 <div class="flex flex-col">
-                  <!-- ✅ CORREGIDO: Usar full_name en lugar de name -->
-                  <span class="font-medium text-gray-900">
-                    {{ getDriverName(route.driver) }}
-                  </span>
-                  <span v-if="route.driver?.email" class="text-xs text-gray-500">
-                    {{ route.driver.email }}
-                  </span>
+                  <span class="font-medium text-gray-900">{{ getDriverName(route.driver) }}</span>
+                  <span v-if="route.driver?.email" class="text-xs text-gray-500">{{ route.driver.email }}</span>
                 </div>
               </td>
               <td class="px-6 py-4">
-                <span 
+                <span
                   class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
                   :class="getStatusBadgeClass(route.status)"
                 >
@@ -122,7 +109,10 @@
               <td class="px-6 py-4 text-gray-700">{{ formatDistance(route.optimization?.totalDistance) }}</td>
               <td class="px-6 py-4 text-gray-700">{{ formatDuration(route.optimization?.totalDuration) }}</td>
               <td class="px-6 py-4 whitespace-nowrap">
-                <button @click="viewRoute(route)" class="text-blue-600 hover:text-blue-800 font-medium px-2 py-1 rounded hover:bg-blue-50 transition-colors">
+                <button
+                  @click="viewRoute(route)"
+                  class="text-blue-600 hover:text-blue-800 font-medium px-2 py-1 rounded hover:bg-blue-50 transition-colors"
+                >
                   👁️ Ver Ruta
                 </button>
               </td>
@@ -158,8 +148,43 @@
             </button>
           </div>
           <div class="text-sm text-gray-600 mb-3">
-            <!-- ✅ CORREGIDO: Usar full_name -->
             Conductor: <span class="font-medium">{{ getDriverName(activeRoute?.driver) }}</span>
+          </div>
+
+          <!-- Editor Inicio/Fin -->
+          <div class="bg-white rounded-lg border p-3 mb-4 space-y-2">
+            <div>
+              <label class="text-xs font-semibold text-gray-600">Inicio</label>
+              <input
+                ref="startInputEl"
+                v-model="startAddress"
+                type="text"
+                placeholder="Escribe una dirección"
+                class="mt-1 w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <p class="text-[11px] text-gray-500 mt-1">Sugerencia: también puedes <b>arrastrar</b> el pin de inicio en el mapa.</p>
+            </div>
+            <div>
+              <label class="text-xs font-semibold text-gray-600">Fin</label>
+              <input
+                ref="endInputEl"
+                v-model="endAddress"
+                type="text"
+                placeholder="Escribe una dirección"
+                class="mt-1 w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <p class="text-[11px] text-gray-500 mt-1">Sugerencia: también puedes <b>arrastrar</b> el pin de fin.</p>
+            </div>
+            <div class="flex gap-2 pt-1">
+              <button
+                @click="reoptimizeActiveRoute"
+                :disabled="reoptLoading || !activeRoute"
+                class="flex-1 bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-3 py-2 rounded-md text-sm font-semibold hover:shadow transition disabled:opacity-60"
+              >
+                🔁 Reoptimizar
+              </button>
+            </div>
+            <p class="text-[11px] text-gray-500">Reoptimiza el orden de paradas y recalcula distancia/duración con los nuevos anclajes.</p>
           </div>
 
           <h4 class="text-sm font-semibold text-gray-700 mb-2">Paradas:</h4>
@@ -169,8 +194,10 @@
               :key="stop._id"
               class="flex items-start gap-3 bg-white p-2 rounded-md shadow-sm hover:bg-blue-50 transition"
             >
-              <span class="w-6 h-6 flex items-center justify-center rounded-full text-white font-bold text-sm"
-                :style="{ backgroundColor: getMarkerColor(stop.deliveryStatus) }">
+              <span
+                class="w-6 h-6 flex items-center justify-center rounded-full text-white font-bold text-sm"
+                :style="{ backgroundColor: getMarkerColor(stop.deliveryStatus) }"
+              >
                 {{ idx + 1 }}
               </span>
               <div>
@@ -221,75 +248,55 @@ const activeRoute = ref(null);
 const mapInstance = ref(null);
 const showRouteOptimizerModal = ref(false);
 
-// ✅ NUEVA FUNCIÓN: Obtener nombre del conductor correctamente
-const getDriverName = (driver) => {
-  if (!driver) return 'Sin asignar';
-  return driver.full_name || driver.name || driver.email || 'Conductor';
-};
+// Edición y reoptimización
+const reoptLoading = ref(false);
+const startAddress = ref("");
+const endAddress = ref("");
+const startInputEl = ref(null);
+const endInputEl = ref(null);
 
-// ✅ NUEVA FUNCIÓN: Obtener texto del estado
-const getStatusText = (status) => {
-  const statusMap = {
-    'draft': 'Borrador',
-    'assigned': 'Asignada',
-    'in_progress': 'En Progreso',
-    'completed': 'Completada',
-    'cancelled': 'Cancelada'
-  };
-  return statusMap[status] || status;
-};
+// Marcadores / utilidades de mapa
+let startMarker = null;
+let endMarker = null;
+let geocoder = null;
+let currentRoutePolyline = null;
 
-// ✅ NUEVA FUNCIÓN: Clases CSS para badges de estado
-const getStatusBadgeClass = (status) => {
-  const classMap = {
-    'draft': 'bg-gray-100 text-gray-800',
-    'assigned': 'bg-blue-100 text-blue-800',
-    'in_progress': 'bg-yellow-100 text-yellow-800',
-    'completed': 'bg-green-100 text-green-800',
-    'cancelled': 'bg-red-100 text-red-800'
-  };
-  return classMap[status] || 'bg-gray-100 text-gray-800';
-};
+// Helpers
+const getDriverName = (driver) => driver?.full_name || driver?.name || driver?.email || "Sin asignar";
+const getStatusText = (status) => ({
+  draft: "Borrador",
+  assigned: "Asignada",
+  in_progress: "En Progreso",
+  completed: "Completada",
+  cancelled: "Cancelada",
+}[status] || status);
+const getStatusBadgeClass = (status) => ({
+  draft: "bg-gray-100 text-gray-800",
+  assigned: "bg-blue-100 text-blue-800",
+  in_progress: "bg-yellow-100 text-yellow-800",
+  completed: "bg-green-100 text-green-800",
+  cancelled: "bg-red-100 text-red-800",
+}[status] || "bg-gray-100 text-gray-800");
 
-// 🔑 Cargar Google Maps dinámicamente
-const getGoogleMapsApiKey = () => {
-  return (
-    window.env?.VITE_GOOGLE_MAPS_API_KEY ||
-    import.meta.env.VITE_GOOGLE_MAPS_API_KEY ||
-    ""
-  );
-};
-
-const loadGoogleMaps = async () => {
-  if (typeof window.google !== "undefined" && window.google.maps) {
-    return window.google.maps;
+const getMarkerColor = (status) => {
+  switch (status) {
+    case "completed": return "#16A34A";
+    case "in_progress": return "#F59E0B";
+    default: return "#1E88E5";
   }
-
-  const apiKey = getGoogleMapsApiKey();
-  if (!apiKey) {
-    console.error("🚫 No se encontró Google Maps API Key");
-    alert("⚠️ Falta configurar Google Maps API Key en el frontend");
-    throw new Error("Missing Google Maps API key");
-  }
-
-  return new Promise((resolve, reject) => {
-    const script = document.createElement("script");
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=geometry,marker`;
-    script.async = true;
-    script.defer = true;
-    script.onload = () => {
-      console.log("✅ Google Maps API cargada correctamente");
-      resolve(window.google.maps);
-    };
-    script.onerror = (e) => {
-      console.error("❌ Error al cargar Google Maps:", e);
-      reject(e);
-    };
-    document.head.appendChild(script);
-  });
 };
 
-// Estadísticas
+const getGoogleMapsApiKey = () => window.env?.VITE_GOOGLE_MAPS_API_KEY || import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "";
+const hasLatLng = (p) => p && typeof p.latitude === "number" && typeof p.longitude === "number";
+
+const formatDistance = (m) => (m < 1000 ? `${m} m` : `${(m / 1000).toFixed(1)} km`);
+const formatDuration = (s) => {
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  return h > 0 ? `${h}h ${m}min` : `${m}min`;
+};
+
+// Stats
 const statCards = computed(() => {
   const total = routes.value.length;
   const completed = routes.value.filter(r => r.status === 'completed').length;
@@ -303,16 +310,33 @@ const statCards = computed(() => {
   ];
 });
 
+// Cargar Google Maps (con places)
+const loadGoogleMaps = async () => {
+  if (typeof window.google !== "undefined" && window.google.maps) return window.google.maps;
+
+  const apiKey = getGoogleMapsApiKey();
+  if (!apiKey) {
+    alert("⚠️ Falta configurar Google Maps API Key en el frontend");
+    throw new Error("Missing Google Maps API key");
+  }
+
+  return new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=geometry,places`;
+    script.async = true;
+    script.defer = true;
+    script.onload = () => resolve(window.google.maps);
+    script.onerror = (e) => reject(e);
+    document.head.appendChild(script);
+  });
+};
+
 // Cargar rutas
 const loadRoutes = async () => {
   loading.value = true;
   try {
-    console.log('🔍 Cargando rutas...');
     const res = await apiService.routes.getAll();
-    console.log('📡 Respuesta del servidor:', res.data);
-    
     routes.value = res.data?.data?.routes || res.data?.routes || res.data || [];
-    console.log(`✅ ${routes.value.length} rutas cargadas`);
   } catch (err) {
     console.error("❌ Error cargando rutas:", err);
   } finally {
@@ -322,7 +346,64 @@ const loadRoutes = async () => {
 
 const refreshRoutes = () => loadRoutes();
 
-// Ver ruta en mapa
+// Reverse geocode
+const reverseGeocode = (maps, lat, lng) =>
+  new Promise((resolve) => {
+    const gc = geocoder || new maps.Geocoder();
+    gc.geocode({ location: { lat, lng } }, (results, status) => {
+      if (status === "OK" && results?.length) resolve(results[0].formatted_address);
+      else resolve(`${lat}, ${lng}`);
+    });
+  });
+
+// Updates desde coordenadas
+const updateStartFromLatLng = async (maps, lat, lng) => {
+  const addr = await reverseGeocode(maps, lat, lng);
+  startAddress.value = addr;
+  activeRoute.value.startLocation = {
+    ...(activeRoute.value.startLocation || {}),
+    latitude: lat, longitude: lng, formatted_address: addr,
+  };
+  if (startMarker) startMarker.setPosition({ lat, lng });
+};
+
+const updateEndFromLatLng = async (maps, lat, lng) => {
+  const addr = await reverseGeocode(maps, lat, lng);
+  endAddress.value = addr;
+  activeRoute.value.endLocation = {
+    ...(activeRoute.value.endLocation || {}),
+    latitude: lat, longitude: lng, formatted_address: addr,
+  };
+  if (endMarker) endMarker.setPosition({ lat, lng });
+};
+
+// Dibuja polyline actual
+const drawRouteOnMap = (maps, map, route) => {
+  if (currentRoutePolyline) {
+    currentRoutePolyline.setMap(null);
+    currentRoutePolyline = null;
+  }
+  const poly = route.optimization?.overview_polyline;
+  if (!poly) return;
+
+  const decodedPath = maps.geometry.encoding.decodePath(poly);
+  currentRoutePolyline = new maps.Polyline({
+    path: decodedPath,
+    geodesic: true,
+    strokeColor: "#1E88E5",
+    strokeOpacity: 0.9,
+    strokeWeight: 5,
+  });
+  currentRoutePolyline.setMap(map);
+
+  const bounds = new maps.LatLngBounds();
+  decodedPath.forEach(p => bounds.extend(p));
+  if (hasLatLng(route.startLocation)) bounds.extend({ lat: route.startLocation.latitude, lng: route.startLocation.longitude });
+  if (hasLatLng(route.endLocation)) bounds.extend({ lat: route.endLocation.latitude, lng: route.endLocation.longitude });
+  map.fitBounds(bounds, 60);
+};
+
+// Ver ruta y preparar mapa + Autocomplete + drag
 const viewRoute = async (route) => {
   activeRoute.value = route;
   showRouteMap.value = true;
@@ -331,99 +412,149 @@ const viewRoute = async (route) => {
   const mapContainer = document.getElementById("routeMapContainer");
   if (!mapContainer) return;
 
-  const polylineString = route.optimization?.overview_polyline;
-  if (!polylineString) {
-    mapContainer.innerHTML = "⚠️ No hay datos de mapa para esta ruta.";
-    return;
-  }
-
   try {
     const maps = await loadGoogleMaps();
-    const { geometry } = maps;
 
     const map = new maps.Map(mapContainer, {
-      center: { lat: route.startLocation.latitude, lng: route.startLocation.longitude },
+      center: hasLatLng(route.startLocation)
+        ? { lat: route.startLocation.latitude, lng: route.startLocation.longitude }
+        : { lat: 0, lng: 0 },
       zoom: 12,
-      mapId: "ENVIGO_MAP_DEFAULT" // ✅ agrega un ID de mapa válido
+      mapId: "ENVIGO_MAP_DEFAULT",
     });
     mapInstance.value = map;
 
-    const bounds = new maps.LatLngBounds();
-    const decodedPath = geometry.encoding.decodePath(polylineString);
+    geocoder = new maps.Geocoder();
 
-    const routePolyline = new maps.Polyline({
-      path: decodedPath,
-      geodesic: true,
-      strokeColor: "#1E88E5",
-      strokeOpacity: 0.9,
-      strokeWeight: 5,
-    });
-    routePolyline.setMap(map);
-    decodedPath.forEach(p => bounds.extend(p));
+    // Marcadores arrastrables
+    if (hasLatLng(route.startLocation)) {
+      startMarker = new maps.Marker({
+        map,
+        position: { lat: route.startLocation.latitude, lng: route.startLocation.longitude },
+        draggable: true,
+        label: "S",
+        title: "Inicio",
+      });
+      startMarker.addListener("dragend", async (e) => {
+        await updateStartFromLatLng(maps, e.latLng.lat(), e.latLng.lng());
+      });
+    }
 
-    const startPos = { lat: route.startLocation.latitude, lng: route.startLocation.longitude };
-    new maps.marker.AdvancedMarkerElement({ map, position: startPos, title: "Inicio: Bodega" });
-    bounds.extend(startPos);
+    if (hasLatLng(route.endLocation)) {
+      endMarker = new maps.Marker({
+        map,
+        position: { lat: route.endLocation.latitude, lng: route.endLocation.longitude },
+        draggable: true,
+        label: "F",
+        title: "Fin",
+      });
+      endMarker.addListener("dragend", async (e) => {
+        await updateEndFromLatLng(maps, e.latLng.lat(), e.latLng.lng());
+      });
+    }
 
-    route.orders.forEach((o, idx) => {
-      if (o.order?.location?.latitude && o.order?.location?.longitude) {
-        const pos = {
-          lat: o.order.location.latitude,
-          lng: o.order.location.longitude,
-        };
-        new maps.marker.AdvancedMarkerElement({
+    // Inputs visibles
+    startAddress.value = route.startLocation?.formatted_address || (hasLatLng(route.startLocation) ? `${route.startLocation.latitude}, ${route.startLocation.longitude}` : "");
+    endAddress.value = route.endLocation?.formatted_address || (hasLatLng(route.endLocation) ? `${route.endLocation.latitude}, ${route.endLocation.longitude}` : "");
+
+    // Autocomplete
+    if (startInputEl.value) {
+      const acStart = new maps.places.Autocomplete(startInputEl.value, { fields: ["geometry", "formatted_address"] });
+      acStart.addListener("place_changed", async () => {
+        const place = acStart.getPlace();
+        if (place?.geometry?.location) {
+          await updateStartFromLatLng(maps, place.geometry.location.lat(), place.geometry.location.lng());
+          map.panTo({ lat: activeRoute.value.startLocation.latitude, lng: activeRoute.value.startLocation.longitude });
+        }
+      });
+    }
+    if (endInputEl.value) {
+      const acEnd = new maps.places.Autocomplete(endInputEl.value, { fields: ["geometry", "formatted_address"] });
+      acEnd.addListener("place_changed", async () => {
+        const place = acEnd.getPlace();
+        if (place?.geometry?.location) {
+          await updateEndFromLatLng(maps, place.geometry.location.lat(), place.geometry.location.lng());
+          map.panTo({ lat: activeRoute.value.endLocation.latitude, lng: activeRoute.value.endLocation.longitude });
+        }
+      });
+    }
+
+    // Paradas (marcadores bonitos opcionales)
+    (route.orders || []).forEach((o, idx) => {
+      const lat = o?.order?.location?.latitude ?? o?.order?.delivery_location?.latitude;
+      const lng = o?.order?.location?.longitude ?? o?.order?.delivery_location?.longitude;
+      if (typeof lat === "number" && typeof lng === "number") {
+        new maps.Marker({
           map,
-          position: pos,
+          position: { lat, lng },
           title: `Parada ${idx + 1}`,
-          content: buildMarkerContent(idx + 1, getMarkerColor(o.deliveryStatus)),
+          label: `${idx + 1}`,
         });
-        bounds.extend(pos);
       }
     });
 
-    const endPos = { lat: route.endLocation.latitude, lng: route.endLocation.longitude };
-    new maps.marker.AdvancedMarkerElement({ map, position: endPos, title: "Fin: Casa Conductor" });
-    bounds.extend(endPos);
-
-    map.fitBounds(bounds, 60);
+    // Polyline actual
+    drawRouteOnMap(maps, map, route);
   } catch (err) {
     console.error("💥 Error al dibujar mapa:", err);
     mapContainer.innerHTML = "❌ Error al cargar mapa.";
   }
 };
 
-// Helper: color por estado
-const getMarkerColor = (status) => {
-  switch (status) {
-    case "completed": return "#16A34A";
-    case "in_progress": return "#F59E0B";
-    default: return "#1E88E5";
+// Reoptimizar ruta con nuevos anclajes
+const reoptimizeActiveRoute = async () => {
+  if (!activeRoute.value) return;
+  const r = activeRoute.value;
+
+  const stops = (r.orders || [])
+    .map(s => {
+      const lat = s?.order?.location?.latitude ?? s?.order?.delivery_location?.latitude;
+      const lng = s?.order?.location?.longitude ?? s?.order?.delivery_location?.longitude;
+      return { id: s._id, lat, lng };
+    })
+    .filter(s => typeof s.lat === "number" && typeof s.lng === "number");
+
+  if (!hasLatLng(r.startLocation) || !hasLatLng(r.endLocation) || stops.length === 0) {
+    alert("Faltan coordenadas de inicio/fin o paradas para reoptimizar.");
+    return;
   }
-};
 
-// Marcadores personalizados
-const buildMarkerContent = (label, color = "#1E88E5") => {
-  const el = document.createElement("div");
-  el.style.width = "28px";
-  el.style.height = "28px";
-  el.style.borderRadius = "50%";
-  el.style.backgroundColor = "#fff";
-  el.style.border = `2px solid ${color}`;
-  el.style.display = "flex";
-  el.style.alignItems = "center";
-  el.style.justifyContent = "center";
-  el.style.fontWeight = "bold";
-  el.style.color = color;
-  el.textContent = label.toString();
-  return el;
-};
+  reoptLoading.value = true;
+  try {
+    const payload = {
+      start: {
+        latitude: r.startLocation.latitude,
+        longitude: r.startLocation.longitude,
+        formatted_address: startAddress.value || r.startLocation.formatted_address,
+      },
+      end: {
+        latitude: r.endLocation.latitude,
+        longitude: r.endLocation.longitude,
+        formatted_address: endAddress.value || r.endLocation.formatted_address,
+      },
+      stops,
+      mode: "driving",
+      optimize: true,
+    };
 
-// Formatos
-const formatDistance = (m) => (m < 1000 ? `${m} m` : `${(m / 1000).toFixed(1)} km`);
-const formatDuration = (s) => {
-  const h = Math.floor(s / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  return h > 0 ? `${h}h ${m}min` : `${m}min`;
+    const res = await apiService.routes.reoptimize(r._id, payload);
+    const updated = res.data?.data?.route || res.data?.route || res.data;
+    if (!updated) throw new Error("Respuesta del servidor inesperada");
+
+    // Actualiza listado y activa nueva ruta
+    const idx = routes.value.findIndex(x => x._id === r._id);
+    if (idx !== -1) routes.value[idx] = updated;
+    activeRoute.value = updated;
+
+    // Redibuja polyline
+    const maps = await loadGoogleMaps();
+    drawRouteOnMap(maps, mapInstance.value, updated);
+  } catch (e) {
+    console.error(e);
+    alert("No se pudo reoptimizar la ruta.");
+  } finally {
+    reoptLoading.value = false;
+  }
 };
 
 // Lifecycle
