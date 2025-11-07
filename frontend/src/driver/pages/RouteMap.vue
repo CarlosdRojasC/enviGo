@@ -472,7 +472,7 @@ const centerOnCurrentLocation = () => {
     },
     {
       enableHighAccuracy: true,
-      timeout: 10000,
+      timeout: 60000,
       maximumAge: 300000
     }
   )
