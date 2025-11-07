@@ -19,23 +19,24 @@ const isNumber = (v) => typeof v === "number" && !Number.isNaN(v);
 
 // ✅ Normaliza coordenadas en múltiples formatos
 const getCoords = (point) => {
-  if (
-    point &&
-    point.location &&
-    typeof point.location.latitude !== "undefined" &&
-    typeof point.location.longitude !== "undefined"
-  ) {
-    return { lat: Number(point.location.latitude), lng: Number(point.location.longitude) };
-  } else if (point && typeof point.latitude !== "undefined" && typeof point.longitude !== "undefined") {
-    return { lat: Number(point.latitude), lng: Number(point.longitude) };
-  } else if (point && point.delivery_location) {
-    return {
-      lat: Number(point.delivery_location.lat),
-      lng: Number(point.delivery_location.lng),
-    };
+  if (!point) throw new Error("Punto nulo recibido en getCoords.");
+
+  // ✅ Formatos aceptados
+  if (point.lat && point.lng) {
+    return { lat: Number(point.lat), lng: Number(point.lng) };
   }
+  if (typeof point.latitude !== "undefined" && typeof point.longitude !== "undefined") {
+    return { lat: Number(point.latitude), lng: Number(point.longitude) };
+  }
+  if (point.location && typeof point.location.latitude !== "undefined" && typeof point.location.longitude !== "undefined") {
+    return { lat: Number(point.location.latitude), lng: Number(point.location.longitude) };
+  }
+  if (point.delivery_location && point.delivery_location.lat && point.delivery_location.lng) {
+    return { lat: Number(point.delivery_location.lat), lng: Number(point.delivery_location.lng) };
+  }
+
   console.error("🚨 Punto de ruta con estructura inválida:", point);
-  throw new Error("Punto de ruta inválido encontrado.");
+  throw new Error("Punto de ruta inválido: no contiene coordenadas válidas.");
 };
 
 const validateCoords = (c) => !!(c && isNumber(c.lat) && isNumber(c.lng));
@@ -154,8 +155,20 @@ const optimizeRoute = async (config) => {
   const orders = await geoService.validateOrderCoordinates(orderIds);
   if (!orders?.length) throw new Error("No hay pedidos válidos para optimizar.");
   console.log(`✅ ${orders.length} órdenes validadas.`);
+const normalizePoint = (p, type) => ({
+  latitude: Number(p.latitude ?? p.lat ?? p.location?.latitude),
+  longitude: Number(p.longitude ?? p.lng ?? p.location?.longitude),
+  address: p.address || p.formatted_address || `${type === 'start' ? 'Inicio' : 'Destino'} sin dirección`,
+  type: p.type || type
+});
 
-  const locations = [getCoords(startLocation), ...orders.map(getCoords), getCoords(endLocation)];
+const start = normalizePoint(startLocation, 'start');
+const end = normalizePoint(endLocation, 'end');
+
+console.log('🧭 Normalizando coordenadas:', { start, end });
+
+  const locations = [getCoords(start), ...orders.map(getCoords), getCoords(end)];
+
   locations.forEach((c, i) => {
     if (!validateCoords(c)) throw new Error(`Coordenadas inválidas en índice ${i}`);
   });
@@ -252,8 +265,8 @@ const optimizeRoute = async (config) => {
     company: companyId,
     driver: driverId,
     createdBy,
-    startLocation,
-    endLocation,
+    startLocation: start,
+  endLocation: end,
     orders: orderedOrders.map((order, index) => ({
       order: order._id,
       sequenceNumber: index + 1,
