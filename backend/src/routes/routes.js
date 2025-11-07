@@ -566,11 +566,23 @@ router.patch('/:id/reoptimize', [
       createdBy: req.user.id
     };
 
-    // Eliminar ruta anterior
-    await RoutePlan.findByIdAndDelete(req.params.id);
+const newRoute = await routeOptimizerService.optimizeRoute(routeConfig);
 
-    // Crear nueva ruta optimizada
-    const result = await routeOptimizerService.optimizeRoute(routeConfig);
+// ✅ Actualizar la ruta existente en lugar de borrarla
+const updated = await RoutePlan.findByIdAndUpdate(
+  req.params.id,
+  {
+    $set: {
+      startLocation: newRoute.startLocation,
+      endLocation: newRoute.endLocation,
+      orders: newRoute.orders,
+      optimization: newRoute.optimization,
+      updatedAt: new Date(),
+      status: 'assigned'
+    }
+  },
+  { new: true }
+).populate('driver orders.order');
 
     res.json({
       success: true,
