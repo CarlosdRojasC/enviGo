@@ -540,11 +540,11 @@ router.patch('/:id/reoptimize', [
   authorizeRoles(['admin', 'manager'])
 ], asyncHandler(async (req, res) => {
   try {
-    const { preferences = {}, start, end, stops } = req.body;
+    const { preferences = {}, start, end } = req.body;
+
     const route = await RoutePlan.findOne({
       _id: req.params.id,
-      company: req.user.company,
-      status: { $in: ['draft', 'assigned'] }
+      status: { $in: ['draft', 'assigned', 'in_progress'] }
     }).populate('orders.order');
 
     if (!route) {
@@ -555,39 +555,39 @@ router.patch('/:id/reoptimize', [
     }
 
     const orderIds = route.orders.map(o => o.order._id);
-    
+
     const routeConfig = {
       startLocation: start || route.startLocation,
       endLocation: end || route.endLocation,
       orderIds,
       driverId: route.driver,
       preferences: { ...route.preferences, ...preferences },
-      companyId: req.user.company || req.user.company_id,
       createdBy: req.user.id
     };
 
-const newRoute = await routeOptimizerService.optimizeRoute(routeConfig);
+    // 🔁 Reoptimizar con el servicio
+    const newRoute = await routeOptimizerService.optimizeRoute(routeConfig);
 
-// ✅ Actualizar la ruta existente en lugar de borrarla
-const updated = await RoutePlan.findByIdAndUpdate(
-  req.params.id,
-  {
-    $set: {
-      startLocation: newRoute.startLocation,
-      endLocation: newRoute.endLocation,
-      orders: newRoute.orders,
-      optimization: newRoute.optimization,
-      updatedAt: new Date(),
-      status: 'assigned'
-    }
-  },
-  { new: true }
-).populate('driver orders.order');
+    // ✅ Actualiza la ruta existente (sin eliminarla)
+    const updated = await RoutePlan.findByIdAndUpdate(
+      req.params.id,
+      {
+        $set: {
+          startLocation: newRoute.startLocation,
+          endLocation: newRoute.endLocation,
+          orders: newRoute.orders,
+          optimization: newRoute.optimization,
+          updatedAt: new Date(),
+          status: 'assigned'
+        }
+      },
+      { new: true }
+    ).populate('driver orders.order');
 
     res.json({
       success: true,
       message: 'Ruta re-optimizada correctamente',
-      data: result
+      data: updated
     });
 
   } catch (error) {
