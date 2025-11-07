@@ -557,8 +557,8 @@ router.patch('/:id/reoptimize', [
     const orderIds = route.orders.map(o => o.order._id);
     
     const routeConfig = {
-      startLocation: route.startLocation,
-      endLocation: route.endLocation,
+      startLocation: start || route.startLocation,
+      endLocation: end || route.endLocation,
       orderIds,
       driverId: route.driver,
       preferences: { ...route.preferences, ...preferences },

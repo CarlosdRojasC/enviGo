@@ -538,7 +538,8 @@ const reoptimizeActiveRoute = async () => {
     };
 
     const res = await apiService.routes.reoptimize(r._id, payload);
-    const updated = res.data?.data?.route || res.data?.route || res.data;
+    console.log("📦 Resultado final reoptimize:", updated);
+    const updated = res.data?.data || res.data?.route || res.data;
     if (!updated) throw new Error("Respuesta del servidor inesperada");
 
     // Actualiza listado y activa nueva ruta
