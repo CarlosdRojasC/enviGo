@@ -540,7 +540,7 @@ router.patch('/:id/reoptimize', [
   authorizeRoles(['admin', 'manager'])
 ], asyncHandler(async (req, res) => {
   try {
-    const { preferences = {} } = req.body;
+    const { preferences = {}, start, end, stops } = req.body;
     const route = await RoutePlan.findOne({
       _id: req.params.id,
       company: req.user.company,
