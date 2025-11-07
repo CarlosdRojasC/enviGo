@@ -101,7 +101,6 @@
               <td class="px-6 py-4 font-medium text-gray-800">#{{ route._id.slice(-6).toUpperCase() }}</td>
               <td class="px-6 py-4">
                 <div class="flex flex-col">
-                  <!-- ✅ CORREGIDO: Usar full_name en lugar de name -->
                   <span class="font-medium text-gray-900">
                     {{ getDriverName(route.driver) }}
                   </span>
@@ -111,7 +110,7 @@
                 </div>
               </td>
               <td class="px-6 py-4">
-                <span 
+                <span
                   class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
                   :class="getStatusBadgeClass(route.status)"
                 >
@@ -158,28 +157,94 @@
             </button>
           </div>
           <div class="text-sm text-gray-600 mb-3">
-            <!-- ✅ CORREGIDO: Usar full_name -->
             Conductor: <span class="font-medium">{{ getDriverName(activeRoute?.driver) }}</span>
+          </div>
+
+          <!-- === NUEVO: Controles del panel === -->
+          <div class="space-y-3 mb-4">
+            <!-- Estilo de marcadores -->
+            <div>
+              <label class="text-xs font-semibold text-gray-600 block mb-1">Estilo de marcadores</label>
+              <div class="flex gap-2">
+                <button
+                  class="px-3 py-1 rounded-lg border"
+                  :class="markerStyle === 'numero' ? 'border-gray-900 text-gray-900' : 'border-gray-300 text-gray-600'"
+                  @click="markerStyle = 'numero'; redrawOrderMarkers()"
+                >Números</button>
+                <button
+                  class="px-3 py-1 rounded-lg border"
+                  :class="markerStyle === 'paquete' ? 'border-gray-900 text-gray-900' : 'border-gray-300 text-gray-600'"
+                  @click="markerStyle = 'paquete'; redrawOrderMarkers()"
+                >📦 + Nº</button>
+              </div>
+            </div>
+
+            <!-- Fijar por dirección -->
+            <div>
+              <label class="text-xs font-semibold text-gray-600 block mb-1">Fijar inicio/fin por dirección</label>
+              <div class="flex gap-2 mb-2">
+                <input v-model="startAddress" class="flex-1 border rounded-lg px-3 py-2 text-sm" placeholder="Dirección de inicio" />
+                <button class="px-3 py-2 rounded-lg bg-gray-100" @click="geocodeAndSet('start', startAddress)">Usar</button>
+              </div>
+              <div class="flex gap-2">
+                <input v-model="endAddress" class="flex-1 border rounded-lg px-3 py-2 text-sm" placeholder="Dirección de fin" />
+                <button class="px-3 py-2 rounded-lg bg-gray-100" @click="geocodeAndSet('end', endAddress)">Usar</button>
+              </div>
+            </div>
+
+            <!-- Fijar con clic en mapa -->
+            <div>
+              <label class="text-xs font-semibold text-gray-600 block mb-1">Fijar inicio/fin con clic en el mapa</label>
+              <div class="flex gap-2">
+                <button
+                  class="px-3 py-1 rounded-lg border"
+                  :class="clickMode === 'start' ? 'border-blue-600 text-blue-700' : 'border-gray-300 text-gray-600'"
+                  @click="clickMode = (clickMode === 'start' ? 'none' : 'start')"
+                >Seleccionar Inicio</button>
+                <button
+                  class="px-3 py-1 rounded-lg border"
+                  :class="clickMode === 'end' ? 'border-red-600 text-red-700' : 'border-gray-300 text-gray-600'"
+                  @click="clickMode = (clickMode === 'end' ? 'none' : 'end')"
+                >Seleccionar Fin</button>
+                <button class="px-3 py-1 rounded-lg border border-gray-300 text-gray-600" @click="clickMode='none'">Ninguno</button>
+              </div>
+            </div>
+
+            <!-- Acciones -->
+            <div class="flex items-center gap-2">
+              <button class="px-3 py-2 rounded-lg border" @click="swapStartEnd">↔️ Intercambiar</button>
+              <button
+                class="px-3 py-2 rounded-lg bg-gradient-to-r from-blue-600 to-purple-600 text-white font-semibold flex-1 disabled:opacity-60"
+                :disabled="reoptimizing || !activeRoute"
+                @click="reoptimizeRoute"
+              >{{ reoptimizing ? 'Reoptimizando…' : 'Reoptimizar Ruta' }}</button>
+            </div>
           </div>
 
           <h4 class="text-sm font-semibold text-gray-700 mb-2">Paradas:</h4>
           <ol class="space-y-2">
             <li
-              v-for="(stop, idx) in activeRoute?.orders"
-              :key="stop._id"
+              v-for="(stop, idx) in sortedStops"
+              :key="stop._id || stop.order?._id"
               class="flex items-start gap-3 bg-white p-2 rounded-md shadow-sm hover:bg-blue-50 transition"
             >
-              <span class="w-6 h-6 flex items-center justify-center rounded-full text-white font-bold text-sm"
-                :style="{ backgroundColor: getMarkerColor(stop.deliveryStatus) }">
+              <span
+                class="w-6 h-6 flex items-center justify-center rounded-full text-white font-bold text-sm"
+                :style="{ backgroundColor: getMarkerColor(stop.deliveryStatus) }"
+              >
                 {{ idx + 1 }}
               </span>
-              <div>
+              <div class="flex-1">
                 <p class="font-medium text-gray-800">
                   {{ stop.order?.customer_name || 'Cliente' }}
                 </p>
                 <p class="text-xs text-gray-500">
                   {{ stop.order?.delivery_location?.formatted_address || stop.order?.shipping_address || 'Sin dirección' }}
                 </p>
+                <div class="flex gap-1 mt-1">
+                  <button class="text-[11px] px-2 py-0.5 rounded bg-gray-100 hover:bg-gray-200" @click="setStartFromStop(stop)">Fijar como inicio</button>
+                  <button class="text-[11px] px-2 py-0.5 rounded bg-gray-100 hover:bg-gray-200" @click="setEndFromStop(stop)">Fijar como fin</button>
+                </div>
               </div>
             </li>
           </ol>
@@ -213,7 +278,7 @@
 import { ref, computed, onMounted, nextTick } from "vue";
 import { apiService } from "../services/api";
 
-// Estado
+// ================== Estado base ==================
 const routes = ref([]);
 const loading = ref(false);
 const showRouteMap = ref(false);
@@ -221,13 +286,25 @@ const activeRoute = ref(null);
 const mapInstance = ref(null);
 const showRouteOptimizerModal = ref(false);
 
-// ✅ NUEVA FUNCIÓN: Obtener nombre del conductor correctamente
+// ================== NUEVO: estado panel/markers ==================
+const markerStyle = ref('numero'); // 'numero' | 'paquete'
+const clickMode = ref('none');     // 'none' | 'start' | 'end'
+const startAddress = ref('');
+const endAddress = ref('');
+const reoptimizing = ref(false);
+
+let startMarker = null;
+let endMarker = null;
+let orderMarkers = [];
+let routePolylineInstance = null;
+let gmaps = null;
+
+// ================== Helpers UI ==================
 const getDriverName = (driver) => {
   if (!driver) return 'Sin asignar';
   return driver.full_name || driver.name || driver.email || 'Conductor';
 };
 
-// ✅ NUEVA FUNCIÓN: Obtener texto del estado
 const getStatusText = (status) => {
   const statusMap = {
     'draft': 'Borrador',
@@ -239,7 +316,6 @@ const getStatusText = (status) => {
   return statusMap[status] || status;
 };
 
-// ✅ NUEVA FUNCIÓN: Clases CSS para badges de estado
 const getStatusBadgeClass = (status) => {
   const classMap = {
     'draft': 'bg-gray-100 text-gray-800',
@@ -251,7 +327,7 @@ const getStatusBadgeClass = (status) => {
   return classMap[status] || 'bg-gray-100 text-gray-800';
 };
 
-// 🔑 Cargar Google Maps dinámicamente
+// ================== Google Maps Loader ==================
 const getGoogleMapsApiKey = () => {
   return (
     window.env?.VITE_GOOGLE_MAPS_API_KEY ||
@@ -262,7 +338,8 @@ const getGoogleMapsApiKey = () => {
 
 const loadGoogleMaps = async () => {
   if (typeof window.google !== "undefined" && window.google.maps) {
-    return window.google.maps;
+    gmaps = window.google.maps;
+    return gmaps;
   }
 
   const apiKey = getGoogleMapsApiKey();
@@ -274,12 +351,13 @@ const loadGoogleMaps = async () => {
 
   return new Promise((resolve, reject) => {
     const script = document.createElement("script");
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=geometry,marker`;
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=geometry,marker,places&v=weekly`;
     script.async = true;
     script.defer = true;
     script.onload = () => {
       console.log("✅ Google Maps API cargada correctamente");
-      resolve(window.google.maps);
+      gmaps = window.google.maps;
+      resolve(gmaps);
     };
     script.onerror = (e) => {
       console.error("❌ Error al cargar Google Maps:", e);
@@ -289,7 +367,7 @@ const loadGoogleMaps = async () => {
   });
 };
 
-// Estadísticas
+// ================== Estadísticas ==================
 const statCards = computed(() => {
   const total = routes.value.length;
   const completed = routes.value.filter(r => r.status === 'completed').length;
@@ -303,16 +381,12 @@ const statCards = computed(() => {
   ];
 });
 
-// Cargar rutas
+// ================== Carga de rutas ==================
 const loadRoutes = async () => {
   loading.value = true;
   try {
-    console.log('🔍 Cargando rutas...');
     const res = await apiService.routes.getAll();
-    console.log('📡 Respuesta del servidor:', res.data);
-    
     routes.value = res.data?.data?.routes || res.data?.routes || res.data || [];
-    console.log(`✅ ${routes.value.length} rutas cargadas`);
   } catch (err) {
     console.error("❌ Error cargando rutas:", err);
   } finally {
@@ -322,77 +396,17 @@ const loadRoutes = async () => {
 
 const refreshRoutes = () => loadRoutes();
 
-// Ver ruta en mapa
-const viewRoute = async (route) => {
-  activeRoute.value = route;
-  showRouteMap.value = true;
-  await nextTick();
+// ================== Lista ordenada por sequenceNumber ==================
+const sortedStops = computed(() => {
+  if (!activeRoute.value?.orders) return [];
+  return [...activeRoute.value.orders].sort((a, b) => {
+    const sa = a.sequenceNumber ?? 999999;
+    const sb = b.sequenceNumber ?? 999999;
+    return sa - sb;
+  });
+});
 
-  const mapContainer = document.getElementById("routeMapContainer");
-  if (!mapContainer) return;
-
-  const polylineString = route.optimization?.overview_polyline;
-  if (!polylineString) {
-    mapContainer.innerHTML = "⚠️ No hay datos de mapa para esta ruta.";
-    return;
-  }
-
-  try {
-    const maps = await loadGoogleMaps();
-    const { geometry } = maps;
-
-    const map = new maps.Map(mapContainer, {
-      center: { lat: route.startLocation.latitude, lng: route.startLocation.longitude },
-      zoom: 12,
-      mapId: "ENVIGO_MAP_DEFAULT" // ✅ agrega un ID de mapa válido
-    });
-    mapInstance.value = map;
-
-    const bounds = new maps.LatLngBounds();
-    const decodedPath = geometry.encoding.decodePath(polylineString);
-
-    const routePolyline = new maps.Polyline({
-      path: decodedPath,
-      geodesic: true,
-      strokeColor: "#1E88E5",
-      strokeOpacity: 0.9,
-      strokeWeight: 5,
-    });
-    routePolyline.setMap(map);
-    decodedPath.forEach(p => bounds.extend(p));
-
-    const startPos = { lat: route.startLocation.latitude, lng: route.startLocation.longitude };
-    new maps.marker.AdvancedMarkerElement({ map, position: startPos, title: "Inicio: Bodega" });
-    bounds.extend(startPos);
-
-    route.orders.forEach((o, idx) => {
-      if (o.order?.location?.latitude && o.order?.location?.longitude) {
-        const pos = {
-          lat: o.order.location.latitude,
-          lng: o.order.location.longitude,
-        };
-        new maps.marker.AdvancedMarkerElement({
-          map,
-          position: pos,
-          title: `Parada ${idx + 1}`,
-          content: buildMarkerContent(idx + 1, getMarkerColor(o.deliveryStatus)),
-        });
-        bounds.extend(pos);
-      }
-    });
-
-    const endPos = { lat: route.endLocation.latitude, lng: route.endLocation.longitude };
-    new maps.marker.AdvancedMarkerElement({ map, position: endPos, title: "Fin: Casa Conductor" });
-    bounds.extend(endPos);
-
-    map.fitBounds(bounds, 60);
-  } catch (err) {
-    console.error("💥 Error al dibujar mapa:", err);
-    mapContainer.innerHTML = "❌ Error al cargar mapa.";
-  }
-};
-
-// Helper: color por estado
+// ================== Mapa: helpers ==================
 const getMarkerColor = (status) => {
   switch (status) {
     case "completed": return "#16A34A";
@@ -401,32 +415,307 @@ const getMarkerColor = (status) => {
   }
 };
 
-// Marcadores personalizados
-const buildMarkerContent = (label, color = "#1E88E5") => {
+const buildMarkerContent = (label, color = "#1E88E5", style = markerStyle.value) => {
+  if (style === 'paquete') {
+    const wrap = document.createElement('div');
+    wrap.style.position = 'relative';
+    wrap.style.transform = 'translateY(2px)';
+    const pkg = document.createElement('div');
+    pkg.textContent = '📦';
+    pkg.style.fontSize = '22px';
+    pkg.style.lineHeight = '1';
+    const badge = document.createElement('div');
+    badge.textContent = String(label);
+    Object.assign(badge.style, {
+      position: 'absolute',
+      right: '-6px',
+      top: '-6px',
+      width: '20px',
+      height: '20px',
+      borderRadius: '10px',
+      background: color,
+      color: '#fff',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      fontWeight: '700',
+      fontSize: '12px',
+      boxShadow: '0 2px 6px rgba(0,0,0,.3)',
+    });
+    wrap.appendChild(pkg);
+    wrap.appendChild(badge);
+    return wrap;
+  }
+
   const el = document.createElement("div");
-  el.style.width = "28px";
-  el.style.height = "28px";
-  el.style.borderRadius = "50%";
-  el.style.backgroundColor = "#fff";
-  el.style.border = `2px solid ${color}`;
-  el.style.display = "flex";
-  el.style.alignItems = "center";
-  el.style.justifyContent = "center";
-  el.style.fontWeight = "bold";
-  el.style.color = color;
-  el.textContent = label.toString();
+  Object.assign(el.style, {
+    width: "28px",
+    height: "28px",
+    borderRadius: "50%",
+    backgroundColor: "#fff",
+    border: `2px solid ${color}`,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontWeight: "bold",
+    color,
+    boxShadow: "0 2px 6px rgba(0,0,0,.3)",
+  });
+  el.textContent = String(label);
   return el;
 };
 
-// Formatos
-const formatDistance = (m) => (m < 1000 ? `${m} m` : `${(m / 1000).toFixed(1)} km`);
+const getOrderLatLng = (o) => {
+  if (o?.order?.location?.latitude && o?.order?.location?.longitude) {
+    return { lat: Number(o.order.location.latitude), lng: Number(o.order.location.longitude) };
+  }
+  if (o?.order?.delivery_location?.lat && o?.order?.delivery_location?.lng) {
+    return { lat: Number(o.order.delivery_location.lat), lng: Number(o.order.delivery_location.lng) };
+  }
+  return null;
+};
+
+// ================== Mapa: dibujo/limpieza ==================
+const clearOrderMarkersOnly = () => {
+  orderMarkers.forEach(m => m.map = null);
+  orderMarkers = [];
+};
+
+const clearMarkers = () => {
+  clearOrderMarkersOnly();
+  if (startMarker) startMarker.map = null;
+  if (endMarker) endMarker.map = null;
+  startMarker = null;
+  endMarker = null;
+};
+
+const drawStartEndMarkers = () => {
+  if (!mapInstance.value || !gmaps) return;
+
+  // Inicio
+  const s = { lat: activeRoute.value.startLocation.latitude, lng: activeRoute.value.startLocation.longitude };
+  startMarker = new gmaps.marker.AdvancedMarkerElement({
+    map: mapInstance.value,
+    position: s,
+    title: "Inicio",
+    content: (() => {
+      const c = buildMarkerContent('I', '#22C55E', 'numero');
+      c.style.border = '2px solid #22C55E';
+      c.style.color = '#22C55E';
+      return c;
+    })()
+  });
+
+  // Fin
+  const e = { lat: activeRoute.value.endLocation.latitude, lng: activeRoute.value.endLocation.longitude };
+  endMarker = new gmaps.marker.AdvancedMarkerElement({
+    map: mapInstance.value,
+    position: e,
+    title: "Fin",
+    content: (() => {
+      const c = buildMarkerContent('F', '#EF4444', 'numero');
+      c.style.border = '2px solid #EF4444';
+      c.style.color = '#EF4444';
+      return c;
+    })()
+  });
+};
+
+const drawOrderMarkers = () => {
+  if (!mapInstance.value || !gmaps) return;
+  clearOrderMarkersOnly();
+  sortedStops.value.forEach((o, idx) => {
+    const pos = getOrderLatLng(o);
+    if (!pos) return;
+    const marker = new gmaps.marker.AdvancedMarkerElement({
+      map: mapInstance.value,
+      position: pos,
+      title: `Parada ${idx + 1}`,
+      content: buildMarkerContent(idx + 1, getMarkerColor(o.deliveryStatus), markerStyle.value)
+    });
+    orderMarkers.push(marker);
+  });
+};
+
+const redrawOrderMarkers = () => {
+  clearOrderMarkersOnly();
+  drawOrderMarkers();
+};
+
+const drawRoutePolyline = () => {
+  if (!mapInstance.value || !gmaps) return;
+  const polylineString = activeRoute.value?.optimization?.overview_polyline;
+  if (!polylineString) return;
+  const decodedPath = gmaps.geometry.encoding.decodePath(polylineString);
+  if (routePolylineInstance) routePolylineInstance.setMap(null);
+  routePolylineInstance = new gmaps.Polyline({
+    path: decodedPath,
+    geodesic: true,
+    strokeColor: "#1E88E5",
+    strokeOpacity: 0.9,
+    strokeWeight: 5,
+  });
+  routePolylineInstance.setMap(mapInstance.value);
+};
+
+const fitToData = () => {
+  if (!mapInstance.value || !gmaps) return;
+  const b = new gmaps.LatLngBounds();
+  const s = activeRoute.value.startLocation;
+  const e = activeRoute.value.endLocation;
+  if (s?.latitude && s?.longitude) b.extend(new gmaps.LatLng(s.latitude, s.longitude));
+  sortedStops.value.forEach(o => {
+    const p = getOrderLatLng(o);
+    if (p) b.extend(new gmaps.LatLng(p.lat, p.lng));
+  });
+  if (e?.latitude && e?.longitude) b.extend(new gmaps.LatLng(e.latitude, e.longitude));
+  if (!b.isEmpty()) mapInstance.value.fitBounds(b, 60);
+};
+
+// ================== Acciones: ver ruta / fijar inicio/fin ==================
+const viewRoute = async (route) => {
+  activeRoute.value = route;
+  showRouteMap.value = true;
+  await nextTick();
+
+  const mapContainer = document.getElementById("routeMapContainer");
+  if (!mapContainer) return;
+
+  try {
+    const maps = await loadGoogleMaps();
+    // Crear mapa (aunque no haya polyline)
+    const center = route?.startLocation?.latitude && route?.startLocation?.longitude
+      ? { lat: route.startLocation.latitude, lng: route.startLocation.longitude }
+      : { lat: 0, lng: 0 };
+
+    const map = new maps.Map(mapContainer, {
+      center,
+      zoom: 12,
+      mapId: "ENVIGO_MAP_DEFAULT"
+    });
+    mapInstance.value = map;
+
+    // Clic para fijar inicio/fin
+    map.addListener('click', (e) => {
+      if (clickMode.value === 'none') return;
+      const pos = { lat: e.latLng.lat(), lng: e.latLng.lng() };
+      if (clickMode.value === 'start') setStartLocation(pos);
+      if (clickMode.value === 'end') setEndLocation(pos);
+      clickMode.value = 'none';
+    });
+
+    // Dibujar capa y marcadores
+    drawRoutePolyline();
+    drawStartEndMarkers();
+    drawOrderMarkers();
+    fitToData();
+  } catch (err) {
+    console.error("💥 Error al dibujar mapa:", err);
+    mapContainer.innerHTML = "❌ Error al cargar mapa.";
+  }
+};
+
+const setStartLocation = ({ lat, lng }) => {
+  activeRoute.value.startLocation = {
+    ...(activeRoute.value.startLocation || {}),
+    latitude: lat,
+    longitude: lng
+  };
+  if (startMarker) startMarker.position = new gmaps.LatLng(lat, lng);
+  fitToData();
+};
+
+const setEndLocation = ({ lat, lng }) => {
+  activeRoute.value.endLocation = {
+    ...(activeRoute.value.endLocation || {}),
+    latitude: lat,
+    longitude: lng
+  };
+  if (endMarker) endMarker.position = new gmaps.LatLng(lat, lng);
+  fitToData();
+};
+
+const geocodeAndSet = async (which, query) => {
+  if (!query) return;
+  try {
+    await loadGoogleMaps();
+    const geocoder = new gmaps.Geocoder();
+    const { results } = await geocoder.geocode({ address: query });
+    if (!results?.length) return alert('No se encontró esa dirección.');
+    const loc = results[0].geometry.location;
+    const pos = { lat: loc.lat(), lng: loc.lng() };
+    if (which === 'start') setStartLocation(pos);
+    if (which === 'end')   setEndLocation(pos);
+  } catch (e) {
+    console.error(e);
+    alert('No se pudo geocodificar la dirección.');
+  }
+};
+
+const swapStartEnd = () => {
+  const s = activeRoute.value.startLocation;
+  activeRoute.value.startLocation = activeRoute.value.endLocation;
+  activeRoute.value.endLocation = s;
+  drawStartEndMarkers();
+  fitToData();
+};
+
+const setStartFromStop = (stop) => {
+  const p = getOrderLatLng(stop);
+  if (p) setStartLocation(p);
+};
+
+const setEndFromStop = (stop) => {
+  const p = getOrderLatLng(stop);
+  if (p) setEndLocation(p);
+};
+
+// ================== Reoptimizar ==================
+const reoptimizeRoute = async () => {
+  if (!activeRoute.value) return;
+  reoptimizing.value = true;
+  try {
+    const payload = {
+      startLocation: {
+        latitude: activeRoute.value.startLocation.latitude,
+        longitude: activeRoute.value.startLocation.longitude
+      },
+      endLocation: {
+        latitude: activeRoute.value.endLocation.latitude,
+        longitude: activeRoute.value.endLocation.longitude
+      },
+      preferences: {} // Ej: { avoidTolls:true, avoidHighways:false, language:'es', region:'co' }
+    };
+    const res = await apiService.routes.reoptimize(activeRoute.value._id, payload);
+    const updated = res.data?.routePlan || res.data?.data?.routePlan || res.data;
+    if (!updated) throw new Error('Respuesta inválida del servidor');
+
+    // Actualizar y redibujar
+    activeRoute.value = updated;
+    drawRoutePolyline();
+    redrawOrderMarkers();
+    fitToData();
+  } catch (e) {
+    console.error(e);
+    alert('No fue posible reoptimizar la ruta.');
+  } finally {
+    reoptimizing.value = false;
+  }
+};
+
+// ================== Formatos ==================
+const formatDistance = (m) => {
+  if (typeof m !== 'number') return '—';
+  return m < 1000 ? `${m} m` : `${(m / 1000).toFixed(1)} km`;
+};
 const formatDuration = (s) => {
+  if (typeof s !== 'number') return '—';
   const h = Math.floor(s / 3600);
   const m = Math.floor((s % 3600) / 60);
   return h > 0 ? `${h}h ${m}min` : `${m}min`;
 };
 
-// Lifecycle
+// ================== Lifecycle ==================
 onMounted(() => {
   loadRoutes();
 });
