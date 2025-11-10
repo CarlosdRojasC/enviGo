@@ -166,7 +166,8 @@ const startPoint = normalizePoint(config.startLocation, 'start');
 const endPoint = normalizePoint(config.endLocation, 'end');
 
 
-console.log('🧭 Normalizando coordenadas:', { start, end });
+console.log('🧭 Normalizando coordenadas:', { start: startPoint, end: endPoint });
+
 
   const locations = [getCoords(startPoint), ...orders.map(getCoords), getCoords(endPoint)];
 
