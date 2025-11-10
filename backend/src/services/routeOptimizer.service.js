@@ -156,18 +156,19 @@ const optimizeRoute = async (config) => {
   if (!orders?.length) throw new Error("No hay pedidos válidos para optimizar.");
   console.log(`✅ ${orders.length} órdenes validadas.`);
 const normalizePoint = (p, type) => ({
-  latitude: Number(p.latitude ?? p.lat ?? p.location?.latitude),
-  longitude: Number(p.longitude ?? p.lng ?? p.location?.longitude),
-  address: p.address || p.formatted_address || `${type === 'start' ? 'Inicio' : 'Destino'} sin dirección`,
-  type: p.type || type
+  latitude: Number(p?.latitude ?? p?.lat ?? p?.location?.latitude),
+  longitude: Number(p?.longitude ?? p?.lng ?? p?.location?.longitude),
+  address: p?.address || p?.formatted_address || `${type === 'start' ? 'Inicio' : 'Destino'} sin dirección`,
+  type: p?.type || type
 });
 
-const start = normalizePoint(startLocation, 'start');
-const end = normalizePoint(endLocation, 'end');
+const startPoint = normalizePoint(config.startLocation, 'start');
+const endPoint = normalizePoint(config.endLocation, 'end');
+
 
 console.log('🧭 Normalizando coordenadas:', { start, end });
 
-  const locations = [getCoords(start), ...orders.map(getCoords), getCoords(end)];
+  const locations = [getCoords(startPoint), ...orders.map(getCoords), getCoords(endPoint)];
 
   locations.forEach((c, i) => {
     if (!validateCoords(c)) throw new Error(`Coordenadas inválidas en índice ${i}`);
@@ -260,8 +261,8 @@ console.log('🧭 Normalizando coordenadas:', { start, end });
   console.log(`✅ Direcciones completadas. Distancia=${(totalDistance/1000).toFixed(1)}km, Duración=${(totalDuration/3600).toFixed(2)}h`);
   const overviewPolyline = fullPathPoints.length ? encodePolyline(fullPathPoints) : undefined;
 
-const startPoint = normalizePoint(startLocation, 'start');
-const endPoint = normalizePoint(endLocation, 'end');
+
+console.log('🧭 Normalizando coordenadas:', { start: startPoint, end: endPoint });
 
   // Guardar - CAMBIO IMPORTANTE: status debe ser "assigned" no "draft"
   const routePlan = new RoutePlan({
