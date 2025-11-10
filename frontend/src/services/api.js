@@ -1112,10 +1112,10 @@ const routes = {
   },
 
   // Re-optimizar ruta existente
-  reoptimize: (routeId, preferences = {}) => {
-    console.log(`🔄 API: Re-optimizando ruta ${routeId}`);
-    return api.patch(`/routes/${routeId}/reoptimize`, { preferences });
-  },
+reoptimize: (routeId, payload = {}) => {
+  console.log(`🔄 API: Re-optimizando ruta ${routeId}`);
+  return api.patch(`/routes/${routeId}/reoptimize`, payload);
+},
 
   // Operaciones masivas
   bulkAssign: (routeIds, driverId) => {
