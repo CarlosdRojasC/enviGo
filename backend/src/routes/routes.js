@@ -540,7 +540,14 @@ router.patch('/:id/reoptimize', [
   authorizeRoles(['admin', 'manager'])
 ], asyncHandler(async (req, res) => {
   try {
-    const { preferences = {}, start, end } = req.body;
+    const { preferences = {} } = req.body;
+
+    // 🛰️ Log de depuración: ver exactamente lo que llega del frontend
+    console.log('🛰️ reoptimize body:', JSON.stringify(req.body, null, 2));
+
+    // ✅ Aceptar tanto start/end como startLocation/endLocation
+    const incomingStart = req.body.startLocation || req.body.start;
+    const incomingEnd   = req.body.endLocation || req.body.end;
 
     const route = await RoutePlan.findOne({
       _id: req.params.id,
@@ -556,16 +563,19 @@ router.patch('/:id/reoptimize', [
 
     const orderIds = route.orders.map(o => o.order._id);
 
+    // 🧭 Configuración de optimización
     const routeConfig = {
-      startLocation: start || route.startLocation,
-      endLocation: end || route.endLocation,
+      startLocation: incomingStart || route.startLocation,
+      endLocation:   incomingEnd   || route.endLocation,
       orderIds,
       driverId: route.driver,
       preferences: { ...route.preferences, ...preferences },
       createdBy: req.user.id
     };
 
-    // 🔁 Reoptimizar con el servicio
+    console.log('🧩 routeConfig listo para optimización:', routeConfig);
+
+    // 🔁 Reoptimizar con el servicio central
     const newRoute = await routeOptimizerService.optimizeRoute(routeConfig);
 
     // ✅ Actualiza la ruta existente (sin eliminarla)
@@ -584,6 +594,10 @@ router.patch('/:id/reoptimize', [
       { new: true }
     ).populate('driver orders.order');
 
+    console.log(`✅ Ruta ${updated._id} re-optimizada correctamente`);
+    console.log(`🧭 Nuevo inicio: ${updated.startLocation.address}`);
+    console.log(`🏁 Nuevo fin: ${updated.endLocation.address}`);
+
     res.json({
       success: true,
       message: 'Ruta re-optimizada correctamente',
@@ -591,7 +605,7 @@ router.patch('/:id/reoptimize', [
     });
 
   } catch (error) {
-    console.error('Error re-optimizando ruta:', error);
+    console.error('❌ Error re-optimizando ruta:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Error re-optimizando ruta'

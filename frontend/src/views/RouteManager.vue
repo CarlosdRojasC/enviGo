@@ -504,7 +504,7 @@ const viewRoute = async (route) => {
 // Reoptimizar ruta con nuevos anclajes
 const reoptimizeActiveRoute = async () => {
   if (!activeRoute.value) return;
-  const r = activeRoute.value;
+  const r = activeRoute.value; // ⚠️ Siempre usa el reactivo, no la referencia en routes
 
   const stops = (r.orders || [])
     .map(s => {
@@ -521,33 +521,33 @@ const reoptimizeActiveRoute = async () => {
 
   reoptLoading.value = true;
   try {
+    // ✅ USAR activeRoute.value directo (ya contiene los cambios de mapa y autocomplete)
     const payload = {
-      start: {
+      startLocation: {
         latitude: r.startLocation.latitude,
         longitude: r.startLocation.longitude,
-        formatted_address: startAddress.value || r.startLocation.formatted_address,
+        address: startAddress.value || r.startLocation.formatted_address || r.startLocation.address,
       },
-      end: {
+      endLocation: {
         latitude: r.endLocation.latitude,
         longitude: r.endLocation.longitude,
-        formatted_address: endAddress.value || r.endLocation.formatted_address,
+        address: endAddress.value || r.endLocation.formatted_address || r.endLocation.address,
       },
-      stops,
-      mode: "driving",
-      optimize: true,
+      orderIds: r.orders.map(o => o.order._id),
+      preferences: { avoidTolls: false, avoidHighways: false, prioritizeTime: true },
     };
 
-const res = await apiService.routes.reoptimize(r._id, payload);
-const updated = res.data?.data || res.data?.route || res.data;
-console.log("📦 Resultado final reoptimize:", updated);
+    console.log("🚀 Enviando a reoptimize:", payload);
+
+    const res = await apiService.routes.reoptimize(r._id, payload);
+    const updated = res.data?.data || res.data?.route || res.data;
+    console.log("📦 Resultado final reoptimize:", updated);
     if (!updated) throw new Error("Respuesta del servidor inesperada");
 
-    // Actualiza listado y activa nueva ruta
     const idx = routes.value.findIndex(x => x._id === r._id);
     if (idx !== -1) routes.value[idx] = updated;
     activeRoute.value = updated;
 
-    // Redibuja polyline
     const maps = await loadGoogleMaps();
     drawRouteOnMap(maps, mapInstance.value, updated);
   } catch (e) {
