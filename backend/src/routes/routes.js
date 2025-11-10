@@ -570,7 +570,8 @@ router.patch('/:id/reoptimize', [
       orderIds,
       driverId: route.driver,
       preferences: { ...route.preferences, ...preferences },
-      createdBy: req.user.id
+      createdBy: req.user.id,
+      existingRouteId: req.params.id
     };
 
     console.log('🧩 routeConfig listo para optimización:', routeConfig);
