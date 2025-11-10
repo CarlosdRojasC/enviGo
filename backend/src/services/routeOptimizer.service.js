@@ -260,13 +260,16 @@ console.log('🧭 Normalizando coordenadas:', { start, end });
   console.log(`✅ Direcciones completadas. Distancia=${(totalDistance/1000).toFixed(1)}km, Duración=${(totalDuration/3600).toFixed(2)}h`);
   const overviewPolyline = fullPathPoints.length ? encodePolyline(fullPathPoints) : undefined;
 
+const startPoint = normalizePoint(startLocation, 'start');
+const endPoint = normalizePoint(endLocation, 'end');
+
   // Guardar - CAMBIO IMPORTANTE: status debe ser "assigned" no "draft"
   const routePlan = new RoutePlan({
     company: companyId,
     driver: driverId,
     createdBy,
-    startLocation: start,
-  endLocation: end,
+    startLocation: startPoint,
+  endLocation: endPoint,
     orders: orderedOrders.map((order, index) => ({
       order: order._id,
       sequenceNumber: index + 1,
