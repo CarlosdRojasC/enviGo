@@ -147,7 +147,16 @@ function buildPreferences(preferences = {}) {
 
 // ====== FUNCIÓN PRINCIPAL ======
 const optimizeRoute = async (config) => {
-  const { startLocation, endLocation, orderIds, driverId, companyId, createdBy, preferences = {} } = config;
+  const {
+    startLocation,
+    endLocation,
+    orderIds,
+    driverId,
+    companyId,
+    createdBy,
+    preferences = {},
+    existingRouteId // ✅ Nuevo parámetro opcional
+  } = config;
 
   if (!process.env.GOOGLE_MAPS_API_KEY) throw new Error("Falta GOOGLE_MAPS_API_KEY");
   if (!process.env.PYTHON_OPTIMIZER_URL) throw new Error("Falta PYTHON_OPTIMIZER_URL");
@@ -155,27 +164,26 @@ const optimizeRoute = async (config) => {
   const orders = await geoService.validateOrderCoordinates(orderIds);
   if (!orders?.length) throw new Error("No hay pedidos válidos para optimizar.");
   console.log(`✅ ${orders.length} órdenes validadas.`);
-const normalizePoint = (p, type) => ({
-  latitude: Number(p?.latitude ?? p?.lat ?? p?.location?.latitude),
-  longitude: Number(p?.longitude ?? p?.lng ?? p?.location?.longitude),
-  address: p?.address || p?.formatted_address || `${type === 'start' ? 'Inicio' : 'Destino'} sin dirección`,
-  type: p?.type || type
-});
 
-const startPoint = normalizePoint(config.startLocation, 'start');
-const endPoint = normalizePoint(config.endLocation, 'end');
+  // === Normalización de puntos ===
+  const normalizePoint = (p, type) => ({
+    latitude: Number(p?.latitude ?? p?.lat ?? p?.location?.latitude),
+    longitude: Number(p?.longitude ?? p?.lng ?? p?.location?.longitude),
+    address: p?.address || p?.formatted_address || `${type === "start" ? "Inicio" : "Destino"} sin dirección`,
+    type: p?.type || type
+  });
 
+  const startPoint = normalizePoint(startLocation, "start");
+  const endPoint = normalizePoint(endLocation, "end");
 
-console.log('🧭 Normalizando coordenadas:', { start: startPoint, end: endPoint });
-
+  console.log("🧭 Normalizando coordenadas:", { start: startPoint, end: endPoint });
 
   const locations = [getCoords(startPoint), ...orders.map(getCoords), getCoords(endPoint)];
-
   locations.forEach((c, i) => {
     if (!validateCoords(c)) throw new Error(`Coordenadas inválidas en índice ${i}`);
   });
 
-  // 3️⃣ Llamar a Python
+  // === Llamada al optimizador Python ===
   let optimizedIndices;
   try {
     console.log(`🐍 Llamando a Python OR-Tools → ${process.env.PYTHON_OPTIMIZER_URL}`);
@@ -196,13 +204,15 @@ console.log('🧭 Normalizando coordenadas:', { start: startPoint, end: endPoint
   const optimizedStops = optimizedIndices.map((i) => originalStops[i]);
   const orderedOrders = optimizedStops.slice(1, -1);
 
+  // === Directions API ===
   console.log("🗺️ Procesando Directions (por lotes)...");
-  let totalDistance = 0, totalDuration = 0;
+  let totalDistance = 0,
+    totalDuration = 0;
   const polylineSegments = [];
   const fullPathPoints = [];
   const prefParams = buildPreferences(preferences);
 
-  for (let i = 0; i < optimizedStops.length - 1; i += (GOOGLE_DIRECTIONS_BATCH_POINTS - 1)) {
+  for (let i = 0; i < optimizedStops.length - 1; i += GOOGLE_DIRECTIONS_BATCH_POINTS - 1) {
     const batch = optimizedStops.slice(i, i + GOOGLE_DIRECTIONS_BATCH_POINTS);
     if (batch.length < 2) continue;
     const origin = getCoords(batch[0]);
@@ -213,19 +223,15 @@ console.log('🧭 Normalizando coordenadas:', { start: startPoint, end: endPoint
       origin: `${origin.lat},${origin.lng}`,
       destination: `${destination.lat},${destination.lng}`,
       waypoints: waypoints.map((wp) => `${wp.lat},${wp.lng}`),
-      optimizeWaypoints: false, // 🚫 No permitir reoptimización (ya lo hizo Python)
+      optimizeWaypoints: false,
       travelMode: "DRIVING",
       key: process.env.GOOGLE_MAPS_API_KEY,
-      ...prefParams,
+      ...prefParams
     };
 
-    console.log(`➡️ Lote ${i / (GOOGLE_DIRECTIONS_BATCH_POINTS - 1) + 1} con ${waypoints.length} puntos.`);
     const directionsResult = await callDirectionsWithRetry(directionsParams, `Lote ${i}`);
     const routes = directionsResult?.data?.routes || [];
-    if (!routes.length) {
-      console.warn(`⚠️ Sin rutas para lote ${i}`);
-      continue;
-    }
+    if (!routes.length) continue;
 
     const route = routes[0];
     for (const leg of route.legs || []) {
@@ -233,49 +239,63 @@ console.log('🧭 Normalizando coordenadas:', { start: startPoint, end: endPoint
       totalDuration += leg.duration?.value || 0;
     }
 
-    let polyline = route?.overview_polyline?.points;
-    if (!polyline && route?.legs?.length) {
-      const stepPolys = [];
-      for (const leg of route.legs) {
-        for (const step of leg.steps || []) {
-          if (step.polyline?.points) stepPolys.push(step.polyline.points);
-        }
-      }
-      const decoded = stepPolys.flatMap(decodePolyline);
-      if (decoded.length) {
-        fullPathPoints.push(...decoded);
-        polyline = encodePolyline(decoded);
-      }
-    }
-
+    const polyline = route?.overview_polyline?.points;
     if (polyline) {
       polylineSegments.push(polyline);
       const pts = decodePolyline(polyline);
-      if (fullPathPoints.length && JSON.stringify(fullPathPoints.at(-1)) === JSON.stringify(pts[0])) {
-        fullPathPoints.push(...pts.slice(1));
-      } else {
-        fullPathPoints.push(...pts);
-      }
+      fullPathPoints.push(...pts);
     }
   }
 
-  console.log(`✅ Direcciones completadas. Distancia=${(totalDistance/1000).toFixed(1)}km, Duración=${(totalDuration/3600).toFixed(2)}h`);
   const overviewPolyline = fullPathPoints.length ? encodePolyline(fullPathPoints) : undefined;
+  console.log(
+    `✅ Direcciones completadas. Distancia=${(totalDistance / 1000).toFixed(1)}km, Duración=${(
+      totalDuration / 3600
+    ).toFixed(2)}h`
+  );
 
+  // === Si se está reoptimizando una ruta existente ===
+  if (existingRouteId) {
+    const updated = await RoutePlan.findByIdAndUpdate(
+      existingRouteId,
+      {
+        $set: {
+          startLocation: startPoint,
+          endLocation: endPoint,
+          orders: orderedOrders.map((order, index) => ({
+            order: order._id,
+            sequenceNumber: index + 1,
+            deliveryStatus: "pending"
+          })),
+          optimization: {
+            algorithm: "python_or-tools+google_directions",
+            totalDistance,
+            totalDuration,
+            overview_polyline: overviewPolyline,
+            overview_polyline_segments: polylineSegments
+          },
+          updatedAt: new Date(),
+          status: "assigned"
+        }
+      },
+      { new: true }
+    ).populate("driver orders.order");
 
-console.log('🧭 Normalizando coordenadas:', { start: startPoint, end: endPoint });
+    console.log(`✅ Ruta ${existingRouteId} actualizada correctamente (sin duplicar).`);
+    return updated;
+  }
 
-  // Guardar - CAMBIO IMPORTANTE: status debe ser "assigned" no "draft"
+  // === Si no existe ruta previa, crear una nueva ===
   const routePlan = new RoutePlan({
     company: companyId,
     driver: driverId,
     createdBy,
     startLocation: startPoint,
-  endLocation: endPoint,
+    endLocation: endPoint,
     orders: orderedOrders.map((order, index) => ({
       order: order._id,
       sequenceNumber: index + 1,
-      deliveryStatus: "pending",
+      deliveryStatus: "pending"
     })),
     optimization: {
       algorithm: "python_or-tools+google_directions",
@@ -283,10 +303,10 @@ console.log('🧭 Normalizando coordenadas:', { start: startPoint, end: endPoint
       totalDuration,
       overview_polyline: overviewPolyline,
       overview_polyline_segments: polylineSegments,
-      batches: Math.ceil((optimizedStops.length - 1) / (GOOGLE_DIRECTIONS_BATCH_POINTS - 1)),
+      batches: Math.ceil((optimizedStops.length - 1) / (GOOGLE_DIRECTIONS_BATCH_POINTS - 1))
     },
-    status: "assigned", // ✅ CAMBIO: Directamente asignada al crear
-    assignedAt: new Date() // ✅ CAMBIO: Fecha de asignación
+    status: "assigned",
+    assignedAt: new Date()
   });
 
   await routePlan.save();
@@ -295,6 +315,7 @@ console.log('🧭 Normalizando coordenadas:', { start: startPoint, end: endPoint
 
   return routePlan;
 };
+
 
 // ==================== MÉTODOS ADICIONALES REQUERIDOS ====================
 
