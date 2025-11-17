@@ -100,11 +100,10 @@
               <div class="h-px bg-gray-200 my-1"></div>
               <button 
   @click="$emit('bulk-delete')"
-  class="flex items-center justify-center gap-1.5 px-3 py-2 border border-red-400/30 rounded-md bg-red-600/20 text-red-200 text-xs font-medium transition-all hover:bg-red-600/30 active:scale-95"
-  title="Eliminar pedidos seleccionados"
+  class="flex items-center gap-2 w-full px-4 py-3 border-none bg-transparent text-red-600 text-sm cursor-pointer transition-colors hover:bg-red-50 text-left"
 >
-  <span class="text-base">🗑️</span>
-  <span class="hidden sm:inline">Eliminar</span>
+  <span class="text-base w-5 text-center">🗑️</span>
+  <span>Eliminar (Borrado físico)</span>
 </button>
               <button 
                 @click="$emit('bulk-status-change', 'cancelled')"

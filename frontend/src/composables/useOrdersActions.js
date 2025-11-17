@@ -272,11 +272,29 @@ async function handleCreateOrder() {
   }
 
 async function bulkDeleteOrders(orderIds) {
+  // Validación básica
+  if (!orderIds || orderIds.length === 0) return false;
+
+  const confirmed = confirm(`¿Estás seguro de eliminar ${orderIds.length} pedidos? Esta acción no se puede deshacer.`);
+  
+  if (!confirmed) return false;
+
   try {
-    const { data } = await api.post("/orders/bulk-delete", { orderIds });
-    return data;
+    console.log("🗑️ Iniciando borrado masivo de:", orderIds);
+    
+    // CORRECCIÓN 1: Usar apiService en lugar de 'api'
+    const response = await apiService.orders.bulkDelete(orderIds);
+    
+    // CORRECCIÓN 2: Mostrar notificación de éxito
+    toast.success(response.data.message || '✅ Pedidos eliminados exitosamente');
+    
+    // CORRECCIÓN 3: Recargar la lista de pedidos para que desaparezcan de la vista
+    await fetchOrders(filters.value);
+
+    return response.data;
   } catch (error) {
-    console.error("Error eliminando pedidos:", error);
+    console.error("❌ Error eliminando pedidos:", error);
+    toast.error(error.response?.data?.error || "Error al eliminar pedidos seleccionados");
     throw error;
   }
 }
