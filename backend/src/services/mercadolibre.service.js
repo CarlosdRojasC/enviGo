@@ -712,7 +712,7 @@ static async createOrderFromApiData(fullOrder, channel, accessToken) {
     shipping_state: shippingInfo.state,
     shipping_zip: shippingInfo.zip_code,
     total_amount: totalAmount,
-    shipping_cost: shippingCost,
+    shipping_cost:  2500,
     currency: fullOrder.currency_id,
     status: newStatus || 'pending',
     order_date: new Date(fullOrder.date_created),

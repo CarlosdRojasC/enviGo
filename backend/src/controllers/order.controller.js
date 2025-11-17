@@ -714,12 +714,25 @@ async bulkUpdateStatus(req, res) {
       return res.status(400).json({ error: 'Estado no válido' });
     }
 
+    // ✅ CORRECCIÓN: Preparar objeto de actualización dinámica
+    const updateData = { 
+      status: status, 
+      updated_at: new Date() 
+    };
+
+    // Si el estado es "delivered", asignar fecha y marcar como facturable
+    if (status === 'delivered') {
+      updateData.delivery_date = new Date();
+      updateData['billing_status.is_billable'] = true; // Forzar facturable
+      updateData['billing_status.status'] = 'pending'; // Estado de facturación pendiente
+    }
+
     const result = await Order.updateMany(
       { _id: { $in: orderIds } },
-      { $set: { status: status, updated_at: new Date() } }
+      { $set: updateData }
     );
 
-    console.log(`✅ Estado actualizado para ${result.modifiedCount} pedidos a "${status}"`);
+    console.log(`✅ Estado actualizado para ${result.modifiedCount} pedidos a "${status}" (Delivery Date: ${status === 'delivered'})`);
 
     res.json({
       message: `${result.modifiedCount} de ${orderIds.length} pedidos han sido actualizados.`,
