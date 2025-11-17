@@ -136,6 +136,7 @@ const orders = {
   create: (orderData) => api.post('/orders', orderData),
   remove: (orderId) => api.delete(`/orders/${orderId}`),
   bulkUpdateStatus: (data) => api.post('/orders/bulk-actions/status', data),
+  bulkDelete: (ids) => api.post('/orders/bulk-delete', { ids }),
   updateStatus: (id, status) => api.patch(`/orders/${id}/status`, { status }),
   markAsReady: (id) => api.patch(`/orders/${id}/ready`),
   getStats: (params = {}) => api.get('/orders/stats', { params }),
@@ -1125,6 +1126,7 @@ reoptimize: (routeId, payload = {}) => {
       driverId
     });
   },
+  
 
   bulkUpdateStatus: (routeIds, status) => {
     console.log(`📝 API: Actualización masiva de estado a ${status}`);

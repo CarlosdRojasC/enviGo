@@ -48,6 +48,7 @@
   @bulk-status-change="handleBulkStatusChange"
   @bulk-export="handleBulkExport"
   @bulk-print="handleBulkPrint"
+  @bulk-delete="handleBulkDelete"
   @clear-selection="clearSelection"
   @optimize-route="optimizeSelectedOrders"
   @driver-selected="bulkDriverId = $event"
@@ -835,7 +836,23 @@ function handleBulkExport() {
   const orderIds = selectedOrders.value
   exportOrders({ order_ids: orderIds })
 }
+async function handleBulkDelete() {
+  if (selectedOrders.value.length === 0) return;
 
+  const confirmDelete = confirm(
+    `¿Seguro que deseas eliminar ${selectedOrders.value.length} pedidos?`
+  );
+
+  if (!confirmDelete) return;
+
+  try {
+    await bulkDeleteOrders(selectedOrders.value);
+    fetchOrders(); // refrescar tabla
+    selectedOrders.value = [];
+  } catch (error) {
+    alert("Error eliminando pedidos.");
+  }
+}
 function handleReports() {
   console.log('📊 Reports button clicked')
   toast.info('Función de reportes en desarrollo')

@@ -32,6 +32,7 @@ router.post(
   upload.single('file'),
   orderController.bulkUpload
 );
+router.post('/bulk-delete', authenticateToken, orderController.bulkDelete);
 
 // Ruta para obtener todas las comunas disponibles (esta puede quedarse aquí ya que es específica de orders)
 router.get('/communes', authenticateToken, async (req, res) => {

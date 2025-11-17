@@ -731,7 +731,40 @@ async bulkUpdateStatus(req, res) {
     res.status(500).json({ error: 'Error interno del servidor' });
   }
 }
+async bulkDelete(req, res) {
+  try {
+    const { orderIds } = req.body;
 
+    if (!orderIds || !Array.isArray(orderIds) || orderIds.length === 0) {
+      return res.status(400).json({ error: "Se requiere un array de IDs." });
+    }
+
+    // Validar ids válidos
+    const validIds = orderIds.filter(id => mongoose.Types.ObjectId.isValid(id));
+    if (validIds.length === 0) {
+      return res.status(400).json({ error: "No hay IDs válidos." });
+    }
+
+    const filter = { _id: { $in: validIds } };
+
+    // Si no es admin, filtra por su empresa
+    if (req.user.role !== "admin") {
+      filter.company_id = req.user.company_id;
+    }
+
+    // Eliminar pedidos
+    const result = await Order.deleteMany(filter);
+
+    return res.json({
+      message: `Se eliminaron ${result.deletedCount} pedidos.`,
+      deleted: result.deletedCount
+    });
+
+  } catch (error) {
+    console.error("❌ Error en borrado masivo:", error);
+    res.status(500).json({ error: "Error interno del servidor" });
+  }
+}
 async assignToDriver(req, res) {
   try {
     const { orderId } = req.params;

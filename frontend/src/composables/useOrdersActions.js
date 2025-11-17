@@ -271,6 +271,15 @@ async function handleCreateOrder() {
     }
   }
 
+async function bulkDeleteOrders(orderIds) {
+  try {
+    const { data } = await api.post("/orders/bulk-delete", { orderIds });
+    return data;
+  } catch (error) {
+    console.error("Error eliminando pedidos:", error);
+    throw error;
+  }
+}
   /**
    * Duplicate order
    */
@@ -439,6 +448,7 @@ function resetNewOrderForm() {
     formatDate,
     getStatusName,
     getCommuneClass,
-    debugOrder
+    debugOrder,
+    bulkDeleteOrders
   }
 }
