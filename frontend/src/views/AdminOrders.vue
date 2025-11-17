@@ -847,11 +847,22 @@ async function handleBulkDelete() {
   if (!confirmDelete) return;
 
   try {
+    // 1. Llamar a la acción de borrado
     await bulkDeleteOrders(selectedOrders.value);
-    fetchOrders(); // refrescar tabla
-    selectedOrders.value = [];
+    
+    // 2. Refrescar la tabla y esperar a que termine
+    await fetchOrders(); 
+    
+    // 3. Limpiar la selección usando el helper correcto
+    clearSelection();
+    
+    // (Opcional) Si bulkDeleteOrders no muestra toast, puedes agregarlo aquí:
+    // toast.success("Pedidos eliminados correctamente");
+
   } catch (error) {
-    alert("Error eliminando pedidos.");
+    console.error(error);
+    // Usar toast en lugar de alert para mantener el diseño
+    toast.error("Error al eliminar los pedidos seleccionados.");
   }
 }
 function handleReports() {
