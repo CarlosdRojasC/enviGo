@@ -834,7 +834,11 @@ function handleBulkExport() {
   }
 
   logger.process(`[AdminOrders] 📤 Exporting ${selectedOrders.value.length} orders`)
-  const orderIds = selectedOrders.value
+  
+  // CORRECCIÓN: Convertir el array a string separado por comas
+  // Esto evita problemas de serialización de arrays en la URL (order_ids[] vs order_ids)
+  const orderIds = selectedOrders.value.join(',') 
+  
   exportOrders({ order_ids: orderIds })
 }
 async function handleBulkDelete() {
