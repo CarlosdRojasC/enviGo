@@ -314,7 +314,8 @@ const {
   formatDate,
   getStatusName,
   getCommuneClass,
-  debugOrder
+  debugOrder,
+  bulkDeleteOrders
 } = useOrdersActions(newOrder, isCreatingOrder, fetchOrders, filters)
 
 
