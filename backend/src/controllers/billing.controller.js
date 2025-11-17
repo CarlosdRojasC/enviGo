@@ -1479,7 +1479,7 @@ async getInvoiceableOrders(req, res) {
       Order.find(query)
         .select('order_number customer_name delivery_date shipping_cost')
         .sort({ delivery_date: -1 })
-        .limit(200)
+        .limit(2000)
         .lean(),
       Order.countDocuments(query)
     ]);
