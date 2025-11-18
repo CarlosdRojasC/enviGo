@@ -545,7 +545,31 @@ static async processWebhook(channelId, webhookData) {
            return true;
         }
 
-        // Si el estado cambia, actualizamos
+        // ========================================================================
+        // 🛑 VALIDACIÓN DE SEGURIDAD LOGÍSTICA (MODIFICACIÓN SOLICITADA)
+        // ========================================================================
+        // Si MercadoLibre dice que está "Entregado", verificamos que el pedido
+        // haya pasado por nuestras manos (Bodega/Ruta) antes de aceptarlo.
+        if (newStatus === 'delivered') {
+            // Estados que confirman que el pedido entró a tu flujo logístico
+            const allowedPreviousStatuses = [
+                'warehouse_received', // Recibido en bodega
+                'shipped',            // Enviado
+                'out_for_delivery',   // En ruta
+                'ready_for_pickup',   // Listo para retiro
+                'picked_up'           // Retirado por conductor
+            ];
+
+            // Si el estado actual NO está en la lista (ej: sigue en 'pending'), bloqueamos
+            if (!allowedPreviousStatuses.includes(existingOrder.status)) {
+                console.log(`🛑 [ML Webhook] BLOQUEADO: ML indica 'delivered' pero el pedido local sigue en '${existingOrder.status}'.`);
+                console.log(`   👉 Acción: Se ignora el webhook para evitar facturación errónea de un pedido no gestionado.`);
+                return true; // Salimos sin actualizar nada
+            }
+        }
+        // ========================================================================
+
+        // Si el estado cambia (y pasó la validación anterior), actualizamos
         if (newStatus !== existingOrder.status) {
           
           // Validar transición (salvo que sea forzar entrega)
@@ -1009,8 +1033,8 @@ static mapOrderStatus(mlOrder) {
   if (mlOrder.shipping?.status) {
     const statusMap = {
       'pending': 'pending',
-      'handling': 'ready_for_pickup',
-      'ready_to_ship': 'ready_for_pickup',
+      'handling': 'pending',
+      'ready_to_ship': 'pending',
       'shipped': 'shipped',
       'in_transit': 'shipped',
       'out_for_delivery': 'out_for_delivery',
