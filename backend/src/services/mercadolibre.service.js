@@ -607,7 +607,7 @@ static async processWebhook(channelId, webhookData) {
       // 6. Lógica para nuevos pedidos (Flex)
       const isFlex = await this.isFlexOrder(mlOrder, accessToken);
       if (!isFlex) {
-        console.log(`[ML Webhook] Pedido ${orderId} no es FLEX. Omitido.`);
+        console.log(`[ML Webhook] Pedido ${orderId} no es FLEXs. Omitido.`);
         return true;
       }
 
