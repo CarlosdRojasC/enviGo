@@ -1035,8 +1035,8 @@ static mapOrderStatus(mlOrder) {
       'pending': 'pending',
       'handling': 'pending',
       'ready_to_ship': 'pending',
-      'shipped': 'shipped',
-      'in_transit': 'shipped',
+      'shipped': 'pending',
+      'in_transit': 'pending',
       'out_for_delivery': 'out_for_delivery',
       'delivered': 'delivered',        // ✅ ESTADO FINAL
       'not_delivered': 'cancelled',     // ✅ ESTADO FINAL  
