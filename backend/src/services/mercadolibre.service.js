@@ -1051,8 +1051,8 @@ static mapOrderStatus(mlOrder) {
       const statusMap = {
         // Estados de preparación/espera de ML
         'pending': 'pending',
-        'handling': 'ready_for_pickup', // Lo mapeamos a un estado de preparación para la logística
-        'ready_to_ship': 'ready_for_pickup', // Lo mapeamos a un estado de preparación para la logística
+        'handling': 'pending', // Lo mapeamos a un estado de preparación para la logística
+        'ready_to_ship': 'pending', // Lo mapeamos a un estado de preparación para la logística
         
         // Estados de movimiento de ML
         'shipped': 'shipped', // Mapeamos correctamente a 'shipped'
