@@ -988,80 +988,112 @@ static isFinalStatus(status) {
 }
 
 // ✅ FUNCIÓN AUXILIAR: Verificar si un cambio de estado es válido
-static isValidStatusTransition(currentStatus, newStatus) {
-  // Si el estado actual es final, no permitir cambios
-  if (this.isFinalStatus(currentStatus)) {
-    console.log(`⚠️ [ML Status] Transición inválida: ${currentStatus} → ${newStatus} (estado final)`);
-    return false;
+/**
+   * ✅ FUNCIÓN AUXILIAR: Verificar si un cambio de estado es válido
+   * Define el flujo de estados permitido en el sistema.
+   */
+  static isValidStatusTransition(currentStatus, newStatus) {
+    // Si el estado actual es final, no permitir cambios
+    if (this.isFinalStatus(currentStatus)) {
+      console.log(`⚠️ [ML Status] Transición inválida: ${currentStatus} → ${newStatus} (estado final)`);
+      return false;
+    }
+    
+    // Definir transiciones válidas para cada estado
+    const validTransitions = {
+      // Pedidos nuevos pueden ir a estados de preparación o finales
+      'pending': ['ready_for_pickup', 'warehouse_received', 'shipped', 'cancelled', 'delivered'],
+      
+      // Desde Bodega, puede ir a listo para retirar o ya en ruta (shipped/out_for_delivery)
+      'warehouse_received': ['ready_for_pickup', 'picked_up', 'shipped', 'out_for_delivery', 'delivered', 'cancelled'],
+      
+      // Listo para ser recogido, puede ir a recogido o ya en ruta
+      'ready_for_pickup': ['picked_up', 'shipped', 'out_for_delivery', 'delivered', 'cancelled'],
+      
+      // El conductor lo tiene, el siguiente paso es en ruta o directamente entregado
+      'picked_up': ['shipped', 'out_for_delivery', 'delivered', 'cancelled'],
+
+      // En ruta, solo puede avanzar a entrega o cancelación
+      'shipped': ['out_for_delivery', 'delivered', 'cancelled'],
+      
+      // Último paso antes de entrega
+      'out_for_delivery': ['delivered', 'cancelled'],
+      
+      // Estado genérico de procesamiento
+      'processing': ['ready_for_pickup', 'shipped', 'cancelled', 'delivered', 'warehouse_received']
+    };
+    
+    const allowedNext = validTransitions[currentStatus];
+
+    // Si el estado actual no tiene transiciones definidas, no lo bloqueamos
+    // (Útil para nuevos estados o estados que vienen de Shipday/ML que no mapeamos aún)
+    if (!allowedNext) {
+        console.warn(`⚠️ [ML Status] Estado actual '${currentStatus}' no tiene transiciones definidas. Se permite por seguridad.`);
+        return true; 
+    }
+
+    const isValid = allowedNext.includes(newStatus);
+    
+    if (!isValid) {
+      console.log(`⚠️ [ML Status] Transición inválida: ${currentStatus} → ${newStatus}. Transiciones válidas: ${allowedNext.join(', ')}`);
+    }
+    
+    return isValid;
   }
-  
-  // Definir transiciones válidas
-  const validTransitions = {
-    'pending': ['ready_for_pickup', 'shipped', 'cancelled', 'delivered'],
-    'ready_for_pickup': ['shipped', 'cancelled', 'delivered', 'picked_up'],
-    'shipped': ['out_for_delivery', 'delivered', 'cancelled'],
-    'out_for_delivery': ['delivered', 'cancelled'],
-    'processing': ['ready_for_pickup', 'shipped', 'cancelled', 'delivered']
-  };
-  
-  const allowedNext = validTransitions[currentStatus] || [];
-  const isValid = allowedNext.includes(newStatus);
-  
-  if (!isValid) {
-    console.log(`⚠️ [ML Status] Transición inválida: ${currentStatus} → ${newStatus}`);
-  }
-  
-  return isValid;
-}
   /**
    * Mapea los estados de Mercado Libre a los estados del sistema
    */
 static mapOrderStatus(mlOrder) {
-  console.log(`🔍 [ML Status] Procesando order: ${mlOrder.id}, status: ${mlOrder.status}, shipping: ${mlOrder.shipping?.status}`);
+    console.log(`🔍 [ML Status] Procesando order: ${mlOrder.id}, status: ${mlOrder.status}, shipping: ${mlOrder.shipping?.status}`);
 
-  // 🚚 Prioridad al estado de shipping (envío)
-  if (mlOrder.shipping?.status) {
-    const statusMap = {
-      'pending': 'pending',
-      'handling': 'pending',
-      'ready_to_ship': 'pending',
-      'shipped': 'pending',
-      'in_transit': 'pending',
-      'out_for_delivery': 'out_for_delivery',
-      'delivered': 'delivered',        // ✅ ESTADO FINAL
-      'not_delivered': 'cancelled',     // ✅ ESTADO FINAL  
-      'cancelled': 'cancelled'          // ✅ ESTADO FINAL
-    };
+    // 🚚 Prioridad al estado de shipping (envío)
+    if (mlOrder.shipping?.status) {
+      const statusMap = {
+        // Estados de preparación/espera de ML
+        'pending': 'pending',
+        'handling': 'ready_for_pickup', // Lo mapeamos a un estado de preparación para la logística
+        'ready_to_ship': 'ready_for_pickup', // Lo mapeamos a un estado de preparación para la logística
+        
+        // Estados de movimiento de ML
+        'shipped': 'shipped', // Mapeamos correctamente a 'shipped'
+        'in_transit': 'shipped', // Mapeamos correctamente a 'shipped'
+        'out_for_delivery': 'out_for_delivery',
+        
+        // Estados finales
+        'delivered': 'delivered',        // ✅ ESTADO FINAL
+        'not_delivered': 'cancelled',     // ✅ ESTADO FINAL  
+        'cancelled': 'cancelled'          // ✅ ESTADO FINAL
+      };
 
-    const mappedStatus = statusMap[mlOrder.shipping.status];
-    if (mappedStatus) {
-      console.log(`📦 [ML Status] Shipping status ${mlOrder.shipping.status} → ${mappedStatus}`);
-      return mappedStatus;
+      const mappedStatus = statusMap[mlOrder.shipping.status];
+      if (mappedStatus) {
+        console.log(`📦 [ML Status] Shipping status ${mlOrder.shipping.status} → ${mappedStatus}`);
+        return mappedStatus;
+      }
     }
-  }
 
-  // 🧾 Si no hay estado de envío, usamos el estado de la orden
-  if (mlOrder.status) {
-    const generalStatusMap = {
-      'confirmed': 'pending',
-      'payment_required': 'pending',
-      'payment_in_process': 'pending',
-      'paid': 'pending',
-      'cancelled': 'cancelled',        // ✅ ESTADO FINAL
-      'invalid': 'cancelled',          // ✅ ESTADO FINAL
-      'delivered': 'delivered'         // ✅ ESTADO FINAL
-    };
+    // 🧾 Si no hay estado de envío, usamos el estado de la orden
+    if (mlOrder.status) {
+      const generalStatusMap = {
+        'confirmed': 'pending',
+        'payment_required': 'pending',
+        'payment_in_process': 'pending',
+        'paid': 'pending',
+        'cancelled': 'cancelled',        // ✅ ESTADO FINAL
+        'invalid': 'cancelled',          // ✅ ESTADO FINAL
+        'delivered': 'delivered'         // ✅ ESTADO FINAL
+      };
 
-    const mappedStatus = generalStatusMap[mlOrder.status];
-    if (mappedStatus) {
-      console.log(`📦 [ML Status] General status ${mlOrder.status} → ${mappedStatus}`);
-      return mappedStatus;
+      const mappedStatus = generalStatusMap[mlOrder.status];
+      if (mappedStatus) {
+        console.log(`📦 [ML Status] General status ${mlOrder.status} → ${mappedStatus}`);
+        return mappedStatus;
+      }
     }
-  }
 
-  console.log(`⚠️ [ML Status] No se pudo mapear el status, usando 'pending' por defecto`);
-  return 'pending';
-}
+    console.log(`⚠️ [ML Status] No se pudo mapear el status, usando 'pending' por defecto`);
+    return 'pending';
+  }
 
   static async syncOrders(channelId, options = {}) {
   console.log('⚠️ [ML Service] syncOrders llamado - redirigiendo a syncInitialOrders');
