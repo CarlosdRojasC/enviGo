@@ -469,20 +469,19 @@ static async processWebhook(channelId, webhookData) {
 
       let orderId = null;
       let shippingId = null;
-      let cachedShipment = null; // Guardaremos el shipment si ya lo descargamos
+      let cachedShipment = null;
 
       // 1. Identificar IDs
       if (webhookData.topic.includes('orders')) {
         orderId = webhookData.resource.split('/').pop();
       } else if (webhookData.topic === 'shipments') {
         shippingId = webhookData.resource.split('/').pop();
-        // Si el webhook es de shipment, consultamos para saber el order_id
         try {
           const { data: shipment } = await axios.get(`${this.API_BASE_URL}/shipments/${shippingId}`, {
             headers: { Authorization: `Bearer ${accessToken}` }
           });
           orderId = shipment.order_id;
-          cachedShipment = shipment; // Lo guardamos para usarlo abajo
+          cachedShipment = shipment;
         } catch (err) {
           console.error(`❌ [ML Webhook] Error buscando shipment ${shippingId}:`, err.message);
           return true;
@@ -500,30 +499,25 @@ static async processWebhook(channelId, webhookData) {
         headers: { Authorization: `Bearer ${accessToken}` }
       });
 
-      // 3. 🔥 CRUCIAL: Obtener datos frescos del Shipment (Fuente de la verdad)
-      // La orden suele tener datos de envío viejos. Consultamos el shipment directo.
+      // 3. Obtener datos frescos del Shipment
       if (mlOrder.shipping?.id) {
         try {
-          // Usamos el que ya bajamos o bajamos uno nuevo
           const shipmentData = cachedShipment || (await axios.get(`${this.API_BASE_URL}/shipments/${mlOrder.shipping.id}`, {
             headers: { Authorization: `Bearer ${accessToken}` }
           })).data;
 
           console.log(`🚚 [ML Webhook] Estado REAL del Shipment (${mlOrder.shipping.id}): ${shipmentData.status}`);
           
-          // SOBRESCRIBIMOS la info de envío en la orden con la real
           mlOrder.shipping = { 
             ...mlOrder.shipping, 
             status: shipmentData.status,
             substatus: shipmentData.substatus,
-            date_delivered: shipmentData.status_history?.date_delivered // Fecha real de entrega
+            date_delivered: shipmentData.status_history?.date_delivered 
           };
         } catch (shipError) {
           console.warn(`⚠️ [ML Webhook] No se pudo actualizar info de shipment: ${shipError.message}`);
         }
       }
-
-      console.log(`📦 [ML Webhook] Procesando: ${mlOrder.id} | Status Real: ${mlOrder.shipping?.status}`);
 
       // 4. Buscar pedido local
       const existingOrder = await Order.findOne({
@@ -537,42 +531,45 @@ static async processWebhook(channelId, webhookData) {
       if (existingOrder) {
         console.log(`🔍 [ML Webhook] Pedido local (${existingOrder.order_number}) estado: ${existingOrder.status}`);
         
-        // Mapear nuevo estado con los datos frescos
         const newStatus = this.mapOrderStatus(mlOrder);
 
-        // Si ya está entregado localmente, no hacemos nada
+        // Si ya está igual, no hacer nada
         if (existingOrder.status === 'delivered' && newStatus === 'delivered') {
            return true;
         }
 
         // ========================================================================
-        // 🛑 VALIDACIÓN DE SEGURIDAD LOGÍSTICA (MODIFICACIÓN SOLICITADA)
+        // 🛡️ REGLA 1: PROTECCIÓN DE FLUJO "PENDING" -> "SHIPPED" (NUEVO)
         // ========================================================================
-        // Si MercadoLibre dice que está "Entregado", verificamos que el pedido
-        // haya pasado por nuestras manos (Bodega/Ruta) antes de aceptarlo.
+        // Si el pedido está 'pending', NO permitir que ML lo marque como 'shipped'.
+        // Esto fuerza a que el cambio a 'shipped' sea interno (Escáner/Driver).
+        if (existingOrder.status === 'pending' && (newStatus === 'shipped' || newStatus === 'out_for_delivery')) {
+            console.log(`🛡️ [ML Webhook] BLOQUEADO: ML indica '${newStatus}' pero el pedido local sigue en 'pending'.`);
+            console.log(`   👉 Acción: Se ignora el webhook. El pedido debe pasar por bodega primero.`);
+            return true; 
+        }
+
+        // ========================================================================
+        // 🛡️ REGLA 2: PROTECCIÓN DE "ENTREGADO"
+        // ========================================================================
         if (newStatus === 'delivered') {
-            // Estados que confirman que el pedido entró a tu flujo logístico
-            const allowedPreviousStatuses = [
-                'warehouse_received', // Recibido en bodega
-                'shipped',            // Enviado
-                'out_for_delivery',   // En ruta
-                'ready_for_pickup',   // Listo para retiro
-                'picked_up'           // Retirado por conductor
+            const estadosPermitidosParaEntregar = [
+                'warehouse_received',
+                'shipped',
+                'out_for_delivery',
+                'ready_for_pickup',
+                'picked_up'
             ];
 
-            // Si el estado actual NO está en la lista (ej: sigue en 'pending'), bloqueamos
-            if (!allowedPreviousStatuses.includes(existingOrder.status)) {
-                console.log(`🛑 [ML Webhook] BLOQUEADO: ML indica 'delivered' pero el pedido local sigue en '${existingOrder.status}'.`);
-                console.log(`   👉 Acción: Se ignora el webhook para evitar facturación errónea de un pedido no gestionado.`);
-                return true; // Salimos sin actualizar nada
+            if (!estadosPermitidosParaEntregar.includes(existingOrder.status)) {
+                console.log(`🛡️ [ML Webhook] BLOQUEADO: ML indica 'delivered' pero el pedido no ha sido procesado (Estado: ${existingOrder.status}).`);
+                return true;
             }
         }
-        // ========================================================================
 
-        // Si el estado cambia (y pasó la validación anterior), actualizamos
+        // Si pasa las reglas, actualizamos
         if (newStatus !== existingOrder.status) {
           
-          // Validar transición (salvo que sea forzar entrega)
           if (!this.isValidStatusTransition(existingOrder.status, newStatus) && newStatus !== 'delivered') {
             console.log(`⚠️ [ML Webhook] Transición inválida: ${existingOrder.status} → ${newStatus}.`);
             return true;
@@ -584,13 +581,9 @@ static async processWebhook(channelId, webhookData) {
           existingOrder.raw_data = [...(existingOrder.raw_data || []), mlOrder];
           existingOrder.updated_at = new Date();
 
-          // ✅ 5. ACTIVAR FACTURACIÓN Y FECHA SI ES ENTREGADO
           if (newStatus === 'delivered') {
              console.log('✅ [ML Webhook] Marcando como entregado y facturable');
-             // Usar fecha real de ML o la actual
              existingOrder.delivery_date = mlOrder.shipping?.date_delivered ? new Date(mlOrder.shipping.date_delivered) : new Date();
-             
-             // Activar flags para el widget de facturación
              existingOrder.billing_status = {
                ...existingOrder.billing_status,
                is_billable: true,
@@ -604,12 +597,9 @@ static async processWebhook(channelId, webhookData) {
         return true;
       }
 
-      // 6. Lógica para nuevos pedidos (Flex)
+      // Lógica para nuevos pedidos...
       const isFlex = await this.isFlexOrder(mlOrder, accessToken);
-      if (!isFlex) {
-        console.log(`[ML Webhook] Pedido ${orderId} no es FLEXs. Omitido.`);
-        return true;
-      }
+      if (!isFlex) return true;
 
       await this.createOrderFromApiData(mlOrder, channel, accessToken);
       console.log(`✅ [ML Webhook] Nuevo pedido creado (order=${orderId}).`);
