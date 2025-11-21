@@ -82,7 +82,7 @@ app.use(express.json({
     req.rawBody = buf;
   }
 }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '20mb' }));
 
 // Logging en desarrollo
 if (process.env.NODE_ENV === 'development') {
