@@ -16,7 +16,7 @@ const driverHistorySchema = new mongoose.Schema({
     type: String,
     required: true
   },
-  
+
   // INFORMACIÓN DE LA EMPRESA
   company_id: {
     type: mongoose.Schema.Types.ObjectId,
@@ -24,7 +24,7 @@ const driverHistorySchema = new mongoose.Schema({
     required: true,
     index: true
   },
-  
+
   // INFORMACIÓN DEL PEDIDO ENTREGADO
   order_id: {
     type: mongoose.Schema.Types.ObjectId,
@@ -33,13 +33,13 @@ const driverHistorySchema = new mongoose.Schema({
   },
   shipday_order_id: {
     type: String,
-    required: true
+    required: false
   },
   order_number: {
     type: String,
     required: true
   },
-  
+
   // DIRECCIÓN DE ENTREGA
   delivery_address: {
     type: String,
@@ -49,21 +49,21 @@ const driverHistorySchema = new mongoose.Schema({
     type: String,
     required: true
   },
-  
+
   // FECHAS
   delivered_at: {
     type: Date,
     required: true,
     index: true
   },
-  
+
   // PAGO - PRECIO FIJO
   payment_amount: {
     type: Number,
     required: true,
     default: 1700
   },
-  
+
   // CONTROL DE PAGOS
   payment_status: {
     type: String,
@@ -80,7 +80,7 @@ const driverHistorySchema = new mongoose.Schema({
     type: Date,
     default: null
   },
-  
+
   created_at: {
     type: Date,
     default: Date.now
@@ -95,7 +95,7 @@ driverHistorySchema.index({ company_id: 1, payment_period: 1, payment_status: 1 
 driverHistorySchema.index({ payment_period: 1, payment_status: 1 });
 
 // Middleware para calcular período de pago automáticamente
-driverHistorySchema.pre('save', function(next) {
+driverHistorySchema.pre('save', function (next) {
   if (this.delivered_at) {
     const date = new Date(this.delivered_at);
     const year = date.getFullYear();
@@ -106,15 +106,15 @@ driverHistorySchema.pre('save', function(next) {
 });
 
 // Métodos estáticos para reportes y consultas
-driverHistorySchema.statics.getDriverEarnings = function(driverId, startDate, endDate) {
+driverHistorySchema.statics.getDriverEarnings = function (driverId, startDate, endDate) {
   const matchFilter = {
     driver_id: driverId
   };
-  
+
   if (startDate && endDate) {
     matchFilter.delivered_at = { $gte: startDate, $lte: endDate };
   }
-  
+
   return this.aggregate([
     { $match: matchFilter },
     {
@@ -137,7 +137,7 @@ driverHistorySchema.statics.getDriverEarnings = function(driverId, startDate, en
   ]);
 };
 
-driverHistorySchema.statics.getMonthlyPaymentReport = function(companyId, paymentPeriod) {
+driverHistorySchema.statics.getMonthlyPaymentReport = function (companyId, paymentPeriod) {
   return this.aggregate([
     {
       $match: {
@@ -162,13 +162,13 @@ driverHistorySchema.statics.getMonthlyPaymentReport = function(companyId, paymen
   ]);
 };
 
-driverHistorySchema.statics.getCompanyStats = function(companyId, startDate, endDate) {
+driverHistorySchema.statics.getCompanyStats = function (companyId, startDate, endDate) {
   const matchFilter = { company_id: companyId };
-  
+
   if (startDate && endDate) {
     matchFilter.delivered_at = { $gte: startDate, $lte: endDate };
   }
-  
+
   return this.aggregate([
     { $match: matchFilter },
     {
