@@ -1,8 +1,11 @@
-// backend/src/routes/upload.routes.js (crear este archivo)
+// backend/src/routes/upload.routes.js
+
 const express = require('express');
 const router = express.Router();
 const multer = require('multer');
 const cloudinary = require('../config/cloudinary');
+// ⚠️ ASUME que tienes este servicio, si no, reemplaza por la ruta correcta
+const CloudinaryService = require('../services/cloudinary.service');
 const { authenticateToken, authorizeRoles } = require('../middlewares/auth.middleware');
 
 // Configurar multer para manejar archivos en memoria
@@ -10,13 +13,14 @@ const storage = multer.memoryStorage();
 const upload = multer({
   storage: storage,
   limits: {
-    fileSize: 5 * 1024 * 1024, // 5MB máximo por archivo
+    fileSize: 5 * 1024 * 1024, // 5MB máximo por archivo (Este límite aplica por archivo individual)
   },
   fileFilter: (req, file, cb) => {
     // Solo permitir imágenes
     if (file.mimetype.startsWith('image/')) {
       cb(null, true);
     } else {
+      // Este error será capturado por el manejador de errores global de Express
       cb(new Error('Solo se permiten archivos de imagen'), false);
     }
   }
@@ -25,41 +29,45 @@ const upload = multer({
 /**
  * POST /api/upload/delivery-photos
  * Sube fotos de entrega del conductor a Cloudinary
+ * 🚀 AHORA usa MULTIPART/FORM-DATA
  */
 router.post('/delivery-photos', [
   authenticateToken,
-  authorizeRoles(['driver', 'admin', 'manager'])
+  authorizeRoles(['driver', 'admin', 'manager']),
+  // CAMBIO CLAVE: Multer procesa los archivos del campo 'photos' (máximo 5)
+  upload.array('photos', 5)
 ], async (req, res) => {
   try {
-    const { photos, orderId } = req.body;
-    
-    if (!photos || !Array.isArray(photos) || photos.length === 0) {
+    // ⚠️ CAMBIO: Los archivos subidos por Multer se encuentran en req.files
+    const photos = req.files;
+    // ⚠️ CAMBIO: Los campos de texto (como orderId) se encuentran en req.body
+    const { orderId } = req.body;
+
+    if (!photos || photos.length === 0) {
       return res.status(400).json({
         success: false,
-        error: 'Se requiere al menos una foto'
+        // Mensaje de error ajustado para indicar que se espera multipart/form-data
+        error: 'Se requiere al menos una foto. Asegúrese de enviar la solicitud como multipart/form-data con el campo "photos".'
       });
     }
 
-    if (photos.length > 5) {
-      return res.status(400).json({
-        success: false,
-        error: 'Máximo 5 fotos permitidas'
-      });
-    }
+    // Nota: Multer ya maneja el límite de 5 fotos y 5MB/archivo.
+    // Si se excede el límite de 5MB, Multer lanzará un error tipo MulterError (ej. LIMIT_FILE_SIZE).
 
     const uploadedPhotos = [];
-    
+
     // Subir cada foto a Cloudinary
     for (let i = 0; i < photos.length; i++) {
       try {
         console.log(`📸 Subiendo foto ${i + 1}/${photos.length} del conductor...`);
-        
+
+        // ⚠️ CAMBIO CLAVE: El contenido binario del archivo está en photos[i].buffer
         const photoResult = await CloudinaryService.uploadProofImage(
-          photos[i], 
-          orderId || 'driver_delivery', 
+          photos[i].buffer, // <--- Pasar el Buffer (contenido binario)
+          orderId || 'driver_delivery',
           `driver_photo_${i + 1}`
         );
-        
+
         uploadedPhotos.push({
           url: photoResult.url,
           public_id: photoResult.public_id,
@@ -68,14 +76,14 @@ router.post('/delivery-photos', [
           height: photoResult.height,
           bytes: photoResult.bytes
         });
-        
+
         console.log(`✅ Foto ${i + 1} subida: ${photoResult.url}`);
       } catch (error) {
         console.error(`❌ Error subiendo foto ${i + 1}:`, error);
-        return res.status(500).json({ 
+        return res.status(500).json({
           success: false,
           error: `Error al subir la foto ${i + 1}`,
-          details: error.message 
+          details: error.message
         });
       }
     }
@@ -101,7 +109,7 @@ router.post('/delivery-photos', [
 
 /**
  * DELETE /api/upload/delete-photo
- * Elimina una foto de Cloudinary
+ * Elimina una foto de Cloudinary (No necesita cambios)
  */
 router.delete('/delete-photo', [
   authenticateToken,
@@ -109,7 +117,7 @@ router.delete('/delete-photo', [
 ], async (req, res) => {
   try {
     const { public_id } = req.body;
-    
+
     if (!public_id) {
       return res.status(400).json({
         success: false,
@@ -118,9 +126,9 @@ router.delete('/delete-photo', [
     }
 
     console.log(`🗑️ Eliminando foto de Cloudinary: ${public_id}`);
-    
+
     const result = await CloudinaryService.deleteImage(public_id);
-    
+
     res.json({
       success: true,
       message: 'Foto eliminada correctamente',
