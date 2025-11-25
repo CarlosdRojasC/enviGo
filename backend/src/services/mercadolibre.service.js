@@ -763,7 +763,7 @@ class MercadoLibreService {
       ml_shipping_id: shippingId,
       customer_name: `${fullOrder.buyer.first_name || ''} ${fullOrder.buyer.last_name || ''}`.trim(),
       customer_email: fullOrder.buyer.email,
-      customer_phone: shippingInfo.phone || '999999999',
+      customer_phone: '999999999',
       customer_document: fullOrder.buyer.billing_info?.doc_number || '',
       shipping_address: shippingInfo.address,
       shipping_commune: shippingInfo.city,
