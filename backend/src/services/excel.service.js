@@ -60,8 +60,16 @@ class ExcelService {
     try {
       console.log(`📊 Generando Excel personalizado con ${orders.length} pedidos`);
 
-      // Preparar datos para Excel con el formato específico
-      const data = orders.map((order) => {
+      // 1) Ordenar los pedidos por fecha (ascendente)
+      //    Usa order_date, y si no existe, cae a created_at
+      const sortedOrders = [...orders].sort((a, b) => {
+        const dateA = new Date(a.order_date || a.created_at || 0);
+        const dateB = new Date(b.order_date || b.created_at || 0);
+        return dateA - dateB; // ascendente
+      });
+
+      // 2) Preparar datos para Excel con el formato específico
+      const data = sortedOrders.map((order) => {
         // Lógica para extraer Dpto/Oficina de la dirección
         let dpto = '';
         const address = order.shipping_address || '';
@@ -72,6 +80,9 @@ class ExcelService {
         }
 
         return {
+          'Fecha Pedido': order.order_date
+            ? new Date(order.order_date).toLocaleDateString('es-CL')
+            : (order.created_at ? new Date(order.created_at).toLocaleDateString('es-CL') : ''),
           'Nombre Completo': order.customer_name || '',
           'Telefono': order.customer_phone || '',
           'Correo': order.customer_email || '',
@@ -94,6 +105,7 @@ class ExcelService {
 
       // Configurar ancho de columnas para mejor lectura
       ws['!cols'] = [
+        { wch: 12 }, // Fecha Pedido
         { wch: 30 }, // Nombre Completo
         { wch: 15 }, // Telefono
         { wch: 25 }, // Correo
@@ -111,7 +123,7 @@ class ExcelService {
       XLSX.utils.book_append_sheet(wb, ws, 'Pedidos');
 
       return XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
-      
+
     } catch (error) {
       console.error('❌ Error generando Excel:', error);
       throw new Error('Error al generar archivo Excel');
@@ -128,14 +140,14 @@ class ExcelService {
         'Pedidos Entregados': invoice.delivered_orders,
         'Precio por Pedido': invoice.price_per_order,
         'Total a Facturar': invoice.total_amount,
-        'Estado': invoice.status === 'paid' ? 'Pagado' : 
-                  invoice.status === 'sent' ? 'Enviado' : 'Pendiente',
+        'Estado': invoice.status === 'paid' ? 'Pagado' :
+          invoice.status === 'sent' ? 'Enviado' : 'Pendiente',
         'Fecha de Pago': invoice.paid_date || '-'
       }));
-      
+
       const wb = XLSX.utils.book_new();
       const ws = XLSX.utils.json_to_sheet(data);
-      
+
       // Ajustar anchos
       ws['!cols'] = [
         { wch: 30 }, // Empresa
@@ -147,16 +159,16 @@ class ExcelService {
         { wch: 12 }, // Estado
         { wch: 15 }  // Fecha de Pago
       ];
-      
+
       XLSX.utils.book_append_sheet(wb, ws, 'Facturas');
-      
+
       return XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
     } catch (error) {
       console.error('Error generando reporte de facturas:', error);
       throw new Error('Error al generar reporte de facturas');
     }
   }
-  
+
   // Generar reporte de pedidos
   static async generateOrdersReport(orders) {
     try {
@@ -174,10 +186,10 @@ class ExcelService {
         'Empresa': order.company_name || '-',
         'Notas': order.notes || '-'
       }));
-      
+
       const wb = XLSX.utils.book_new();
       const ws = XLSX.utils.json_to_sheet(data);
-      
+
       // Ajustar anchos de columna
       ws['!cols'] = [
         { wch: 15 }, // ID Pedido
@@ -193,21 +205,21 @@ class ExcelService {
         { wch: 20 }, // Empresa
         { wch: 30 }  // Notas
       ];
-      
+
       XLSX.utils.book_append_sheet(wb, ws, 'Pedidos');
-      
+
       return XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
     } catch (error) {
       console.error('Error generando reporte de pedidos:', error);
       throw new Error('Error al generar reporte de pedidos');
     }
   }
-  
+
   // Generar reporte de análisis por empresa
   static async generateCompanyAnalysisReport(companyData) {
     try {
       const wb = XLSX.utils.book_new();
-      
+
       // Hoja 1: Resumen General
       const summaryData = companyData.map(company => ({
         'Empresa': company.name,
@@ -221,7 +233,7 @@ class ExcelService {
         'Precio por Pedido': company.price_per_order,
         'Total a Cobrar': company.delivered_orders * company.price_per_order
       }));
-      
+
       const wsSummary = XLSX.utils.json_to_sheet(summaryData);
       wsSummary['!cols'] = [
         { wch: 30 }, // Empresa
@@ -235,9 +247,9 @@ class ExcelService {
         { wch: 18 }, // Precio por Pedido
         { wch: 18 }  // Total a Cobrar
       ];
-      
+
       XLSX.utils.book_append_sheet(wb, wsSummary, 'Resumen General');
-      
+
       // Hoja 2: Análisis por Canal
       const channelData = [];
       companyData.forEach(company => {
@@ -254,7 +266,7 @@ class ExcelService {
           });
         }
       });
-      
+
       if (channelData.length > 0) {
         const wsChannels = XLSX.utils.json_to_sheet(channelData);
         wsChannels['!cols'] = [
@@ -267,14 +279,14 @@ class ExcelService {
         ];
         XLSX.utils.book_append_sheet(wb, wsChannels, 'Análisis por Canal');
       }
-      
+
       return XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
     } catch (error) {
       console.error('Error generando reporte de análisis:', error);
       throw new Error('Error al generar reporte de análisis');
     }
   }
-  
+
   // Traducir estado
   static translateStatus(status) {
     const translations = {
@@ -286,28 +298,28 @@ class ExcelService {
     };
     return translations[status] || status;
   }
-  
+
   // Validar datos de importación
   static validateImportData(data) {
     const errors = [];
     const requiredFields = ['ID Externo*', 'Número de Pedido*', 'Nombre Cliente*', 'Dirección*', 'Ciudad*', 'Monto Total*'];
-    
+
     data.forEach((row, index) => {
       requiredFields.forEach(field => {
         if (!row[field]) {
           errors.push(`Fila ${index + 2}: El campo "${field}" es obligatorio`);
         }
       });
-      
+
       if (row['Monto Total*'] && isNaN(parseFloat(row['Monto Total*']))) {
         errors.push(`Fila ${index + 2}: El monto total debe ser un número`);
       }
-      
+
       if (row['Costo de Envío'] && isNaN(parseFloat(row['Costo de Envío']))) {
         errors.push(`Fila ${index + 2}: El costo de envío debe ser un número`);
       }
     });
-    
+
     return errors;
   }
 
@@ -333,11 +345,11 @@ class ExcelService {
         'Canal': order.channel_id?.channel_name || '',
         'Notas': order.notes || ''
       }));
-      
+
       const wb = XLSX.utils.book_new();
       const ws = XLSX.utils.json_to_sheet(data);
       XLSX.utils.book_append_sheet(wb, ws, 'Pedidos');
-      
+
       return XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
     } catch (error) {
       console.error('Error generando Excel para dashboard:', error);
@@ -360,28 +372,28 @@ class ExcelService {
       byCompany: {},
       byChannel: {}
     };
-    
+
     orders.forEach(order => {
       if (stats.hasOwnProperty(order.status)) {
         stats[order.status]++;
       }
       stats.totalAmount += order.total_amount || 0;
       stats.totalShippingCost += order.shipping_cost || 0;
-      
+
       const company = order.company_id?.name || 'Sin Empresa';
       stats.byCompany[company] = (stats.byCompany[company] || 0) + 1;
-      
+
       const channel = order.channel_id?.channel_name || 'Sin Canal';
       stats.byChannel[channel] = (stats.byChannel[channel] || 0) + 1;
     });
-    
+
     stats.averageAmount = orders.length > 0 ? stats.totalAmount / orders.length : 0;
     return stats;
   }
 
   async generateDriverPaymentReport(ordersData, summary) {
     const workbook = new ExcelJS.Workbook();
-    
+
     // Hoja 1: Resumen
     const summarySheet = workbook.addWorksheet('Resumen');
     summarySheet.addRow(['REPORTE DE PAGOS A CONDUCTORES']);
@@ -391,17 +403,17 @@ class ExcelService {
     summarySheet.addRow(['Total Entregas:', summary.total_deliveries]);
     summarySheet.addRow(['Pago por Entrega:', `$${summary.payment_per_delivery}`]);
     summarySheet.addRow(['TOTAL A PAGAR:', `$${summary.total_amount_to_pay.toLocaleString('es-CL')}`]);
-    
+
     // Hoja 2: Detalle por pedido
     const detailSheet = workbook.addWorksheet('Detalle por Pedido');
-    
+
     const headers = ['Conductor', 'N° Pedido', 'Cliente', 'Comuna', 'Fecha Entrega', 'Monto'];
     detailSheet.addRow(headers);
-    
+
     const headerRow = detailSheet.getRow(1);
     headerRow.font = { bold: true };
     headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE6F3FF' } };
-    
+
     ordersData.forEach(order => {
       detailSheet.addRow([
         order.Conductor,
@@ -412,11 +424,11 @@ class ExcelService {
         `${order.Monto.toLocaleString('es-CL')}`
       ]);
     });
-    
+
     detailSheet.columns = [
       { width: 20 }, { width: 15 }, { width: 25 }, { width: 15 }, { width: 12 }, { width: 10 }
     ];
-    
+
     const buffer = await workbook.xlsx.writeBuffer();
     return buffer;
   }
