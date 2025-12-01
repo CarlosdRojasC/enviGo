@@ -55,7 +55,7 @@ class ExcelService {
     }
   }
 
-  // ✅ MÉTODO MODIFICADO CON EL FORMATO SOLICITADO
+  // ✅ MÉTODO MODIFICADO CON EL FORMATO SOLICITADO + EMPRESA
   static async generateOrdersExport(orders) {
     try {
       console.log(`📊 Generando Excel personalizado con ${orders.length} pedidos`);
@@ -79,10 +79,14 @@ class ExcelService {
           dpto = dptoMatch[1];
         }
 
+        // Obtener nombre de empresa de forma segura
+        const companyName = order.company_name || (order.company_id && order.company_id.name) || '';
+
         return {
           'Fecha Pedido': order.order_date
             ? new Date(order.order_date).toLocaleDateString('es-CL')
             : (order.created_at ? new Date(order.created_at).toLocaleDateString('es-CL') : ''),
+          'Empresa': companyName, // <--- CAMPO AGREGADO
           'Nombre Completo': order.customer_name || '',
           'Telefono': order.customer_phone || '',
           'Correo': order.customer_email || '',
@@ -106,6 +110,7 @@ class ExcelService {
       // Configurar ancho de columnas para mejor lectura
       ws['!cols'] = [
         { wch: 12 }, // Fecha Pedido
+        { wch: 20 }, // Empresa <--- ANCHO AGREGADO
         { wch: 30 }, // Nombre Completo
         { wch: 15 }, // Telefono
         { wch: 25 }, // Correo
