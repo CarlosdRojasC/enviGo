@@ -55,25 +55,23 @@ class ExcelService {
     }
   }
 
-  // ✅ MÉTODO MODIFICADO CON EL FORMATO SOLICITADO + EMPRESA
+  // ✅ MÉTODO MODIFICADO: INCLUYE EMPRESA Y NÚMERO DE PEDIDO
   static async generateOrdersExport(orders) {
     try {
       console.log(`📊 Generando Excel personalizado con ${orders.length} pedidos`);
 
       // 1) Ordenar los pedidos por fecha (ascendente)
-      //    Usa order_date, y si no existe, cae a created_at
       const sortedOrders = [...orders].sort((a, b) => {
         const dateA = new Date(a.order_date || a.created_at || 0);
         const dateB = new Date(b.order_date || b.created_at || 0);
-        return dateA - dateB; // ascendente
+        return dateA - dateB;
       });
 
-      // 2) Preparar datos para Excel con el formato específico
+      // 2) Preparar datos para Excel
       const data = sortedOrders.map((order) => {
-        // Lógica para extraer Dpto/Oficina de la dirección
+        // Lógica para extraer Dpto/Oficina
         let dpto = '';
         const address = order.shipping_address || '';
-        // Busca patrones como "Dpto 101", "Of 305", "Casa 2", "#304"
         const dptoMatch = address.match(/(?:dpto|dept|departamento|oficina|of|casa|unit|interior)\.?\s*[:#]?\s*([a-zA-Z0-9-]+)/i);
         if (dptoMatch && dptoMatch[1]) {
           dpto = dptoMatch[1];
@@ -86,19 +84,20 @@ class ExcelService {
           'Fecha Pedido': order.order_date
             ? new Date(order.order_date).toLocaleDateString('es-CL')
             : (order.created_at ? new Date(order.created_at).toLocaleDateString('es-CL') : ''),
-          'Empresa': companyName, // <--- CAMPO AGREGADO
+          'Número de Pedido': order.order_number || '', // <--- CAMPO AGREGADO (NR PEDIDO)
+          'Empresa': companyName,                       // <--- CAMPO EMPRESA
           'Nombre Completo': order.customer_name || '',
           'Telefono': order.customer_phone || '',
           'Correo': order.customer_email || '',
           'Direccion': order.shipping_address || '',
           'Comuna': order.shipping_commune || '',
-          'Dpto': dpto, // Extraído automáticamente o vacío
+          'Dpto': dpto,
           'Observacion': order.notes || '',
-          'Cantidad': 1, // Fijo según requerimiento
+          'Cantidad': 1,
           'Valor de la Encomienda': order.total_amount || 0,
-          'Tamaño': 'normal', // Valor por defecto
-          'Forma de Pago': 'contado', // Valor por defecto
-          'Devolución': 'no' // Valor por defecto
+          'Tamaño': 'normal',
+          'Forma de Pago': 'contado',
+          'Devolución': 'no'
         };
       });
 
@@ -107,10 +106,11 @@ class ExcelService {
       // Crear hoja principal
       const ws = XLSX.utils.json_to_sheet(data);
 
-      // Configurar ancho de columnas para mejor lectura
+      // Configurar ancho de columnas
       ws['!cols'] = [
         { wch: 12 }, // Fecha Pedido
-        { wch: 20 }, // Empresa <--- ANCHO AGREGADO
+        { wch: 15 }, // Número de Pedido <--- ANCHO PARA NR PEDIDO
+        { wch: 20 }, // Empresa          <--- ANCHO PARA EMPRESA
         { wch: 30 }, // Nombre Completo
         { wch: 15 }, // Telefono
         { wch: 25 }, // Correo
