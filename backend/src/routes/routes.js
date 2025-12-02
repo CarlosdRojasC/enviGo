@@ -5,6 +5,8 @@ const { body, validationResult } = require('express-validator');
 const RoutePlan = require('../models/RoutePlan');
 const routeOptimizerService = require('../services/routeOptimizer.service');
 const { authenticateToken, authorizeRoles } = require('../middlewares/auth.middleware');
+const multer = require('multer');
+const upload = multer({ storage: multer.memoryStorage() });
 
 // Middleware de validación de errores
 const handleValidationErrors = (req, res, next) => {
@@ -269,32 +271,59 @@ router.get('/driver/active', [
 router.patch('/:id/orders/:orderId/status', [
   authenticateToken,
   authorizeRoles(['driver', 'admin', 'manager']),
+  
+  // ⚠️ IMPORTANTE: Este middleware permite leer archivos y campos de texto
+  upload.any(), 
+  
+  // Las validaciones van DESPUÉS de upload.any() para que req.body ya tenga datos
   body('status').isIn(['pending', 'in_progress', 'delivered', 'failed', 'cancelled']).withMessage('Estado inválido'),
   handleValidationErrors
 ], asyncHandler(async (req, res) => {
   try {
-    const { status, deliveryProof } = req.body;
+    let { status, deliveryProof } = req.body;
     const { id: routeId, orderId } = req.params;
+
+    // 📸 LÓGICA NUEVA: Si hay archivos, reconstruimos el deliveryProof desde la App
+    if (req.files && req.files.length > 0) {
+      console.log(`📸 Recibidas ${req.files.length} fotos desde la App`);
+      
+      deliveryProof = {
+        recipientName: req.body.recipient_name, // Nota el guion bajo, así lo enviamos desde la App
+        notes: req.body.notes,
+        photos: req.files, // Pasamos el array de archivos crudos al servicio
+        location: {
+          latitude: req.body.latitude,
+          longitude: req.body.longitude
+        },
+        timestamp: new Date()
+      };
+    } else if (typeof deliveryProof === 'string') {
+      // Si por alguna razón llega como string JSON (a veces pasa con FormData)
+      try {
+        deliveryProof = JSON.parse(deliveryProof);
+      } catch (e) {
+        console.error('Error parseando deliveryProof string', e);
+      }
+    }
 
     console.log('📦 Actualizando estado de entrega:', {
       routeId,
       orderId,
       status,
       userId: req.user.id,
-      userRole: req.user.role
+      hasProof: !!deliveryProof
     });
 
-    // AGREGAR: Obtener información del conductor
+    // Obtener información del conductor
     let driverInfo = {
       id: req.user.id,
       name: req.user.name || req.user.email,
       email: req.user.email
     };
 
-    // Si es un conductor, buscar su información completa
     if (req.user.role === 'driver' && req.user.driver_id) {
       try {
-        const Driver = require('../models/Driver'); // Asegúrate de tener el modelo Driver
+        const Driver = require('../models/Driver');
         const driver = await Driver.findById(req.user.driver_id);
         if (driver) {
           driverInfo = {
@@ -304,10 +333,11 @@ router.patch('/:id/orders/:orderId/status', [
           };
         }
       } catch (error) {
-        console.log('⚠️ No se pudo obtener info del conductor, usando datos del usuario');
+        console.log('⚠️ No se pudo obtener info del conductor:', error.message);
       }
     }
 
+    // Llamar al servicio
     const result = await routeOptimizerService.updateDeliveryStatus(
       routeId,
       orderId,
