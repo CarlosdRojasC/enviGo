@@ -568,7 +568,7 @@ router.post('/:id/duplicate', [
  */
 router.patch('/:id/reoptimize', [
   authenticateToken,
-  authorizeRoles(['admin', 'manager'])
+  authorizeRoles(['admin', 'manager', 'driver'])
 ], asyncHandler(async (req, res) => {
   try {
     const { preferences = {} } = req.body;
