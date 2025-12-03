@@ -405,7 +405,8 @@ function resetNewOrderForm() {
     shipped: '🚚 En Ruta',
     delivered: '✅ Entregado',
     invoiced: '🧾 Facturado',
-    cancelled: '❌ Cancelado'
+    cancelled: '❌ Cancelado',
+    failed: '⚠️ Fallido'
     }
     return statusMap[status] || status
   }

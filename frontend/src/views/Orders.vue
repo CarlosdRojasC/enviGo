@@ -596,6 +596,7 @@ const orderStats = computed(() => ({
   processing: orders.value.filter(o => o.status === 'processing').length,
   shipped: orders.value.filter(o => o.status === 'shipped').length,
   delivered: orders.value.filter(o => o.status === 'delivered').length,
+  failed: orders.value.filter(o => o.status === 'failed').length,
   cancelled: orders.value.filter(o => o.status === 'cancelled').length
 }))
 
@@ -1210,7 +1211,8 @@ function getStatusName(status) {
     shipped: '🚚 En Ruta',                  // 🔧 MEJORAR con emoji
     delivered: '✅ Entregado',
     invoiced: '🧾 Facturado',
-    cancelled: '❌ Cancelado'
+    cancelled: '❌ Cancelado',
+    failed: '⚠️ Fallido'
   }
   return names[status] || status
 }

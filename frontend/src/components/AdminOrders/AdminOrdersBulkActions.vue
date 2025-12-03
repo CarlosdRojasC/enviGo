@@ -373,7 +373,8 @@ function getStatusName(status) {
     invoiced: 'Facturado',
     cancelled: 'Cancelado',
     ready_for_pickup: 'Listo',
-    warehouse_received: 'Recibido'
+    warehouse_received: 'Recibido',
+    failed: 'Entrega Fallida'
   }
   return statusMap[status] || status
 }
@@ -391,7 +392,8 @@ function getStatusClass(status) {
     invoiced: 'bg-teal-100 text-teal-800',
     cancelled: 'bg-red-100 text-red-800',
     ready_for_pickup: 'bg-violet-100 text-violet-800',
-    warehouse_received: 'bg-cyan-100 text-cyan-800'
+    warehouse_received: 'bg-cyan-100 text-cyan-800',
+    failed: 'bg-red-100 text-red-800 font-bold',
   }
   return classMap[status] || 'bg-gray-100 text-gray-800'
 }

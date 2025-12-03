@@ -598,7 +598,8 @@ function getStatusName(status) {
     delivered: 'Entregado',
     out_for_delivery: 'En Entrega',
     invoiced: 'Facturado',
-    cancelled: 'Cancelado'
+    cancelled: 'Cancelado',
+    failed: 'Fallido'
   };
   return names[status] || status;
 }

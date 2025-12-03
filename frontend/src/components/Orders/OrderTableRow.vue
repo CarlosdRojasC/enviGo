@@ -356,6 +356,7 @@ function getStatusName(status) {
     processing: 'Procesando',
     ready_for_pickup: 'Listo',
     shipped: 'En Tránsito',
+    failed: 'Entrega Fallida',
     out_for_delivery: 'En Entrega',
     delivered: 'Entregado',
     invoiced: 'Facturado',
@@ -373,7 +374,8 @@ function getStatusClasses(status) {
     shipped: 'bg-green-100 text-green-800',
     out_for_delivery: 'bg-yellow-100 text-yellow-800',
     delivered: 'bg-emerald-100 text-emerald-700',
-    cancelled: 'bg-red-100 text-red-800',
+    cancelled: 'bg-gray-100 text-gray-600',
+    failed: 'bg-red-100 text-red-800 font-bold',
     warehouse_received: 'bg-gray-100 text-gray-700',
     invoiced: 'bg-amber-50 text-amber-700'
   }
