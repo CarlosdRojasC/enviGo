@@ -579,10 +579,20 @@ router.post('/:id/duplicate', [
  */
 router.patch('/:id/reoptimize', [
   authenticateToken,
-  authorizeRoles(['admin', 'manager', 'driver'])
+  // ✅ 1. IMPORTANTE: Agregamos 'driver' para que el conductor pueda llamarlo
+  authorizeRoles(['admin', 'manager', 'driver']) 
 ], asyncHandler(async (req, res) => {
   try {
-    const { preferences = {} } = req.body;
+    // ✅ 2. IMPORTANTE: Recibimos 'addedOrderIds' del cuerpo de la petición
+    const { preferences = {}, addedOrderIds = [] } = req.body;
+
+    // Log para depuración
+    console.log('🛰️ Petición de re-optimización recibida:', {
+        routeId: req.params.id,
+        newOrdersCount: addedOrderIds.length,
+        addedIds: addedOrderIds
+    });
+
     const incomingStart = req.body.startLocation || req.body.start;
     const incomingEnd   = req.body.endLocation || req.body.end;
 
@@ -598,39 +608,31 @@ router.patch('/:id/reoptimize', [
       });
     }
 
-    const orderIds = route.orders.map(o => o.order._id);
+    // 3. Fusionar IDs actuales + IDs nuevos (evitando duplicados)
+    const currentOrderIds = route.orders.map(o => o.order._id.toString());
+    
+    // Set elimina duplicados automáticamente
+    const combinedOrderIds = [...new Set([...currentOrderIds, ...addedOrderIds])];
+
+    console.log(`🧩 Fusionando pedidos: ${currentOrderIds.length} actuales + ${addedOrderIds.length} nuevos = ${combinedOrderIds.length} total`);
 
     const routeConfig = {
       startLocation: incomingStart || route.startLocation,
       endLocation:   incomingEnd   || route.endLocation,
-      orderIds,
+      orderIds: combinedOrderIds, // ✅ Enviamos la lista combinada al optimizador
       driverId: route.driver,
       preferences: { ...route.preferences, ...preferences },
       createdBy: req.user.id,
       existingRouteId: req.params.id
     };
 
-    const newRoute = await routeOptimizerService.optimizeRoute(routeConfig);
-
-    const updated = await RoutePlan.findByIdAndUpdate(
-      req.params.id,
-      {
-        $set: {
-          startLocation: newRoute.startLocation,
-          endLocation: newRoute.endLocation,
-          orders: newRoute.orders,
-          optimization: newRoute.optimization,
-          updatedAt: new Date(),
-          status: 'assigned'
-        }
-      },
-      { new: true }
-    ).populate('driver orders.order');
+    // Llamar al servicio de optimización
+    const result = await routeOptimizerService.optimizeRoute(routeConfig);
 
     res.json({
       success: true,
-      message: 'Ruta re-optimizada correctamente',
-      data: updated
+      message: `Ruta actualizada con ${addedOrderIds.length} nuevos pedidos`,
+      data: result
     });
 
   } catch (error) {
