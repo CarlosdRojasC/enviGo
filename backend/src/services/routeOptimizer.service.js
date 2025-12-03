@@ -255,18 +255,56 @@ const optimizeRoute = async (config) => {
   );
 
   // === Si se está reoptimizando una ruta existente ===
-  if (existingRouteId) {
+ if (existingRouteId) {
+    // 1. Obtener la ruta actual para preservar su estado
+    const currentRoute = await RoutePlan.findById(existingRouteId);
+    
+    // Mapa de estados actuales de los pedidos (ID -> Estado/Prueba)
+    const currentOrdersMap = new Map();
+    if (currentRoute && currentRoute.orders) {
+      currentRoute.orders.forEach(o => {
+        // Guardamos todo el objeto del pedido para no perder nada (status, pruebas, fechas)
+        currentOrdersMap.set(o.order.toString(), o);
+      });
+    }
+
+    // Determinar el estado general de la ruta (mantener in_progress si ya estaba iniciada)
+    const statusToKeep = currentRoute && currentRoute.status === 'in_progress' 
+      ? 'in_progress' 
+      : 'assigned';
+
+    // 2. Construir la nueva lista de pedidos preservando el estado de los completados
+    const newOrders = orderedOrders.map((order, index) => {
+      const existingInfo = currentOrdersMap.get(order._id.toString());
+      
+      // Si ya existía, conservamos su estado, prueba, fechas, etc.
+      if (existingInfo) {
+        return {
+          order: order._id,
+          sequenceNumber: index + 1, // Actualizamos solo la secuencia
+          deliveryStatus: existingInfo.deliveryStatus,
+          deliveryProof: existingInfo.deliveryProof,
+          deliveredAt: existingInfo.deliveredAt,
+          attemptedAt: existingInfo.attemptedAt
+        };
+      }
+      
+      // Si es nuevo (raro en re-optimización, pero posible), va como pending
+      return {
+        order: order._id,
+        sequenceNumber: index + 1,
+        deliveryStatus: "pending"
+      };
+    });
+
+    // 3. Actualizar la ruta
     const updated = await RoutePlan.findByIdAndUpdate(
       existingRouteId,
       {
         $set: {
           startLocation: startPoint,
           endLocation: endPoint,
-          orders: orderedOrders.map((order, index) => ({
-            order: order._id,
-            sequenceNumber: index + 1,
-            deliveryStatus: "pending"
-          })),
+          orders: newOrders, // Usamos la lista con estados preservados
           optimization: {
             algorithm: "python_or-tools+google_directions",
             totalDistance,
@@ -275,16 +313,15 @@ const optimizeRoute = async (config) => {
             overview_polyline_segments: polylineSegments
           },
           updatedAt: new Date(),
-          status: "assigned"
+          status: statusToKeep // ✅ Mantener estado (assigned o in_progress)
         }
       },
       { new: true }
     ).populate("driver orders.order");
 
-    console.log(`✅ Ruta ${existingRouteId} actualizada correctamente (sin duplicar).`);
+    console.log(`✅ Ruta ${existingRouteId} re-optimizada conservando progreso.`);
     return updated;
   }
-
   // === Si no existe ruta previa, crear una nueva ===
   const routePlan = new RoutePlan({
     company: companyId,
