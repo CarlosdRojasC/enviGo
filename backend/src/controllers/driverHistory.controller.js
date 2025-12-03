@@ -600,82 +600,40 @@ async payAllPendingToDriver(req, res) {
     });
   }
 }
-  async getDriverHistory(req, res) {
+async getDriverHistory(req, res) {
     try {
       const { driverId } = req.params;
       const { 
         start_date, 
         end_date, 
-        status = 'completed', 
         limit = 100 
       } = req.query;
 
-      console.log('📚 Obteniendo historial para conductor:', {
-        driverId,
-        start_date,
-        end_date,
-        status
-      });
+      console.log('📚 App Móvil: Buscando historial para:', driverId);
 
-      // 1. BUSCAR EN ROUTEPLANS (entregas del optimizador de rutas)
-      const RoutePlan = require('../models/RoutePlan');
+      // 1. BUSCAR EN DRIVER HISTORY (Ya pagados o migrados)
+      const historyQuery = { driver_id: driverId };
       
-      const routeQuery = {
-        driver: driverId,
-        status: { $in: ['completed', 'in_progress'] }
-      };
-
       if (start_date || end_date) {
-        routeQuery.createdAt = {};
-        if (start_date) routeQuery.createdAt.$gte = new Date(start_date);
-        if (end_date) routeQuery.createdAt.$lte = new Date(end_date);
+        historyQuery.delivered_at = {};
+        if (start_date) historyQuery.delivered_at.$gte = new Date(start_date);
+        if (end_date) historyQuery.delivered_at.$lte = new Date(end_date);
       }
 
-      const routePlans = await RoutePlan.find(routeQuery)
-        .populate('orders.order', 'order_number customer_name shipping_address customer_phone')
-        .populate('driver', 'full_name name email')
-        .sort({ createdAt: -1 })
+      const historyRecords = await DriverHistory.find(historyQuery)
+        .sort({ delivered_at: -1 })
         .limit(parseInt(limit))
         .lean();
 
-      console.log(`📊 Rutas encontradas: ${routePlans.length}`);
-
-      // 2. EXTRAER ENTREGAS DE LAS RUTAS
-      const deliveries = [];
-      
-      routePlans.forEach(route => {
-        route.orders?.forEach(orderItem => {
-          if (['delivered', 'failed', 'cancelled'].includes(orderItem.deliveryStatus)) {
-            deliveries.push({
-              _id: `route_${route._id}_${orderItem.order._id}`,
-              order: {
-                _id: orderItem.order._id,
-                order_number: orderItem.order.order_number,
-                customer_name: orderItem.order.customer_name,
-                shipping_address: orderItem.order.shipping_address,
-                customer_phone: orderItem.order.customer_phone
-              },
-              deliveryStatus: orderItem.deliveryStatus,
-              completedAt: orderItem.deliveredAt || orderItem.attemptedAt || route.createdAt,
-              deliveryProof: orderItem.deliveryProof || null,
-              route_id: route._id,
-              sequence_number: orderItem.sequenceNumber,
-              source: 'route_optimizer'
-            });
-          }
-        });
-      });
-
-      // 3. TAMBIÉN BUSCAR EN ÓRDENES DIRECTAS (Shipday, Circuit, manuales)
-      const Order = require('../models/Order');
-      
+      // 2. BUSCAR EN ÓRDENES (Recientes, no migradas)
       const orderQuery = {
         status: { $in: ['delivered', 'invoiced'] },
+        // Excluir lo que ya está en history para no duplicar
+        _id: { $nin: historyRecords.map(h => h.order_id) },
         $or: [
-          { shipday_driver_id: driverId },
-          { assigned_driver_id: driverId },
           { 'delivered_by_driver.driver_id': driverId },
-          { 'driver_info.id': driverId }
+          { 'driver_info.id': driverId },
+          { shipday_driver_id: driverId } // Legacy
         ]
       };
 
@@ -685,76 +643,50 @@ async payAllPendingToDriver(req, res) {
         if (end_date) orderQuery.delivery_date.$lte = new Date(end_date);
       }
 
-      const directOrders = await Order.find(orderQuery)
-        .select('_id order_number customer_name shipping_address customer_phone delivery_date proof_of_delivery delivered_by_driver')
+      const recentOrders = await Order.find(orderQuery)
+        .select('_id order_number customer_name shipping_address delivery_date isPaid paidAt paymentNote')
         .sort({ delivery_date: -1 })
         .limit(parseInt(limit))
         .lean();
 
-      console.log(`📦 Órdenes directas encontradas: ${directOrders.length}`);
+      // 3. UNIFICAR
+      const combined = [
+        ...historyRecords.map(h => ({
+          _id: h._id,
+          order_number: h.order_number,
+          customer_name: h.customer_name,
+          delivery_address: h.delivery_address,
+          delivered_at: h.delivered_at,
+          payment_amount: h.payment_amount,
+          payment_status: h.payment_status,
+          source: 'history'
+        })),
+        ...recentOrders.map(o => ({
+          _id: o._id,
+          order_number: o.order_number,
+          customer_name: o.customer_name,
+          delivery_address: o.shipping_address,
+          delivered_at: o.delivery_date,
+          payment_amount: 1700,
+          payment_status: o.isPaid ? 'paid' : 'pending',
+          source: 'order'
+        }))
+      ];
 
-      // 4. AGREGAR ÓRDENES DIRECTAS A LAS ENTREGAS
-      directOrders.forEach(order => {
-        // Evitar duplicados
-        const existsInRoutes = deliveries.some(d => d.order._id.toString() === order._id.toString());
-        
-        if (!existsInRoutes) {
-          deliveries.push({
-            _id: `order_${order._id}`,
-            order: {
-              _id: order._id,
-              order_number: order.order_number,
-              customer_name: order.customer_name,
-              shipping_address: order.shipping_address,
-              customer_phone: order.customer_phone
-            },
-            deliveryStatus: 'delivered', // Las órdenes directas entregadas
-            completedAt: order.delivery_date,
-            deliveryProof: this.convertProofOfDelivery(order.proof_of_delivery),
-            route_id: null,
-            sequence_number: null,
-            source: 'direct_order'
-          });
-        }
-      });
-
-      // 5. ORDENAR POR FECHA MÁS RECIENTE
-      deliveries.sort((a, b) => new Date(b.completedAt) - new Date(a.completedAt));
-
-      // 6. CALCULAR ESTADÍSTICAS
-      const stats = {
-        total: deliveries.length,
-        delivered: deliveries.filter(d => d.deliveryStatus === 'delivered').length,
-        failed: deliveries.filter(d => d.deliveryStatus === 'failed').length,
-        cancelled: deliveries.filter(d => d.deliveryStatus === 'cancelled').length
-      };
-
-      console.log('✅ Historial compilado:', {
-        total_deliveries: deliveries.length,
-        sources: {
-          route_optimizer: deliveries.filter(d => d.source === 'route_optimizer').length,
-          direct_orders: deliveries.filter(d => d.source === 'direct_order').length
-        },
-        stats
-      });
+      // Ordenar por fecha descendente
+      combined.sort((a, b) => new Date(b.delivered_at) - new Date(a.delivered_at));
 
       res.json({
         success: true,
         data: {
-          deliveries,
-          stats,
-          driver_id: driverId,
-          period: { start_date, end_date },
-          total_found: deliveries.length
+          deliveries: combined.slice(0, parseInt(limit)), // Aplicar límite final
+          total: combined.length
         }
       });
 
     } catch (error) {
-      console.error('❌ Error obteniendo historial del conductor:', error);
-      res.status(500).json({
-        success: false,
-        error: error.message
-      });
+      console.error('❌ Error historial conductor:', error);
+      res.status(500).json({ success: false, error: error.message });
     }
   }
 
@@ -764,64 +696,36 @@ async payAllPendingToDriver(req, res) {
   async getDriverStats(req, res) {
     try {
       const { driverId } = req.params;
-      const { period = '30d' } = req.query;
+      const { period = '30d' } = req.query; // 7d, 30d, all
 
-      console.log('📊 Obteniendo estadísticas del conductor:', { driverId, period });
-
-      // Calcular fechas
-      const endDate = new Date();
-      const startDate = new Date();
+      const dateFilter = {};
+      const now = new Date();
       
-      switch (period) {
-        case '7d':
-          startDate.setDate(endDate.getDate() - 7);
-          break;
-        case '30d':
-          startDate.setDate(endDate.getDate() - 30);
-          break;
-        case '90d':
-          startDate.setDate(endDate.getDate() - 90);
-          break;
-        default:
-          startDate.setDate(endDate.getDate() - 30);
-      }
+      if (period === '7d') dateFilter.$gte = new Date(now.setDate(now.getDate() - 7));
+      if (period === '30d') dateFilter.$gte = new Date(now.setDate(now.getDate() - 30));
 
-      // Reutilizar la lógica del método anterior
-      const historyData = await this.getDriverHistoryData(driverId, startDate, endDate);
+      // Usamos una agregación simple sobre el Historial (que es más rápido)
+      // Si necesitas precisión absoluta con órdenes no migradas, sería más complejo, 
+      // pero para stats rápidas el historial suele bastar si se migra regularmente.
+      
+      // Vamos a contar todo (Historial + Orders) para ser precisos
+      
+      // ... (Puedes reutilizar la lógica de getDriverHistoryData o hacer un count rápido)
+      // Por simplicidad y velocidad en la app, usaremos el método getDriverHistoryData que ya creamos antes
+      
+      const historyData = await this.getDriverHistoryData(driverId, dateFilter.$gte || new Date(0), new Date());
       const deliveries = historyData.deliveries;
 
-      // Calcular estadísticas detalladas
       const stats = {
-        period,
-        total_deliveries: deliveries.length,
         successful_deliveries: deliveries.filter(d => d.deliveryStatus === 'delivered').length,
-        failed_deliveries: deliveries.filter(d => d.deliveryStatus === 'failed').length,
-        success_rate: deliveries.length > 0 ? 
-          Math.round((deliveries.filter(d => d.deliveryStatus === 'delivered').length / deliveries.length) * 100) : 0,
-        estimated_earnings: deliveries.filter(d => d.deliveryStatus === 'delivered').length * 1700,
-        
-        // Estadísticas por día
-        daily_average: deliveries.length > 0 ? 
-          Math.round(deliveries.length / Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24))) : 0,
-        
-        // Fuentes de entregas
-        sources: {
-          route_optimizer: deliveries.filter(d => d.source === 'route_optimizer').length,
-          direct_orders: deliveries.filter(d => d.source === 'direct_order').length
-        }
+        estimated_earnings: deliveries.reduce((sum, d) => sum + (d.payment_amount || 1700), 0),
+        pending_payment: deliveries.filter(d => d.payment_status === 'pending').reduce((sum, d) => sum + (d.payment_amount || 1700), 0)
       };
 
-      res.json({
-        success: true,
-        data: stats
-      });
+      res.json({ success: true, data: stats });
 
     } catch (error) {
-      console.error('❌ Error obteniendo estadísticas del conductor:', error);
-      res.status(500).json({
-        success: false,
-        error: error.message
-      });
+      res.status(500).json({ success: false, error: error.message });
     }
   }
 
@@ -831,71 +735,69 @@ async payAllPendingToDriver(req, res) {
   async getDriverPendingPayments(req, res) {
     try {
       const { driverId } = req.params;
-      
-      console.log('💰 Obteniendo pagos pendientes del conductor:', driverId);
+      console.log('💰 App Móvil: Buscando pendientes para:', driverId);
 
-      // Buscar en DriverHistory
-      const DriverHistory = require('../models/DriveryHistory');
+      // 1. Pendientes en Historial
       const pendingHistory = await DriverHistory.find({
         driver_id: driverId,
         payment_status: 'pending'
-      }).sort({ delivered_at: -1 });
+      }).lean();
 
-      // También buscar en Orders directamente
-      const Order = require('../models/Order');
+      // 2. Pendientes en Órdenes (que no estén en historial)
       const pendingOrders = await Order.find({
-  status: { $in: ['delivered', 'invoiced'] },
-  $or: [
-    { 'driver_info.email': driverId },               // ✅ nuevo
-    { 'driver_info.name': driverId },                // opcional
-    { shipday_driver_id: driverId },                 // legacy
-    { 'delivered_by_driver.driver_id': driverId }    // legacy / otros orígenes
-  ],
-  $or: [
-    { isPaid: { $exists: false } },
-    { isPaid: false }
-  ]
-})
-.select('_id order_number customer_name delivery_date shipping_address')
-.sort({ delivery_date: -1 });
+        status: { $in: ['delivered', 'invoiced'] },
+        // Excluir si ya existe en historial (aunque esté pending allá, ya lo tenemos en la lista 1)
+        _id: { $nin: pendingHistory.map(h => h.order_id) },
+        $or: [
+          { isPaid: false },
+          { isPaid: { $exists: false } }
+        ],
+        $or: [
+          { 'delivered_by_driver.driver_id': driverId },
+          { 'driver_info.id': driverId },
+          { shipday_driver_id: driverId }
+        ]
+      }).select('_id order_number customer_name delivery_date shipping_address').lean();
 
-      const totalPending = (pendingHistory.length * 1700) + (pendingOrders.length * 1700);
+      // 3. Combinar
+      const allPending = [
+        ...pendingHistory.map(h => ({
+          _id: h._id,
+          order_number: h.order_number,
+          customer_name: h.customer_name,
+          delivery_address: h.delivery_address,
+          delivered_at: h.delivered_at,
+          payment_amount: h.payment_amount,
+          payment_status: 'pending',
+          source: 'history'
+        })),
+        ...pendingOrders.map(o => ({
+          _id: o._id,
+          order_number: o.order_number,
+          customer_name: o.customer_name,
+          delivery_address: o.shipping_address,
+          delivered_at: o.delivery_date,
+          payment_amount: 1700,
+          payment_status: 'pending',
+          source: 'order'
+        }))
+      ];
+
+      // Ordenar más antiguas primero (para cobrar)
+      allPending.sort((a, b) => new Date(a.delivered_at) - new Date(b.delivered_at));
 
       res.json({
         success: true,
         data: {
-          driver_id: driverId,
-          pending_from_history: pendingHistory.length,
-          pending_from_orders: pendingOrders.length,
-          total_pending_deliveries: pendingHistory.length + pendingOrders.length,
-          total_pending_amount: totalPending,
-          deliveries: [
-            ...pendingHistory.map(h => ({
-              _id: h._id,
-              order_number: h.order_number,
-              customer_name: h.customer_name,
-              delivered_at: h.delivered_at,
-              payment_amount: h.payment_amount,
-              source: 'driver_history'
-            })),
-            ...pendingOrders.map(o => ({
-              _id: o._id,
-              order_number: o.order_number,
-              customer_name: o.customer_name,
-              delivered_at: o.delivery_date,
-              payment_amount: 1700,
-              source: 'order_direct'
-            }))
-          ]
+          deliveries: allPending,
+          total_amount: allPending.reduce((sum, item) => sum + (item.payment_amount || 0), 0),
+          count: allPending.length
         }
       });
 
     } catch (error) {
-      console.error('❌ Error obteniendo pagos pendientes:', error);
-      res.status(500).json({
-        success: false,
-        error: error.message
-      });
+      console.error('❌ Error pendientes conductor:', error);
+      res.status(500).json({ success: false, error: error.message });
     }
   }
 
