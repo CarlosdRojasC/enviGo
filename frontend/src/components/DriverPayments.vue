@@ -4,7 +4,7 @@
     <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100 mb-6">
       <div class="flex flex-col md:flex-row justify-between items-end gap-4">
         
-        <div class="flex flex-wrap gap-4 flex-1">
+        <div class="flex flex-wrap gap-4 flex-1 items-end">
           <div class="flex flex-col gap-1">
             <label class="text-xs font-bold text-gray-500 uppercase">Desde</label>
             <input v-model="dateFrom" type="date" class="form-input" @change="fetchData" />
@@ -23,11 +23,32 @@
               <option value="all">📋 Todos</option>
             </select>
           </div>
+
+          <div class="flex flex-col gap-1 flex-grow min-w-[250px]">
+            <label class="text-xs font-bold text-gray-500 uppercase">🔍 Buscar Conductor</label>
+            <div class="relative">
+              <input 
+                v-model="searchQuery" 
+                type="text" 
+                placeholder="Nombre o Email..." 
+                class="form-input w-full pl-9 pr-8"
+              />
+              <span class="absolute left-3 top-2.5 text-gray-400">🔎</span>
+              <button 
+                v-if="searchQuery" 
+                @click="searchQuery = ''" 
+                class="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600"
+                title="Limpiar búsqueda"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
         </div>
 
         <div class="flex gap-2">
-          <button @click="fetchData" class="btn btn-secondary">
-            🔄 Refrescar
+          <button @click="fetchData" class="btn btn-secondary" title="Recargar datos">
+            🔄
           </button>
           <button @click="runTest" class="btn btn-outline">
             🧪 Test
@@ -66,10 +87,16 @@
     </div>
 
     <div v-else-if="groupedDrivers.length === 0" class="bg-white p-10 rounded-xl text-center border border-dashed border-gray-300">
-      <div class="text-4xl mb-3">📭</div>
-      <h3 class="text-lg font-medium text-gray-900">No hay pagos pendientes</h3>
-      <p class="text-gray-500">No se encontraron entregas en este rango de fechas.</p>
-      <button @click="migrateData" class="mt-4 text-blue-600 font-medium hover:underline">
+      <div class="text-4xl mb-3">
+        {{ searchQuery ? '🔍' : '📭' }}
+      </div>
+      <h3 class="text-lg font-medium text-gray-900">
+        {{ searchQuery ? 'No se encontraron conductores' : 'No hay pagos pendientes' }}
+      </h3>
+      <p class="text-gray-500">
+        {{ searchQuery ? `No hay resultados para "${searchQuery}"` : 'No se encontraron entregas en este rango de fechas.' }}
+      </p>
+      <button v-if="!searchQuery" @click="migrateData" class="mt-4 text-blue-600 font-medium hover:underline">
         ¿Intentar importar desde órdenes recientes?
       </button>
     </div>
@@ -85,7 +112,7 @@
           @click="toggleDriver(driver.id)"
         >
           <div class="flex items-center gap-4">
-            <div class="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-bold">
+            <div class="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-bold shrink-0">
               {{ getInitials(driver.name) }}
             </div>
             <div>
