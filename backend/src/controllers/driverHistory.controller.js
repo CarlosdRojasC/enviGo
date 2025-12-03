@@ -616,146 +616,160 @@ async payAllPendingToDriver(req, res) {
   }
 }
 async getDriverHistory(req, res) {
-    try {
-      const { driverId } = req.params;
-      const { start_date, end_date, limit = 100 } = req.query;
+  try {
+    const { driverId } = req.params;
+    const { 
+      start_date, 
+      end_date, 
+      limit = 100 
+    } = req.query;
 
-      console.log('📚 App Móvil: Buscando historial para:', driverId);
+    console.log('📚 App Móvil: Historial para:', { driverId, start_date, end_date, limit });
 
-      // 1. Buscar en DriverHistory
-      const historyQuery = { driver_id: driverId };
-      if (start_date || end_date) {
-        historyQuery.delivered_at = {};
-        if (start_date) historyQuery.delivered_at.$gte = new Date(start_date);
-        if (end_date) historyQuery.delivered_at.$lte = new Date(end_date);
-      }
-      const historyRecords = await DriverHistory.find(historyQuery)
-        .sort({ delivered_at: -1 }).limit(parseInt(limit)).lean();
+    const query = { driver_id: driverId };
 
-      // 2. Buscar en Orders (excluyendo lo que ya está en history)
-      const orderQuery = {
-        status: { $in: ['delivered', 'invoiced'] },
-        _id: { $nin: historyRecords.map(h => h.order_id) },
-        $or: [
-          { 'delivered_by_driver.driver_id': driverId },
-          { 'driver_info.id': driverId },
-          { 'driver_info.email': driverId } // Por si acaso buscamos por email
-        ]
-      };
-      if (start_date || end_date) {
-        orderQuery.delivery_date = {};
-        if (start_date) orderQuery.delivery_date.$gte = new Date(start_date);
-        if (end_date) orderQuery.delivery_date.$lte = new Date(end_date);
-      }
-      const recentOrders = await Order.find(orderQuery)
-        .sort({ delivery_date: -1 }).limit(parseInt(limit)).lean();
-
-      // 3. Fusionar y responder
-      // NOTA: Aquí usamos 'this' porque estamos dentro de la misma instancia
-      const combined = this.mergeAndMapDeliveries(historyRecords, recentOrders);
-      
-      // Ordenar por fecha
-      combined.sort((a, b) => new Date(b.delivered_at) - new Date(a.delivered_at));
-
-      res.json({
-        success: true,
-        data: {
-          deliveries: combined.slice(0, parseInt(limit)),
-          total: combined.length
-        }
-      });
-    } catch (error) {
-      console.error('❌ Error historial:', error);
-      res.status(500).json({ success: false, error: error.message });
+    if (start_date || end_date) {
+      query.delivered_at = {};
+      if (start_date) query.delivered_at.$gte = new Date(start_date);
+      if (end_date)   query.delivered_at.$lte = new Date(end_date);
     }
+
+    const records = await DriverHistory.find(query)
+      .sort({ delivered_at: -1 })
+      .limit(parseInt(limit))
+      .lean();
+
+    // Normalizar al formato que la app espera
+    const deliveries = records.map(h => ({
+      _id: h._id,
+      order_number: h.order_number,
+      customer_name: h.customer_name,
+      delivery_address: h.delivery_address,
+      delivered_at: h.delivered_at,
+      payment_amount: h.payment_amount,
+      payment_status: h.payment_status || 'pending', // por seguridad
+      source: 'history'
+    }));
+
+    res.json({
+      success: true,
+      data: {
+        deliveries,
+        total: deliveries.length
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Error historial conductor (Móvil):', error);
+    res.status(500).json({ success: false, error: error.message });
   }
+}
+
 
   /**
    * ✅ NUEVO: Obtener estadísticas de un conductor
    */
 async getDriverStats(req, res) {
-    try {
-      const { driverId } = req.params;
-      const { period = '30d' } = req.query;
-      const startDate = new Date();
-      startDate.setDate(startDate.getDate() - (period === '7d' ? 7 : 30));
+  try {
+    const { driverId } = req.params;
+    const { period = '30d' } = req.query; // 7d, 30d, all
 
-      // Buscar en ambas partes con filtro de fecha
-      const historyRecs = await DriverHistory.find({ 
-          driver_id: driverId, delivered_at: { $gte: startDate } 
-      }).lean();
-      
-      const orderRecs = await Order.find({
-        status: { $in: ['delivered', 'invoiced'] },
-        _id: { $nin: historyRecs.map(h => h.order_id) },
-        delivery_date: { $gte: startDate },
-        $or: [
-            { 'delivered_by_driver.driver_id': driverId },
-            { 'driver_info.id': driverId },
-            { 'driver_info.email': driverId }
-        ]
-      }).lean();
+    console.log('📊 App Móvil: Stats para:', { driverId, period });
 
-      const all = this.mergeAndMapDeliveries(historyRecs, orderRecs);
+    const now = new Date();
+    let startDate = null;
 
-      res.json({
-        success: true,
-        data: {
-          successful_deliveries: all.length,
-          estimated_earnings: all.reduce((sum, d) => sum + (d.payment_amount || 0), 0),
-          pending_payment: all.filter(d => d.payment_status === 'pending')
-                              .reduce((sum, d) => sum + (d.payment_amount || 0), 0)
-        }
-      });
-    } catch (error) {
-      res.status(500).json({ success: false, error: error.message });
+    if (period === '7d') {
+      startDate = new Date(now);
+      startDate.setDate(startDate.getDate() - 7);
+    } else if (period === '30d') {
+      startDate = new Date(now);
+      startDate.setDate(startDate.getDate() - 30);
     }
+
+    const query = { driver_id: driverId };
+    if (startDate) {
+      query.delivered_at = { $gte: startDate, $lte: now };
+    }
+
+    const records = await DriverHistory.find(query).lean();
+
+    const totalDeliveries = records.length;
+    const estimatedEarnings = records.reduce(
+      (sum, r) => sum + (r.payment_amount || 1700),
+      0
+    );
+
+    // Si quisieras mostrar "pendiente vs pagado", podrías separar aquí.
+    const pendingPayment = records
+      .filter(r => r.payment_status === 'pending')
+      .reduce((sum, r) => sum + (r.payment_amount || 1700), 0);
+
+    const stats = {
+      period,
+      total_deliveries: totalDeliveries,
+      successful_deliveries: totalDeliveries, // en tu modelo todo es entrega hecha
+      failed_deliveries: 0,
+      success_rate: totalDeliveries > 0 ? 100 : 0,
+      estimated_earnings: estimatedEarnings,
+      pending_payment: pendingPayment
+    };
+
+    res.json({ success: true, data: stats });
+
+  } catch (error) {
+    console.error('❌ Error stats conductor (Móvil):', error);
+    res.status(500).json({ success: false, error: error.message });
   }
+}
+
 
   /**
    * ✅ NUEVO: Obtener entregas pendientes de pago de un conductor
    */
- async getDriverPendingPayments(req, res) {
-    try {
-      const { driverId } = req.params;
-      console.log('💰 App Móvil: Buscando pendientes para:', driverId);
+async getDriverPendingPayments(req, res) {
+  try {
+    const { driverId } = req.params;
+    console.log('💰 App Móvil: Pendientes para:', driverId);
 
-      // 1. Pendientes en Historial
-      const pendingHistory = await DriverHistory.find({
-        driver_id: driverId,
-        payment_status: 'pending'
-      }).lean();
+    const pendingHistory = await DriverHistory.find({
+      driver_id: driverId,
+      payment_status: 'pending'
+    })
+      .sort({ delivered_at: 1 })
+      .lean();
 
-      // 2. Pendientes en Órdenes
-      const pendingOrders = await Order.find({
-        status: { $in: ['delivered', 'invoiced'] },
-        _id: { $nin: pendingHistory.map(h => h.order_id) },
-        $or: [{ isPaid: false }, { isPaid: { $exists: false } }],
-        $or: [
-          { 'delivered_by_driver.driver_id': driverId },
-          { 'driver_info.id': driverId },
-          { 'driver_info.email': driverId }
-        ]
-      }).lean();
+    const deliveries = pendingHistory.map(h => ({
+      _id: h._id,
+      order_number: h.order_number,
+      customer_name: h.customer_name,
+      delivery_address: h.delivery_address,
+      delivered_at: h.delivered_at,
+      payment_amount: h.payment_amount,
+      payment_status: 'pending',
+      source: 'history'
+    }));
 
-      // 3. Fusionar
-      const allPending = this.mergeAndMapDeliveries(pendingHistory, pendingOrders);
-      
-      // Ordenar más antiguos primero
-      allPending.sort((a, b) => new Date(a.delivered_at) - new Date(b.delivered_at));
+    const totalAmount = deliveries.reduce(
+      (sum, item) => sum + (item.payment_amount || 0),
+      0
+    );
 
-      res.json({
-        success: true,
-        data: {
-          deliveries: allPending,
-          total_amount: allPending.reduce((sum, item) => sum + (item.payment_amount || 0), 0),
-          count: allPending.length
-        }
-      });
-    } catch (error) {
-      res.status(500).json({ success: false, error: error.message });
-    }
+    res.json({
+      success: true,
+      data: {
+        deliveries,
+        total_amount: totalAmount,
+        count: deliveries.length
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Error pendientes conductor (Móvil):', error);
+    res.status(500).json({ success: false, error: error.message });
   }
+}
+
 
   /**
    * ✅ HELPER: Método auxiliar para obtener datos de historial (reutilizable)
