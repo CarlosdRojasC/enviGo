@@ -1,16 +1,14 @@
 // backend/src/routes/driverHistory.routes.js
-// VERSIÓN MÍNIMA - SOLO MÉTODOS QUE REALMENTE EXISTEN EN EL CONTROLADOR
-
 const express = require('express');
 const router = express.Router();
-const { authenticateToken, isAdmin, isAdminOrCompanyOwner } = require('../middlewares/auth.middleware');
+const { authenticateToken, isAdmin } = require('../middlewares/auth.middleware');
 const driverHistoryController = require('../controllers/driverHistory.controller');
 
 // ==================== RUTAS QUE SÍ FUNCIONAN ====================
 
 /**
  * GET /api/driver-history/test
- * Método de prueba para debuggear el sistema (IMPLEMENTADO ✅)
+ * Método de prueba para debuggear el sistema
  */
 router.get('/test', 
   authenticateToken, 
@@ -19,7 +17,7 @@ router.get('/test',
 
 /**
  * GET /api/driver-history/all-deliveries
- * Obtener entregas para pagos (IMPLEMENTADO ✅)
+ * Obtener entregas para pagos
  */
 router.get('/all-deliveries', 
   authenticateToken, 
@@ -29,7 +27,7 @@ router.get('/all-deliveries',
 
 /**
  * POST /api/driver-history/create-from-orders
- * Crear registros desde órdenes existentes (IMPLEMENTADO ✅)
+ * Crear registros desde órdenes existentes
  */
 router.post('/create-from-orders', 
   authenticateToken, 
@@ -37,7 +35,12 @@ router.post('/create-from-orders',
   driverHistoryController.createHistoryFromOrders
 );
 
-router.post('/mark-paid', 
+/**
+ * POST /api/driver-history/mark-as-paid
+ * Marcar entregas específicas como pagadas
+ * CORREGIDO: Coincide con el frontend (antes era /mark-paid)
+ */
+router.post('/mark-as-paid', 
   authenticateToken, 
   isAdmin, 
   driverHistoryController.markDeliveriesAsPaid
@@ -53,32 +56,18 @@ router.post('/driver/:driverId/pay-all',
   driverHistoryController.payAllPendingToDriver
 );
 
-// ==================== RUTAS QUE HAY QUE IMPLEMENTAR DESPUÉS ====================
-// (Comentadas hasta que implementemos los métodos en el controlador)
+// ==================== RUTAS DE HISTORIAL Y ESTADÍSTICAS ====================
 
 router.get('/driver/:driverId', [
   authenticateToken,
-  // Permitir que conductores vean su propio historial O que admins/managers vean cualquier historial
   async (req, res, next) => {
     const { driverId } = req.params;
     const userRole = req.user.role;
     const userId = req.user.id;
 
-    // Admins pueden ver cualquier historial
-    if (['admin', 'manager'].includes(userRole)) {
-      return next();
-    }
-
-    // Conductores solo pueden ver su propio historial
-    if (userRole === 'driver' && userId === driverId) {
-      return next();
-    }
-
-    // Company owners pueden ver conductores de su empresa (requiere lógica adicional)
-    if (userRole === 'company_owner') {
-      // Aquí podrías agregar lógica para verificar que el conductor pertenece a la empresa
-      return next();
-    }
+    if (['admin', 'manager'].includes(userRole)) return next();
+    if (userRole === 'driver' && userId === driverId) return next();
+    if (userRole === 'company_owner') return next();
 
     return res.status(403).json({
       success: false,
@@ -89,27 +78,17 @@ router.get('/driver/:driverId', [
 
 /**
  * GET /api/driver-history/driver/:driverId/stats
- * Obtener estadísticas de entregas de un conductor específico
  */
 router.get('/driver/:driverId/stats', [
   authenticateToken,
-  // Misma lógica de permisos que arriba
   async (req, res, next) => {
     const { driverId } = req.params;
     const userRole = req.user.role;
     const userId = req.user.id;
 
-    if (['admin', 'manager'].includes(userRole)) {
-      return next();
-    }
-
-    if (userRole === 'driver' && userId === driverId) {
-      return next();
-    }
-
-    if (userRole === 'company_owner') {
-      return next();
-    }
+    if (['admin', 'manager'].includes(userRole)) return next();
+    if (userRole === 'driver' && userId === driverId) return next();
+    if (userRole === 'company_owner') return next();
 
     return res.status(403).json({
       success: false,
@@ -120,23 +99,16 @@ router.get('/driver/:driverId/stats', [
 
 /**
  * GET /api/driver-history/driver/:driverId/pending
- * Obtener entregas pendientes de pago de un conductor
  */
 router.get('/driver/:driverId/pending', [
   authenticateToken,
-  // Solo admins y el propio conductor pueden ver pagos pendientes
   async (req, res, next) => {
     const { driverId } = req.params;
     const userRole = req.user.role;
     const userId = req.user.id;
 
-    if (['admin'].includes(userRole)) {
-      return next();
-    }
-
-    if (userRole === 'driver' && userId === driverId) {
-      return next();
-    }
+    if (['admin'].includes(userRole)) return next();
+    if (userRole === 'driver' && userId === driverId) return next();
 
     return res.status(403).json({
       success: false,
