@@ -161,127 +161,173 @@ class DriverHistoryController {
    * Obtener entregas para pagos - VERSIÓN FINAL CORREGIDA
    */
 async getAllDeliveriesForPayments(req, res) {
-  try {
-    const { 
-      date_from, 
-      date_to, 
-      driver_id, 
-      company_id, 
-      payment_status = 'pending' 
-    } = req.query;
+    try {
+      const { 
+        date_from, 
+        date_to, 
+        driver_id, 
+        company_id, 
+        payment_status = 'pending' 
+      } = req.query;
 
-    console.log('💰 Obteniendo entregas para pagos:', { 
-      date_from, 
-      date_to, 
-      driver_id, 
-      company_id, 
-      payment_status 
-    });
+      console.log('💰 Obteniendo entregas (Historial + Órdenes):', { payment_status, date_from, date_to });
 
-    // 🔥 CAMBIO PRINCIPAL: Filtros base para órdenes (incluir invoiced)
-    const orderFilters = {
-      // ✅ INCLUIR TANTO DELIVERED COMO INVOICED
-      status: { $in: ['delivered', 'invoiced'] },
-      $or: [
-        { shipday_driver_id: { $exists: true, $ne: null, $ne: '' } },
-        { 'driver_info.name': { $exists: true, $ne: null, $ne: '' } }
-      ]
-    };
-
-    // Filtro por estado de pago
-    if (payment_status === 'pending') {
-      orderFilters.$and = [
-        {
-          $or: [
-            { isPaid: { $exists: false } },
-            { isPaid: false }
-          ]
-        }
-      ];
-    } else if (payment_status === 'paid') {
-      orderFilters.isPaid = true;
-    }
-    // Si payment_status === 'all', no agregar filtro de pago
-
-    // Filtros de fecha
-    if (date_from || date_to) {
-  orderFilters.delivery_date = parseDateRangeForQuery(date_from, date_to);
-}
-
-    // Filtros adicionales
-    if (driver_id) {
-  orderFilters.$and = [
-    ...(orderFilters.$and || []),
-    {
-      $or: [
-        { 'driver_info.email': driver_id },
-        { 'driver_info.name': driver_id }
-      ]
-    }
-  ];
-}
-    if (company_id) orderFilters.company_id = new mongoose.Types.ObjectId(company_id);
-
-    console.log('🔍 Filtros aplicados:', JSON.stringify(orderFilters, null, 2));
-
-    const orders = await Order.find(orderFilters)
-      .populate('company_id', 'name email phone')
-      .sort({ delivery_date: -1 })
-      .lean();
-
-    console.log('📊 Órdenes encontradas:', orders.length);
-
-    // Convertir a formato de entregas
-    const deliveries = orders.map(order => ({
-  _id: order._id,
-  // ✅ driver_id ahora es el correo (la misma clave que usamos en el agrupador)
-  driver_id: order.driver_info?.email || 'no-email@driver.com',
-  driver_name: order.driver_info?.name || 'Conductor',
-  driver_email: order.driver_info?.email || 'no-email@driver.com',
-  company_id: order.company_id,
-  order_id: order._id,
-  order_number: order.order_number,
-  customer_name: order.customer_name,
-  delivery_address: order.shipping_address,
-  delivered_at: order.delivery_date,
-  payment_amount: 1700,
-  payment_status: order.isPaid ? 'paid' : 'pending',
-  paid_at: order.paidAt,
-  order_status: order.status,
-  company_name: order.company_id?.name
-}));
-
-    // Agrupar por conductor usando el método estático
-    const driverGroups = DriverHistoryController.groupDeliveriesByDriverStatic(deliveries);
-
-    const summary = {
-      total_deliveries: deliveries.length,
-      unique_drivers: driverGroups.length,
-      total_amount: deliveries.reduce((sum, d) => sum + d.payment_amount, 0),
-      data_source: 'orders',
-      payment_filter: payment_status
-    };
-
-    res.json({
-      success: true,
-      data: {
-        period: { date_from, date_to },
-        filters: { driver_id, company_id, payment_status },
-        summary,
-        drivers: driverGroups,
-        // 📊 Para debugging, incluir una muestra de los datos
-        sample_deliveries: deliveries.slice(0, 5)
+      // =======================================================
+      // 1. BUSCAR EN DRIVER HISTORY (Datos Migrados/Históricos)
+      // =======================================================
+      const historyFilter = {};
+      
+      // Filtro de fechas
+      if (date_from || date_to) {
+        const dateQuery = parseDateRangeForQuery(date_from, date_to);
+        if (dateQuery) historyFilter.delivered_at = dateQuery;
       }
-    });
 
-  } catch (error) {
-    console.error('❌ Error obteniendo entregas para pagos:', error);
-    res.status(500).json({ 
-      success: false, 
-      error: error.message 
-    });
+      // Filtros directos
+      if (driver_id) historyFilter.driver_id = driver_id;
+      if (company_id) historyFilter.company_id = new mongoose.Types.ObjectId(company_id);
+      if (payment_status !== 'all') historyFilter.payment_status = payment_status;
+
+      const historyRecords = await DriverHistory.find(historyFilter)
+        .populate('company_id', 'name') // Necesitamos el nombre de la empresa si está referenciada
+        .lean();
+
+      console.log(`📚 Registros en Historial: ${historyRecords.length}`);
+
+      // =======================================================
+      // 2. BUSCAR EN ORDERS (Datos Recientes/No Migrados)
+      // =======================================================
+      const orderFilter = {
+        status: { $in: ['delivered', 'invoiced'] },
+        // Excluir los que ya están en el historial para no duplicar
+        _id: { $nin: historyRecords.map(h => h.order_id) },
+        // Buscar conductor en campos nativos
+        $or: [
+          { 'delivered_by_driver.driver_id': { $exists: true, $ne: null } },
+          { 'driver_info.id': { $exists: true, $ne: null } },
+          { 'driver_info.name': { $exists: true, $ne: null, $ne: '' } }
+        ]
+      };
+
+      // Filtro de pago para órdenes
+      if (payment_status === 'pending') {
+        orderFilter.$and = [{ $or: [{ isPaid: { $exists: false } }, { isPaid: false }] }];
+      } else if (payment_status === 'paid') {
+        orderFilter.isPaid = true;
+      }
+
+      if (date_from || date_to) {
+        const dateQuery = parseDateRangeForQuery(date_from, date_to);
+        if (dateQuery) orderFilter.delivery_date = dateQuery;
+      }
+
+      if (driver_id) {
+        orderFilter.$or = [
+          { 'delivered_by_driver.driver_id': driver_id },
+          { 'driver_info.id': driver_id }
+        ];
+      }
+      
+      if (company_id) {
+        orderFilter.company_id = new mongoose.Types.ObjectId(company_id);
+      }
+
+      const recentOrders = await Order.find(orderFilter)
+        .populate('company_id', 'name')
+        .lean();
+
+      console.log(`📦 Órdenes recientes (no en historial): ${recentOrders.length}`);
+
+      // =======================================================
+      // 3. UNIFICAR FORMATOS
+      // =======================================================
+      
+      // Formatear registros del historial
+      const mappedHistory = historyRecords.map(h => ({
+        _id: h._id, // ID del registro de pago
+        driver_id: h.driver_id,
+        driver_name: h.driver_name,
+        driver_email: h.driver_email,
+        company_id: h.company_id?._id || h.company_id, // Manejar si está poblado o no
+        company_name: h.company_id?.name || 'N/A',
+        order_id: h.order_id,
+        order_number: h.order_number,
+        customer_name: h.customer_name,
+        delivery_address: h.delivery_address,
+        delivered_at: h.delivered_at,
+        payment_amount: h.payment_amount,
+        payment_status: h.payment_status,
+        paid_at: h.paid_at,
+        source: 'history' // Marca de origen
+      }));
+
+      // Formatear órdenes recientes
+      const mappedOrders = recentOrders.map(o => {
+        const driverInfo = {
+          id: o.delivered_by_driver?.driver_id || o.driver_info?.id,
+          name: o.delivered_by_driver?.driver_name || o.driver_info?.name || 'Conductor Desconocido',
+          email: o.delivered_by_driver?.driver_email || o.driver_info?.email || 'sin-email'
+        };
+
+        // Generar ID temporal si no existe
+        if (!driverInfo.id && driverInfo.name) {
+             driverInfo.id = `manual-${driverInfo.name.toLowerCase().replace(/\s+/g, '-')}`;
+        }
+
+        return {
+          _id: o._id, // ID de la orden (actúa como ID de pago temporal)
+          driver_id: driverInfo.id,
+          driver_name: driverInfo.name,
+          driver_email: driverInfo.email,
+          company_id: o.company_id?._id || o.company_id,
+          company_name: o.company_id?.name || 'N/A',
+          order_id: o._id,
+          order_number: o.order_number,
+          customer_name: o.customer_name,
+          delivery_address: o.shipping_address,
+          delivered_at: o.delivery_date || o.updated_at,
+          payment_amount: 1700, // Tarifa por defecto
+          payment_status: o.isPaid ? 'paid' : 'pending',
+          paid_at: o.paidAt,
+          source: 'order' // Marca de origen
+        };
+      }).filter(d => d.driver_id); // Filtramos si no logramos identificar conductor
+
+      // Combinar todo
+      const allDeliveries = [...mappedHistory, ...mappedOrders];
+      
+      // Ordenar por fecha descendente
+      allDeliveries.sort((a, b) => new Date(b.delivered_at) - new Date(a.delivered_at));
+
+      // =======================================================
+      // 4. AGRUPAR Y RESPONDER
+      // =======================================================
+      const driverGroups = DriverHistoryController.groupDeliveriesByDriverStatic(allDeliveries);
+
+      const summary = {
+        total_deliveries: allDeliveries.length,
+        unique_drivers: driverGroups.length,
+        total_amount: allDeliveries.reduce((sum, d) => sum + (d.payment_amount || 0), 0),
+        data_source: 'merged'
+      };
+
+      res.json({
+        success: true,
+        data: {
+          summary,
+          drivers: driverGroups,
+          debug: {
+            history_count: mappedHistory.length,
+            orders_count: mappedOrders.length
+          }
+        }
+      });
+
+    } catch (error) {
+      console.error('❌ Error obteniendo pagos:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
   }
-}
 
   /**
    * Crear registros en DriverHistory desde órdenes existentes
