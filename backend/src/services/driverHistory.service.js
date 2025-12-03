@@ -10,7 +10,6 @@ class DriverHistoryService {
    */
   static async recordDelivery(orderData, driverData) {
     try {
-      // Verificar que no exista ya el registro
       const existingRecord = await DriverHistory.findOne({
         order_id: orderData._id,
         shipday_order_id: orderData.shipday_order_id
@@ -20,6 +19,12 @@ class DriverHistoryService {
         console.log(`✅ Entrega ya registrada en historial: ${orderData.order_number}`);
         return existingRecord;
       }
+
+      // ✅ CORRECCIÓN: Calcular el periodo de pago manualmente aquí
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const paymentPeriod = `${year}-${month}`;
 
       const historyRecord = new DriverHistory({
         driver_id: driverData.driver_id,
@@ -31,13 +36,14 @@ class DriverHistoryService {
         order_number: orderData.order_number,
         delivery_address: orderData.shipping_address,
         customer_name: orderData.customer_name,
-        delivered_at: new Date(),
-        payment_amount: 1700, // Precio fijo
-        payment_status: 'pending'
+        delivered_at: now,
+        payment_amount: 1700,
+        payment_status: 'pending',
+        payment_period: paymentPeriod // <--- ¡AQUÍ ESTÁ LA SOLUCIÓN!
       });
 
       await historyRecord.save();
-      console.log(`✅ Entrega registrada en historial para conductor ${driverData.driver_name}: $1700`);
+      console.log(`✅ Entrega registrada en historial para ${driverData.driver_name}: $1700 (Periodo: ${paymentPeriod})`);
       return historyRecord;
 
     } catch (error) {
