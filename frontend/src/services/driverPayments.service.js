@@ -124,7 +124,7 @@ export const driverPaymentsService = {
   markDeliveriesAsPaid: (deliveryIds, paymentNote = '') => {
     console.log('✅ API: Marcando entregas como pagadas');
     return api.post('/driver-history/mark-as-paid', {
-      deliveryIds,
+      orderIds: deliveryIds,
       paymentNote
     });
   },
