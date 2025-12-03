@@ -26,9 +26,13 @@ const handleValidationErrors = (req, res, next) => {
 /**
  * POST /api/routes/optimize
  */
+/**
+ * POST /api/routes/optimize
+ * Optimiza una ruta con múltiples pedidos
+ */
 router.post('/optimize', [
   authenticateToken,
-  authorizeRoles(['admin', 'manager']),
+  authorizeRoles(['admin', 'manager', 'driver']), // ✅ Drivers permitidos
   body('startLocation.latitude').isFloat().withMessage('Latitud de inicio requerida'),
   body('startLocation.longitude').isFloat().withMessage('Longitud de inicio requerida'),
   body('startLocation.address').notEmpty().withMessage('Dirección de inicio requerida'),
@@ -40,7 +44,8 @@ router.post('/optimize', [
   handleValidationErrors
 ], asyncHandler(async (req, res) => {
   try {
-    const {
+    // 1. Usamos 'let' para poder modificar el driverId si viene como 'self'
+    let {
       startLocation,
       endLocation,
       orderIds,
@@ -48,11 +53,17 @@ router.post('/optimize', [
       preferences = {}
     } = req.body;
 
+    // ✅ TRUCO: Si es conductor y manda "self", usamos su propio ID
+    if (req.user.role === 'driver' && driverId === 'self') {
+       driverId = req.user.driver_id || req.user._id;
+       console.log('🚗 Auto-asignando ruta al conductor:', driverId);
+    }
+
     const routeConfig = {
       startLocation,
       endLocation,
       orderIds,
-      driverId,
+      driverId, // Aquí ya va el ID real
       preferences,
       companyId: req.user.company || req.user.company_id,
       createdBy: req.user.id
