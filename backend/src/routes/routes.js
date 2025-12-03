@@ -6,6 +6,7 @@ const RoutePlan = require('../models/RoutePlan');
 const routeOptimizerService = require('../services/routeOptimizer.service');
 const { authenticateToken, authorizeRoles } = require('../middlewares/auth.middleware');
 const multer = require('multer');
+// Configuración de Multer para memoria (RAM)
 const upload = multer({ storage: multer.memoryStorage() });
 const CloudinaryService = require('../services/cloudinary.service');
 
@@ -24,7 +25,6 @@ const handleValidationErrors = (req, res, next) => {
 
 /**
  * POST /api/routes/optimize
- * Optimiza una ruta con múltiples pedidos
  */
 router.post('/optimize', [
   authenticateToken,
@@ -77,7 +77,6 @@ router.post('/optimize', [
 
 /**
  * GET /api/routes
- * Obtiene todas las rutas de la empresa
  */
 router.get('/', [
   authenticateToken
@@ -142,7 +141,6 @@ router.get('/', [
 
 /**
  * GET /api/routes/:id
- * Obtiene una ruta específica
  */
 router.get('/:id', [
   authenticateToken
@@ -179,7 +177,6 @@ router.get('/:id', [
 
 /**
  * PATCH /api/routes/:id/assign
- * Asigna una ruta a un conductor
  */
 router.patch('/:id/assign', [
   authenticateToken,
@@ -208,7 +205,6 @@ router.patch('/:id/assign', [
 
 /**
  * PATCH /api/routes/:id/start
- * Inicia la ejecución de una ruta (solo para conductores)
  */
 router.patch('/:id/start', [
   authenticateToken,
@@ -234,7 +230,6 @@ router.patch('/:id/start', [
 
 /**
  * GET /api/routes/driver/active
- * Obtiene la ruta activa del conductor autenticado
  */
 router.get('/driver/active', [
   authenticateToken,
@@ -267,12 +262,12 @@ router.get('/driver/active', [
 
 /**
  * PATCH /api/routes/:id/orders/:orderId/status
- * Actualiza el estado de entrega de un pedido
+ * Actualiza el estado de entrega de un pedido con soporte para FOTOS
  */
 router.patch('/:id/orders/:orderId/status', [
   authenticateToken,
   authorizeRoles(['driver', 'admin', 'manager']),
-  upload.any(), 
+  upload.any(), // Middleware para procesar archivos y campos
   body('status').isIn(['pending', 'in_progress', 'delivered', 'failed', 'cancelled']).withMessage('Estado inválido'),
   handleValidationErrors
 ], asyncHandler(async (req, res) => {
@@ -280,36 +275,38 @@ router.patch('/:id/orders/:orderId/status', [
     let { status, deliveryProof } = req.body;
     const { id: routeId, orderId } = req.params;
 
-    // 📸 PROCESAMIENTO DE IMÁGENES
+    // 📸 PROCESAMIENTO DE IMÁGENES PARALELO (TURBO MODE 🚀)
     if (req.files && req.files.length > 0) {
-      console.log(`📸 Procesando ${req.files.length} fotos para Cloudinary...`);
+      console.log(`📸 Procesando ${req.files.length} fotos en PARALELO...`);
       
-      const photoUrls = [];
-
-      // Subir cada foto a Cloudinary
-      for (const file of req.files) {
+      // 1. Crear array de promesas para subida simultánea
+      const uploadPromises = req.files.map(async (file) => {
         try {
-          // 1. Convertir Buffer a Base64 (Data URI)
+          // Convertir Buffer a Base64
           const b64 = Buffer.from(file.buffer).toString('base64');
           const dataURI = `data:${file.mimetype};base64,${b64}`;
           
-          // 2. Subir a Cloudinary usando tu servicio existente
+          // Subir a Cloudinary (Retorna promesa sin await aquí)
           const uploadResult = await CloudinaryService.uploadProofImage(dataURI, orderId, 'photo');
-          
-          // 3. Guardar solo la URL
-          photoUrls.push(uploadResult.url);
-          console.log('✅ Foto subida:', uploadResult.url);
+          return uploadResult.url;
         } catch (uploadError) {
-          console.error('❌ Error subiendo foto a Cloudinary:', uploadError);
-          // Opcional: Decidir si abortar o continuar con las que funcionaron
+          console.error('❌ Error subiendo una foto:', uploadError.message);
+          return null; // Continuar con las otras si una falla
         }
-      }
+      });
 
-      // Construir el objeto deliveryProof con las URLs ya generadas
+      // 2. Esperar a que todas terminen
+      const results = await Promise.all(uploadPromises);
+      
+      // 3. Filtrar errores
+      const photoUrls = results.filter(url => url !== null);
+      console.log(`✅ ${photoUrls.length} fotos subidas exitosamente`);
+
+      // Construir objeto deliveryProof
       deliveryProof = {
         recipientName: req.body.recipient_name,
         notes: req.body.notes,
-        photos: photoUrls, // <--- ¡AQUÍ ESTÁ EL CAMBIO! Ahora son strings
+        photos: photoUrls, // Usamos 'photos' como array de strings (URLs)
         location: {
           latitude: req.body.latitude,
           longitude: req.body.longitude
@@ -374,7 +371,6 @@ router.patch('/:id/orders/:orderId/status', [
 
 /**
  * POST /api/routes/:id/sync-offline
- * Sincroniza actualizaciones offline
  */
 router.post('/:id/sync-offline', [
   authenticateToken,
@@ -384,7 +380,6 @@ router.post('/:id/sync-offline', [
 ], asyncHandler(async (req, res) => {
   try {
     const { updates } = req.body;
-
     const result = await routeOptimizerService.processOfflineUpdates(req.params.id, updates);
 
     res.json({
@@ -406,7 +401,6 @@ router.post('/:id/sync-offline', [
 
 /**
  * DELETE /api/routes/:id
- * Elimina una ruta (solo si está en estado draft)
  */
 router.delete('/:id', [
   authenticateToken,
@@ -444,7 +438,6 @@ router.delete('/:id', [
 
 /**
  * GET /api/routes/stats/summary
- * Obtiene estadísticas generales de rutas
  */
 router.get('/stats/summary', [
   authenticateToken
@@ -489,7 +482,6 @@ router.get('/stats/summary', [
       averageOrdersPerRoute: 0
     };
 
-    // Calcular métricas adicionales
     result.completionRate = result.totalRoutes > 0 
       ? Math.round((result.completedRoutes / result.totalRoutes) * 100) 
       : 0;
@@ -518,7 +510,6 @@ router.get('/stats/summary', [
 
 /**
  * POST /api/routes/:id/duplicate
- * Duplica una ruta existente
  */
 router.post('/:id/duplicate', [
   authenticateToken,
@@ -574,7 +565,6 @@ router.post('/:id/duplicate', [
 
 /**
  * PATCH /api/routes/:id/reoptimize
- * Re-optimiza una ruta existente
  */
 router.patch('/:id/reoptimize', [
   authenticateToken,
@@ -582,11 +572,6 @@ router.patch('/:id/reoptimize', [
 ], asyncHandler(async (req, res) => {
   try {
     const { preferences = {} } = req.body;
-
-    // 🛰️ Log de depuración: ver exactamente lo que llega del frontend
-    console.log('🛰️ reoptimize body:', JSON.stringify(req.body, null, 2));
-
-    // ✅ Aceptar tanto start/end como startLocation/endLocation
     const incomingStart = req.body.startLocation || req.body.start;
     const incomingEnd   = req.body.endLocation || req.body.end;
 
@@ -604,7 +589,6 @@ router.patch('/:id/reoptimize', [
 
     const orderIds = route.orders.map(o => o.order._id);
 
-    // 🧭 Configuración de optimización
     const routeConfig = {
       startLocation: incomingStart || route.startLocation,
       endLocation:   incomingEnd   || route.endLocation,
@@ -615,12 +599,8 @@ router.patch('/:id/reoptimize', [
       existingRouteId: req.params.id
     };
 
-    console.log('🧩 routeConfig listo para optimización:', routeConfig);
-
-    // 🔁 Reoptimizar con el servicio central
     const newRoute = await routeOptimizerService.optimizeRoute(routeConfig);
 
-    // ✅ Actualiza la ruta existente (sin eliminarla)
     const updated = await RoutePlan.findByIdAndUpdate(
       req.params.id,
       {
@@ -636,10 +616,6 @@ router.patch('/:id/reoptimize', [
       { new: true }
     ).populate('driver orders.order');
 
-    console.log(`✅ Ruta ${updated._id} re-optimizada correctamente`);
-    console.log(`🧭 Nuevo inicio: ${updated.startLocation.address}`);
-    console.log(`🏁 Nuevo fin: ${updated.endLocation.address}`);
-
     res.json({
       success: true,
       message: 'Ruta re-optimizada correctamente',
@@ -654,12 +630,14 @@ router.patch('/:id/reoptimize', [
     });
   }
 }));
+
+/**
+ * GET /api/routes/driver/history
+ */
 router.get('/driver/history', authenticateToken, async (req, res) => {
   try {
     const { start_date, end_date, status } = req.query;
     const driverId = req.user.driver_id || req.user.id || req.query.driverId;
-
-    console.log('📚 Obteniendo historial para conductor:', driverId);
 
     const query = {
       driver: driverId,
@@ -673,14 +651,12 @@ router.get('/driver/history', authenticateToken, async (req, res) => {
       };
     }
 
-    // CORREGIR: Usar RoutePlan en lugar de Route
     const routes = await RoutePlan.find(query)
       .populate('orders.order')
       .populate('driver', 'name email full_name')
       .sort({ completedAt: -1 })
       .limit(100);
 
-    // Extraer entregas individuales de las rutas
     const deliveries = [];
     routes.forEach(route => {
       route.orders.forEach(orderItem => {
@@ -689,7 +665,7 @@ router.get('/driver/history', authenticateToken, async (req, res) => {
             ...orderItem.toObject(),
             routeId: route._id,
             completedAt: orderItem.deliveredAt || route.completedAt,
-            driverInfo: route.driver // AGREGAR: Información del conductor
+            driverInfo: route.driver
           });
         }
       });
@@ -709,4 +685,5 @@ router.get('/driver/history', authenticateToken, async (req, res) => {
     });
   }
 });
+
 module.exports = router;
