@@ -44,6 +44,7 @@
             <option value="delivered">Entregado</option>
             <option value="invoiced">Facturado</option>
             <option value="cancelled">Cancelado</option>
+            <option value="failed">Entrega Fallida</option>
           </select>
         </div>
 

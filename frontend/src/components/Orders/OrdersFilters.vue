@@ -20,6 +20,7 @@
             <option value="delivered">✅ Entregados</option>
             <option value="invoiced"> 🧾 Facturados</option>
             <option value="cancelled">❌ Cancelados</option>
+            <option value="failed">⚠️ Entregas Fallidas</option>
           </select>
         </div>
 

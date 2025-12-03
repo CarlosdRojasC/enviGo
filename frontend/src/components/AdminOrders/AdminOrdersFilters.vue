@@ -40,6 +40,7 @@
           <option value="shipped">Enviados</option>
           <option value="delivered">Entregados</option>
           <option value="cancelled">Cancelados</option>
+          <option value="failed">Entregas Fallidas</option>
         </select>
       </div>
 
