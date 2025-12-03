@@ -54,9 +54,19 @@ router.post('/optimize', [
     } = req.body;
 
     // ✅ TRUCO: Si es conductor y manda "self", usamos su propio ID
-    if (req.user.role === 'driver' && driverId === 'self') {
-       driverId = req.user.driver_id || req.user._id;
+  if (req.user.role === 'driver' && driverId === 'self') {
+       // req.user.id es el estándar en JWT, pero dejamos los otros por si acaso
+       driverId = req.user.id || req.user.driver_id || req.user._id;
+       
        console.log('🚗 Auto-asignando ruta al conductor:', driverId);
+    }
+
+    // 🛡️ VALIDACIÓN DE SEGURIDAD
+    if (!driverId) {
+        return res.status(400).json({
+            success: false, 
+            message: "No se pudo identificar el ID del conductor. Cierra sesión y vuelve a entrar."
+        });
     }
 
     const routeConfig = {
