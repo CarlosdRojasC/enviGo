@@ -626,36 +626,102 @@ async getDriverHistory(req, res) {
 
     console.log('📚 App Móvil: Historial para:', { driverId, start_date, end_date, limit });
 
-    const query = { driver_id: driverId };
+    // ==========================
+    // 1) HISTORIAL (DriverHistory)
+    // ==========================
+    const historyQuery = { driver_id: driverId };
 
     if (start_date || end_date) {
-      query.delivered_at = {};
-      if (start_date) query.delivered_at.$gte = new Date(start_date);
-      if (end_date)   query.delivered_at.$lte = new Date(end_date);
+      historyQuery.delivered_at = {};
+      if (start_date) historyQuery.delivered_at.$gte = new Date(start_date);
+      if (end_date)   historyQuery.delivered_at.$lte = new Date(end_date);
     }
 
-    const records = await DriverHistory.find(query)
+    const historyRecords = await DriverHistory.find(historyQuery)
       .sort({ delivered_at: -1 })
-      .limit(parseInt(limit))
       .lean();
 
-    // Normalizar al formato que la app espera
-    const deliveries = records.map(h => ({
+    // Guardamos los order_id para no duplicar luego
+    const historyOrderIds = historyRecords
+      .map(h => h.order_id)
+      .filter(Boolean)
+      .map(id => id.toString());
+
+    // Normalizamos formato
+    const historyDeliveries = historyRecords.map(h => ({
       _id: h._id,
       order_number: h.order_number,
       customer_name: h.customer_name,
       delivery_address: h.delivery_address,
       delivered_at: h.delivered_at,
       payment_amount: h.payment_amount,
-      payment_status: h.payment_status || 'pending', // por seguridad
+      payment_status: h.payment_status || 'pending',
       source: 'history'
     }));
+
+    // ==========================
+    // 2) ÓRDENES (Order)
+    // ==========================
+    const orderQuery = {
+      status: { $in: ['delivered', 'invoiced'] },
+
+      // Matchear por EMAIL o nombre del driver
+      $or: [
+        { 'driver_info.email': driverId },
+        { 'driver_info.name': driverId },
+        { 'delivered_by_driver.driver_email': driverId },
+        { shipday_driver_id: driverId }
+      ]
+    };
+
+    if (start_date || end_date) {
+      orderQuery.delivery_date = {};
+      if (start_date) orderQuery.delivery_date.$gte = new Date(start_date);
+      if (end_date)   orderQuery.delivery_date.$lte = new Date(end_date);
+    }
+
+    // Excluir órdenes que ya están en DriverHistory
+    if (historyOrderIds.length > 0) {
+      orderQuery._id = { $nin: historyOrderIds };
+    }
+
+    const orderRecords = await Order.find(orderQuery)
+      .sort({ delivery_date: -1 })
+      .lean();
+
+    const orderDeliveries = orderRecords.map(o => ({
+      _id: o._id,
+      order_number: o.order_number,
+      customer_name: o.customer_name,
+      delivery_address: o.shipping_address,
+      delivered_at: o.delivery_date || o.updated_at || o.created_at,
+      payment_amount: 1700, // tarifa fija
+      payment_status: o.isPaid ? 'paid' : 'pending',
+      source: 'order'
+    }));
+
+    // ==========================
+    // 3) UNIR + ORDENAR + LIMIT
+    // ==========================
+    let combined = [...historyDeliveries, ...orderDeliveries];
+
+    combined.sort(
+      (a, b) => new Date(b.delivered_at) - new Date(a.delivered_at)
+    );
+
+    if (limit) {
+      combined = combined.slice(0, parseInt(limit));
+    }
+
+    console.log(
+      `📚 Historial combinado para ${driverId}: history=${historyDeliveries.length}, orders=${orderDeliveries.length}, total=${combined.length}`
+    );
 
     res.json({
       success: true,
       data: {
-        deliveries,
-        total: deliveries.length
+        deliveries: combined,
+        total: combined.length
       }
     });
 
@@ -664,6 +730,7 @@ async getDriverHistory(req, res) {
     res.status(500).json({ success: false, error: error.message });
   }
 }
+
 
 
   /**
@@ -687,28 +754,66 @@ async getDriverStats(req, res) {
       startDate.setDate(startDate.getDate() - 30);
     }
 
-    const query = { driver_id: driverId };
+    // 1) DriverHistory
+    const historyQuery = { driver_id: driverId };
     if (startDate) {
-      query.delivered_at = { $gte: startDate, $lte: now };
+      historyQuery.delivered_at = { $gte: startDate, $lte: now };
     }
 
-    const records = await DriverHistory.find(query).lean();
+    const historyRecords = await DriverHistory.find(historyQuery).lean();
 
-    const totalDeliveries = records.length;
-    const estimatedEarnings = records.reduce(
-      (sum, r) => sum + (r.payment_amount || 1700),
+    // 2) Orders (sin DriverHistory, opcional)
+    const historyOrderIds = historyRecords
+      .map(h => h.order_id)
+      .filter(Boolean)
+      .map(id => id.toString());
+
+    const orderQuery = {
+      status: { $in: ['delivered', 'invoiced'] },
+      $or: [
+        { 'driver_info.email': driverId },
+        { 'driver_info.name': driverId },
+        { 'delivered_by_driver.driver_email': driverId },
+        { shipday_driver_id: driverId }
+      ]
+    };
+
+    if (startDate) {
+      orderQuery.delivery_date = { $gte: startDate, $lte: now };
+    }
+
+    if (historyOrderIds.length > 0) {
+      orderQuery._id = { $nin: historyOrderIds };
+    }
+
+    const orderRecords = await Order.find(orderQuery).lean();
+
+    const allDeliveries = [
+      ...historyRecords.map(h => ({
+        delivered_at: h.delivered_at,
+        payment_amount: h.payment_amount,
+        payment_status: h.payment_status
+      })),
+      ...orderRecords.map(o => ({
+        delivered_at: o.delivery_date || o.updated_at || o.created_at,
+        payment_amount: 1700,
+        payment_status: o.isPaid ? 'paid' : 'pending'
+      }))
+    ];
+
+    const totalDeliveries = allDeliveries.length;
+    const estimatedEarnings = allDeliveries.reduce(
+      (sum, d) => sum + (d.payment_amount || 1700),
       0
     );
-
-    // Si quisieras mostrar "pendiente vs pagado", podrías separar aquí.
-    const pendingPayment = records
-      .filter(r => r.payment_status === 'pending')
-      .reduce((sum, r) => sum + (r.payment_amount || 1700), 0);
+    const pendingPayment = allDeliveries
+      .filter(d => d.payment_status === 'pending')
+      .reduce((sum, d) => sum + (d.payment_amount || 1700), 0);
 
     const stats = {
       period,
       total_deliveries: totalDeliveries,
-      successful_deliveries: totalDeliveries, // en tu modelo todo es entrega hecha
+      successful_deliveries: totalDeliveries,
       failed_deliveries: 0,
       success_rate: totalDeliveries > 0 ? 100 : 0,
       estimated_earnings: estimatedEarnings,
@@ -724,6 +829,7 @@ async getDriverStats(req, res) {
 }
 
 
+
   /**
    * ✅ NUEVO: Obtener entregas pendientes de pago de un conductor
    */
@@ -732,6 +838,7 @@ async getDriverPendingPayments(req, res) {
     const { driverId } = req.params;
     console.log('💰 App Móvil: Pendientes para:', driverId);
 
+    // 1) Pendientes en DriverHistory
     const pendingHistory = await DriverHistory.find({
       driver_id: driverId,
       payment_status: 'pending'
@@ -739,7 +846,12 @@ async getDriverPendingPayments(req, res) {
       .sort({ delivered_at: 1 })
       .lean();
 
-    const deliveries = pendingHistory.map(h => ({
+    const pendingHistoryOrderIds = pendingHistory
+      .map(h => h.order_id)
+      .filter(Boolean)
+      .map(id => id.toString());
+
+    const historyDeliveries = pendingHistory.map(h => ({
       _id: h._id,
       order_number: h.order_number,
       customer_name: h.customer_name,
@@ -750,17 +862,62 @@ async getDriverPendingPayments(req, res) {
       source: 'history'
     }));
 
-    const totalAmount = deliveries.reduce(
+    // 2) Pendientes en Orders (sin DriverHistory)
+    const orderQuery = {
+      status: { $in: ['delivered', 'invoiced'] },
+
+      // Pagos NO realizados
+      $or: [
+        { isPaid: false },
+        { isPaid: { $exists: false } }
+      ],
+
+      // Match por email/nombre
+      $or: [
+        { 'driver_info.email': driverId },
+        { 'driver_info.name': driverId },
+        { 'delivered_by_driver.driver_email': driverId },
+        { shipday_driver_id: driverId }
+      ]
+    };
+
+    if (pendingHistoryOrderIds.length > 0) {
+      orderQuery._id = { $nin: pendingHistoryOrderIds };
+    }
+
+    const pendingOrders = await Order.find(orderQuery)
+      .sort({ delivery_date: 1 })
+      .lean();
+
+    const orderDeliveries = pendingOrders.map(o => ({
+      _id: o._id,
+      order_number: o.order_number,
+      customer_name: o.customer_name,
+      delivery_address: o.shipping_address,
+      delivered_at: o.delivery_date || o.updated_at || o.created_at,
+      payment_amount: 1700,
+      payment_status: 'pending',
+      source: 'order'
+    }));
+
+    // 3) Unir
+    const allPending = [...historyDeliveries, ...orderDeliveries];
+
+    const totalAmount = allPending.reduce(
       (sum, item) => sum + (item.payment_amount || 0),
       0
+    );
+
+    console.log(
+      `💰 Pendientes para ${driverId}: history=${historyDeliveries.length}, orders=${orderDeliveries.length}, total=${allPending.length}, monto=${totalAmount}`
     );
 
     res.json({
       success: true,
       data: {
-        deliveries,
+        deliveries: allPending,
         total_amount: totalAmount,
-        count: deliveries.length
+        count: allPending.length
       }
     });
 
@@ -769,6 +926,7 @@ async getDriverPendingPayments(req, res) {
     res.status(500).json({ success: false, error: error.message });
   }
 }
+
 
 
   /**
