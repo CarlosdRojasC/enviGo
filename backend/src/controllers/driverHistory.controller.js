@@ -539,15 +539,21 @@ async payAllPendingToDriver(req, res) {
     console.log(`💸 Pagando todas las entregas pendientes del conductor: ${driverId}`);
 
     // 🔥 CAMBIO: Buscar todas las órdenes pendientes del conductor (delivered E invoiced)
-    const pendingOrders = await Order.find({
+const pendingOrders = await Order.find({
   status: { $in: ['delivered', 'invoiced'] },
-  $or: [
-    { 'driver_info.email': driverId },   // driverId = correo
-    { 'driver_info.name': driverId }     // o nombre
-  ],
-  $or: [
-    { isPaid: { $exists: false } },
-    { isPaid: false }
+  $and: [
+    {
+      $or: [
+        { 'driver_info.email': driverId },
+        { 'driver_info.name': driverId }
+      ]
+    },
+    {
+      $or: [
+        { isPaid: { $exists: false } },
+        { isPaid: false }
+      ]
+    }
   ]
 }).select('_id order_number customer_name status');
 
@@ -866,18 +872,24 @@ async getDriverPendingPayments(req, res) {
     const orderQuery = {
       status: { $in: ['delivered', 'invoiced'] },
 
-      // Pagos NO realizados
-      $or: [
-        { isPaid: false },
-        { isPaid: { $exists: false } }
-      ],
-
-      // Match por email/nombre
-      $or: [
-        { 'driver_info.email': driverId },
-        { 'driver_info.name': driverId },
-        { 'delivered_by_driver.driver_email': driverId },
-        { shipday_driver_id: driverId }
+      // 🔥 OJO: aquí usamos UN SOLO $and con dos $or adentro
+      $and: [
+        // a) NO pagadas
+        {
+          $or: [
+            { isPaid: false },
+            { isPaid: { $exists: false } }
+          ]
+        },
+        // b) Órdenes del conductor
+        {
+          $or: [
+            { 'driver_info.email': driverId },
+            { 'driver_info.name': driverId },
+            { 'delivered_by_driver.driver_email': driverId },
+            { shipday_driver_id: driverId }
+          ]
+        }
       ]
     };
 
@@ -926,6 +938,7 @@ async getDriverPendingPayments(req, res) {
     res.status(500).json({ success: false, error: error.message });
   }
 }
+
 
 
 
