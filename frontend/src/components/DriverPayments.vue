@@ -273,6 +273,7 @@ const selectedDeliveries = ref({}) // { "delivery_id": true/false }
 const dateFrom = ref('')
 const dateTo = ref('')
 const paymentStatus = ref('pending')
+const searchQuery = ref('') // 👈 FALTA ESTO
 
 // Resultados temporales
 const testResults = ref(null)
@@ -301,15 +302,27 @@ const groupedDrivers = computed(() => {
 
     groups[driverId].deliveries.push(record)
     
-    // Solo sumar al total si no está pagado (o si estamos viendo historial)
     if (paymentStatus.value === 'pending' && record.payment_status === 'pending') {
-        groups[driverId].totalAmount += (record.payment_amount || 0)
+      groups[driverId].totalAmount += (record.payment_amount || 0)
     } else if (paymentStatus.value !== 'pending') {
-        groups[driverId].totalAmount += (record.payment_amount || 0)
+      groups[driverId].totalAmount += (record.payment_amount || 0)
     }
   })
 
-  return Object.values(groups).sort((a, b) => b.totalAmount - a.totalAmount)
+  let result = Object.values(groups)
+
+  // 🔍 FILTRO POR BÚSQUEDA (nombre o email)
+  if (searchQuery.value && searchQuery.value.trim() !== '') {
+    const q = searchQuery.value.toLowerCase()
+
+    result = result.filter(driver => {
+      const name = (driver.name || '').toLowerCase()
+      const email = (driver.email || '').toLowerCase()
+      return name.includes(q) || email.includes(q)
+    })
+  }
+
+  return result.sort((a, b) => b.totalAmount - a.totalAmount)
 })
 
 // ==========================================
