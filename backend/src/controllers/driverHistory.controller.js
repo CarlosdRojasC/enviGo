@@ -468,9 +468,9 @@ async markDeliveriesAsPaid(req, res) {
       });
     }
 
-    console.log('💰 Marcando como pagadas las órdenes:', orderIds);
+    console.log('💰 Marcando como pagadas las órdenes/deliveries:', orderIds);
 
-    // Actualizar las órdenes
+    // Actualizar las órdenes (si alguno es realmente un _id de Order)
     const orderResult = await Order.updateMany(
       { _id: { $in: orderIds } },
       { 
@@ -483,7 +483,12 @@ async markDeliveriesAsPaid(req, res) {
 
     // También actualizar DriverHistory si existe
     const historyResult = await DriverHistory.updateMany(
-      { order_id: { $in: orderIds } },
+      { 
+        $or: [
+          { order_id: { $in: orderIds } }, // cuando te manden IDs de Order
+          { _id: { $in: orderIds } }       // cuando te manden IDs de DriverHistory (lo que pasa hoy)
+        ]
+      },
       { 
         payment_status: 'paid',
         paid_at: new Date(),
@@ -496,7 +501,7 @@ async markDeliveriesAsPaid(req, res) {
 
     res.json({
       success: true,
-      message: `${orderResult.modifiedCount} entregas marcadas como pagadas`,
+      message: `${orderResult.modifiedCount + historyResult.modifiedCount} entregas marcadas como pagadas`,
       data: {
         orders_updated: orderResult.modifiedCount,
         history_updated: historyResult.modifiedCount
