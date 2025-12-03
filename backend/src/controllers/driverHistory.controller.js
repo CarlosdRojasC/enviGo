@@ -222,11 +222,18 @@ async getAllDeliveriesForPayments(req, res) {
       }
 
       if (driver_id) {
-        orderFilter.$or = [
-          { 'delivered_by_driver.driver_id': driver_id },
-          { 'driver_info.id': driver_id }
-        ];
-      }
+  orderFilter.$and = [
+    ...(orderFilter.$and || []),
+    {
+      $or: [
+        { 'delivered_by_driver.driver_id': driver_id },
+        { 'driver_info.id': driver_id },
+        { 'driver_info.email': driver_id }, // 👉 NUEVO
+      ]
+    }
+  ];
+}
+
       
       if (company_id) {
         orderFilter.company_id = new mongoose.Types.ObjectId(company_id);
@@ -635,15 +642,22 @@ async getDriverHistory(req, res) {
 
       // 2. BUSCAR EN ÓRDENES (Recientes, no migradas)
       const orderQuery = {
-        status: { $in: ['delivered', 'invoiced'] },
-        // Excluir lo que ya está en history para no duplicar
-        _id: { $nin: historyRecords.map(h => h.order_id) },
-        $or: [
-          { 'delivered_by_driver.driver_id': driverId },
-          { 'driver_info.id': driverId },
-          { shipday_driver_id: driverId } // Legacy
-        ]
-      };
+  status: { $in: ['delivered', 'invoiced'] },
+
+  _id: { $nin: historyRecords.map(h => h.order_id) },
+
+  $and: [
+    {
+      $or: [
+        { 'delivered_by_driver.driver_id': driverId },
+        { 'driver_info.id': driverId },
+        { 'driver_info.email': driverId }, // 👉 NUEVO
+        { shipday_driver_id: driverId }    // legacy
+      ]
+    }
+  ]
+};
+
 
       if (start_date || end_date) {
         orderQuery.delivery_date = {};
@@ -753,20 +767,28 @@ async getDriverHistory(req, res) {
 
       // 2. Pendientes en Órdenes (que no estén en historial)
       const pendingOrders = await Order.find({
-        status: { $in: ['delivered', 'invoiced'] },
-        // Excluir si ya existe en historial (aunque esté pending allá, ya lo tenemos en la lista 1)
-        _id: { $nin: pendingHistory.map(h => h.order_id) },
-        $or: [
-          { isPaid: false },
-          { isPaid: { $exists: false } }
-        ],
-        $or: [
-          { 'delivered_by_driver.driver_id': driverId },
-          { 'driver_info.id': driverId },
-          { shipday_driver_id: driverId }
-        ]
-      }).select('_id order_number customer_name delivery_date shipping_address').lean();
+  status: { $in: ['delivered', 'invoiced'] },
 
+  _id: { $nin: pendingHistory.map(h => h.order_id) },
+
+  $and: [
+    {
+      $or: [
+        { isPaid: false },
+        { isPaid: { $exists: false } }
+      ]
+    },
+    {
+      $or: [
+        { 'delivered_by_driver.driver_id': driverId },
+        { 'driver_info.id': driverId },
+        { shipday_driver_id: driverId }
+      ]
+    }
+  ]
+})
+.select('_id order_number customer_name delivery_date shipping_address')
+.lean();
       // 3. Combinar
       const allPending = [
         ...pendingHistory.map(h => ({
