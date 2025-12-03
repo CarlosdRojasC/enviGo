@@ -309,7 +309,7 @@ router.patch('/:id/orders/:orderId/status', [
       deliveryProof = {
         recipientName: req.body.recipient_name,
         notes: req.body.notes,
-        photo_urls: photoUrls, // <--- ¡AQUÍ ESTÁ EL CAMBIO! Ahora son strings
+        photos: photoUrls, // <--- ¡AQUÍ ESTÁ EL CAMBIO! Ahora son strings
         location: {
           latitude: req.body.latitude,
           longitude: req.body.longitude
