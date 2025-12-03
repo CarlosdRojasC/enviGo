@@ -209,7 +209,17 @@ async getAllDeliveriesForPayments(req, res) {
 }
 
     // Filtros adicionales
-    if (driver_id) orderFilters.shipday_driver_id = driver_id;
+    if (driver_id) {
+  orderFilters.$and = [
+    ...(orderFilters.$and || []),
+    {
+      $or: [
+        { 'driver_info.email': driver_id },
+        { 'driver_info.name': driver_id }
+      ]
+    }
+  ];
+}
     if (company_id) orderFilters.company_id = new mongoose.Types.ObjectId(company_id);
 
     console.log('🔍 Filtros aplicados:', JSON.stringify(orderFilters, null, 2));
@@ -223,23 +233,23 @@ async getAllDeliveriesForPayments(req, res) {
 
     // Convertir a formato de entregas
     const deliveries = orders.map(order => ({
-      _id: order._id,
-      driver_id: order.shipday_driver_id,
-      driver_name: order.driver_info?.name || 'Conductor',
-      driver_email: order.driver_info?.email || 'no-email@shipday.com',
-      company_id: order.company_id,
-      order_id: order._id,
-      order_number: order.order_number,
-      customer_name: order.customer_name,
-      delivery_address: order.shipping_address,
-      delivered_at: order.delivery_date,
-      payment_amount: 1700,
-      payment_status: order.isPaid ? 'paid' : 'pending',
-      paid_at: order.paidAt,
-      // 📋 CAMPO ADICIONAL PARA DEBUGGING
-      order_status: order.status, // 'delivered' o 'invoiced'
-      company_name: order.company_id?.name
-    }));
+  _id: order._id,
+  // ✅ driver_id ahora es el correo (la misma clave que usamos en el agrupador)
+  driver_id: order.driver_info?.email || 'no-email@driver.com',
+  driver_name: order.driver_info?.name || 'Conductor',
+  driver_email: order.driver_info?.email || 'no-email@driver.com',
+  company_id: order.company_id,
+  order_id: order._id,
+  order_number: order.order_number,
+  customer_name: order.customer_name,
+  delivery_address: order.shipping_address,
+  delivered_at: order.delivery_date,
+  payment_amount: 1700,
+  payment_status: order.isPaid ? 'paid' : 'pending',
+  paid_at: order.paidAt,
+  order_status: order.status,
+  company_name: order.company_id?.name
+}));
 
     // Agrupar por conductor usando el método estático
     const driverGroups = DriverHistoryController.groupDeliveriesByDriverStatic(deliveries);
@@ -306,12 +316,11 @@ async getAllDeliveriesForPayments(req, res) {
         const paymentPeriod = `${deliveryDate.getFullYear()}-${String(deliveryDate.getMonth() + 1).padStart(2, '0')}`;
 
         const historyRecord = new DriverHistory({
-          driver_id: order.shipday_driver_id,
-          driver_email: order.driver_info?.email || 'no-email@migrated.com',
-          driver_name: order.driver_info?.name || 'Conductor',
+            driver_id: order.driver_info?.email || order.shipday_driver_id || 'no-email@migrated.com',
+  driver_email: order.driver_info?.email || 'no-email@migrated.com',
+  driver_name: order.driver_info?.name || 'Conductor',
           company_id: order.company_id._id,
           order_id: order._id,
-          shipday_order_id: order.shipday_order_id || 'no-shipday-id',
           order_number: order.order_number,
           delivery_address: order.shipping_address,
           customer_name: order.customer_name,
@@ -349,57 +358,54 @@ async getAllDeliveriesForPayments(req, res) {
   /**
    * Agrupar entregas por conductor - MÉTODO ESTÁTICO
    */
-  static groupDeliveriesByDriverStatic(deliveries) {
-    const grouped = {};
-    
-    deliveries.forEach(delivery => {
-      let driverId, driverName, driverEmail, paymentAmount;
-      
-      // Si viene de DriverHistory
-      if (delivery.driver_id) {
-        driverId = delivery.driver_id;
-        driverName = delivery.driver_name;
-        driverEmail = delivery.driver_email;
-        paymentAmount = delivery.payment_amount || 1700;
-      } 
-      // Si viene de Order
-      else if (delivery.shipday_driver_id) {
-        driverId = delivery.shipday_driver_id;
-        driverName = delivery.driver_info?.name || 'Conductor';
-        driverEmail = delivery.driver_info?.email || 'no-email@shipday.com';
-        paymentAmount = 1700;
-      } else {
-        return; // Saltar si no hay driver_id
-      }
+static groupDeliveriesByDriverStatic(deliveries) {
+  const grouped = {};
 
-      if (!grouped[driverId]) {
-        grouped[driverId] = {
-          driver_id: driverId,
-          driver_name: driverName,
-          driver_email: driverEmail,
-          total_deliveries: 0,
-          total_amount: 0,
-          deliveries: []
-        };
-      }
+  deliveries.forEach(delivery => {
+    // Tomar siempre email + nombre, venga de DriverHistory o de Order
+    const driverEmail =
+      delivery.driver_email ||
+      delivery.driver_info?.email ||
+      'no-email@driver.com';
 
-      grouped[driverId].total_deliveries++;
-      grouped[driverId].total_amount += paymentAmount;
-      grouped[driverId].deliveries.push({
-        _id: delivery._id,
-        order_number: delivery.order_number,
-        customer_name: delivery.customer_name,
-        delivery_address: delivery.delivery_address || delivery.shipping_address,
-        delivered_at: delivery.delivered_at || delivery.delivery_date,
-        payment_amount: paymentAmount,
-        company_name: delivery.company_id?.name,
-         payment_status: delivery.payment_status, // 'paid' o 'pending'
+    const driverName =
+      delivery.driver_name ||
+      delivery.driver_info?.name ||
+      'Conductor';
+
+    const paymentAmount = delivery.payment_amount || 1700;
+
+    // 🔑 Clave de agrupación: correo (siempre debería ser único)
+    const driverKey = driverEmail;
+
+    if (!grouped[driverKey]) {
+      grouped[driverKey] = {
+        driver_id: driverKey,          // aquí usamos el correo como "id lógico"
+        driver_name: driverName,
+        driver_email: driverEmail,
+        total_deliveries: 0,
+        total_amount: 0,
+        deliveries: []
+      };
+    }
+
+    grouped[driverKey].total_deliveries++;
+    grouped[driverKey].total_amount += paymentAmount;
+    grouped[driverKey].deliveries.push({
+      _id: delivery._id,
+      order_number: delivery.order_number,
+      customer_name: delivery.customer_name,
+      delivery_address: delivery.delivery_address || delivery.shipping_address,
+      delivered_at: delivery.delivered_at || delivery.delivery_date,
+      payment_amount: paymentAmount,
+      company_name: delivery.company_id?.name,
+      payment_status: delivery.payment_status,
       paid_at: delivery.paid_at,
-      });
     });
+  });
 
-    return Object.values(grouped).sort((a, b) => b.total_amount - a.total_amount);
-  }
+  return Object.values(grouped).sort((a, b) => b.total_amount - a.total_amount);
+}
 
   /**
  * Marcar entregas específicas como pagadas
@@ -473,14 +479,16 @@ async payAllPendingToDriver(req, res) {
 
     // 🔥 CAMBIO: Buscar todas las órdenes pendientes del conductor (delivered E invoiced)
     const pendingOrders = await Order.find({
-      // ✅ INCLUIR TANTO DELIVERED COMO INVOICED
-      status: { $in: ['delivered', 'invoiced'] },
-      shipday_driver_id: driverId,
-      $or: [
-        { isPaid: { $exists: false } },
-        { isPaid: false }
-      ]
-    }).select('_id order_number customer_name status');
+  status: { $in: ['delivered', 'invoiced'] },
+  $or: [
+    { 'driver_info.email': driverId },   // driverId = correo
+    { 'driver_info.name': driverId }     // o nombre
+  ],
+  $or: [
+    { isPaid: { $exists: false } },
+    { isPaid: false }
+  ]
+}).select('_id order_number customer_name status');
 
     if (pendingOrders.length === 0) {
       return res.status(400).json({
@@ -790,17 +798,20 @@ async payAllPendingToDriver(req, res) {
       // También buscar en Orders directamente
       const Order = require('../models/Order');
       const pendingOrders = await Order.find({
-        status: { $in: ['delivered', 'invoiced'] },
-        $or: [
-          { shipday_driver_id: driverId },
-          { 'delivered_by_driver.driver_id': driverId }
-        ],
-        $or: [
-          { isPaid: { $exists: false } },
-          { isPaid: false }
-        ]
-      }).select('_id order_number customer_name delivery_date shipping_address')
-        .sort({ delivery_date: -1 });
+  status: { $in: ['delivered', 'invoiced'] },
+  $or: [
+    { 'driver_info.email': driverId },               // ✅ nuevo
+    { 'driver_info.name': driverId },                // opcional
+    { shipday_driver_id: driverId },                 // legacy
+    { 'delivered_by_driver.driver_id': driverId }    // legacy / otros orígenes
+  ],
+  $or: [
+    { isPaid: { $exists: false } },
+    { isPaid: false }
+  ]
+})
+.select('_id order_number customer_name delivery_date shipping_address')
+.sort({ delivery_date: -1 });
 
       const totalPending = (pendingHistory.length * 1700) + (pendingOrders.length * 1700);
 
