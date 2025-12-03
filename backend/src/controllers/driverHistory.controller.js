@@ -408,7 +408,6 @@ static groupDeliveriesByDriverStatic(deliveries) {
   const grouped = {};
 
   deliveries.forEach(delivery => {
-    // Tomar siempre email + nombre, venga de DriverHistory o de Order
     const driverEmail =
       delivery.driver_email ||
       delivery.driver_info?.email ||
@@ -421,12 +420,11 @@ static groupDeliveriesByDriverStatic(deliveries) {
 
     const paymentAmount = delivery.payment_amount || 1700;
 
-    // 🔑 Clave de agrupación: correo (siempre debería ser único)
     const driverKey = driverEmail;
 
     if (!grouped[driverKey]) {
       grouped[driverKey] = {
-        driver_id: driverKey,          // aquí usamos el correo como "id lógico"
+        driver_id: driverKey,
         driver_name: driverName,
         driver_email: driverEmail,
         total_deliveries: 0,
@@ -439,6 +437,8 @@ static groupDeliveriesByDriverStatic(deliveries) {
     grouped[driverKey].total_amount += paymentAmount;
     grouped[driverKey].deliveries.push({
       _id: delivery._id,
+      // 🔥 IMPORTANTE: enviar también el order_id
+      order_id: delivery.order_id || delivery._id,  // ← clave para el frontend
       order_number: delivery.order_number,
       customer_name: delivery.customer_name,
       delivery_address: delivery.delivery_address || delivery.shipping_address,
@@ -447,11 +447,14 @@ static groupDeliveriesByDriverStatic(deliveries) {
       company_name: delivery.company_id?.name,
       payment_status: delivery.payment_status,
       paid_at: delivery.paid_at,
+      // opcional pero útil:
+      source: delivery.source,
     });
   });
 
   return Object.values(grouped).sort((a, b) => b.total_amount - a.total_amount);
 }
+
 
   /**
  * Marcar entregas específicas como pagadas
