@@ -3,7 +3,7 @@ const { ORDER_STATUS } = require('../config/constants');
 
 class PickupScannerController {
 
-  // ✅ Escanear QR y marcar como recogido
+  // ✅ Escanear QR y marcar como recogido (Modo Recogida Rápida)
   async scanPackageForPickup(req, res) {
     try {
       let { code } = req.body;
@@ -108,7 +108,7 @@ class PickupScannerController {
     }
   }
 
-  // 🧩 Validar código sin marcarlo como retirado
+  // 🧩 Validar código (Modo Asignación a Ruta)
   async validateCode(req, res) {
     try {
       const { code } = req.body;
@@ -150,8 +150,11 @@ class PickupScannerController {
       res.json({
         success: true,
         package: {
+          // ✅ CAMBIO IMPORTANTE: Devolvemos el ID para que el frontend pueda asignarlo
+          order_id: order._id, 
           order_number: order.order_number,
           customer_name: order.customer_name,
+          shipping_address: order.shipping_address, // También útil para mostrar en la lista
           company: order.company_id?.name,
           status: order.status,
           can_pickup: canPickup,
