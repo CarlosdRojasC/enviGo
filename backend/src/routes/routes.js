@@ -7,6 +7,7 @@ const routeOptimizerService = require('../services/routeOptimizer.service');
 const { authenticateToken, authorizeRoles } = require('../middlewares/auth.middleware');
 const multer = require('multer');
 const upload = multer({ storage: multer.memoryStorage() });
+const CloudinaryService = require('../services/cloudinary.service');
 
 // Middleware de validación de errores
 const handleValidationErrors = (req, res, next) => {
@@ -271,11 +272,7 @@ router.get('/driver/active', [
 router.patch('/:id/orders/:orderId/status', [
   authenticateToken,
   authorizeRoles(['driver', 'admin', 'manager']),
-  
-  // ⚠️ IMPORTANTE: Este middleware permite leer archivos y campos de texto
   upload.any(), 
-  
-  // Las validaciones van DESPUÉS de upload.any() para que req.body ya tenga datos
   body('status').isIn(['pending', 'in_progress', 'delivered', 'failed', 'cancelled']).withMessage('Estado inválido'),
   handleValidationErrors
 ], asyncHandler(async (req, res) => {
@@ -283,14 +280,36 @@ router.patch('/:id/orders/:orderId/status', [
     let { status, deliveryProof } = req.body;
     const { id: routeId, orderId } = req.params;
 
-    // 📸 LÓGICA NUEVA: Si hay archivos, reconstruimos el deliveryProof desde la App
+    // 📸 PROCESAMIENTO DE IMÁGENES
     if (req.files && req.files.length > 0) {
-      console.log(`📸 Recibidas ${req.files.length} fotos desde la App`);
+      console.log(`📸 Procesando ${req.files.length} fotos para Cloudinary...`);
       
+      const photoUrls = [];
+
+      // Subir cada foto a Cloudinary
+      for (const file of req.files) {
+        try {
+          // 1. Convertir Buffer a Base64 (Data URI)
+          const b64 = Buffer.from(file.buffer).toString('base64');
+          const dataURI = `data:${file.mimetype};base64,${b64}`;
+          
+          // 2. Subir a Cloudinary usando tu servicio existente
+          const uploadResult = await CloudinaryService.uploadProofImage(dataURI, orderId, 'photo');
+          
+          // 3. Guardar solo la URL
+          photoUrls.push(uploadResult.url);
+          console.log('✅ Foto subida:', uploadResult.url);
+        } catch (uploadError) {
+          console.error('❌ Error subiendo foto a Cloudinary:', uploadError);
+          // Opcional: Decidir si abortar o continuar con las que funcionaron
+        }
+      }
+
+      // Construir el objeto deliveryProof con las URLs ya generadas
       deliveryProof = {
-        recipientName: req.body.recipient_name, // Nota el guion bajo, así lo enviamos desde la App
+        recipientName: req.body.recipient_name,
         notes: req.body.notes,
-        photos: req.files, // Pasamos el array de archivos crudos al servicio
+        photo_urls: photoUrls, // <--- ¡AQUÍ ESTÁ EL CAMBIO! Ahora son strings
         location: {
           latitude: req.body.latitude,
           longitude: req.body.longitude
@@ -298,7 +317,6 @@ router.patch('/:id/orders/:orderId/status', [
         timestamp: new Date()
       };
     } else if (typeof deliveryProof === 'string') {
-      // Si por alguna razón llega como string JSON (a veces pasa con FormData)
       try {
         deliveryProof = JSON.parse(deliveryProof);
       } catch (e) {
@@ -306,15 +324,9 @@ router.patch('/:id/orders/:orderId/status', [
       }
     }
 
-    console.log('📦 Actualizando estado de entrega:', {
-      routeId,
-      orderId,
-      status,
-      userId: req.user.id,
-      hasProof: !!deliveryProof
-    });
+    console.log('📦 Guardando estado con pruebas:', deliveryProof);
 
-    // Obtener información del conductor
+    // Info del conductor
     let driverInfo = {
       id: req.user.id,
       name: req.user.name || req.user.email,
@@ -337,7 +349,6 @@ router.patch('/:id/orders/:orderId/status', [
       }
     }
 
-    // Llamar al servicio
     const result = await routeOptimizerService.updateDeliveryStatus(
       routeId,
       orderId,
