@@ -1,1001 +1,498 @@
-<!-- frontend/src/components/DriverPayments.vue -->
-<!-- VERSIÓN MÍNIMA QUE FUNCIONA CON TUS RUTAS ACTUALES -->
-
 <template>
   <div class="driver-payments-container">
     
-    <!-- FILTROS BÁSICOS -->
-    <div class="filters-section">
-      <div class="filters-row">
-        <div class="filter-group">
-          <label>📅 Desde:</label>
-          <input 
-            v-model="dateFrom" 
-            type="date" 
-            class="form-input"
-            @change="fetchDriverPayments"
-          />
-        </div>
+    <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100 mb-6">
+      <div class="flex flex-col md:flex-row justify-between items-end gap-4">
         
-        <div class="filter-group">
-          <label>📅 Hasta:</label>
-          <input 
-            v-model="dateTo" 
-            type="date" 
-            class="form-input"
-            @change="fetchDriverPayments"
-          />
-        </div>
-
-        <div class="filter-group">
-          <label>💰 Estado:</label>
-          <select 
-            v-model="paymentStatus" 
-            class="form-select"
-            @change="fetchDriverPayments"
-          >
-            <option value="pending">⏳ Pendientes</option>
-            <option value="paid">✅ Pagados</option>
-            <option value="all">📋 Todos</option>
-          </select>
-        </div>
-
-        <div class="filter-actions">
-          <button @click="refreshData" class="btn-refresh">
-            🔄 Actualizar
-          </button>
+        <div class="flex flex-wrap gap-4 flex-1">
+          <div class="flex flex-col gap-1">
+            <label class="text-xs font-bold text-gray-500 uppercase">Desde</label>
+            <input v-model="dateFrom" type="date" class="form-input" @change="fetchData" />
+          </div>
           
-          <button 
-            @click="runTest" 
-            class="btn-test"
-            :disabled="loading"
-          >
-            🧪 Test Sistema
+          <div class="flex flex-col gap-1">
+            <label class="text-xs font-bold text-gray-500 uppercase">Hasta</label>
+            <input v-model="dateTo" type="date" class="form-input" @change="fetchData" />
+          </div>
+
+          <div class="flex flex-col gap-1">
+            <label class="text-xs font-bold text-gray-500 uppercase">Estado</label>
+            <select v-model="paymentStatus" class="form-select min-w-[150px]" @change="fetchData">
+              <option value="pending">⏳ Pendientes</option>
+              <option value="paid">✅ Pagados</option>
+              <option value="all">📋 Todos</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="flex gap-2">
+          <button @click="fetchData" class="btn btn-secondary">
+            🔄 Refrescar
           </button>
-
-          <button 
-            @click="migrateData" 
-            class="btn-migrate"
-            :disabled="loading"
-          >
-            🔄 Migrar Datos
+          <button @click="runTest" class="btn btn-outline">
+            🧪 Test
+          </button>
+          <button @click="migrateData" class="btn btn-warning">
+            📥 Traer Pedidos
           </button>
         </div>
       </div>
     </div>
 
-    <!-- RESULTADOS DEL TEST -->
-    <div v-if="testResults" class="test-results">
-      <div class="test-card">
-        <h3>🧪 Resultados del Test</h3>
-        <div class="test-stats">
-          <div class="test-stat">
-            <span>Total Pedidos:</span>
-            <span>{{ testResults.debug_info?.total_orders }}</span>
-          </div>
-          <div class="test-stat">
-            <span>Pedidos Entregados:</span>
-            <span>{{ testResults.debug_info?.delivered_orders }}</span>
-          </div>
-          <div class="test-stat">
-            <span>Con Conductor:</span>
-            <span>{{ testResults.debug_info?.delivered_with_driver }}</span>
-          </div>
-          <div class="test-stat">
-            <span>Conductores Únicos:</span>
-            <span>{{ testResults.payment_report?.summary?.total_drivers }}</span>
-          </div>
-          <div class="test-stat">
-            <span>Total a Pagar:</span>
-            <span class="amount">${{ formatCurrency(testResults.payment_report?.summary?.total_amount || 0) }}</span>
-          </div>
+    <div v-if="summary" class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+      <div class="kpi-card">
+        <div class="kpi-label">Total a Pagar</div>
+        <div class="kpi-value text-emerald-600">${{ formatCurrency(summary.total_amount) }}</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Entregas</div>
+        <div class="kpi-value text-blue-600">{{ summary.total_deliveries }}</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Conductores</div>
+        <div class="kpi-value text-purple-600">{{ summary.unique_drivers }}</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Periodo</div>
+        <div class="kpi-value text-gray-600 text-sm mt-1">
+          {{ formatDateShort(dateFrom) }} - {{ formatDateShort(dateTo) }}
         </div>
       </div>
     </div>
 
-    <!-- RESUMEN ESTADÍSTICAS -->
-    <div v-if="summary" class="stats-summary">
-      <div class="summary-card">
-        <h3>💰 Resumen de Pagos</h3>
-        <div class="summary-stats">
-          <div class="stat">
-            <span class="stat-label">Conductores:</span>
-            <span class="stat-value">{{ summary.unique_drivers }}</span>
-          </div>
-          <div class="stat">
-            <span class="stat-label">Entregas:</span>
-            <span class="stat-value">{{ summary.total_deliveries }}</span>
-          </div>
-          <div class="stat">
-            <span class="stat-label">Total:</span>
-            <span class="stat-value amount">${{ formatCurrency(summary.total_amount) }}</span>
-          </div>
-          <div class="stat">
-            <span class="stat-label">Fuente:</span>
-            <span class="stat-value">{{ summary.data_source === 'driver_history' ? '📋 DriverHistory' : '📦 Orders' }}</span>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- LOADING -->
-    <div v-if="loading" class="loading-container">
-      <div class="spinner"></div>
+    <div v-if="loading" class="py-12 text-center text-gray-500">
+      <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mb-2"></div>
       <p>{{ loadingMessage }}</p>
     </div>
 
-    <!-- MENSAJE SI NO HAY DATOS -->
-    <div v-else-if="drivers.length === 0 && !testResults" class="no-data-message">
-      <div class="no-data-card">
-        <h3>📭 No hay entregas registradas</h3>
-        <p>No se encontraron entregas para los filtros seleccionados.</p>
-        <p><strong>Sugerencia:</strong> Ejecuta primero el "Test Sistema" y luego "Migrar Datos"</p>
-      </div>
+    <div v-else-if="groupedDrivers.length === 0" class="bg-white p-10 rounded-xl text-center border border-dashed border-gray-300">
+      <div class="text-4xl mb-3">📭</div>
+      <h3 class="text-lg font-medium text-gray-900">No hay pagos pendientes</h3>
+      <p class="text-gray-500">No se encontraron entregas en este rango de fechas.</p>
+      <button @click="migrateData" class="mt-4 text-blue-600 font-medium hover:underline">
+        ¿Intentar importar desde órdenes recientes?
+      </button>
     </div>
 
-    <!-- LISTA DE CONDUCTORES -->
-    <div v-else-if="drivers.length > 0" class="drivers-list">
+    <div v-else class="space-y-4">
       <div 
-        v-for="driver in drivers" 
-        :key="driver.driver_id"
-        class="driver-section"
+        v-for="driver in groupedDrivers" 
+        :key="driver.id"
+        class="bg-white border border-gray-200 rounded-xl overflow-hidden transition-all hover:shadow-md"
       >
-        <div class="driver-header">
-          <div class="driver-info">
-            <h3>🚗 {{ driver.driver_name }}</h3>
-            <div class="driver-details">
-              <span class="driver-id">🆔 {{ driver.driver_id }}</span>
-              <span class="driver-email">📧 {{ driver.driver_email }}</span>
+        <div 
+          class="p-4 flex items-center justify-between cursor-pointer bg-gray-50 hover:bg-gray-100 transition-colors"
+          @click="toggleDriver(driver.id)"
+        >
+          <div class="flex items-center gap-4">
+            <div class="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-bold">
+              {{ getInitials(driver.name) }}
             </div>
-            <div class="driver-stats">
-              <span class="orders-count">{{ driver.total_deliveries }} entregas</span>
-              <span class="total-payment">
-                ${{ formatCurrency(driver.total_amount) }}
-              </span>
+            <div>
+              <h3 class="font-bold text-gray-900">{{ driver.name }}</h3>
+              <p class="text-xs text-gray-500">{{ driver.email }}</p>
             </div>
           </div>
-          <div class="driver-actions">
-            <button 
-              @click="toggleDriverDetails(driver.driver_id)"
-              class="toggle-btn"
-            >
-              {{ expandedDrivers.has(driver.driver_id) ? '▲ Ocultar' : '▼ Ver Detalle' }}
-            </button>
+
+          <div class="flex items-center gap-6">
+            <div class="text-right hidden sm:block">
+              <p class="text-xs text-gray-500">Entregas</p>
+              <p class="font-bold">{{ driver.deliveries.length }}</p>
+            </div>
+            <div class="text-right min-w-[100px]">
+              <p class="text-xs text-gray-500">Total</p>
+              <p class="font-bold text-lg text-emerald-600">${{ formatCurrency(driver.totalAmount) }}</p>
+            </div>
+            <div class="transform transition-transform duration-200" :class="{ 'rotate-180': expandedDrivers.has(driver.id) }">
+              ▼
+            </div>
           </div>
         </div>
 
-        <!-- DETALLE DE ENTREGAS -->
-<!-- DETALLE DE ENTREGAS -->
-<div 
-  v-if="expandedDrivers.has(driver.driver_id)" 
-  class="driver-orders"
->
-  <!-- Botón pagar todo el conductor -->
-  <div 
-    v-if="paymentStatus === 'pending' && driver.total_deliveries > 0" 
-    class="driver-payment-actions"
-  >
-    <button 
-      @click="payAllToDriver(driver.driver_id, driver.driver_name, driver.total_amount)"
-      class="btn-pay-all-driver"
-      :disabled="payingDriver === driver.driver_id"
-    >
-      <span v-if="payingDriver === driver.driver_id">⏳ Procesando...</span>
-      <span v-else>💸 Pagar Todo al Conductor (${{ formatCurrency(driver.total_amount) }})</span>
-    </button>
-  </div>
+        <div v-if="expandedDrivers.has(driver.id)" class="border-t border-gray-200 p-4 animate-fade-in">
+          
+          <div class="flex flex-wrap justify-between items-center mb-4 bg-blue-50 p-3 rounded-lg gap-3" v-if="paymentStatus === 'pending'">
+            <div class="flex items-center gap-2">
+              <input 
+                type="checkbox" 
+                :checked="areAllSelected(driver)" 
+                @change="toggleSelectAllDriver(driver)"
+                class="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+              />
+              <span class="text-sm font-medium text-blue-800">Seleccionar todo</span>
+            </div>
+            
+            <div class="flex gap-2">
+              <button 
+                @click="paySelected(driver)"
+                :disabled="getSelectedCount(driver) === 0 || processing"
+                class="btn btn-primary text-sm shadow-sm"
+              >
+                {{ processing ? 'Procesando...' : `Pagar (${getSelectedCount(driver)}) Seleccionados` }}
+              </button>
+              
+              <button 
+                 @click="payAllToDriver(driver.id, driver.name, driver.totalAmount)"
+                 class="btn btn-emerald text-sm shadow-sm"
+                 :disabled="processing"
+              >
+                💸 Pagar Todo
+              </button>
+            </div>
+          </div>
 
-  <div class="orders-table">
-    <div class="table-header">
-      <div class="col">N° Pedido</div>
-      <div class="col">Cliente</div>
-      <div class="col">Empresa</div>
-      <div class="col">Dirección</div>
-      <div class="col">Fecha</div>
-      <div class="col">Monto</div>
-      <div class="col">Estado</div>
-      <div v-if="paymentStatus === 'pending'" class="col">Acción</div>
-    </div>
-    
-    <div 
-      v-for="delivery in driver.deliveries" 
-      :key="delivery.order_number"
-      class="table-row"
-      :class="{ 'paid-row': delivery.payment_status === 'paid' }"
-    >
-      <div class="col order-number">{{ delivery.order_number }}</div>
-      <div class="col customer">{{ delivery.customer_name }}</div>
-      <div class="col company">{{ delivery.company_name || 'N/A' }}</div>
-      <div class="col address" :title="delivery.delivery_address">
-        {{ truncateText(delivery.delivery_address, 30) }}
-      </div>
-      <div class="col date">{{ formatDate(delivery.delivered_at) }}</div>
-      <div class="col amount">${{ formatCurrency(delivery.payment_amount) }}</div>
-      <div class="col status">
-        <span 
-          class="status-badge" 
-          :class="delivery.payment_status"
-        >
-          {{ delivery.payment_status === 'paid' ? '✅ Pagado' : '⏳ Pendiente' }}
-        </span>
-        <div v-if="delivery.paid_at" class="paid-date">
-          {{ formatDate(delivery.paid_at) }}
+          <div class="overflow-x-auto border border-gray-200 rounded-lg">
+            <table class="w-full text-sm text-left">
+              <thead class="text-xs text-gray-500 uppercase bg-gray-50 border-b border-gray-200">
+                <tr>
+                  <th v-if="paymentStatus === 'pending'" class="px-4 py-3 w-10"></th>
+                  <th class="px-4 py-3">Pedido</th>
+                  <th class="px-4 py-3">Fecha</th>
+                  <th class="px-4 py-3">Dirección</th>
+                  <th class="px-4 py-3">Cliente</th>
+                  <th class="px-4 py-3 text-right">Monto</th>
+                  <th class="px-4 py-3 text-center">Estado</th>
+                  <th v-if="paymentStatus === 'pending'" class="px-4 py-3 text-center">Acción</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-100">
+                <tr 
+                  v-for="delivery in driver.deliveries" 
+                  :key="delivery._id"
+                  class="hover:bg-gray-50 transition-colors"
+                  :class="{ 'bg-blue-50/30': selectedDeliveries[delivery._id] }"
+                >
+                  <td v-if="paymentStatus === 'pending'" class="px-4 py-3">
+                    <input 
+                      type="checkbox" 
+                      v-model="selectedDeliveries[delivery._id]"
+                      class="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                    />
+                  </td>
+                  <td class="px-4 py-3 font-medium text-gray-900">
+                    {{ delivery.order_number }}
+                  </td>
+                  <td class="px-4 py-3 text-gray-600 whitespace-nowrap">
+                    {{ formatDateTime(delivery.delivered_at) }}
+                  </td>
+                  <td class="px-4 py-3 text-gray-600 truncate max-w-[200px]" :title="delivery.delivery_address">
+                    {{ delivery.delivery_address }}
+                  </td>
+                  <td class="px-4 py-3 text-gray-600">
+                    {{ delivery.customer_name }}
+                  </td>
+                  <td class="px-4 py-3 text-right font-medium text-emerald-600">
+                    ${{ formatCurrency(delivery.payment_amount) }}
+                  </td>
+                  <td class="px-4 py-3 text-center">
+                    <span 
+                      class="px-2.5 py-0.5 rounded-full text-xs font-medium"
+                      :class="delivery.payment_status === 'paid' ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'"
+                    >
+                      {{ delivery.payment_status === 'paid' ? 'Pagado' : 'Pendiente' }}
+                    </span>
+                  </td>
+                  <td v-if="paymentStatus === 'pending'" class="px-4 py-3 text-center">
+                    <button 
+                      @click="markAsPaid([delivery._id], driver.name)"
+                      class="text-xs bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 px-3 py-1 rounded transition-colors"
+                    >
+                      Pagar
+                    </button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
-      <div 
-        v-if="paymentStatus === 'pending'" 
-        class="col action"
-      >
-        <button 
-          @click="markAsPaid([delivery._id], driver.driver_name)"
-          class="btn-pay-single"
-          :disabled="payingDeliveries.includes(delivery._id)"
-        >
-          <span v-if="payingDeliveries.includes(delivery._id)">⏳</span>
-          <span v-else>💰 Pagar</span>
+    </div>
+
+    <div v-if="migrationResult" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50" @click="migrationResult = null">
+      <div class="bg-white p-6 rounded-xl shadow-xl max-w-md w-full m-4" @click.stop>
+        <h3 class="text-lg font-bold text-emerald-600 mb-4 flex items-center gap-2">
+          ✅ Migración Completada
+        </h3>
+        <div class="space-y-2 mb-6 text-gray-600">
+          <p class="flex justify-between"><span>Registros creados:</span> <strong class="text-gray-900">{{ migrationResult.created }}</strong></p>
+          <p class="flex justify-between"><span>Registros omitidos:</span> <strong class="text-gray-900">{{ migrationResult.skipped }}</strong></p>
+          <p class="flex justify-between"><span>Total procesado:</span> <strong class="text-gray-900">{{ migrationResult.total_processed }}</strong></p>
+        </div>
+        <button @click="migrationResult = null" class="w-full btn btn-primary">
+          Cerrar
         </button>
-      </div>
-    </div>
-  </div>
-  <!-- Resumen del conductor -->
-  <div class="driver-summary">
-    <div class="summary-item">
-      <span>Total Entregas:</span>
-      <span>{{ driver.total_deliveries }}</span>
-    </div>
-    <div class="summary-item">
-      <span>Total a Pagar:</span>
-      <span class="amount">${{ formatCurrency(driver.total_amount) }}</span>
-    </div>
-    <div v-if="paymentStatus === 'all'" class="summary-item">
-      <span>Pendientes:</span>
-      <span>{{ driver.deliveries.filter(d => d.payment_status === 'pending').length }}</span>
-    </div>
-    <div v-if="paymentStatus === 'all'" class="summary-item">
-      <span>Pagadas:</span>
-      <span>{{ driver.deliveries.filter(d => d.payment_status === 'paid').length }}</span>
-    </div>
-  </div>
-</div>
-      </div>
-    </div>
-
-    <!-- MODAL DE MIGRACIÓN -->
-    <div v-if="migrationResult" class="migration-modal" @click="migrationResult = null">
-      <div class="migration-content" @click.stop>
-        <h3>✅ Migración Completada</h3>
-        <p><strong>{{ migrationResult.created }}</strong> registros creados</p>
-        <p><strong>{{ migrationResult.skipped }}</strong> registros omitidos</p>
-        <p><strong>{{ migrationResult.total_processed }}</strong> órdenes procesadas</p>
-        <button @click="migrationResult = null" class="btn-close">Cerrar</button>
       </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
-import { useAuthStore } from '../store/auth'
+import { ref, onMounted, computed } from 'vue'
 import { useToast } from 'vue-toastification'
-import { api } from '../services/api'
+import { driverPaymentsService } from '../services/driverPayments.service'
 
-// ==================== STORES & COMPOSABLES ====================
-const authStore = useAuthStore()
 const toast = useToast()
 
-// ==================== REACTIVE DATA ====================
+// Estado
 const loading = ref(false)
-const loadingMessage = ref('Cargando datos...')
-const drivers = ref([])
-const summary = ref(null)
-const testResults = ref(null)
-const migrationResult = ref(null)
+const processing = ref(false)
+const loadingMessage = ref('')
+const rawDeliveries = ref([]) // Datos crudos del backend
+const summary = ref({ total_amount: 0, total_deliveries: 0, unique_drivers: 0 })
+const expandedDrivers = ref(new Set())
+const selectedDeliveries = ref({}) // { "delivery_id": true/false }
 
 // Filtros
 const dateFrom = ref('')
 const dateTo = ref('')
 const paymentStatus = ref('pending')
 
-// UI State
-const expandedDrivers = ref(new Set())
+// Resultados temporales
+const testResults = ref(null)
+const migrationResult = ref(null)
 
-// ==================== REACTIVE DATA (AGREGAR) ====================
-const payingDriver = ref(null)
-const payingDeliveries = ref([])
+// ==========================================
+// ⚡ COMPUTED: AGRUPACIÓN DE DATOS INTELIGENTE
+// ==========================================
+const groupedDrivers = computed(() => {
+  if (!rawDeliveries.value || rawDeliveries.value.length === 0) return []
 
-// ==================== LIFECYCLE ====================
-onMounted(async () => {
-  // Establecer fechas por defecto (último mes)
-  const today = new Date()
-  const lastMonth = new Date(today.getFullYear(), today.getMonth() - 1, today.getDate())
-  
-  dateFrom.value = lastMonth.toISOString().split('T')[0]
-  dateTo.value = today.toISOString().split('T')[0]
-  
-  // Cargar datos automáticamente
-  await fetchDriverPayments()
+  const groups = {}
+
+  rawDeliveries.value.forEach(record => {
+    const driverId = record.driver_id || 'unknown'
+    
+    if (!groups[driverId]) {
+      groups[driverId] = {
+        id: driverId,
+        name: record.driver_name || 'Conductor Desconocido',
+        email: record.driver_email || '',
+        totalAmount: 0,
+        deliveries: []
+      }
+    }
+
+    groups[driverId].deliveries.push(record)
+    
+    // Solo sumar al total si no está pagado (o si estamos viendo historial)
+    if (paymentStatus.value === 'pending' && record.payment_status === 'pending') {
+        groups[driverId].totalAmount += (record.payment_amount || 0)
+    } else if (paymentStatus.value !== 'pending') {
+        groups[driverId].totalAmount += (record.payment_amount || 0)
+    }
+  })
+
+  return Object.values(groups).sort((a, b) => b.totalAmount - a.totalAmount)
 })
 
-// ==================== API CALLS ====================
-async function runTest() {
-  try {
-    loading.value = true
-    loadingMessage.value = 'Ejecutando test del sistema...'
-    
-    const response = await api.get('/driver-history/test', {
-      params: {
-        date_from: dateFrom.value,
-        date_to: dateTo.value,
-        payment_status: paymentStatus.value
-      }
-    })
-    
-    testResults.value = response.data
-    toast.success('Test ejecutado correctamente')
-    console.log('🧪 Resultados del test:', response.data)
-    
-  } catch (error) {
-    console.error('❌ Error en test:', error)
-    toast.error('Error ejecutando test: ' + (error.response?.data?.error || error.message))
-  } finally {
-    loading.value = false
-  }
-}
+// ==========================================
+// 🔄 CARGA DE DATOS
+// ==========================================
+onMounted(() => {
+  const today = new Date()
+  const firstDay = new Date(today.getFullYear(), today.getMonth(), 1)
+  
+  dateFrom.value = firstDay.toISOString().split('T')[0]
+  dateTo.value = today.toISOString().split('T')[0]
+  
+  fetchData()
+})
 
-async function fetchDriverPayments() {
+async function fetchData() {
+  loading.value = true
+  loadingMessage.value = 'Cargando entregas...'
+  selectedDeliveries.value = {} // Limpiar selección al recargar
+  
   try {
-    loading.value = true
-    loadingMessage.value = 'Cargando entregas de conductores...'
-    
-    const params = {
+    const response = await driverPaymentsService.getAllDeliveries({
       date_from: dateFrom.value,
       date_to: dateTo.value,
       payment_status: paymentStatus.value
-    }
-
-    console.log('📡 Solicitando entregas con parámetros:', params)
-
-    const response = await api.get('/driver-history/all-deliveries', { params })
-    const { data } = response.data
-    
-    drivers.value = data.drivers || []
-    summary.value = data.summary || null
-    
-    console.log('✅ Datos cargados:', {
-      drivers: drivers.value.length,
-      summary: summary.value
     })
-    
-    if (drivers.value.length === 0) {
-      toast.info('No se encontraron entregas. Intenta ejecutar la migración de datos.')
+
+    const responseData = response.data
+
+    // Normalizar datos: Extraer lista plana de entregas
+    if (responseData.data && Array.isArray(responseData.data.drivers)) {
+      // Si viene agrupado, lo aplanamos para usar nuestra lógica
+      rawDeliveries.value = responseData.data.drivers.flatMap(d => d.deliveries.map(del => ({
+        ...del,
+        driver_id: d.driver_id,
+        driver_name: d.driver_name,
+        driver_email: d.driver_email
+      })))
+    } else if (Array.isArray(responseData.deliveries)) {
+      rawDeliveries.value = responseData.deliveries
     } else {
-      toast.success(`Cargados ${drivers.value.length} conductores`)
+      rawDeliveries.value = []
     }
-    
+
+    // Recalcular resumen
+    summary.value = {
+      total_amount: rawDeliveries.value.reduce((sum, d) => sum + (d.payment_amount || 0), 0),
+      total_deliveries: rawDeliveries.value.length,
+      unique_drivers: new Set(rawDeliveries.value.map(d => d.driver_id)).size
+    }
+
   } catch (error) {
-    console.error('❌ Error cargando pagos:', error)
-    toast.error('Error al cargar los pagos: ' + (error.response?.data?.error || error.message))
+    console.error('Error fetching payments:', error)
+    toast.error('Error al cargar datos')
   } finally {
     loading.value = false
   }
 }
 
+// ==========================================
+// 💾 ACCIONES
+// ==========================================
 async function migrateData() {
+  if(!confirm("¿Importar entregas recientes desde las Órdenes?")) return
+  
+  loading.value = true
   try {
-    if (!confirm('¿Deseas migrar los datos históricos? Esto creará registros en DriverHistory desde las órdenes entregadas.')) {
-      return
-    }
-
-    loading.value = true
-    loadingMessage.value = 'Migrando datos históricos...'
-
-    const response = await api.post('/driver-history/create-from-orders')
-    
-    migrationResult.value = response.data.data
-    toast.success(response.data.message)
-    
-    // Recargar datos después de la migración
-    await fetchDriverPayments()
-
+    const res = await driverPaymentsService.createHistoryFromOrders()
+    migrationResult.value = res.data.data || { created: 0, skipped: 0, total_processed: 0 }
+    toast.success(res.data.message)
+    await fetchData()
   } catch (error) {
-    console.error('❌ Error en migración:', error)
-    toast.error('Error en migración: ' + (error.response?.data?.error || error.message))
+    toast.error('Error en migración')
   } finally {
     loading.value = false
   }
 }
 
-// ==================== UI METHODS ====================
-function toggleDriverDetails(driverId) {
-  if (expandedDrivers.value.has(driverId)) {
-    expandedDrivers.value.delete(driverId)
-  } else {
-    expandedDrivers.value.add(driverId)
+async function runTest() {
+  try {
+    const res = await driverPaymentsService.testDriverSystem()
+    console.log('Test Result:', res.data)
+    toast.info('Test ejecutado. Revisa la consola para detalles técnicos.')
+  } catch (e) {
+    toast.error('Error en test')
   }
 }
 
-function refreshData() {
-  fetchDriverPayments()
-}
-// ==================== MÉTODOS DE PAGO (AGREGAR) ====================
-async function markAsPaid(orderIds, driverName = '') {
+async function paySelected(driver) {
+  const idsToPay = driver.deliveries
+    .filter(d => selectedDeliveries.value[d._id])
+    .map(d => d._id)
+
+  if (idsToPay.length === 0) return
+
+  if (!confirm(`¿Pagar ${idsToPay.length} entregas a ${driver.name}?`)) return
+
+  processing.value = true
   try {
-    if (!Array.isArray(orderIds)) {
-      orderIds = [orderIds];
-    }
-
-    console.log('💰 Marcando como pagadas las órdenes:', orderIds);
-
-    // Agregar a la lista de "procesando"
-    payingDeliveries.value.push(...orderIds);
-    
-    const response = await api.post('/driver-history/mark-paid', {
-      orderIds: orderIds,
-      paymentNote: `Pago manual desde panel${driverName ? ` - ${driverName}` : ''}`
-    });
-    
-    toast.success(`${response.data.data.orders_updated} entrega(s) marcada(s) como pagada(s)`);
-    
-    // Recargar datos para ver los cambios
-    await fetchDriverPayments();
-    
+    await driverPaymentsService.markDeliveriesAsPaid(idsToPay, 'Pago manual panel')
+    toast.success('Pagos registrados exitosamente')
+    await fetchData()
   } catch (error) {
-    console.error('❌ Error marcando como pagado:', error);
-    toast.error('Error al marcar entregas como pagadas: ' + (error.response?.data?.error || error.message));
+    toast.error('Error al procesar el pago')
   } finally {
-    // Remover de la lista de "procesando"
-    payingDeliveries.value = payingDeliveries.value.filter(id => !orderIds.includes(id));
+    processing.value = false
+  }
+}
+
+async function markAsPaid(orderIds, driverName) {
+  if (!confirm(`¿Marcar como pagado?`)) return
+  
+  try {
+    await driverPaymentsService.markDeliveriesAsPaid(orderIds, `Pago individual - ${driverName}`)
+    toast.success('Entrega pagada')
+    await fetchData()
+  } catch (error) {
+    toast.error('Error al pagar')
   }
 }
 
 async function payAllToDriver(driverId, driverName, totalAmount) {
+  if (!confirm(`¿Pagar TODO ($${formatCurrency(totalAmount)}) a ${driverName}?`)) return
+
+  processing.value = true
   try {
-    payingDriver.value = driverId;
-    
-    // Confirmación
-    if (!confirm(`¿Estás seguro de pagar todas las entregas pendientes de ${driverName} por $${formatCurrency(totalAmount)}?`)) {
-      return;
-    }
-    
-    const response = await api.post(`/driver-history/driver/${driverId}/pay-all`, {
-      paymentNote: `Pago completo - ${driverName}`
-    });
-    
-    toast.success(response.data.message);
-    
-    // Recargar datos para ver los cambios
-    await fetchDriverPayments();
-    
+    await driverPaymentsService.payAllPendingToDriver(driverId)
+    toast.success(`Pagado todo a ${driverName}`)
+    await fetchData()
   } catch (error) {
-    console.error('❌ Error pagando conductor:', error);
-    toast.error('Error al pagar conductor: ' + (error.response?.data?.error || error.message));
+    toast.error('Error al pagar conductor')
   } finally {
-    payingDriver.value = null;
+    processing.value = false
   }
 }
 
-// ==================== UTILS ====================
-function formatCurrency(amount) {
-  return new Intl.NumberFormat('es-CL').format(amount || 0)
+// ==========================================
+// 💅 UI HELPERS
+// ==========================================
+function toggleDriver(id) {
+  if (expandedDrivers.value.has(id)) {
+    expandedDrivers.value.delete(id)
+  } else {
+    expandedDrivers.value.add(id)
+  }
 }
 
-function formatDate(date) {
-  if (!date) return 'Sin fecha'
-  return new Date(date).toLocaleDateString('es-CL', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit'
+function toggleSelectAllDriver(driver) {
+  const allSelected = areAllSelected(driver)
+  driver.deliveries.forEach(d => {
+    selectedDeliveries.value[d._id] = !allSelected
   })
 }
 
-function truncateText(text, maxLength) {
-  if (!text) return 'N/A'
-  return text.length > maxLength ? text.substring(0, maxLength) + '...' : text
+function areAllSelected(driver) {
+  return driver.deliveries.length > 0 && 
+         driver.deliveries.every(d => selectedDeliveries.value[d._id])
+}
+
+function getSelectedCount(driver) {
+  return driver.deliveries.filter(d => selectedDeliveries.value[d._id]).length
+}
+
+function getInitials(name) {
+  return name ? name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) : '??'
+}
+
+function formatCurrency(val) {
+  return new Intl.NumberFormat('es-CL').format(val)
+}
+
+function formatDateShort(dateStr) {
+  if (!dateStr) return ''
+  const d = new Date(dateStr)
+  return `${d.getDate()}/${d.getMonth() + 1}`
+}
+
+function formatDateTime(dateStr) {
+  if (!dateStr) return '-'
+  return new Date(dateStr).toLocaleDateString('es-CL', {
+    day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit'
+  })
 }
 </script>
 
 <style scoped>
-.driver-payments-container {
-  padding: 20px;
-  max-width: 1200px;
-  margin: 0 auto;
-}
-
-/* Filtros */
-.filters-section {
-  background: white;
-  padding: 20px;
-  border-radius: 8px;
-  margin-bottom: 20px;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-}
-
-.filters-row {
-  display: flex;
-  gap: 15px;
-  flex-wrap: wrap;
-  align-items: end;
-}
-
-.filter-group {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-
-.filter-group label {
-  font-weight: 600;
-  color: #374151;
-  font-size: 14px;
-}
-
 .form-input, .form-select {
-  padding: 8px 12px;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
-  font-size: 14px;
+  @apply border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-shadow;
 }
 
-.filter-actions {
-  display: flex;
-  gap: 10px;
-  margin-left: auto;
+.btn {
+  @apply px-4 py-2 rounded-lg font-medium text-sm transition-all flex items-center justify-center active:scale-95;
 }
+.btn-primary { @apply bg-blue-600 text-white hover:bg-blue-700 disabled:bg-blue-300 disabled:cursor-not-allowed; }
+.btn-secondary { @apply bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-200; }
+.btn-outline { @apply border border-gray-300 text-gray-600 hover:bg-gray-50; }
+.btn-warning { @apply bg-amber-100 text-amber-800 hover:bg-amber-200 border border-amber-200; }
+.btn-emerald { @apply bg-emerald-600 text-white hover:bg-emerald-700 disabled:bg-emerald-300; }
 
-.btn-refresh, .btn-test, .btn-migrate {
-  padding: 8px 16px;
-  border: none;
-  border-radius: 6px;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s;
+.kpi-card {
+  @apply bg-white p-4 rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow;
 }
+.kpi-label { @apply text-xs font-bold text-gray-500 uppercase tracking-wider; }
+.kpi-value { @apply text-2xl font-bold mt-1; }
 
-.btn-refresh {
-  background: #3b82f6;
-  color: white;
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-5px); }
+  to { opacity: 1; transform: translateY(0); }
 }
-
-.btn-test {
-  background: #8b5cf6;
-  color: white;
-}
-
-.btn-migrate {
-  background: #f59e0b;
-  color: white;
-}
-
-.btn-refresh:hover, .btn-test:hover, .btn-migrate:hover {
-  opacity: 0.9;
-  transform: translateY(-1px);
-}
-
-/* Test Results */
-.test-results {
-  margin-bottom: 20px;
-}
-
-.test-card {
-  background: #f8fafc;
-  border: 2px solid #e2e8f0;
-  padding: 20px;
-  border-radius: 8px;
-}
-
-.test-stats {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 15px;
-  margin-top: 15px;
-}
-
-.test-stat {
-  display: flex;
-  justify-content: space-between;
-  padding: 10px;
-  background: white;
-  border-radius: 6px;
-  border: 1px solid #e2e8f0;
-}
-
-.test-stat .amount {
-  color: #059669;
-  font-weight: 700;
-}
-
-/* Estadísticas */
-.stats-summary {
-  margin-bottom: 20px;
-}
-
-.summary-card {
-  background: white;
-  padding: 20px;
-  border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-}
-
-.summary-stats {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 15px;
-  margin-top: 15px;
-}
-
-.stat {
-  display: flex;
-  justify-content: space-between;
-  padding: 10px;
-  background: #f9fafb;
-  border-radius: 6px;
-}
-
-.stat-label {
-  font-weight: 600;
-  color: #6b7280;
-}
-
-.stat-value {
-  font-weight: 700;
-  color: #111827;
-}
-
-.stat-value.amount {
-  color: #059669;
-  font-size: 16px;
-}
-
-/* Conductores */
-.drivers-list {
-  space-y: 20px;
-}
-
-.driver-section {
-  background: white;
-  border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-  overflow: hidden;
-  margin-bottom: 20px;
-}
-
-.driver-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 20px;
-  background: #f8fafc;
-  border-bottom: 1px solid #e5e7eb;
-}
-
-.driver-info h3 {
-  margin: 0 0 8px 0;
-  color: #111827;
-  font-size: 18px;
-}
-
-.driver-details {
-  display: flex;
-  gap: 15px;
-  margin-bottom: 8px;
-  font-size: 13px;
-  color: #6b7280;
-}
-
-.driver-stats {
-  display: flex;
-  gap: 15px;
-}
-
-.orders-count {
-  background: #dbeafe;
-  color: #1e40af;
-  padding: 4px 8px;
-  border-radius: 4px;
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.total-payment {
-  background: #d1fae5;
-  color: #065f46;
-  padding: 4px 8px;
-  border-radius: 4px;
-  font-size: 14px;
-  font-weight: 700;
-}
-
-.toggle-btn {
-  background: #6b7280;
-  color: white;
-  padding: 8px 12px;
-  border: none;
-  border-radius: 6px;
-  font-size: 12px;
-  cursor: pointer;
-}
-
-/* Tabla */
-.driver-orders {
-  padding: 20px;
-}
-
-.orders-table {
-  width: 100%;
-}
-
-.table-header {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr 2fr 1fr 80px;
-  gap: 10px;
-  padding: 10px;
-  background: #f3f4f6;
-  font-weight: 600;
-  color: #374151;
-  border-radius: 6px 6px 0 0;
-}
-
-.table-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr 2fr 1fr 80px;
-  gap: 10px;
-  padding: 12px 10px;
-  border-bottom: 1px solid #e5e7eb;
-  align-items: center;
-}
-
-.table-row:hover {
-  background: #f9fafb;
-}
-
-.col {
-  font-size: 14px;
-  color: #374151;
-}
-
-.order-number {
-  font-weight: 600;
-  color: #1f2937;
-}
-
-.amount {
-  font-weight: 600;
-  color: #059669;
-}
-
-/* Loading */
-.loading-container {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 60px 20px;
-  color: #6b7280;
-}
-
-.spinner {
-  width: 40px;
-  height: 40px;
-  border: 4px solid #e5e7eb;
-  border-top: 4px solid #3b82f6;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-  margin-bottom: 15px;
-}
-
-@keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
-
-/* No data */
-.no-data-message {
-  display: flex;
-  justify-content: center;
-  padding: 40px 20px;
-}
-
-.no-data-card {
-  background: white;
-  padding: 40px;
-  border-radius: 8px;
-  text-align: center;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-  max-width: 500px;
-}
-
-.no-data-card h3 {
-  color: #6b7280;
-  margin-bottom: 15px;
-}
-
-.no-data-card p {
-  color: #9ca3af;
-  margin-bottom: 10px;
-}
-
-/* Migration Modal */
-.migration-modal {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0,0,0,0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-}
-
-.migration-content {
-  background: white;
-  padding: 30px;
-  border-radius: 8px;
-  text-align: center;
-  max-width: 400px;
-}
-
-.migration-content h3 {
-  color: #059669;
-  margin-bottom: 15px;
-}
-
-.btn-close {
-  background: #3b82f6;
-  color: white;
-  border: none;
-  padding: 8px 16px;
-  border-radius: 6px;
-  cursor: pointer;
-  margin-top: 15px;
-}
-/* Acciones de pago del conductor */
-.driver-payment-actions {
-  margin-bottom: 15px;
-  text-align: center;
-}
-
-.btn-pay-all-driver {
-  background: #059669;
-  color: white;
-  padding: 12px 24px;
-  border: none;
-  border-radius: 8px;
-  font-weight: 600;
-  cursor: pointer;
-  font-size: 16px;
-  transition: all 0.2s;
-}
-
-.btn-pay-all-driver:hover:not(:disabled) {
-  background: #047857;
-  transform: translateY(-1px);
-}
-
-.btn-pay-all-driver:disabled {
-  background: #9ca3af;
-  cursor: not-allowed;
-  transform: none;
-}
-
-/* Actualizar tabla header para incluir Estado y Acción */
-.table-header {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr 2fr 1fr 80px 100px 80px;
-  gap: 10px;
-  padding: 10px;
-  background: #f3f4f6;
-  font-weight: 600;
-  color: #374151;
-  border-radius: 6px 6px 0 0;
-}
-
-.table-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr 2fr 1fr 80px 100px 80px;
-  gap: 10px;
-  padding: 12px 10px;
-  border-bottom: 1px solid #e5e7eb;
-  align-items: center;
-}
-
-.table-row.paid-row {
-  background: #f0fdf4;
-  opacity: 0.8;
-}
-
-/* Estados de pago */
-.status-badge {
-  padding: 4px 8px;
-  border-radius: 4px;
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.status-badge.pending {
-  background: #fef3c7;
-  color: #92400e;
-}
-
-.status-badge.paid {
-  background: #d1fae5;
-  color: #065f46;
-}
-
-.paid-date {
-  font-size: 10px;
-  color: #6b7280;
-  margin-top: 2px;
-}
-
-/* Botón pagar individual */
-.btn-pay-single {
-  padding: 6px 12px;
-  background: #f59e0b;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 600;
-  transition: all 0.2s;
-}
-
-.btn-pay-single:hover:not(:disabled) {
-  background: #d97706;
-}
-
-.btn-pay-single:disabled {
-  background: #9ca3af;
-  cursor: not-allowed;
-}
-
-/* Resumen del conductor */
-.driver-summary {
-  margin-top: 15px;
-  padding: 15px;
-  background: #f8fafc;
-  border-radius: 6px;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 15px;
-}
-
-.summary-item {
-  display: flex;
-  justify-content: space-between;
-  padding: 8px;
-  background: white;
-  border-radius: 4px;
-  font-size: 14px;
-}
-
-.summary-item .amount {
-  font-weight: 700;
-  color: #059669;
-}
-
-/* Responsive */
-@media (max-width: 768px) {
-  .table-header,
-  .table-row {
-    grid-template-columns: 1fr;
-    gap: 5px;
-  }
-  
-  .col {
-    padding: 5px;
-    border-bottom: 1px solid #f3f4f6;
-  }
-  
-  .col:before {
-    content: attr(data-label) ": ";
-    font-weight: 600;
-    margin-right: 10px;
-  }
+.animate-fade-in {
+  animation: fadeIn 0.2s ease-out forwards;
 }
 </style>
