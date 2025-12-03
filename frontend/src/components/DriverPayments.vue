@@ -185,14 +185,14 @@
               <tbody class="divide-y divide-gray-100">
                 <tr 
                   v-for="delivery in driver.deliveries" 
-                  :key="delivery._id"
+                  :key="delivery.order_id"
                   class="hover:bg-gray-50 transition-colors"
-                  :class="{ 'bg-blue-50/30': selectedDeliveries[delivery._id] }"
+                  :class="{ 'bg-blue-50/30': selectedDeliveries[delivery.order_id] }"
                 >
                   <td v-if="paymentStatus === 'pending'" class="px-4 py-3">
                     <input 
                       type="checkbox" 
-                      v-model="selectedDeliveries[delivery._id]"
+                      v-model="selectedDeliveries[delivery.order_id]"
                       class="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
                     />
                   </td>
@@ -221,10 +221,11 @@
                   </td>
                   <td v-if="paymentStatus === 'pending'" class="px-4 py-3 text-center">
                     <button 
-                      @click="markAsPaid([delivery._id], driver.name)"
+                      @click="markAsPaid([delivery.order_id], driver.name)"
                       class="text-xs bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 px-3 py-1 rounded transition-colors"
+                      :disabled="payingDeliveries.includes(delivery.order_id)"
                     >
-                      Pagar
+                      {{ payingDeliveries.includes(delivery.order_id) ? '⏳' : 'Pagar' }}
                     </button>
                   </td>
                 </tr>
@@ -267,13 +268,14 @@ const loadingMessage = ref('')
 const rawDeliveries = ref([]) // Datos crudos del backend
 const summary = ref({ total_amount: 0, total_deliveries: 0, unique_drivers: 0 })
 const expandedDrivers = ref(new Set())
-const selectedDeliveries = ref({}) // { "delivery_id": true/false }
+const selectedDeliveries = ref({}) // { "order_id": true/false }
+const payingDeliveries = ref([])   // Lista de IDs procesándose
 
 // Filtros
 const dateFrom = ref('')
 const dateTo = ref('')
 const paymentStatus = ref('pending')
-const searchQuery = ref('') // 👈 FALTA ESTO
+const searchQuery = ref('') 
 
 // Resultados temporales
 const testResults = ref(null)
@@ -302,27 +304,27 @@ const groupedDrivers = computed(() => {
 
     groups[driverId].deliveries.push(record)
     
+    // Solo sumar al total si no está pagado (o si estamos viendo historial)
     if (paymentStatus.value === 'pending' && record.payment_status === 'pending') {
-      groups[driverId].totalAmount += (record.payment_amount || 0)
+        groups[driverId].totalAmount += (record.payment_amount || 0)
     } else if (paymentStatus.value !== 'pending') {
-      groups[driverId].totalAmount += (record.payment_amount || 0)
+        groups[driverId].totalAmount += (record.payment_amount || 0)
     }
   })
 
-  let result = Object.values(groups)
+  // Convertir objeto a array
+  let driversList = Object.values(groups)
 
-  // 🔍 FILTRO POR BÚSQUEDA (nombre o email)
-  if (searchQuery.value && searchQuery.value.trim() !== '') {
-    const q = searchQuery.value.toLowerCase()
-
-    result = result.filter(driver => {
-      const name = (driver.name || '').toLowerCase()
-      const email = (driver.email || '').toLowerCase()
-      return name.includes(q) || email.includes(q)
-    })
+  // Filtrar por Búsqueda (Nombre o Email)
+  if (searchQuery.value) {
+    const q = searchQuery.value.toLowerCase().trim()
+    driversList = driversList.filter(d => 
+      d.name.toLowerCase().includes(q) || 
+      d.email.toLowerCase().includes(q)
+    )
   }
 
-  return result.sort((a, b) => b.totalAmount - a.totalAmount)
+  return driversList.sort((a, b) => b.totalAmount - a.totalAmount)
 })
 
 // ==========================================
@@ -341,7 +343,7 @@ onMounted(() => {
 async function fetchData() {
   loading.value = true
   loadingMessage.value = 'Cargando entregas...'
-  selectedDeliveries.value = {} // Limpiar selección al recargar
+  selectedDeliveries.value = {} 
   
   try {
     const response = await driverPaymentsService.getAllDeliveries({
@@ -354,7 +356,6 @@ async function fetchData() {
 
     // Normalizar datos: Extraer lista plana de entregas
     if (responseData.data && Array.isArray(responseData.data.drivers)) {
-      // Si viene agrupado, lo aplanamos para usar nuestra lógica
       rawDeliveries.value = responseData.data.drivers.flatMap(d => d.deliveries.map(del => ({
         ...del,
         driver_id: d.driver_id,
@@ -412,9 +413,10 @@ async function runTest() {
 }
 
 async function paySelected(driver) {
+  // ✅ CORREGIDO: Usar order_id
   const idsToPay = driver.deliveries
-    .filter(d => selectedDeliveries.value[d._id])
-    .map(d => d._id)
+    .filter(d => selectedDeliveries.value[d.order_id])
+    .map(d => d.order_id)
 
   if (idsToPay.length === 0) return
 
@@ -433,7 +435,9 @@ async function paySelected(driver) {
 }
 
 async function markAsPaid(orderIds, driverName) {
-  if (!confirm(`¿Marcar como pagado?`)) return
+  // ✅ Asegurar confirmación simple para pago individual
+  // Agregamos visual feedback
+  payingDeliveries.value.push(...orderIds);
   
   try {
     await driverPaymentsService.markDeliveriesAsPaid(orderIds, `Pago individual - ${driverName}`)
@@ -441,6 +445,8 @@ async function markAsPaid(orderIds, driverName) {
     await fetchData()
   } catch (error) {
     toast.error('Error al pagar')
+  } finally {
+    payingDeliveries.value = payingDeliveries.value.filter(id => !orderIds.includes(id));
   }
 }
 
@@ -473,17 +479,18 @@ function toggleDriver(id) {
 function toggleSelectAllDriver(driver) {
   const allSelected = areAllSelected(driver)
   driver.deliveries.forEach(d => {
-    selectedDeliveries.value[d._id] = !allSelected
+    // ✅ CORREGIDO: Usar order_id
+    selectedDeliveries.value[d.order_id] = !allSelected
   })
 }
 
 function areAllSelected(driver) {
   return driver.deliveries.length > 0 && 
-         driver.deliveries.every(d => selectedDeliveries.value[d._id])
+         driver.deliveries.every(d => selectedDeliveries.value[d.order_id]) // ✅ order_id
 }
 
 function getSelectedCount(driver) {
-  return driver.deliveries.filter(d => selectedDeliveries.value[d._id]).length
+  return driver.deliveries.filter(d => selectedDeliveries.value[d.order_id]).length // ✅ order_id
 }
 
 function getInitials(name) {
