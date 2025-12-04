@@ -252,7 +252,7 @@ const showRouteMap = ref(false);
 const activeRoute = ref(null);
 const mapInstance = ref(null);
 const showRouteOptimizerModal = ref(false);
-
+const activeDriverIds = ref(new Set());
 // WebSocket Composable
 const { on, off } = useWebSocket();
 
@@ -354,23 +354,25 @@ const loadGoogleMaps = async () => {
 
 // ✅ MANEJADOR DE UBICACIÓN DEL CONDUCTOR
 const handleDriverLocation = (payload) => {
-  // 1. Si el mapa está cerrado o no hay ruta activa, ignorar
-  if (!showRouteMap.value || !activeRoute.value) return;
+  console.log('📍 Tracking recibido:', payload); // Debug
 
-  // 2. Desempaquetar datos (backend envía { driver_id, location: {...} })
+  // Validar datos
+  if (!payload || !payload.driver_id || !payload.location) return;
+
   const { driver_id, location } = payload;
   
-  // 3. Verificar si es el conductor de ESTA ruta
-  // El campo driver puede ser un objeto poblado o solo un ID string
-  const routeDriverId = activeRoute.value.driver?._id || activeRoute.value.driver;
-  
-  if (driver_id !== routeDriverId) {
-      // console.log("Ignorando ubicación de otro conductor:", driver_id);
-      return;
-  }
+  // 1. Marcar conductor como online
+  activeDriverIds.value.add(driver_id);
 
-  // 4. Actualizar marcador
-  updateDriverMarker(location.latitude, location.longitude, location.heading);
+  // 2. Si el mapa está abierto y es el conductor correcto, mover el camión
+  if (showRouteMap.value && activeRoute.value) {
+    // Manejar si activeRoute.value.driver es objeto o string
+    const currentDriverId = activeRoute.value.driver?._id || activeRoute.value.driver;
+    
+    if (currentDriverId === driver_id) {
+      updateDriverMarker(location.latitude, location.longitude, location.heading);
+    }
+  }
 };
 
 const updateDriverMarker = (lat, lng, heading) => {
@@ -651,6 +653,9 @@ onMounted(() => {
 
 onUnmounted(() => {
   off('driver_location_update', handleDriverLocation);
+  if (driverMarker) {
+     driverMarker.setMap(null);
+  }
 });
 </script>
 
