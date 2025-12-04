@@ -161,21 +161,21 @@ onClose(event) {
       this.emit('server_error', data)
       break
 
-      case 'driver_location_updated':
+      case 'driver_location_update':
       // Emitimos el evento para que RouteManager lo escuche
-      this.emit('driver_location_updated', data)
+      this.emit('driver_location_update', data)
       break
 
     default:
       // Solo mostrar log para tipos desconocidos
       console.log(`ℹ️ WS: Mensaje tipo '${type}':`, data)
   }
-  
-  // Emitir evento genérico (pero sin log adicional)
-  this.emit('message', message)
-  
-  // Emitir evento específico por tipo
-  this.emit(type, data)
+    this.emit('message', message)
+
+  // Si no fue manejado en el switch, emitir por tipo
+  if (!['connection_established', 'pong', 'order_status_changed', 'new_order', 'permissions', 'connection_stats', 'error', 'driver_location_update'].includes(type)) {
+    this.emit(type, data)
+  }
 }
 
   // Handlers específicos para notificaciones

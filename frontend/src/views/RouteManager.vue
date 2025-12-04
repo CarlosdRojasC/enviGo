@@ -269,7 +269,7 @@ let endMarker = null;
 let geocoder = null;
 let currentRoutePolyline = null;
 let driverMarker = null; // 🚛 Marcador del conductor en tiempo real
-
+let infoWindow = null; 
 // Helpers
 const getDriverName = (driver) => driver?.full_name || driver?.name || driver?.email || "Sin asignar";
 const getStatusText = (status) => ({
@@ -354,26 +354,30 @@ const loadGoogleMaps = async () => {
 
 // ✅ MANEJADOR DE UBICACIÓN DEL CONDUCTOR
 const handleDriverLocation = (payload) => {
-  console.log('📍 Tracking recibido:', payload); // Debug
+  console.log('📍 Tracking recibido:', payload);
 
-  // Validar datos
   if (!payload || !payload.driver_id || !payload.location) return;
 
   const { driver_id, location } = payload;
-  
-  // 1. Marcar conductor como online
   activeDriverIds.value.add(driver_id);
 
-  // 2. Si el mapa está abierto y es el conductor correcto, mover el camión
   if (showRouteMap.value && activeRoute.value) {
-    // Manejar si activeRoute.value.driver es objeto o string
     const currentDriverId = activeRoute.value.driver?._id || activeRoute.value.driver;
-    
-    if (currentDriverId === driver_id) {
+
+    console.log('🧪 Comparando IDs de driver', {
+      currentDriverId,
+      payloadDriverId: driver_id,
+      equalStrict: currentDriverId === driver_id,
+      equalLoose: currentDriverId == driver_id
+    });
+
+    // Usa comparación flexible para evitar problemas string/ObjectId
+    if (currentDriverId == driver_id) {
       updateDriverMarker(location.latitude, location.longitude, location.heading);
     }
   }
 };
+
 
 const updateDriverMarker = (lat, lng, heading) => {
   let map = mapInstance.value;
@@ -500,17 +504,18 @@ const viewRoute = async (route) => {
   if (!mapContainer) return;
 
   try {
-    const maps = await loadGoogleMaps();
+const maps = await loadGoogleMaps();
 
-    const map = new maps.Map(mapContainer, {
-      center: hasLatLng(route.startLocation)
-        ? { lat: route.startLocation.latitude, lng: route.startLocation.longitude }
-        : { lat: 0, lng: 0 },
-      zoom: 12,
-      mapId: "ENVIGO_MAP_DEFAULT",
-      streetViewControl: false,
-      mapTypeControl: false
-    });
+// Crear InfoWindow para mostrar detalle de entrega
+infoWindow = new maps.InfoWindow();
+
+const map = new maps.Map(mapContainer, {
+  center: hasLatLng(route.startLocation)
+    ? { lat: route.startLocation.latitude, lng: route.startLocation.longitude }
+    : { lat: 0, lng: 0 },
+  zoom: 12,
+  mapId: "ENVIGO_MAP_DEFAULT",
+});
     mapInstance.value = map;
 
     geocoder = new maps.Geocoder();
@@ -571,25 +576,100 @@ const viewRoute = async (route) => {
 
     // Paradas
     (route.orders || []).forEach((o, idx) => {
-      const lat = o?.order?.location?.latitude ?? o?.order?.delivery_location?.latitude;
-      const lng = o?.order?.location?.longitude ?? o?.order?.delivery_location?.longitude;
-      if (typeof lat === "number" && typeof lng === "number") {
-        new maps.Marker({
-          map,
-          position: { lat, lng },
-          title: `Parada ${idx + 1}`,
-          label: { text: `${idx + 1}`, color: "white", fontSize: "12px", fontWeight: "bold" },
-          icon: {
-             path: maps.SymbolPath.CIRCLE,
-             scale: 12,
-             fillColor: getMarkerColor(o.deliveryStatus),
-             fillOpacity: 1,
-             strokeColor: "white",
-             strokeWeight: 2
-          }
-        });
+  const lat = o?.order?.location?.latitude ?? o?.order?.delivery_location?.latitude;
+  const lng = o?.order?.location?.longitude ?? o?.order?.delivery_location?.longitude;
+
+  if (typeof lat === "number" && typeof lng === "number") {
+    const marker = new maps.Marker({
+      map,
+      position: { lat, lng },
+      title: `Parada ${idx + 1}`,
+      label: { text: `${idx + 1}`, color: "white", fontSize: "12px", fontWeight: "bold" },
+      icon: {
+        path: maps.SymbolPath.CIRCLE,
+        scale: 12,
+        fillColor: getMarkerColor(o.deliveryStatus),
+        fillOpacity: 1,
+        strokeColor: "white",
+        strokeWeight: 2
       }
     });
+
+    // Al hacer clic en una parada, mostrar detalle de entrega
+    marker.addListener("click", () => {
+      const orderData = o.order || o;
+
+      // Info de entrega (ajusta los campos según tu modelo real)
+      const deliveryInfo = orderData.delivery_info || orderData.deliveryInfo || {};
+      const receivedBy =
+        deliveryInfo.received_by ||
+        deliveryInfo.receivedBy ||
+        orderData.received_by ||
+        orderData.delivery_received_by ||
+        orderData.delivery_contact_name ||
+        orderData.customer_name ||
+        "No registrado";
+
+      const deliveredAt =
+        deliveryInfo.delivered_at ||
+        deliveryInfo.deliveredAt ||
+        orderData.delivered_at ||
+        orderData.delivery_date ||
+        orderData.updatedAt ||
+        null;
+
+      const photos =
+        deliveryInfo.photos ||
+        deliveryInfo.proof_photos ||
+        orderData.proof_photos ||
+        orderData.delivery_photos ||
+        [];
+
+      const orderNumber =
+        orderData.order_number ||
+        orderData.external_order_id ||
+        orderData.external_id ||
+        orderData._id ||
+        "Sin número";
+
+      // 👉 Si quieres que SOLO muestre popup para entregas realizadas:
+      // if (!['completed', 'delivered'].includes(o.deliveryStatus)) return;
+
+      // HTML del popup
+      let html = '<div style="max-width:260px;font-family:system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;">';
+      html += '<div style="font-size:14px;font-weight:600;margin-bottom:4px;">Entrega #' + orderNumber + '</div>';
+      html += '<div style="font-size:12px;color:#4b5563;margin-bottom:4px;">Cliente: ' + (orderData.customer_name || orderData.customer || "—") + '</div>';
+
+      html += '<div style="font-size:12px;color:#374151;margin-bottom:2px;"><strong>Estado:</strong> ' + (o.deliveryStatus || orderData.status || "—") + '</div>';
+      html += '<div style="font-size:12px;color:#374151;margin-bottom:2px;"><strong>Recibido por:</strong> ' + receivedBy + '</div>';
+      if (deliveredAt) {
+        html += '<div style="font-size:12px;color:#374151;margin-bottom:4px;"><strong>Entregado:</strong> ' + new Date(deliveredAt).toLocaleString() + '</div>';
+      }
+
+      if (Array.isArray(photos) && photos.length > 0) {
+        html += '<div style="margin-top:4px;"><div style="font-size:12px;color:#4b5563;margin-bottom:4px;">Fotos de entrega:</div>';
+        const limited = photos.slice(0, 3);
+        limited.forEach((url) => {
+          if (!url) return;
+          html += '<img src="' + url + '" style="width:70px;height:70px;object-fit:cover;border-radius:6px;margin-right:4px;border:1px solid #e5e7eb;" />';
+        });
+        if (photos.length > 3) {
+          html += '<div style="font-size:11px;color:#6b7280;margin-top:2px;">+' + (photos.length - 3) + ' fotos más</div>';
+        }
+        html += '</div>';
+      } else {
+        html += '<div style="margin-top:4px;font-size:11px;color:#9ca3af;">Sin fotos de entrega registradas.</div>';
+      }
+
+      html += '</div>';
+
+      if (infoWindow) {
+        infoWindow.setContent(html);
+        infoWindow.open(map, marker);
+      }
+    });
+  }
+});
 
     drawRouteOnMap(maps, map, route);
   } catch (err) {
