@@ -1,4 +1,4 @@
-// backend/src/services/websocket.service.js
+// backend/src/services/websocket.service.js - VERSIÓN MEJORADA
 const WebSocket = require('ws');
 const jwt = require('jsonwebtoken');
 const { ROLES } = require('../config/constants');
@@ -16,9 +16,9 @@ class WebSocketService {
     this.adminClients = new Set();
     this.companyClients = new Map();
     this.driverClients = new Map();
-    this.roomSubscriptions = new Map();
+    this.roomSubscriptions = new Map(); // Para salas específicas
     
-    // Métricas
+    // Métricas y estadísticas
     this.stats = {
       totalConnections: 0,
       totalMessages: 0,
@@ -55,26 +55,33 @@ class WebSocketService {
       const user = req.user;
       console.log(`🔗 Nueva conexión: ${user.email} (${user.role})`);
       
+      // Configurar cliente
       ws.user = user;
       ws.isAlive = true;
       ws.subscribedRooms = new Set();
+      ws.connectionTime = new Date();
       
+      // Almacenar conexión
       this.connections.set(ws, user);
       this.categorizeClient(ws, user);
       this.updateStats(user.role, 'connect');
       
+      // Event handlers del cliente
       ws.on('message', this.handleMessage.bind(this, ws));
       ws.on('close', this.handleDisconnect.bind(this, ws));
       ws.on('pong', () => { ws.isAlive = true; });
       
+      // Enviar bienvenida
       this.sendToClient(ws, 'connected', {
         user: { name: user.name, role: user.role },
-        server_time: new Date()
+        server_time: new Date(),
+        permissions: this.getUserPermissions(user)
       });
     });
   }
 
   categorizeClient(ws, user) {
+    // Categorizar por rol
     if (user.role === ROLES.ADMIN) {
       this.adminClients.add(ws);
     } else if (user.company_id) {
@@ -85,15 +92,21 @@ class WebSocketService {
       this.companyClients.get(companyId).add(ws);
     }
     
-    if (user.role === 'driver' && (user.driver_id || user.id)) {
-      const dId = (user.driver_id || user.id).toString();
-      this.driverClients.set(dId, ws);
+    // Si es conductor
+if (user.role === 'driver') {
+      const driverId = user.driver_id || user.id;
+      if (driverId) {
+        this.driverClients.set(driverId.toString(), ws);
+        console.log(`🚚 Driver registrado en mapa WS: ${driverId}`);
+      }
     }
   }
 
   handleMessage(ws, data) {
     try {
       const message = JSON.parse(data);
+      console.log(`📨 Mensaje recibido de ${ws.user.email}:`, message.type);
+      
       this.stats.totalMessages++;
       
       switch (message.type) {
@@ -101,7 +114,6 @@ class WebSocketService {
           this.sendToClient(ws, 'pong', { timestamp: new Date() });
           break;
           
-        // ✅ NUEVO: Manejar ubicación del conductor
         case 'update_location':
           this.handleLocationUpdate(ws, message.data);
           break;
@@ -114,17 +126,27 @@ class WebSocketService {
           this.unsubscribeFromRoom(ws, message.data.room);
           break;
           
-        default:
-          // console.log(`⚠️ Tipo de mensaje no reconocido: ${message.type}`);
+        case 'get_stats':
+          if (ws.user.role === ROLES.ADMIN) {
+            this.sendToClient(ws, 'stats', this.getSystemStats());
+          }
           break;
+          
+        case 'broadcast_to_company':
+          if (ws.user.role === ROLES.ADMIN) {
+            this.broadcastToCompany(message.data.companyId, message.data.event, message.data.payload);
+          }
+          break;
+          
+        default:
+          console.log(`⚠️ Tipo de mensaje no reconocido: ${message.type}`);
       }
     } catch (error) {
       console.error('❌ Error procesando mensaje:', error);
     }
   }
 
-  // ✅ LÓGICA DE TRACKING
-  handleLocationUpdate(ws, data) {
+handleLocationUpdate(ws, data) {
     const { latitude, longitude, heading, speed } = data;
     const user = ws.user;
 
@@ -138,10 +160,10 @@ class WebSocketService {
       timestamp: new Date()
     };
 
-    // 1. Enviar a los Admins Generales
+    // 1. Enviar SIEMPRE a los Admins Generales (Tú)
     this.notifyAdmins('driver_location_update', payload);
 
-    // 2. Enviar a la Empresa del conductor
+    // 2. Enviar al Dueño de la Empresa (si el conductor pertenece a una)
     if (user.company_id) {
       this.notifyCompany(user.company_id.toString(), 'driver_location_update', payload);
     }
@@ -149,6 +171,9 @@ class WebSocketService {
 
   handleDisconnect(ws) {
     const user = ws.user;
+    console.log(`🔌 Desconexión: ${user.email}`);
+    
+    // Limpiar de todas las categorías
     this.connections.delete(ws);
     this.adminClients.delete(ws);
     
@@ -162,16 +187,68 @@ class WebSocketService {
       }
     }
     
-    const dId = (user.driver_id || user.id)?.toString();
-    if (dId) {
-      this.driverClients.delete(dId);
+    if (user.driver_id) {
+      this.driverClients.delete(user.driver_id.toString());
     }
     
+    // Limpiar suscripciones a salas
     ws.subscribedRooms?.forEach(room => {
       this.unsubscribeFromRoom(ws, room);
     });
     
     this.updateStats(user.role, 'disconnect');
+  }
+
+  // ==================== NOTIFICACIONES AVANZADAS ====================
+
+  notifyOrderUpdate(order, eventType) {
+    const notificationData = {
+      order_id: order._id,
+      order_number: order.order_number,
+      status: order.status,
+      customer_name: order.customer_name,
+      company_id: order.company_id,
+      eventType,
+      timestamp: new Date(),
+      message: this.getEventMessage(order, eventType),
+      tracking_url: order.shipday_tracking_url,
+      driver_info: order.driver_info
+    };
+
+    // Enviar a la empresa específica
+    const sentToCompany = this.notifyCompany(order.company_id.toString(), 'order_status_changed', notificationData);
+    
+    // Enviar a admins
+    const sentToAdmins = this.notifyAdmins('order_status_changed', notificationData);
+    
+    // Enviar a conductor específico si aplica
+    let sentToDriver = 0;
+    if (order.shipday_driver_id && this.driverClients.has(order.shipday_driver_id)) {
+      this.notifyDriver(order.shipday_driver_id, 'order_assigned', notificationData);
+      sentToDriver = 1;
+    }
+
+    console.log(`📡 Notificación enviada: ${sentToCompany} empresa, ${sentToAdmins} admins, ${sentToDriver} conductor`);
+    return sentToCompany + sentToAdmins + sentToDriver;
+  }
+
+  notifyNewOrder(order) {
+    const notificationData = {
+      order_id: order._id,
+      order_number: order.order_number,
+      customer_name: order.customer_name,
+      company_id: order.company_id,
+      channel: order.channel_name,
+      total_amount: order.total_amount,
+      timestamp: new Date(),
+      message: `Nueva orden #${order.order_number} desde ${order.channel_name}`
+    };
+
+    const sentToCompany = this.notifyCompany(order.company_id.toString(), 'new_order', notificationData);
+    const sentToAdmins = this.notifyAdmins('new_order', notificationData);
+
+    console.log(`🆕 Nueva orden notificada: ${sentToCompany} empresa, ${sentToAdmins} admins`);
+    return sentToCompany + sentToAdmins;
   }
 
   // ==================== MÉTODOS DE ENVÍO ====================
@@ -184,10 +261,12 @@ class WebSocketService {
     return false;
   }
 
-  notifyAdmins(type, data) {
+  broadcast(type, data) {
     let sent = 0;
-    this.adminClients.forEach(ws => {
-      if (this.sendToClient(ws, type, data)) sent++;
+    this.connections.forEach((user, ws) => {
+      if (this.sendToClient(ws, type, data)) {
+        sent++;
+      }
     });
     return sent;
   }
@@ -198,7 +277,19 @@ class WebSocketService {
     
     let sent = 0;
     clients.forEach(ws => {
-      if (this.sendToClient(ws, type, data)) sent++;
+      if (this.sendToClient(ws, type, data)) {
+        sent++;
+      }
+    });
+    return sent;
+  }
+
+  notifyAdmins(type, data) {
+    let sent = 0;
+    this.adminClients.forEach(ws => {
+      if (this.sendToClient(ws, type, data)) {
+        sent++;
+      }
     });
     return sent;
   }
@@ -211,34 +302,44 @@ class WebSocketService {
     return 0;
   }
 
-  notifyOrderUpdate(order, eventType) {
-    const notificationData = {
-      order_id: order._id,
-      order_number: order.order_number,
-      status: order.status,
-      eventType
-    };
-    this.notifyCompany(order.company_id.toString(), 'order_status_changed', notificationData);
-    this.notifyAdmins('order_status_changed', notificationData);
-  }
-
-  // ==================== SALAS ====================
+  // ==================== SALAS Y SUSCRIPCIONES ====================
 
   subscribeToRoom(ws, room) {
     if (!this.roomSubscriptions.has(room)) {
       this.roomSubscriptions.set(room, new Set());
     }
+    
     this.roomSubscriptions.get(room).add(ws);
     ws.subscribedRooms.add(room);
+    
+    this.sendToClient(ws, 'subscribed', { room, timestamp: new Date() });
+    console.log(`📺 ${ws.user.email} suscrito a sala: ${room}`);
   }
 
   unsubscribeFromRoom(ws, room) {
     const roomClients = this.roomSubscriptions.get(room);
     if (roomClients) {
       roomClients.delete(ws);
-      if (roomClients.size === 0) this.roomSubscriptions.delete(room);
+      if (roomClients.size === 0) {
+        this.roomSubscriptions.delete(room);
+      }
     }
+    
     ws.subscribedRooms?.delete(room);
+    this.sendToClient(ws, 'unsubscribed', { room, timestamp: new Date() });
+  }
+
+  broadcastToRoom(room, type, data) {
+    const clients = this.roomSubscriptions.get(room);
+    if (!clients) return 0;
+    
+    let sent = 0;
+    clients.forEach(ws => {
+      if (this.sendToClient(ws, type, data)) {
+        sent++;
+      }
+    });
+    return sent;
   }
 
   // ==================== UTILIDADES ====================
@@ -246,23 +347,72 @@ class WebSocketService {
   startHeartbeat() {
     setInterval(() => {
       this.wss.clients.forEach(ws => {
-        if (!ws.isAlive) return ws.terminate();
+        if (!ws.isAlive) {
+          console.log(`💔 Conexión sin vida detectada: ${ws.user?.email}`);
+          return ws.terminate();
+        }
+        
         ws.isAlive = false;
         ws.ping();
       });
     }, 30000);
   }
 
+  getEventMessage(order, eventType) {
+    const messages = {
+      driver_assigned: `👨‍💼 Conductor asignado a pedido #${order.order_number}`,
+      picked_up: `📦 Pedido #${order.order_number} recogido y en camino`,
+      delivered: `✅ Pedido #${order.order_number} entregado exitosamente`,
+      proof_uploaded: `📸 Prueba de entrega disponible para #${order.order_number}`,
+      cancelled: `❌ Pedido #${order.order_number} cancelado`,
+      ready_for_pickup: `🎯 Pedido #${order.order_number} listo para recoger`
+    };
+    
+    return messages[eventType] || `📦 Pedido #${order.order_number} actualizado`;
+  }
+
+  getUserPermissions(user) {
+    const permissions = {
+      canViewOrders: true,
+      canUpdateOrders: user.role !== 'viewer',
+      canViewAllCompanies: user.role === ROLES.ADMIN,
+      canManageDrivers: user.role === ROLES.ADMIN || user.role === 'company_owner',
+      canViewAnalytics: true
+    };
+    
+    return permissions;
+  }
+
   updateStats(role, action) {
-    if (action === 'connect') this.stats.totalConnections++;
-    // stats lógica básica...
+    if (action === 'connect') {
+      this.stats.totalConnections++;
+      const currentCount = this.stats.connectionsByRole.get(role) || 0;
+      this.stats.connectionsByRole.set(role, currentCount + 1);
+    } else if (action === 'disconnect') {
+      const currentCount = this.stats.connectionsByRole.get(role) || 0;
+      this.stats.connectionsByRole.set(role, Math.max(0, currentCount - 1));
+    }
   }
 
   getSystemStats() {
     return {
       ...this.stats,
-      currentConnections: this.connections.size
+      currentConnections: this.connections.size,
+      adminConnections: this.adminClients.size,
+      companyConnections: this.companyClients.size,
+      driverConnections: this.driverClients.size,
+      activeRooms: this.roomSubscriptions.size,
+      uptime: Date.now() - this.stats.startTime.getTime()
     };
+  }
+
+  // Getters públicos
+  get connectionCount() {
+    return this.connections.size;
+  }
+
+  get isHealthy() {
+    return this.wss.readyState === WebSocket.OPEN;
   }
 }
 
