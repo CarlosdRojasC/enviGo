@@ -345,25 +345,41 @@ const loadGoogleMaps = async () => {
 };
 
 const handleDriverLocation = (data) => {
-  // data trae: { driverId, latitude, longitude, heading, ... }
-  
-  // 1. OBTENER EL MAPA PURO (Sin Proxy de Vue)
+  // 1. Obtener el mapa "limpio" de Vue
   let map = mapInstance.value || mapInstance;
-  if (map && map["__v_isRef"]) map = map.value; // Por seguridad si es ref anidado
-  if (toRaw) map = toRaw(map); // <--- ESTA ES LA CLAVE
-
-  if (!map) return; 
-
-  // ... resto del código igual ...
-  const latLng = new google.maps.LatLng(data.latitude, data.longitude);
   
-  // ... lógica de marcadores ...
+  // Si es un Proxy de Vue, lo convertimos al objeto original
+  if (toRaw) map = toRaw(map);
+  
+  if (!map) {
+    console.warn("⚠️ El mapa aún no está listo");
+    return;
+  }
+
+  const latLng = new google.maps.LatLng(data.latitude, data.longitude);
+
   if (driverMarkers[data.driverId]) {
-      // ...
+    // === CASO 1: ACTUALIZAR ===
+    console.log(`🔄 Actualizando posición de ${data.driverName}...`);
+    const marker = driverMarkers[data.driverId];
+    
+    // IMPORTANTE: setPosition es nativo de Google Maps, funciona si el marcador se creó bien
+    marker.setPosition(latLng);
+
+    // Actualizar rotación
+    const icon = marker.getIcon();
+    if (icon) {
+        icon.rotation = data.heading || 0;
+        marker.setIcon(icon);
+    }
+    
   } else {
+    // === CASO 2: CREAR ===
+    console.log(`✨ Creando nuevo marcador para ${data.driverName}...`);
+    
     const newMarker = new google.maps.Marker({
       position: latLng,
-      map: map, // <--- Ahora 'map' es el objeto original que Google acepta
+      map: map, // Aquí usamos el mapa "limpio"
       title: data.driverName || 'Conductor',
       icon: {
         ...carSymbol,
@@ -371,6 +387,8 @@ const handleDriverLocation = (data) => {
       },
       zIndex: 9999
     });
+    
+    // Guardamos el marcador en el objeto global del script
     driverMarkers[data.driverId] = newMarker;
   }
 };
