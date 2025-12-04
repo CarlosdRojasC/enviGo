@@ -239,7 +239,7 @@
 <script setup>
 import { ref, computed, onMounted, nextTick } from "vue";
 import { apiService } from "../services/api";
-
+import { useWebSocket } from '../services/websocket.service'; // Asegúrate de la ruta correcta
 // Estado
 const routes = ref([]);
 const loading = ref(false);
@@ -247,7 +247,9 @@ const showRouteMap = ref(false);
 const activeRoute = ref(null);
 const mapInstance = ref(null);
 const showRouteOptimizerModal = ref(false);
-
+const driverMarkers = {};
+const activeDrivers = ref({});
+const { on, off } = useWebSocket();
 // Edición y reoptimización
 const reoptLoading = ref(false);
 const startAddress = ref("");
@@ -284,6 +286,17 @@ const getMarkerColor = (status) => {
     case "in_progress": return "#F59E0B";
     default: return "#1E88E5";
   }
+};
+
+const carSymbol = {
+  path: 'M17.402,0H5.643C2.526,0,0,3.467,0,6.584v34.804c0,3.116,2.526,5.644,5.643,5.644h11.759c3.116,0,5.644-2.527,5.644-5.644 V6.584C23.044,3.467,20.518,0,17.402,0z M22.057,14.188v11.665l-2.729,0.351v-4.806L22.057,14.188z M20.625,10.773 c-1.016,3.9-2.219,8.51-2.219,8.51H4.638c0,0-1.203-4.61-2.218-8.51C2.42,10.773,11.523,7.6,20.625,10.773z M5.171,21.047l-2.728-0.351 v4.806l2.728-2.652V21.047z M5.328,30.338v-4.806l2.728,2.652v-2.348l1.626,0.209v4.293H5.328z M10.669,30.338v-4.293l1.626-0.209v2.348 l2.728-2.652v4.806H10.669z M20.158,30.338h-4.354v-4.293l1.626,0.209v2.348l2.728-2.652V30.338z',
+  scale: 0.7,
+  fillColor: "#2563EB", // Azul bonito
+  fillOpacity: 1,
+  strokeWeight: 1,
+  strokeColor: "#ffffff",
+  anchor: { x: 11.5, y: 23 }, // Centrar correctamente
+  rotation: 0 // Se actualizará dinámicamente
 };
 
 const getGoogleMapsApiKey = () => window.env?.VITE_GOOGLE_MAPS_API_KEY || import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "";
@@ -329,6 +342,45 @@ const loadGoogleMaps = async () => {
     script.onerror = (e) => reject(e);
     document.head.appendChild(script);
   });
+};
+
+const handleDriverLocation = (data) => {
+  // data: { driverId, latitude, longitude, heading, ... }
+  
+  // 1. Validar que el mapa esté listo
+  if (!mapInstance) return; 
+
+  const latLng = new google.maps.LatLng(data.latitude, data.longitude);
+
+  // 2. Verificar si ya tenemos un marcador para este conductor
+  if (driverMarkers[data.driverId]) {
+    // === ACTUALIZAR EXISTENTE ===
+    const marker = driverMarkers[data.driverId];
+    
+    // Mover suavemente
+    marker.setPosition(latLng);
+    
+    // Rotar el icono según la dirección (heading) del GPS
+    const icon = marker.getIcon();
+    icon.rotation = data.heading || 0;
+    marker.setIcon(icon);
+    
+  } else {
+    // === CREAR NUEVO ===
+    const newMarker = new google.maps.Marker({
+      position: latLng,
+      map: mapInstance, // Tu instancia de mapa nativa
+      title: data.driverName || 'Conductor',
+      icon: {
+        ...carSymbol,
+        rotation: data.heading || 0
+      },
+      zIndex: 999 // Para que aparezca encima de las casas
+    });
+    
+    // Guardar referencia
+    driverMarkers[data.driverId] = newMarker;
+  }
 };
 
 // Cargar rutas
@@ -561,7 +613,16 @@ const reoptimizeActiveRoute = async () => {
 // Lifecycle
 onMounted(() => {
   loadRoutes();
+  on('driver_location_updated', handleDriverLocation);
 });
+
+onUnmounted(() => {
+  // Dejar de escuchar para no causar errores de memoria
+  off('driver_location_updated', handleDriverLocation);
+
+  Object.values(driverMarkers).forEach(marker => marker.setMap(null));
+});
+
 </script>
 
 <style scoped>
