@@ -160,7 +160,7 @@ onClose(event) {
       console.error('❌ WS: Error del servidor:', data.message)
       this.emit('server_error', data)
       break
-      
+
       case 'driver_location_updated':
       // Emitimos el evento para que RouteManager lo escuche
       this.emit('driver_location_updated', data)
@@ -387,6 +387,11 @@ export default wsManager
 
 // Composable para usar en componentes Vue
 export function useWebSocket() {
+  // Auto-conectar si hay token
+  const authStore = useAuthStore();
+  if (authStore.token && !wsManager.isConnected) {
+    wsManager.connect();
+  }
   return {
     wsManager,
     state: wsManager.state,
@@ -398,4 +403,5 @@ export function useWebSocket() {
     getMyPermissions: () => wsManager.getMyPermissions(),
     subscribeToCompany: (companyId) => wsManager.subscribeToCompany(companyId)
   }
+  
 }

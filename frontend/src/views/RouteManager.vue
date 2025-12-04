@@ -92,12 +92,15 @@
                 <div class="flex flex-col">
                   <span class="font-medium text-gray-900">{{ getDriverName(route.driver) }}</span>
                   <span v-if="route.driver?.email" class="text-xs text-gray-500">{{ route.driver.email }}</span>
-                  <span v-if="route.status === 'in_progress'" class="text-[10px] text-green-600 font-bold flex items-center gap-1 mt-1">
+                  <span 
+                    v-if="isDriverActive(route.driver)" 
+                    class="text-[10px] text-green-600 font-bold flex items-center gap-1 mt-1"
+                  >
                     <span class="relative flex h-2 w-2">
                       <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
                       <span class="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
                     </span>
-                    Tracking Activo
+                    En Línea
                   </span>
                 </div>
               </td>
@@ -158,6 +161,9 @@
           </div>
           <div class="text-sm text-gray-600 mb-3">
             Conductor: <span class="font-medium">{{ getDriverName(activeRoute?.driver) }}</span>
+            <div v-if="isLiveTracking" class="text-green-600 text-xs font-bold animate-pulse mt-1">
+               📡 Señal en vivo recibida: {{ lastUpdate }}
+            </div>
           </div>
 
           <div class="bg-white rounded-lg border p-3 mb-4 space-y-2">
@@ -253,6 +259,7 @@ const activeRoute = ref(null);
 const mapInstance = ref(null);
 const showRouteOptimizerModal = ref(false);
 const activeDriverIds = ref(new Set());
+
 // WebSocket Composable
 const { on, off } = useWebSocket();
 
@@ -298,7 +305,7 @@ const getMarkerColor = (status) => {
 };
 
 const carSymbol = {
-  path: 'M17.402,0H5.643C2.526,0,0,3.467,0,6.584v34.804c0,3.116,2.526,5.644,5.643,5.644h11.759c3.116,0,5.644-2.527,5.644-5.644 V6.584C23.044,3.467,20.518,0,17.402,0z M22.057,14.188v11.665l-2.729,0.351v-4.806L22.057,14.188z M20.625,10.773 c-1.016,3.9-2.219,8.51-2.219,8.51H4.638c0,0-1.203-4.61-2.218-8.51C2.42,10.773,11.523,7.6,20.625,10.773z M5.171,21.047l-2.728-0.351 v4.806l2.728-2.652V21.047z M5.328,30.338v-4.806l2.728,2.652v-2.348l1.626,0.209v4.293H5.328z M10.669,30.338v-4.293l1.626-0.209v2.348 l2.728-2.652v4.806H10.669z M20.158,30.338h-4.354v-4.293l1.626,0.209v2.348l2.728-2.652V30.338z',
+  path: 'M17.402,0H5.643C2.526,0,0,3.467,0,6.584v34.804c0,3.116,2.526,5.644,5.643,5.644h11.759c3.116,0,5.644-2.527,5.644-5.644 V6.584C23.044,3.467,20.518,0,17.402,0z M22.057,14.188v11.665l-2.729,0.351v-4.806L22.057,14.188z M20.625,10.773 c-1.016,3.9-2.219,8.51-2.219,8.51H4.638c0,0-1.203-4.61-2.218-8.51C2.42,10.773,11.523,7.6,20.625,10.773z M5.171,21.047l-2.728-0.351 v4.806l2.728-2.652V21.047z M5.328,30.338v-4.806l2.728,2.652v-2.348l1.626,0.209v4.293H5.328z M10.669,30.338v-4.293l1.626-0.209v2.348 l2.728-2.652v4.806H10.669z M20.158,30.338h-4.354v-4.293l1.626-0.209v2.348l2.728-2.652V30.338z',
   scale: 0.7,
   fillColor: "#2563EB",
   fillOpacity: 1,
@@ -332,6 +339,17 @@ const statCards = computed(() => {
   ];
 });
 
+// Helper para verificar si un conductor está activo
+const isDriverActive = (driver) => {
+  if (!driver) return false;
+  const id = driver._id || driver;
+  return activeDriverIds.value.has(id);
+};
+
+// State local para UI
+const isLiveTracking = ref(false);
+const lastUpdate = ref('');
+
 // Cargar Google Maps
 const loadGoogleMaps = async () => {
   if (typeof window.google !== "undefined" && window.google.maps) return window.google.maps;
@@ -352,11 +370,10 @@ const loadGoogleMaps = async () => {
   });
 };
 
-// ✅ MANEJADOR DE UBICACIÓN DEL CONDUCTOR
+// ✅ MANEJADOR DE UBICACIÓN (CORREGIDO)
 const handleDriverLocation = (payload) => {
-  console.log('📍 Tracking recibido:', payload); // Debug
+  // console.log('📍 Tracking recibido:', payload); 
 
-  // Validar datos
   if (!payload || !payload.driver_id || !payload.location) return;
 
   const { driver_id, location } = payload;
@@ -366,44 +383,50 @@ const handleDriverLocation = (payload) => {
 
   // 2. Si el mapa está abierto y es el conductor correcto, mover el camión
   if (showRouteMap.value && activeRoute.value) {
-    // Manejar si activeRoute.value.driver es objeto o string
     const currentDriverId = activeRoute.value.driver?._id || activeRoute.value.driver;
     
-    if (currentDriverId === driver_id) {
+    // Comparación estricta de strings (ObjectId vs String)
+    if (String(currentDriverId) === String(driver_id)) {
       updateDriverMarker(location.latitude, location.longitude, location.heading);
+      isLiveTracking.value = true;
+      lastUpdate.value = new Date().toLocaleTimeString();
     }
   }
 };
 
 const updateDriverMarker = (lat, lng, heading) => {
+  // 🔥 CLAVE: Usar toRaw para quitar el Proxy de Vue y que Google Maps entienda el objeto
   let map = mapInstance.value;
-  if (toRaw) map = toRaw(map); // Vue proxy fix
+  if (toRaw) map = toRaw(map);
+  
   if (!map || typeof window.google === "undefined") return;
 
-  const latLng = new google.maps.LatLng(lat, lng);
+  const newPos = new google.maps.LatLng(lat, lng);
 
   if (driverMarker) {
     // Mover marcador existente
-    driverMarker.setPosition(latLng);
+    driverMarker.setPosition(newPos);
     
-    // Actualizar rotación si hay icono
-    const icon = driverMarker.getIcon();
-    if (icon) {
-       icon.rotation = heading || 0;
+    if (heading !== undefined) {
+       const icon = driverMarker.getIcon();
+       icon.rotation = heading;
        driverMarker.setIcon(icon);
     }
   } else {
     // Crear nuevo marcador (Camión)
+    console.log("🚚 Creando marcador de camión...");
     driverMarker = new google.maps.Marker({
-      position: latLng,
+      position: newPos,
       map: map,
       title: "Conductor",
       icon: {
         ...carSymbol,
         rotation: heading || 0
       },
-      zIndex: 9999 // Siempre encima
+      zIndex: 9999
     });
+    // Centrar en el conductor la primera vez
+    map.panTo(newPos);
   }
 };
 
@@ -480,6 +503,7 @@ const drawRouteOnMap = (maps, map, route) => {
 
 const closeRouteMap = () => {
     showRouteMap.value = false;
+    isLiveTracking.value = false;
     if (driverMarker) {
         driverMarker.setMap(null);
         driverMarker = null;
@@ -490,6 +514,7 @@ const closeRouteMap = () => {
 const viewRoute = async (route) => {
   activeRoute.value = route;
   showRouteMap.value = true;
+  isLiveTracking.value = route.status === 'in_progress';
   
   // Resetear marcador de conductor al abrir
   driverMarker = null;
@@ -654,7 +679,7 @@ onMounted(() => {
 onUnmounted(() => {
   off('driver_location_update', handleDriverLocation);
   if (driverMarker) {
-     driverMarker.setMap(null);
+      driverMarker.setMap(null);
   }
 });
 </script>
