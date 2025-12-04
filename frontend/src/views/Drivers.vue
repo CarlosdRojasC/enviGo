@@ -226,7 +226,7 @@
 import { ref, computed, onMounted } from 'vue'
 import DriverForm from './DriverForm.vue'
 import { useRouter } from 'vue-router'
-import { apiService } from '../services/api' // Usamos apiService interno
+import { apiService } from '../services/api'
 import { useToast } from 'vue-toastification'
 
 const router = useRouter()
@@ -290,16 +290,15 @@ onMounted(() => {
 const loadDrivers = async () => {
   loading.value = true
   try {
-    // CAMBIO: Usar apiService en lugar de shipdayService
     const response = await apiService.drivers.getAll()
-    
-    // Ajustar según la estructura de tu respuesta de backend
     const rawData = response.data?.data || response.data || []
     
+    // Mapeo corregido: Base de datos (is_active, full_name) -> Frontend (isActive, name)
     drivers.value = rawData.map(driver => ({
       ...driver,
-      // Aseguramos que isActive sea booleano
-      isActive: driver.isActive !== undefined ? driver.isActive : true
+      name: driver.full_name || driver.name,
+      // Priorizamos is_active de la BD, si no existe usamos isActive o default true
+      isActive: driver.is_active !== undefined ? driver.is_active : (driver.isActive !== undefined ? driver.isActive : true)
     }))
     
   } catch (error) {
@@ -311,7 +310,12 @@ const loadDrivers = async () => {
 }
 
 const editDriver = (driver) => {
-  editingDriver.value = { ...driver }
+  // Aseguramos que el objeto tenga full_name por si el formulario lo requiere
+  editingDriver.value = { 
+    ...driver,
+    full_name: driver.name 
+  }
+  showCreateForm.value = true
 }
 
 const confirmDelete = (driver) => {
@@ -323,7 +327,6 @@ const deleteDriver = async () => {
 
   deleting.value = true
   try {
-    // CAMBIO: Usar apiService
     await apiService.drivers.delete(driverToDelete.value._id)
     
     // Remover de la lista local
@@ -343,15 +346,17 @@ const toggleDriverStatus = async (driver) => {
   updatingStatus.value = driver._id
   try {
     const newStatus = !driver.isActive
-    // CAMBIO: Usar apiService
+    
+    // CORREGIDO: Enviamos 'is_active' (snake_case) para MongoDB
     await apiService.drivers.update(driver._id, {
-      isActive: newStatus
+      is_active: newStatus
     })
     
     // Actualizar en la lista local
     const index = drivers.value.findIndex(d => d._id === driver._id)
     if (index !== -1) {
       drivers.value[index].isActive = newStatus
+      drivers.value[index].is_active = newStatus // Mantener consistencia
     }
     
     toast.success(`Conductor ${newStatus ? 'activado' : 'desactivado'} exitosamente`)
@@ -364,16 +369,8 @@ const toggleDriverStatus = async (driver) => {
 }
 
 const handleDriverSuccess = (event) => {
-  if (editingDriver.value) {
-    // Actualizar conductor existente
-    const index = drivers.value.findIndex(d => d._id === editingDriver.value._id)
-    if (index !== -1) {
-      drivers.value[index] = { ...drivers.value[index], ...event.driver }
-    }
-  } else {
-    // Agregar nuevo conductor
-    drivers.value.push(event.driver)
-  }
+  // Recargamos para asegurar que los datos estén sincronizados con el backend
+  loadDrivers()
   
   toast.success(event.message || 'Conductor guardado correctamente')
   closeModals()
@@ -392,7 +389,7 @@ const viewDriverPayments = (driver) => {
   router.push({
     name: 'DriverPayments',
     query: {
-      driverId: driver._id, // Usamos el ID interno
+      driverId: driver._id,
       driverName: driver.name
     }
   })

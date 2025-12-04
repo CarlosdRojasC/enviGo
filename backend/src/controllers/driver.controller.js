@@ -151,7 +151,7 @@ class DriverController {
     }
   }
 
-  /**
+/**
    * ✏️ Actualizar conductor (solo admin)
    */
   async updateDriver(req, res) {
@@ -166,17 +166,34 @@ class DriverController {
       if (!driver)
         return res.status(404).json({ success: false, message: 'Conductor no encontrado' });
 
+      // Validación de email único si se está cambiando
       if (updates.email && updates.email !== driver.email) {
         const exists = await Driver.findOne({ email: updates.email });
         if (exists)
           return res.status(400).json({ success: false, message: 'El correo ya está en uso' });
       }
 
+      // Encriptar password si viene en el update
       if (updates.password) {
         updates.password = await bcrypt.hash(updates.password, 10);
       }
 
-      Object.assign(driver, updates);
+      // IMPORTANTE: Mapeo manual para asegurar que los nombres coinciden
+      // Si el frontend envía 'isActive', lo convertimos a 'is_active'
+      if (updates.isActive !== undefined) {
+        driver.is_active = updates.isActive;
+      }
+      if (updates.is_active !== undefined) {
+        driver.is_active = updates.is_active;
+      }
+      
+      // Actualizar otros campos permitidos
+      if (updates.full_name) driver.full_name = updates.full_name;
+      if (updates.phone) driver.phone = updates.phone;
+      if (updates.vehicle_type) driver.vehicle_type = updates.vehicle_type;
+      if (updates.vehicle_plate) driver.vehicle_plate = updates.vehicle_plate; // Asegúrate de tener esto en tu modelo
+      if (updates.email) driver.email = updates.email;
+
       await driver.save();
 
       res.json({
