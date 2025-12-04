@@ -813,9 +813,14 @@ const drivers = {
 
   // Crear conductor en tu BD local
   create: (driverData) => api.post('/drivers', driverData),
+
+  update: (id, data) => api.put(`/drivers/${id}`, data),
   
   // Eliminar conductor
   delete: (driverId) => api.delete(`/drivers/${driverId}`),
+
+  toggleStatus: (id) => api.patch(`/drivers/${id}/toggle`), // Para activar/desactivar
+    resetPassword: (id, data) => api.post(`/drivers/${id}/reset-password`, data),
   
   // Obtener conductores por empresa (si necesitas)
   getByCompany: (companyId) => api.get(`/companies/${companyId}/drivers`),
