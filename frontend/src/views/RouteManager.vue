@@ -237,7 +237,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, nextTick } from "vue";
+import { ref, computed, onMounted, onUnmounted, nextTick } from "vue";
 import { apiService } from "../services/api";
 import { useWebSocket } from '../services/websocket.service'; // Asegúrate de la ruta correcta
 // Estado
