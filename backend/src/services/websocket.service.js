@@ -110,6 +110,10 @@ class WebSocketService {
           this.sendToClient(ws, 'pong', { timestamp: new Date() });
           break;
           
+        case 'update_location':
+          this.handleLocationUpdate(ws, message.data);
+          break;
+
         case 'subscribe_to_room':
           this.subscribeToRoom(ws, message.data.room);
           break;
@@ -135,6 +139,29 @@ class WebSocketService {
       }
     } catch (error) {
       console.error('❌ Error procesando mensaje:', error);
+    }
+  }
+
+handleLocationUpdate(ws, data) {
+    const { latitude, longitude, heading, speed } = data;
+    const user = ws.user;
+
+    // Solo procesar si es conductor
+    if (user.role !== 'driver') return;
+
+    const payload = {
+      driver_id: user.driver_id || user.id,
+      driver_name: user.name || user.full_name || 'Conductor',
+      location: { latitude, longitude, heading, speed },
+      timestamp: new Date()
+    };
+
+    // 1. Enviar SIEMPRE a los Admins Generales (Tú)
+    this.notifyAdmins('driver_location_update', payload);
+
+    // 2. Enviar al Dueño de la Empresa (si el conductor pertenece a una)
+    if (user.company_id) {
+      this.notifyCompany(user.company_id.toString(), 'driver_location_update', payload);
     }
   }
 

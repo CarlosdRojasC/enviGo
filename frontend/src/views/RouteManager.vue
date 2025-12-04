@@ -1,6 +1,5 @@
 <template>
   <div class="p-6 bg-gray-50 min-h-screen">
-    <!-- Header -->
     <div class="bg-white rounded-xl shadow-sm p-6 mb-6 flex justify-between items-center">
       <div>
         <h1 class="text-3xl font-bold text-gray-900 flex items-center gap-2">
@@ -27,7 +26,6 @@
       </div>
     </div>
 
-    <!-- Stats -->
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
       <div
         v-for="card in statCards"
@@ -44,7 +42,6 @@
       </div>
     </div>
 
-    <!-- Routes Table -->
     <div class="bg-white rounded-xl shadow-sm overflow-hidden">
       <div class="p-6 border-b border-gray-200 flex justify-between items-center">
         <h3 class="text-xl font-semibold text-gray-900">Lista de Rutas</h3>
@@ -95,6 +92,13 @@
                 <div class="flex flex-col">
                   <span class="font-medium text-gray-900">{{ getDriverName(route.driver) }}</span>
                   <span v-if="route.driver?.email" class="text-xs text-gray-500">{{ route.driver.email }}</span>
+                  <span v-if="route.status === 'in_progress'" class="text-[10px] text-green-600 font-bold flex items-center gap-1 mt-1">
+                    <span class="relative flex h-2 w-2">
+                      <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                      <span class="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                    </span>
+                    Tracking Activo
+                  </span>
                 </div>
               </td>
               <td class="px-6 py-4">
@@ -111,9 +115,10 @@
               <td class="px-6 py-4 whitespace-nowrap">
                 <button
                   @click="viewRoute(route)"
-                  class="text-blue-600 hover:text-blue-800 font-medium px-2 py-1 rounded hover:bg-blue-50 transition-colors"
+                  class="text-blue-600 hover:text-blue-800 font-medium px-2 py-1 rounded hover:bg-blue-50 transition-colors flex items-center gap-1"
                 >
-                  👁️ Ver Ruta
+                  <span v-if="route.status === 'in_progress'">📡 Rastrear</span>
+                  <span v-else>👁️ Ver Ruta</span>
                 </button>
               </td>
             </tr>
@@ -122,28 +127,32 @@
       </div>
     </div>
 
-    <!-- Route Map Modal -->
     <div
       v-if="showRouteMap"
       class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4 backdrop-blur-sm"
-      @click.self="showRouteMap = false"
+      @click.self="closeRouteMap"
     >
       <div class="bg-white rounded-xl w-full max-w-7xl shadow-xl overflow-hidden flex flex-col md:flex-row max-h-[90vh]">
-        <!-- MAP -->
         <div class="flex-1 relative">
           <div id="routeMapContainer" class="w-full h-[70vh] md:h-full"></div>
           <div v-if="!mapInstance" class="absolute inset-0 flex items-center justify-center text-gray-400 bg-white bg-opacity-70">
             Inicializando mapa...
           </div>
+          
+          <div class="absolute bottom-4 left-4 bg-white p-3 rounded-lg shadow-lg text-xs space-y-2 z-10 bg-opacity-90">
+             <div class="font-bold text-gray-700 mb-1">Leyenda</div>
+             <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-full bg-green-500"></span> Entregado</div>
+             <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-full bg-yellow-500"></span> Pendiente</div>
+             <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-full bg-blue-600"></span> Camión (En vivo)</div>
+          </div>
         </div>
 
-        <!-- SIDEBAR -->
         <div class="w-full md:w-80 bg-gray-50 border-l p-4 overflow-y-auto">
           <div class="flex justify-between items-center mb-4">
             <h3 class="text-lg font-semibold text-gray-900 flex items-center gap-2">
               <span class="text-xl">🗺️</span> Ruta #{{ activeRoute?._id?.slice(-6).toUpperCase() }}
             </h3>
-            <button @click="showRouteMap = false" class="text-gray-500 hover:text-red-600 transition-colors p-1 rounded-full hover:bg-gray-200">
+            <button @click="closeRouteMap" class="text-gray-500 hover:text-red-600 transition-colors p-1 rounded-full hover:bg-gray-200">
               ✖
             </button>
           </div>
@@ -151,7 +160,6 @@
             Conductor: <span class="font-medium">{{ getDriverName(activeRoute?.driver) }}</span>
           </div>
 
-          <!-- Editor Inicio/Fin -->
           <div class="bg-white rounded-lg border p-3 mb-4 space-y-2">
             <div>
               <label class="text-xs font-semibold text-gray-600">Inicio</label>
@@ -162,7 +170,6 @@
                 placeholder="Escribe una dirección"
                 class="mt-1 w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
-              <p class="text-[11px] text-gray-500 mt-1">Sugerencia: también puedes <b>arrastrar</b> el pin de inicio en el mapa.</p>
             </div>
             <div>
               <label class="text-xs font-semibold text-gray-600">Fin</label>
@@ -173,7 +180,6 @@
                 placeholder="Escribe una dirección"
                 class="mt-1 w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
-              <p class="text-[11px] text-gray-500 mt-1">Sugerencia: también puedes <b>arrastrar</b> el pin de fin.</p>
             </div>
             <div class="flex gap-2 pt-1">
               <button
@@ -184,7 +190,6 @@
                 🔁 Reoptimizar
               </button>
             </div>
-            <p class="text-[11px] text-gray-500">Reoptimiza el orden de paradas y recalcula distancia/duración con los nuevos anclajes.</p>
           </div>
 
           <h4 class="text-sm font-semibold text-gray-700 mb-2">Paradas:</h4>
@@ -219,7 +224,6 @@
       </div>
     </div>
 
-    <!-- Optimizer Modal Placeholder -->
     <div
       v-if="showRouteOptimizerModal"
       class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
@@ -239,7 +243,8 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, nextTick, toRaw } from "vue";
 import { apiService } from "../services/api";
-import { useWebSocket } from '../services/websocket.service'; // Asegúrate de la ruta correcta
+import { useWebSocket } from '../services/websocket.service';
+
 // Estado
 const routes = ref([]);
 const loading = ref(false);
@@ -247,9 +252,10 @@ const showRouteMap = ref(false);
 const activeRoute = ref(null);
 const mapInstance = ref(null);
 const showRouteOptimizerModal = ref(false);
-const driverMarkers = {};
-const activeDrivers = ref({});
+
+// WebSocket Composable
 const { on, off } = useWebSocket();
+
 // Edición y reoptimización
 const reoptLoading = ref(false);
 const startAddress = ref("");
@@ -262,6 +268,7 @@ let startMarker = null;
 let endMarker = null;
 let geocoder = null;
 let currentRoutePolyline = null;
+let driverMarker = null; // 🚛 Marcador del conductor en tiempo real
 
 // Helpers
 const getDriverName = (driver) => driver?.full_name || driver?.name || driver?.email || "Sin asignar";
@@ -282,21 +289,23 @@ const getStatusBadgeClass = (status) => ({
 
 const getMarkerColor = (status) => {
   switch (status) {
-    case "completed": return "#16A34A";
-    case "in_progress": return "#F59E0B";
-    default: return "#1E88E5";
+    case "completed": return "#16A34A"; // Verde
+    case "delivered": return "#16A34A"; // Verde
+    case "in_progress": return "#F59E0B"; // Amarillo
+    case "failed": return "#EF4444"; // Rojo
+    default: return "#F59E0B"; // Amarillo por defecto (pendiente)
   }
 };
 
 const carSymbol = {
   path: 'M17.402,0H5.643C2.526,0,0,3.467,0,6.584v34.804c0,3.116,2.526,5.644,5.643,5.644h11.759c3.116,0,5.644-2.527,5.644-5.644 V6.584C23.044,3.467,20.518,0,17.402,0z M22.057,14.188v11.665l-2.729,0.351v-4.806L22.057,14.188z M20.625,10.773 c-1.016,3.9-2.219,8.51-2.219,8.51H4.638c0,0-1.203-4.61-2.218-8.51C2.42,10.773,11.523,7.6,20.625,10.773z M5.171,21.047l-2.728-0.351 v4.806l2.728-2.652V21.047z M5.328,30.338v-4.806l2.728,2.652v-2.348l1.626,0.209v4.293H5.328z M10.669,30.338v-4.293l1.626-0.209v2.348 l2.728-2.652v4.806H10.669z M20.158,30.338h-4.354v-4.293l1.626,0.209v2.348l2.728-2.652V30.338z',
   scale: 0.7,
-  fillColor: "#2563EB", // Azul bonito
+  fillColor: "#2563EB",
   fillOpacity: 1,
   strokeWeight: 1,
   strokeColor: "#ffffff",
-  anchor: { x: 11.5, y: 23 }, // Centrar correctamente
-  rotation: 0 // Se actualizará dinámicamente
+  anchor: { x: 11.5, y: 23 },
+  rotation: 0
 };
 
 const getGoogleMapsApiKey = () => window.env?.VITE_GOOGLE_MAPS_API_KEY || import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "";
@@ -323,13 +332,12 @@ const statCards = computed(() => {
   ];
 });
 
-// Cargar Google Maps (con places)
+// Cargar Google Maps
 const loadGoogleMaps = async () => {
   if (typeof window.google !== "undefined" && window.google.maps) return window.google.maps;
-
   const apiKey = getGoogleMapsApiKey();
   if (!apiKey) {
-    alert("⚠️ Falta configurar Google Maps API Key en el frontend");
+    alert("⚠️ Falta configurar Google Maps API Key");
     throw new Error("Missing Google Maps API key");
   }
 
@@ -344,52 +352,56 @@ const loadGoogleMaps = async () => {
   });
 };
 
-const handleDriverLocation = (data) => {
-  // 1. Obtener el mapa "limpio" de Vue
-  let map = mapInstance.value || mapInstance;
+// ✅ MANEJADOR DE UBICACIÓN DEL CONDUCTOR
+const handleDriverLocation = (payload) => {
+  // 1. Si el mapa está cerrado o no hay ruta activa, ignorar
+  if (!showRouteMap.value || !activeRoute.value) return;
+
+  // 2. Desempaquetar datos (backend envía { driver_id, location: {...} })
+  const { driver_id, location } = payload;
   
-  // Si es un Proxy de Vue, lo convertimos al objeto original
-  if (toRaw) map = toRaw(map);
+  // 3. Verificar si es el conductor de ESTA ruta
+  // El campo driver puede ser un objeto poblado o solo un ID string
+  const routeDriverId = activeRoute.value.driver?._id || activeRoute.value.driver;
   
-  if (!map) {
-    console.warn("⚠️ El mapa aún no está listo");
-    return;
+  if (driver_id !== routeDriverId) {
+      // console.log("Ignorando ubicación de otro conductor:", driver_id);
+      return;
   }
 
-  const latLng = new google.maps.LatLng(data.latitude, data.longitude);
+  // 4. Actualizar marcador
+  updateDriverMarker(location.latitude, location.longitude, location.heading);
+};
 
-  if (driverMarkers[data.driverId]) {
-    // === CASO 1: ACTUALIZAR ===
-    console.log(`🔄 Actualizando posición de ${data.driverName}...`);
-    const marker = driverMarkers[data.driverId];
+const updateDriverMarker = (lat, lng, heading) => {
+  let map = mapInstance.value;
+  if (toRaw) map = toRaw(map); // Vue proxy fix
+  if (!map || typeof window.google === "undefined") return;
+
+  const latLng = new google.maps.LatLng(lat, lng);
+
+  if (driverMarker) {
+    // Mover marcador existente
+    driverMarker.setPosition(latLng);
     
-    // IMPORTANTE: setPosition es nativo de Google Maps, funciona si el marcador se creó bien
-    marker.setPosition(latLng);
-
-    // Actualizar rotación
-    const icon = marker.getIcon();
+    // Actualizar rotación si hay icono
+    const icon = driverMarker.getIcon();
     if (icon) {
-        icon.rotation = data.heading || 0;
-        marker.setIcon(icon);
+       icon.rotation = heading || 0;
+       driverMarker.setIcon(icon);
     }
-    
   } else {
-    // === CASO 2: CREAR ===
-    console.log(`✨ Creando nuevo marcador para ${data.driverName}...`);
-    
-    const newMarker = new google.maps.Marker({
+    // Crear nuevo marcador (Camión)
+    driverMarker = new google.maps.Marker({
       position: latLng,
-      map: map, // Aquí usamos el mapa "limpio"
-      title: data.driverName || 'Conductor',
+      map: map,
+      title: "Conductor",
       icon: {
         ...carSymbol,
-        rotation: data.heading || 0
+        rotation: heading || 0
       },
-      zIndex: 9999
+      zIndex: 9999 // Siempre encima
     });
-    
-    // Guardamos el marcador en el objeto global del script
-    driverMarkers[data.driverId] = newMarker;
   }
 };
 
@@ -418,7 +430,6 @@ const reverseGeocode = (maps, lat, lng) =>
     });
   });
 
-// Updates desde coordenadas
 const updateStartFromLatLng = async (maps, lat, lng) => {
   const addr = await reverseGeocode(maps, lat, lng);
   startAddress.value = addr;
@@ -439,7 +450,7 @@ const updateEndFromLatLng = async (maps, lat, lng) => {
   if (endMarker) endMarker.setPosition({ lat, lng });
 };
 
-// Dibuja polyline actual
+// Dibuja polyline
 const drawRouteOnMap = (maps, map, route) => {
   if (currentRoutePolyline) {
     currentRoutePolyline.setMap(null);
@@ -453,7 +464,7 @@ const drawRouteOnMap = (maps, map, route) => {
     path: decodedPath,
     geodesic: true,
     strokeColor: "#1E88E5",
-    strokeOpacity: 0.9,
+    strokeOpacity: 0.8,
     strokeWeight: 5,
   });
   currentRoutePolyline.setMap(map);
@@ -465,10 +476,22 @@ const drawRouteOnMap = (maps, map, route) => {
   map.fitBounds(bounds, 60);
 };
 
-// Ver ruta y preparar mapa + Autocomplete + drag
+const closeRouteMap = () => {
+    showRouteMap.value = false;
+    if (driverMarker) {
+        driverMarker.setMap(null);
+        driverMarker = null;
+    }
+};
+
+// Ver ruta y preparar mapa
 const viewRoute = async (route) => {
   activeRoute.value = route;
   showRouteMap.value = true;
+  
+  // Resetear marcador de conductor al abrir
+  driverMarker = null;
+
   await nextTick();
 
   const mapContainer = document.getElementById("routeMapContainer");
@@ -483,12 +506,14 @@ const viewRoute = async (route) => {
         : { lat: 0, lng: 0 },
       zoom: 12,
       mapId: "ENVIGO_MAP_DEFAULT",
+      streetViewControl: false,
+      mapTypeControl: false
     });
     mapInstance.value = map;
 
     geocoder = new maps.Geocoder();
 
-    // Marcadores arrastrables
+    // Marcador Inicio
     if (hasLatLng(route.startLocation)) {
       startMarker = new maps.Marker({
         map,
@@ -502,6 +527,7 @@ const viewRoute = async (route) => {
       });
     }
 
+    // Marcador Fin
     if (hasLatLng(route.endLocation)) {
       endMarker = new maps.Marker({
         map,
@@ -541,7 +567,7 @@ const viewRoute = async (route) => {
       });
     }
 
-    // Paradas (marcadores bonitos opcionales)
+    // Paradas
     (route.orders || []).forEach((o, idx) => {
       const lat = o?.order?.location?.latitude ?? o?.order?.delivery_location?.latitude;
       const lng = o?.order?.location?.longitude ?? o?.order?.delivery_location?.longitude;
@@ -550,12 +576,19 @@ const viewRoute = async (route) => {
           map,
           position: { lat, lng },
           title: `Parada ${idx + 1}`,
-          label: `${idx + 1}`,
+          label: { text: `${idx + 1}`, color: "white", fontSize: "12px", fontWeight: "bold" },
+          icon: {
+             path: maps.SymbolPath.CIRCLE,
+             scale: 12,
+             fillColor: getMarkerColor(o.deliveryStatus),
+             fillOpacity: 1,
+             strokeColor: "white",
+             strokeWeight: 2
+          }
         });
       }
     });
 
-    // Polyline actual
     drawRouteOnMap(maps, map, route);
   } catch (err) {
     console.error("💥 Error al dibujar mapa:", err);
@@ -563,48 +596,37 @@ const viewRoute = async (route) => {
   }
 };
 
-// Reoptimizar ruta con nuevos anclajes
 const reoptimizeActiveRoute = async () => {
   if (!activeRoute.value) return;
-  const r = activeRoute.value; // ⚠️ Siempre usa el reactivo, no la referencia en routes
+  const r = activeRoute.value;
 
-  const stops = (r.orders || [])
-    .map(s => {
-      const lat = s?.order?.location?.latitude ?? s?.order?.delivery_location?.latitude;
-      const lng = s?.order?.location?.longitude ?? s?.order?.delivery_location?.longitude;
-      return { id: s._id, lat, lng };
-    })
-    .filter(s => typeof s.lat === "number" && typeof s.lng === "number");
+  const stops = (r.orders || []).map(s => s?.order?._id).filter(Boolean);
 
   if (!hasLatLng(r.startLocation) || !hasLatLng(r.endLocation) || stops.length === 0) {
-    alert("Faltan coordenadas de inicio/fin o paradas para reoptimizar.");
+    alert("Faltan coordenadas o paradas.");
     return;
   }
 
   reoptLoading.value = true;
   try {
-    // ✅ USAR activeRoute.value directo (ya contiene los cambios de mapa y autocomplete)
     const payload = {
       startLocation: {
         latitude: r.startLocation.latitude,
         longitude: r.startLocation.longitude,
-        address: startAddress.value || r.startLocation.formatted_address || r.startLocation.address,
+        address: startAddress.value,
       },
       endLocation: {
         latitude: r.endLocation.latitude,
         longitude: r.endLocation.longitude,
-        address: endAddress.value || r.endLocation.formatted_address || r.endLocation.address,
+        address: endAddress.value,
       },
       orderIds: r.orders.map(o => o.order._id),
       preferences: { avoidTolls: false, avoidHighways: false, prioritizeTime: true },
     };
 
-    console.log("🚀 Enviando a reoptimize:", payload);
-
     const res = await apiService.routes.reoptimize(r._id, payload);
     const updated = res.data?.data || res.data?.route || res.data;
-    console.log("📦 Resultado final reoptimize:", updated);
-    if (!updated) throw new Error("Respuesta del servidor inesperada");
+    if (!updated) throw new Error("Error del servidor");
 
     const idx = routes.value.findIndex(x => x._id === r._id);
     if (idx !== -1) routes.value[idx] = updated;
@@ -620,29 +642,16 @@ const reoptimizeActiveRoute = async () => {
   }
 };
 
-// Lifecycle
+// Lifecycle Hooks
 onMounted(() => {
   loadRoutes();
-  on('driver_location_updated', handleDriverLocation);
-  window.moverCamion = (lat, lng, heading = 90) => {
-    console.log(`🚚 Moviendo camión a: ${lat}, ${lng}`);
-    handleDriverLocation({
-      driverId: 'test-driver-1',
-      driverName: 'Conductor Fantasma 👻',
-      latitude: lat,
-      longitude: lng,
-      heading: heading // 0 = Norte, 90 = Este, 180 = Sur
-    });
-  };
+  // ✅ Suscribirse al evento correcto 'driver_location_update'
+  on('driver_location_update', handleDriverLocation);
 });
 
 onUnmounted(() => {
-  // Dejar de escuchar para no causar errores de memoria
-  off('driver_location_updated', handleDriverLocation);
-
-  Object.values(driverMarkers).forEach(marker => marker.setMap(null));
+  off('driver_location_update', handleDriverLocation);
 });
-
 </script>
 
 <style scoped>
