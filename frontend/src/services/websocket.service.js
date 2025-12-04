@@ -161,6 +161,11 @@ onClose(event) {
       this.emit('server_error', data)
       break
       
+      case 'driver_location_updated':
+      // Emitimos el evento para que RouteManager lo escuche
+      this.emit('driver_location_updated', data)
+      break
+
     default:
       // Solo mostrar log para tipos desconocidos
       console.log(`ℹ️ WS: Mensaje tipo '${type}':`, data)

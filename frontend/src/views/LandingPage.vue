@@ -383,7 +383,7 @@
             </svg>
             <div>
               <div class="font-semibold text-gray-900">Precio fijo transparente</div>
-              <div class="text-sm text-gray-600">$2.500 por entrega, todas las zonas</div>
+              <div class="text-sm text-gray-600">$2.800 + IVA por entrega, todas las zonas</div>
             </div>
           </li>
         </ul>
@@ -483,7 +483,7 @@
               <div class="text-6xl mb-4">📦</div>
               <h3 class="text-3xl font-bold text-gray-900 mb-2">Precio por Entrega</h3>
               <div class="flex items-center justify-center gap-2 mb-4">
-                <span class="text-6xl font-extrabold text-lime-600">$2.500</span>
+                <span class="text-6xl font-extrabold text-lime-600">$2.800 + IVA</span>
                 <span class="text-2xl text-gray-600">/ pedido</span>
               </div>
               <p class="text-lg text-gray-600">Todas las zonas de Santiago</p>
@@ -496,7 +496,7 @@
                 </svg>
                 <div>
                   <div class="font-semibold text-gray-900">Retiro GRATIS</div>
-                  <div class="text-sm text-gray-600">Con 4+ paquetes diarios (máx 12kg, 40x40x40cm)</div>
+                  <div class="text-sm text-gray-600">Con 4+ paquetes diarios (máx 15kg, 40x40x40cm)</div>
                 </div>
               </div>
 
@@ -571,7 +571,7 @@
           v-show="openFaq === 1"
           class="px-8 pb-6 text-gray-600 leading-relaxed"
         >
-          No hay problema. Si tienes <strong>menos de 4 paquetes</strong>, aplicamos un cargo único de <strong>$3.000 por retiro</strong>. El precio por entrega sigue siendo $2.500 por pedido. Igual puedes usar todos nuestros servicios: tracking GPS, prueba digital, dashboard, etc.
+          No hay problema. Si tienes <strong>menos de 4 paquetes</strong>, aplicamos un cargo único de <strong>$3.000 por retiro</strong>. El precio por entrega sigue siendo $2.800 + IVA por pedido. Igual puedes usar todos nuestros servicios: tracking GPS, prueba digital, dashboard, etc.
         </div>
       </div>
 
