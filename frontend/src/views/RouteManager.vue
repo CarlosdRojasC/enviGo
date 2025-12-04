@@ -614,6 +614,16 @@ const reoptimizeActiveRoute = async () => {
 onMounted(() => {
   loadRoutes();
   on('driver_location_updated', handleDriverLocation);
+  window.moverCamion = (lat, lng, heading = 90) => {
+    console.log(`🚚 Moviendo camión a: ${lat}, ${lng}`);
+    handleDriverLocation({
+      driverId: 'test-driver-1',
+      driverName: 'Conductor Fantasma 👻',
+      latitude: lat,
+      longitude: lng,
+      heading: heading // 0 = Norte, 90 = Este, 180 = Sur
+    });
+  };
 });
 
 onUnmounted(() => {
