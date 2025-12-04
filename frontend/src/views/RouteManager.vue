@@ -237,7 +237,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, nextTick } from "vue";
+import { ref, computed, onMounted, onUnmounted, nextTick, toRaw } from "vue";
 import { apiService } from "../services/api";
 import { useWebSocket } from '../services/websocket.service'; // Asegúrate de la ruta correcta
 // Estado
@@ -345,40 +345,32 @@ const loadGoogleMaps = async () => {
 };
 
 const handleDriverLocation = (data) => {
-  // data: { driverId, latitude, longitude, heading, ... }
+  // data trae: { driverId, latitude, longitude, heading, ... }
   
-  // 1. Validar que el mapa esté listo
-  if (!mapInstance) return; 
+  // 1. OBTENER EL MAPA PURO (Sin Proxy de Vue)
+  let map = mapInstance.value || mapInstance;
+  if (map && map["__v_isRef"]) map = map.value; // Por seguridad si es ref anidado
+  if (toRaw) map = toRaw(map); // <--- ESTA ES LA CLAVE
 
+  if (!map) return; 
+
+  // ... resto del código igual ...
   const latLng = new google.maps.LatLng(data.latitude, data.longitude);
-
-  // 2. Verificar si ya tenemos un marcador para este conductor
+  
+  // ... lógica de marcadores ...
   if (driverMarkers[data.driverId]) {
-    // === ACTUALIZAR EXISTENTE ===
-    const marker = driverMarkers[data.driverId];
-    
-    // Mover suavemente
-    marker.setPosition(latLng);
-    
-    // Rotar el icono según la dirección (heading) del GPS
-    const icon = marker.getIcon();
-    icon.rotation = data.heading || 0;
-    marker.setIcon(icon);
-    
+      // ...
   } else {
-    // === CREAR NUEVO ===
     const newMarker = new google.maps.Marker({
       position: latLng,
-      map: mapInstance, // Tu instancia de mapa nativa
+      map: map, // <--- Ahora 'map' es el objeto original que Google acepta
       title: data.driverName || 'Conductor',
       icon: {
         ...carSymbol,
         rotation: data.heading || 0
       },
-      zIndex: 999 // Para que aparezca encima de las casas
+      zIndex: 9999
     });
-    
-    // Guardar referencia
     driverMarkers[data.driverId] = newMarker;
   }
 };
