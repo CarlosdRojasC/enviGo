@@ -575,159 +575,26 @@ const map = new maps.Map(mapContainer, {
     }
 
     // Paradas
-(route.orders || []).forEach((o, idx) => {
-  const orderData = o.order || o; // <- aquí usamos tu documento real de orden
-
-  const lat = orderData.location?.latitude;
-  const lng = orderData.location?.longitude;
-
-  if (typeof lat === "number" && typeof lng === "number") {
-    const marker = new maps.Marker({
-      map,
-      position: { lat, lng },
-      title: `Parada ${idx + 1}`,
-      label: {
-        text: `${idx + 1}`,
-        color: "white",
-        fontSize: "12px",
-        fontWeight: "bold",
-      },
-      icon: {
-        path: maps.SymbolPath.CIRCLE,
-        scale: 12,
-        fillColor: getMarkerColor(o.deliveryStatus || orderData.status),
-        fillOpacity: 1,
-        strokeColor: "white",
-        strokeWeight: 2,
-      },
-    });
-
-    marker.addListener("click", () => {
-      // 👉 Solo mostrar InfoWindow si está entregado
-      const isDelivered =
-        (o.deliveryStatus && o.deliveryStatus === "delivered") ||
-        orderData.status === "delivered";
-
-      if (!isDelivered) {
-        // Si quieres que igual muestre info aunque no esté delivered, borra este if
-        return;
-      }
-
-      // ===================== CAMPOS REALES =====================
-      const pod = orderData.proof_of_delivery || {};
-      const driverDelivery = orderData.delivered_by_driver || {};
-      const driverInfo = orderData.driver_info || {};
-
-      const orderNumber =
-        orderData.order_number || orderData.external_order_id || orderData._id;
-
-      const customerName = orderData.customer_name || "—";
-
-      const receivedBy =
-        pod.recipient_name ||
-        orderData.customer_name ||
-        "No registrado";
-
-      const deliveredAt =
-        pod.timestamp ||
-        driverDelivery.delivery_timestamp ||
-        driverDelivery.delivery_date ||
-        orderData.updated_at ||
-        null;
-
-      const photos =
-        (Array.isArray(pod.photo_urls) && pod.photo_urls) ||
-        orderData.podUrls ||
-        orderData.photos ||
-        [];
-
-      const deliveryNotes = pod.notes || orderData.notes || "";
-
-      const deliveredByName =
-        driverDelivery.driver_name ||
-        driverInfo.name ||
-        driverDelivery.driver_email ||
-        driverInfo.email ||
-        "No registrado";
-
-      // ===================== HTML DEL POPUP =====================
-      let html =
-        '<div style="max-width:270px;font-family:system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;">';
-
-      html +=
-        '<div style="font-size:14px;font-weight:600;margin-bottom:4px;">Pedido ' +
-        orderNumber +
-        "</div>";
-
-      html +=
-        '<div style="font-size:12px;color:#4b5563;margin-bottom:4px;">Cliente: ' +
-        customerName +
-        "</div>";
-
-      html +=
-        '<div style="font-size:12px;color:#374151;margin-bottom:2px;"><strong>Estado:</strong> ' +
-        (o.deliveryStatus || orderData.status || "—") +
-        "</div>";
-
-      html +=
-        '<div style="font-size:12px;color:#374151;margin-bottom:2px;"><strong>Recibido por:</strong> ' +
-        receivedBy +
-        "</div>";
-
-      if (deliveredByName) {
-        html +=
-          '<div style="font-size:12px;color:#374151;margin-bottom:2px;"><strong>Entregado por:</strong> ' +
-          deliveredByName +
-          "</div>";
-      }
-
-      if (deliveredAt) {
-        html +=
-          '<div style="font-size:12px;color:#374151;margin-bottom:4px;"><strong>Fecha entrega:</strong> ' +
-          new Date(deliveredAt).toLocaleString() +
-          "</div>";
-      }
-
-      if (deliveryNotes) {
-        html +=
-          '<div style="font-size:12px;color:#4b5563;margin-bottom:4px;"><strong>Notas:</strong> ' +
-          deliveryNotes +
-          "</div>";
-      }
-
-      if (Array.isArray(photos) && photos.length > 0) {
-        html +=
-          '<div style="margin-top:4px;"><div style="font-size:12px;color:#4b5563;margin-bottom:4px;">Fotos de entrega:</div>';
-        const limited = photos.slice(0, 3);
-        limited.forEach((url) => {
-          if (!url) return;
-          html +=
-            '<img src="' +
-            url +
-            '" style="width:70px;height:70px;object-fit:cover;border-radius:6px;margin-right:4px;border:1px solid #e5e7eb;" />';
+    (route.orders || []).forEach((o, idx) => {
+      const lat = o?.order?.location?.latitude ?? o?.order?.delivery_location?.latitude;
+      const lng = o?.order?.location?.longitude ?? o?.order?.delivery_location?.longitude;
+      if (typeof lat === "number" && typeof lng === "number") {
+        new maps.Marker({
+          map,
+          position: { lat, lng },
+          title: `Parada ${idx + 1}`,
+          label: { text: `${idx + 1}`, color: "white", fontSize: "12px", fontWeight: "bold" },
+          icon: {
+             path: maps.SymbolPath.CIRCLE,
+             scale: 12,
+             fillColor: getMarkerColor(o.deliveryStatus),
+             fillOpacity: 1,
+             strokeColor: "white",
+             strokeWeight: 2
+          }
         });
-        if (photos.length > 3) {
-          html +=
-            '<div style="font-size:11px;color:#6b7280;margin-top:2px;">+' +
-            (photos.length - 3) +
-            " fotos más</div>";
-        }
-        html += "</div>";
-      } else {
-        html +=
-          '<div style="margin-top:4px;font-size:11px;color:#9ca3af;">Sin fotos de entrega registradas.</div>';
-      }
-
-      html += "</div>";
-
-      if (infoWindow) {
-        infoWindow.setContent(html);
-        infoWindow.open(map, marker);
       }
     });
-  }
-});
-
 
     drawRouteOnMap(maps, map, route);
   } catch (err) {
