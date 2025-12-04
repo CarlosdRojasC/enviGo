@@ -806,47 +806,27 @@ const dashboard = {
 }
 // Servicios de conductores
 const drivers = {
-  // Obtener todos los conductores (desde tu BD local)
+  // CRUD Básico
   getAll: () => api.get('/drivers'),
-  
-  getAvailable: () => api.get('/drivers'), // Reutilizamos la ruta existente
-
-  // Crear conductor en tu BD local
+  get: (id) => api.get(`/drivers/${id}`),
   create: (driverData) => api.post('/drivers', driverData),
-
   update: (id, data) => api.put(`/drivers/${id}`, data),
-  
-  // Eliminar conductor
   delete: (driverId) => api.delete(`/drivers/${driverId}`),
-
-  toggleStatus: (id) => api.patch(`/drivers/${id}/toggle`), // Para activar/desactivar
-    resetPassword: (id, data) => api.post(`/drivers/${id}/reset-password`, data),
   
-  // Obtener conductores por empresa (si necesitas)
+  // Acciones específicas
+  toggleStatus: (id) => api.patch(`/drivers/${id}/toggle`),
+  resetPassword: (id, data) => api.post(`/drivers/${id}/reset-password`, data),
+  getAvailable: () => api.get('/drivers'),
   getByCompany: (companyId) => api.get(`/companies/${companyId}/drivers`),
+  syncWithShipday: () => api.post('/drivers/sync-with-shipday'),
   
-syncWithShipday: () => api.post('/drivers/sync-with-shipday'),
-
-getDeliveredOrders: (params) => {
-      console.log('📦 API: Obteniendo pedidos entregados para pagos');
-      return api.get('/drivers/delivered-orders', { params });
-    },
-    
-    // NUEVO: Generar reporte de pagos
-    getPaymentReport: (params) => {
-      console.log('📊 API: Generando reporte de pagos');
-      return api.get('/drivers/payment-report', { params });
-    },
-    
-    // NUEVO: Exportar pagos a Excel
-    exportPaymentsToExcel: (params) => {
-      console.log('📊 API: Exportando pagos a Excel');
-      return api.get('/drivers/payment-report', { 
-        params: { ...params, format: 'excel' },
-        responseType: 'blob' // Importante para descargar archivos
-      });
-    }
-    
+  // Pagos y Reportes
+  getDeliveredOrders: (params) => api.get('/drivers/delivered-orders', { params }),
+  getPaymentReport: (params) => api.get('/drivers/payment-report', { params }),
+  exportPaymentsToExcel: (params) => api.get('/drivers/payment-report', { 
+    params: { ...params, format: 'excel' },
+    responseType: 'blob' 
+  })
 }
 // Servicios de Shipday
 const shipday = {
