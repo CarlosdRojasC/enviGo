@@ -63,7 +63,6 @@
             <th class="p-4 text-left">Monto</th>
             <th class="p-4 text-left">Estado</th>
             <th class="p-4 text-left">Fechas</th>
-            <th class="p-4 text-left">Shipday</th>
             <th class="p-4 text-left">Acciones</th>
           </tr>
         </thead>
@@ -184,23 +183,6 @@
                   <span>Entregado:</span>
                   {{ formatDate(order.delivery_date, true) }}
                 </div>
-              </div>
-            </td>
-            
-            <td class="p-4">
-              <div v-if="order.shipday_order_id" class="space-y-1">
-                <div class="px-2 py-1 bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 rounded text-xs font-semibold">
-                  📦 {{ order.shipday_order_id.slice(-6) }}
-                </div>
-                <div v-if="order.shipday_driver_id" class="px-2 py-1 bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 rounded text-xs font-semibold">
-                  🚚 {{ order.driver_info?.name || 'Conductor asignado' }}
-                </div>
-                <div v-else class="px-2 py-1 bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200 rounded text-xs font-semibold">
-                  ⏳ Sin conductor
-                </div>
-              </div>
-              <div v-else class="px-2 py-1 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 rounded text-xs font-semibold">
-                📋 Sin asignar
               </div>
             </td>
             
