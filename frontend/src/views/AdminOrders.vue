@@ -76,6 +76,7 @@
       @mark-delivered="openDeliveryProofModal"
       @page-change="goToPage"
       @page-size-change="changePageSize"
+      @edit-order="editOrder"
     />
 
     <!-- Modales -->
