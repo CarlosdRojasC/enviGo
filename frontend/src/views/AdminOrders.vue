@@ -713,17 +713,35 @@ function getChannelTypeName(channelType) {
   }
   return names[channelType] || channelType
 }
+function openEditOrderModal(order) {
+  // Clonar para no mutar el original
+  editingOrderData.value = JSON.parse(JSON.stringify(order))
+  showEditModal.value = true
+}
+
 function handleSwitchToEdit(order) {
-  // 1. Cerrar modal de detalles
-  showOrderDetailsModal.value = false;
-  
-  // 2. Preparar datos para edición (copia profunda)
-  editingOrderData.value = JSON.parse(JSON.stringify(order));
-  
-  // 3. Abrir modal de edición (usando nextTick para asegurar transición suave si es necesario)
+  // Cerrar detalle y abrir edición
+  showOrderDetailsModal.value = false
+  editingOrderData.value = JSON.parse(JSON.stringify(order))
+  // Usar nextTick para asegurar que el DOM se actualice antes de abrir el otro modal
   nextTick(() => {
-    showEditModal.value = true;
-  });
+    showEditModal.value = true
+  })
+}
+
+async function handleSaveEdit(updatedOrderData) {
+  try {
+    isSavingEdit.value = true
+    // Llamar a la acción del composable
+    await editOrder(updatedOrderData._id, updatedOrderData)
+    // Cerrar modal al finalizar
+    showEditModal.value = false
+  } catch (error) {
+    console.error("Error al guardar edición:", error)
+    // El toast de error ya se maneja en editOrder
+  } finally {
+    isSavingEdit.value = false
+  }
 }
 function redirectToChannels() {
   router.push('/app/admin/channels')
