@@ -1,4 +1,3 @@
-// composables/useOrdersModals.js
 import { ref } from 'vue'
 
 export function useOrdersModals() {
@@ -12,6 +11,7 @@ export function useOrdersModals() {
   const showAssignModal = ref(false)
   const showBulkAssignModal = ref(false)
   const showDeliveryProofModal = ref(false)
+  const showEditModal = ref(false) // ✅ Definición agregada
 
   // Selected items
   const selectedOrder = ref(null)
@@ -39,17 +39,37 @@ export function useOrdersModals() {
     selectedOrder.value = null
     console.log('❌ Order details modal closed')
   }
-function openDeliveryProofModal(order) {
-  selectedOrder.value = order
-  showDeliveryProofModal.value = true
-  console.log('📦 Opening delivery proof modal for:', order.order_number)
-}
 
-function closeDeliveryProofModal() {
-  showDeliveryProofModal.value = false
-  selectedOrder.value = null
-  console.log('❌ Delivery proof modal closed')
-}
+  /**
+   * Open edit order modal (NUEVO)
+   */
+  function openEditModal(order) {
+    selectedOrder.value = order
+    showEditModal.value = true
+    console.log('📝 Opening edit order modal for:', order.order_number)
+  }
+
+  /**
+   * Close edit order modal (NUEVO)
+   */
+  function closeEditModal() {
+    showEditModal.value = false
+    selectedOrder.value = null
+    console.log('❌ Edit order modal closed')
+  }
+
+  function openDeliveryProofModal(order) {
+    selectedOrder.value = order
+    showDeliveryProofModal.value = true
+    console.log('📦 Opening delivery proof modal for:', order.order_number)
+  }
+
+  function closeDeliveryProofModal() {
+    showDeliveryProofModal.value = false
+    selectedOrder.value = null
+    console.log('❌ Delivery proof modal closed')
+  }
+
   /**
    * Open update status modal
    */
@@ -75,6 +95,7 @@ function closeDeliveryProofModal() {
     // Initialize new order with default values
     newOrder.value = {
       company_id: '',
+      channel_id: '',
       customer_name: '',
       customer_email: '',
       customer_phone: '',
@@ -126,16 +147,16 @@ function closeDeliveryProofModal() {
   }
 
   function closeBulkAssignModalFull() {
-  // Cerrar modal visualmente
-  showBulkAssignModal.value = false;
+    // Cerrar modal visualmente
+    showBulkAssignModal.value = false;
 
-  // Resetear estados del composable de driver assignment
-  if (typeof resetBulkAssignmentState === 'function') {
-    resetBulkAssignmentState();
+    // Resetear estados del composable de driver assignment
+    if (typeof resetBulkAssignmentState === 'function') {
+      resetBulkAssignmentState();
+    }
+
+    console.log('❌ Bulk assign modal closed and state reset')
   }
-
-  console.log('❌ Bulk assign modal closed and state reset')
-}
 
   /**
    * Close assign driver modal
@@ -157,33 +178,14 @@ function closeDeliveryProofModal() {
   /**
    * Close bulk assign modal
    */
-function closeBulkAssignModal() {
-  // Si la asignación masiva ya terminó, eliminar los pedidos exitosos de la selección
-  if (bulkAssignmentFinished.value) {
-    const successfulOrderIds = bulkAssignmentResults.value
-      .filter(r => r.success)
-      .map(r => r.orderId)
-
-    if (successfulOrderIds.length > 0) {
-      selectedOrders.value = selectedOrders.value.filter(id => !successfulOrderIds.includes(id))
-      selectedOrderObjects.value = selectedOrderObjects.value.filter(order => !successfulOrderIds.includes(order._id))
-    }
-
-    console.log(`🧹 Removed ${successfulOrderIds.length} successfully assigned orders from selection`)
+  function closeBulkAssignModal() {
+    // Si la asignación masiva ya terminó, eliminar los pedidos exitosos de la selección
+    // (Nota: bulkAssignmentFinished es una prop externa, aquí solo cerramos)
+    
+    // ⚡ Emitir al padre para cerrar el modal (esto se maneja en el componente)
+    showBulkAssignModal.value = false
+    console.log('❌ Bulk assignment modal closed')
   }
-
-  // Resetear todos los estados de la asignación masiva
-  bulkSelectedDriverId.value = ''
-  bulkAssignmentCompleted.value = 0
-  bulkAssignmentResults.value = []
-  bulkAssignmentFinished.value = false
-  isBulkAssigning.value = false
-
-  // ⚡ Emitir al padre para cerrar el modal
-  emit('close-bulk-assign')
-
-  console.log('❌ Bulk assignment modal closed and state fully reset')
-}
 
   /**
    * Close all modals
@@ -195,6 +197,9 @@ function closeBulkAssignModal() {
     showBulkUploadModal.value = false
     showAssignModal.value = false
     showBulkAssignModal.value = false
+    showDeliveryProofModal.value = false
+    showEditModal.value = false // ✅ Agregado aquí
+    
     selectedOrder.value = null
     newOrder.value = {}
     isCreatingOrder.value = false
@@ -291,6 +296,7 @@ function closeBulkAssignModal() {
   function resetNewOrderForm() {
     newOrder.value = {
       company_id: '',
+      channel_id: '',
       customer_name: '',
       customer_email: '',
       customer_phone: '',
@@ -320,6 +326,8 @@ function closeBulkAssignModal() {
       bulkUpload: showBulkUploadModal.value,
       assign: showAssignModal.value,
       bulkAssign: showBulkAssignModal.value,
+      deliveryProof: showDeliveryProofModal.value,
+      edit: showEditModal.value,
       selectedOrder: selectedOrder.value?.order_number || null
     }
   }
@@ -347,22 +355,34 @@ function closeBulkAssignModal() {
     newOrder,
     isCreatingOrder,
     showDeliveryProofModal,
-  openDeliveryProofModal,
-  closeDeliveryProofModal,
+    showEditModal, // ✅ Exportado
     
     // Methods
     openOrderDetailsModal,
     closeOrderDetailsModal,
+    
+    openDeliveryProofModal,
+    closeDeliveryProofModal,
+    
     openUpdateStatusModal,
     closeUpdateStatusModal,
+    
+    openEditModal, // ✅ Exportado
+    closeEditModal, // ✅ Exportado
+    
     openCreateOrderModal,
     closeCreateOrderModal,
+    
     openBulkUploadModal,
     closeBulkUploadModal,
+    
     openAssignModal,
     closeAssignModal,
+    
     openBulkAssignModal,
     closeBulkAssignModal,
+    closeBulkAssignModalFull,
+    
     closeAllModals,
     validateNewOrder,
     prepareOrderData,
