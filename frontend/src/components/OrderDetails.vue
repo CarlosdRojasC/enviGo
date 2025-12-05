@@ -93,7 +93,7 @@
           
           <button 
             v-if="['pending', 'warehouse_received', 'picked_up', 'ready_for_pickup'].includes(order.status)"
-            @click="$emit('edit-order', order)"
+            @click="$emit('edit', order)"
             class="text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 p-1.5 rounded-lg transition-all"
             title="Editar dirección y datos"
           >
@@ -189,7 +189,7 @@
 
 <script setup>
 // AGREGAMOS 'edit' A LOS EMITS
-const emit = defineEmits(['edit-order'])
+const emit = defineEmits(['edit'])
 
 const props = defineProps({
   order: { type: Object, required: true }

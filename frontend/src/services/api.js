@@ -135,6 +135,7 @@ const orders = {
   getById: (id) => api.get(`/orders/${id}`),
   create: (orderData) => api.post('/orders', orderData),
   remove: (orderId) => api.delete(`/orders/${orderId}`),
+  update: (id, orderData) => api.put(`/orders/${id}`, orderData),
   bulkUpdateStatus: (data) => api.post('/orders/bulk-actions/status', data),
   bulkDelete: (orderIds) => api.post('/orders/bulk-delete', { orderIds }),
   updateStatus: (id, status) => api.patch(`/orders/${id}/status`, { status }),
