@@ -1,6 +1,5 @@
 <template>
   <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm overflow-hidden">
-    <!-- Acciones Rápidas -->
     <div class="p-4 border-b border-gray-200 dark:border-gray-700">
       <div class="flex flex-wrap items-center justify-between gap-3">
         <div class="flex flex-wrap gap-2">
@@ -43,7 +42,6 @@
       </div>
     </div>
 
-    <!-- Tabla -->
     <div>
       <table class="w-full text-sm">
         <thead class="bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
@@ -77,7 +75,6 @@
             class="hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
             :class="{ 'bg-indigo-50 dark:bg-indigo-900/20': isOrderSelected(order) }"
           >
-            <!-- Checkbox -->
             <td class="p-4">
               <input
                 type="checkbox"
@@ -87,7 +84,6 @@
               />
             </td>
             
-            <!-- Pedido -->
             <td class="p-4">
               <div class="font-medium text-gray-900 dark:text-white">
                 {{ order.order_number }}
@@ -100,7 +96,6 @@
               </div>
             </td>
             
-            <!-- Empresa -->
             <td class="p-4">
               <div class="font-medium text-gray-900 dark:text-white">
                 {{ getCompanyName(order.company_id) }}
@@ -110,7 +105,6 @@
               </div>
             </td>
             
-            <!-- Cliente -->
             <td class="p-4">
               <div class="font-medium text-gray-900 dark:text-white">
                 {{ order.customer_name }}
@@ -127,7 +121,6 @@
               </div>
             </td>
             
-            <!-- Dirección -->
             <td class="p-4">
               <div class="text-gray-900 dark:text-white">
                 {{ order.shipping_address }}
@@ -137,7 +130,6 @@
               </div>
             </td>
             
-            <!-- Comuna -->
             <td class="p-4">
               <span 
                 v-if="order.shipping_commune"
@@ -153,7 +145,6 @@
               </span>
             </td>
             
-            <!-- Monto -->
             <td class="p-4">
               <div class="font-semibold text-indigo-600 dark:text-indigo-400">
                 {{ formatCurrency(order.total_amount) }}
@@ -163,7 +154,6 @@
               </div>
             </td>
             
-            <!-- Estado -->
             <td class="p-4">
               <span
                 :class="[
@@ -180,7 +170,6 @@
               </div>
             </td>
             
-            <!-- Fechas -->
             <td class="p-4">
               <div class="text-xs space-y-1">
                 <div class="text-gray-900 dark:text-white">
@@ -198,7 +187,6 @@
               </div>
             </td>
             
-            <!-- Shipday -->
             <td class="p-4">
               <div v-if="order.shipday_order_id" class="space-y-1">
                 <div class="px-2 py-1 bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 rounded text-xs font-semibold">
@@ -216,10 +204,8 @@
               </div>
             </td>
             
-            <!-- Acciones -->
             <td class="p-4">
               <div class="flex items-center gap-1">
-                <!-- Ver -->
                 <button
                   @click="$emit('view-details', order)"
                   class="p-2 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
@@ -227,26 +213,34 @@
                 >
                   <span class="material-icons text-base">visibility</span>
                 </button>
+
+                <button
+                  v-if="['pending', 'warehouse_received', 'picked_up', 'ready_for_pickup'].includes(order.status)"
+                  @click="$emit('edit-order', order)"
+                  class="p-2 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-lg transition-colors"
+                  title="Editar datos del pedido"
+                >
+                  <span class="material-icons text-base">edit_note</span>
+                </button>
                 
-                <!-- Estado -->
                 <button
                   @click="$emit('update-status', order)"
                   class="p-2 text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/30 rounded-lg transition-colors"
                   title="Actualizar estado del pedido"
                 >
-                  <span class="material-icons text-base">edit</span>
+                  <span class="material-icons text-base">swap_horiz</span>
                 </button>
                 
-                <!-- Asignar -->
                 <button
                   @click="$emit('assign-driver', order)"
                   class="p-2 text-green-600 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/30 rounded-lg transition-colors"
                   :title="['pending', 'ready_for_pickup', 'warehouse_received'].includes(order.status) ? 'Asignar conductor' : 'No se puede asignar en este estado'"
+                  :disabled="!['pending', 'ready_for_pickup', 'warehouse_received', 'assigned'].includes(order.status)"
+                  :class="{'opacity-50 cursor-not-allowed': !['pending', 'ready_for_pickup', 'warehouse_received', 'assigned'].includes(order.status)}"
                 >
                   <span class="material-icons text-base">local_shipping</span>
                 </button>
 
-                <!-- Entregar -->
                 <button
                   v-if="shouldShowDeliverButton(order)"
                   @click="$emit('mark-delivered', order)"
@@ -256,7 +250,6 @@
                   <span class="material-icons text-base">done_all</span>
                 </button>
 
-                <!-- Menú dropdown -->
                 <div class="relative group">
                   <button
                     class="p-2 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
@@ -265,7 +258,6 @@
                     <span class="material-icons text-base">more_vert</span>
                   </button>
                   
-                  <!-- Dropdown Menu -->
                   <div class="absolute right-0 mt-1 w-48 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-10">
                     <button
                       @click="debugOrder(order)"
@@ -306,7 +298,6 @@
           </tr>
         </tbody>
         
-        <!-- Loading State -->
         <tbody v-else-if="loading">
           <tr>
             <td colspan="11" class="p-12 text-center">
@@ -318,7 +309,6 @@
           </tr>
         </tbody>
         
-        <!-- Empty State -->
         <tbody v-else>
           <tr>
             <td colspan="11" class="p-12 text-center">
@@ -333,10 +323,8 @@
       </table>
     </div>
 
-    <!-- Paginación -->
     <div class="p-4 border-t border-gray-200 dark:border-gray-700">
       <div class="flex flex-col md:flex-row items-center justify-between gap-4">
-        <!-- Info de resultados -->
         <div class="flex items-center gap-4 text-sm text-gray-600 dark:text-gray-400">
           <span>
             Mostrando {{ startItem }} a {{ endItem }} de {{ pagination.total }} pedidos
@@ -359,7 +347,6 @@
           </div>
         </div>
         
-        <!-- Controles de paginación -->
         <div class="flex items-center gap-2">
           <button
             @click="$emit('page-change', 1)"
@@ -412,7 +399,6 @@
           </button>
         </div>
 
-        <!-- Ir a página -->
         <div class="flex items-center gap-2 text-sm">
           <label class="text-gray-600 dark:text-gray-400">Ir a página:</label>
           <input
@@ -485,7 +471,8 @@ const emit = defineEmits([
   'refresh',
   'bulk-assign',
   'bulk-export',
-  'reports'
+  'reports',
+  'edit-order'
 ])
 
 // ==================== COMPOSABLES ====================
