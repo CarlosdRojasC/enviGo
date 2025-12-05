@@ -1,37 +1,167 @@
 <template>
   <div class="modals-container">
-      <Modal 
-      :model-value="showDetails" 
-      @update:model-value="(value) => !value && $emit('close-details')"
-      :title="`Detalles del Pedido #${selectedOrder?.order_number}`" 
-      width="900px"
-      class="order-details-modal"
-    >
-      <OrderDetails 
-        v-if="selectedOrder" 
-        :order="selectedOrder" 
-        @close="$emit('close-details')"
-      />
-    </Modal>
-    <Modal 
-      :model-value="showUpdateStatus" 
+    <Modal
+      :model-value="showUpdateStatus"
       @update:model-value="(value) => !value && $emit('close-update-status')"
-      title="Actualizar Estado del Pedido" 
+      title="Actualizar Estado del Pedido"
       width="600px"
       class="update-status-modal"
     >
-      <UpdateOrderStatus 
-        v-if="selectedOrder" 
-        :order="selectedOrder" 
+      <UpdateOrderStatus
+        v-if="selectedOrder"
+        :order="selectedOrder"
         @close="$emit('close-update-status')"
         @status-updated="$emit('status-updated', $event)"
       />
     </Modal>
 
-   <Modal 
-      :model-value="showCreate" 
+    <Modal
+      :model-value="showEdit"
+      @update:model-value="(value) => !value && $emit('close-edit')"
+      title="Editar Pedido"
+      width="800px"
+      class="edit-order-modal"
+    >
+      <form v-if="editableOrder._id" @submit.prevent="handleEditSubmit" class="order-form">
+        <div class="form-section">
+          <div class="section-header">
+            <h4 class="section-title">
+              <span class="section-icon">👤</span>
+              Información del Cliente
+            </h4>
+            <p class="section-description">Actualiza los datos principales del pedido</p>
+          </div>
+
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label required">Nombre del Cliente</label>
+              <input
+                v-model="editableOrder.customer_name"
+                type="text"
+                class="form-input"
+                required
+              />
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Email del Cliente</label>
+              <input
+                v-model="editableOrder.customer_email"
+                type="email"
+                class="form-input"
+              />
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Teléfono del Cliente</label>
+              <input
+                v-model="editableOrder.customer_phone"
+                type="tel"
+                class="form-input"
+              />
+            </div>
+          </div>
+        </div>
+
+        <div class="form-section">
+          <div class="section-header">
+            <h4 class="section-title">
+              <span class="section-icon">📦</span>
+              Detalles de Envío
+            </h4>
+          </div>
+
+          <div class="form-grid">
+            <div class="form-group full-width">
+              <label class="form-label required">Dirección de Envío</label>
+              <input
+                v-model="editableOrder.shipping_address"
+                type="text"
+                class="form-input"
+                required
+              />
+            </div>
+
+            <div class="form-group">
+              <label class="form-label required">Comuna</label>
+              <input
+                v-model="editableOrder.shipping_commune"
+                type="text"
+                class="form-input"
+                required
+              />
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Región</label>
+              <input
+                v-model="editableOrder.shipping_state"
+                type="text"
+                class="form-input"
+              />
+            </div>
+          </div>
+        </div>
+
+        <div class="form-section">
+          <div class="section-header">
+            <h4 class="section-title">
+              <span class="section-icon">💰</span>
+              Valores
+            </h4>
+          </div>
+
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label required">Monto Total</label>
+              <input
+                v-model.number="editableOrder.total_amount"
+                type="number"
+                step="100"
+                min="0"
+                class="form-input"
+                required
+              />
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Costo de Envío</label>
+              <input
+                v-model.number="editableOrder.shipping_cost"
+                type="number"
+                step="100"
+                min="0"
+                class="form-input"
+              />
+            </div>
+          </div>
+
+          <div class="form-group full-width">
+            <label class="form-label">Notas</label>
+            <textarea
+              v-model="editableOrder.notes"
+              rows="3"
+              class="form-textarea"
+              placeholder="Instrucciones adicionales, referencias, etc."
+            />
+          </div>
+        </div>
+
+        <div class="form-actions">
+          <button type="button" class="btn-modal cancel" @click="$emit('close-edit')">
+            Cancelar
+          </button>
+          <button type="submit" class="btn-modal save" :disabled="isSavingEdit">
+            {{ isSavingEdit ? 'Guardando...' : 'Guardar Cambios' }}
+          </button>
+        </div>
+      </form>
+    </Modal>
+
+   <Modal
+      :model-value="showCreate"
       @update:model-value="(value) => !value && $emit('close-create')"
-      title="Crear Nuevo Pedido Manual" 
+      title="Crear Nuevo Pedido Manual"
       width="1000px"
       class="create-order-modal"
     >
@@ -836,16 +966,25 @@ const props = defineProps({
   showDetails: Boolean,
   showUpdateStatus: Boolean,
   showCreate: Boolean,
+  showEdit: Boolean,
   showBulkUpload: Boolean,
   showAssign: Boolean,
   showBulkAssign: Boolean,
   showDeliveryProof: Boolean,
-  
+
   // Data
   selectedOrder: Object,
+  editingOrder: {
+    type: Object,
+    default: () => ({})
+  },
   companies: Array,
   newOrder: Object,
   isCreating: Boolean,
+  isSavingEdit: {
+    type: Boolean,
+    default: false
+  },
   
   // Bulk upload
   bulkUploadCompanyId: String,
@@ -892,12 +1031,19 @@ const emit = defineEmits([
   'close-delivery-proof',
   'confirm-delivery',
   'switch-to-edit',
+  'close-edit',
+  'save-edit'
 ])
 const router = useRouter()
 const toast = useToast()
 
 const availableChannels = ref([])
 const loadingChannels = ref(false)
+const editableOrder = ref({})
+
+watch(() => props.editingOrder, (newOrder) => {
+  editableOrder.value = newOrder ? JSON.parse(JSON.stringify(newOrder)) : {}
+}, { immediate: true, deep: true })
 
 
 const selectedChannelInfo = computed(() => {
@@ -906,9 +1052,9 @@ const selectedChannelInfo = computed(() => {
 })
 
 const isFormValid = computed(() => {
-  return props.newOrder.company_id && 
+  return props.newOrder.company_id &&
          props.newOrder.channel_id && // ✅ NUEVA VALIDACIÓN
-         props.newOrder.customer_name && 
+         props.newOrder.customer_name &&
          props.newOrder.shipping_address &&
          props.newOrder.shipping_commune &&
          props.newOrder.total_amount > 0
@@ -916,6 +1062,19 @@ const isFormValid = computed(() => {
 // Función para manejar el envío de la prueba
 const handleDeliverySubmit = (proofData) => {
   emit('confirm-delivery', proofData)
+}
+const handleEditSubmit = () => {
+  const payload = {
+    ...editableOrder.value,
+    total_amount: Number(editableOrder.value.total_amount) || 0,
+    shipping_cost: Number(editableOrder.value.shipping_cost) || 0
+  }
+
+  if (Array.isArray(payload.shipping_commune)) {
+    payload.shipping_commune = payload.shipping_commune.join(', ')
+  }
+
+  emit('save-edit', payload)
 }
 // ==================== METHODS ====================
 // ==================== MÉTODOS (Agregar estos) ====================
