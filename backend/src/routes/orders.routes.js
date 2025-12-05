@@ -128,7 +128,7 @@ const validateOrderPermissions = (req, res, next) => {
 router.post('/', authenticateToken, validateOrderPermissions, validateOrderCreation, orderController.create);
 router.get('/:id', authenticateToken, validateMongoId('id'), orderController.getById);
 router.patch('/:id/status', authenticateToken, statusUpdateLimiter, validateMongoId('id'), isAdmin, orderController.updateStatus);
-
+router.put('/:id', authenticateToken, orderController.update);
 router.patch('/:id/ready', authenticateToken, validateMongoId('id'), async (req, res) => {
   try {
     const order = await Order.findById(req.params.id).populate('company_id', 'name email phone');

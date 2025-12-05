@@ -84,6 +84,8 @@
       :show-details="showOrderDetailsModal"
       :show-update-status="showUpdateStatusModal"
       :show-create="showCreateOrderModal"
+      :show-edit="showEditModal"
+      :editing-order="editingOrderData"
       :show-bulk-upload="showBulkUploadModal"
       :show-assign="showAssignModal"
       :show-bulk-assign="showBulkAssignModal"
@@ -109,6 +111,7 @@
       :bulk-assignment-finished="bulkAssignmentFinished"
       :bulk-progress-percentage="bulkProgressPercentage"
       @close-details="showOrderDetailsModal = false"
+      @switch-to-edit="handleSwitchToEdit"
       @close-update-status="showUpdateStatusModal = false"
       @status-updated="handleStatusUpdate"
       @close-create="showCreateOrderModal = false"
@@ -710,7 +713,18 @@ function getChannelTypeName(channelType) {
   }
   return names[channelType] || channelType
 }
-
+function handleSwitchToEdit(order) {
+  // 1. Cerrar modal de detalles
+  showOrderDetailsModal.value = false;
+  
+  // 2. Preparar datos para edición (copia profunda)
+  editingOrderData.value = JSON.parse(JSON.stringify(order));
+  
+  // 3. Abrir modal de edición (usando nextTick para asegurar transición suave si es necesario)
+  nextTick(() => {
+    showEditModal.value = true;
+  });
+}
 function redirectToChannels() {
   router.push('/app/admin/channels')
   emit('close-create')

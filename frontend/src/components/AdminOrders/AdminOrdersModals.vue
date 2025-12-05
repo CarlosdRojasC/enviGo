@@ -798,6 +798,18 @@
         </div>
       </div>
     </Modal>
+    <Modal 
+      :model-value="showDetails" 
+      @update:model-value="(value) => !value && $emit('close-details')"
+      :title="`Detalles del Pedido #${selectedOrder?.order_number}`" 
+      width="900px"
+    >
+      <OrderDetails 
+        v-if="selectedOrder" 
+        :order="selectedOrder" 
+        @edit="$emit('switch-to-edit', selectedOrder)" 
+      />
+    </Modal>
     <DeliveryProofModal
   :model-value="showDeliveryProof"
   @update:model-value="(value) => !value && $emit('close-delivery-proof')"
@@ -878,7 +890,8 @@ const emit = defineEmits([
   'update:selectedDriverId',
   'update:bulkSelectedDriverId',
   'close-delivery-proof',
-  'confirm-delivery'
+  'confirm-delivery',
+  'switch-to-edit',
 ])
 const router = useRouter()
 const toast = useToast()

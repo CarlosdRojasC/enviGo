@@ -1275,5 +1275,55 @@ async customerBulkUpload(req, res) {
     });
   }
 }
+async update(req, res) {
+    try {
+      const { id } = req.params;
+      const updateData = req.body;
+
+      // Lista de campos permitidos para actualización manual
+      const allowedFields = [
+        'customer_name', 'customer_email', 'customer_phone',
+        'shipping_address', 'shipping_commune', 'shipping_state',
+        'total_amount', 'shipping_cost', 'notes'
+      ];
+
+      // Filtrar solo los campos permitidos (seguridad)
+      const filteredUpdate = {};
+      Object.keys(updateData).forEach(key => {
+        if (allowedFields.includes(key)) {
+          filteredUpdate[key] = updateData[key];
+        }
+      });
+
+      // Validar que no se intente editar un pedido entregado/cancelado si es política de negocio
+      const currentOrder = await Order.findById(id);
+          if (['delivered', 'cancelled'].includes(currentOrder.status)) {
+                  return res.status(400).json({ error: 'No se puede editar un pedido finalizado' });
+      }
+
+      filteredUpdate.updated_at = new Date();
+
+      const order = await Order.findByIdAndUpdate(
+        id, 
+        { $set: filteredUpdate },
+        { new: true } // Devolver el objeto actualizado
+      ).populate('company_id', 'name')
+       .populate('channel_id', 'channel_name');
+
+      if (!order) {
+        return res.status(404).json({ error: 'Pedido no encontrado' });
+      }
+
+      // Si se actualizó la dirección y el pedido está en Shipday, podrías llamar a ShipdayService.updateOrder aquí
+
+      console.log(`✏️ Pedido ${order.order_number} actualizado manualmente por ${req.user.email}`);
+      
+      res.json(order);
+
+    } catch (error) {
+      console.error('Error actualizando pedido:', error);
+      res.status(500).json({ error: 'Error interno al actualizar el pedido' });
+    }
+  }
 }
 module.exports = new OrderController();

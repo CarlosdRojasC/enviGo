@@ -84,23 +84,36 @@
         </div>
       </div>
 
-      <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
-        <h4 class="flex items-center gap-2 text-gray-800 font-semibold mb-3">
-          <span class="material-icons text-gray-400">place</span>
-          Dirección de Envío
-        </h4>
+      <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-4 relative group hover:border-indigo-200 transition-colors">
+        <div class="flex justify-between items-center mb-3">
+          <h4 class="flex items-center gap-2 text-gray-800 font-semibold">
+            <span class="material-icons text-gray-400">place</span>
+            Dirección de Envío
+          </h4>
+          
+          <button 
+            v-if="['pending', 'warehouse_received', 'picked_up', 'ready_for_pickup'].includes(order.status)"
+            @click="$emit('edit', order)"
+            class="text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 p-1.5 rounded-lg transition-all"
+            title="Editar dirección y datos"
+          >
+            <span class="material-icons text-lg">edit</span>
+          </button>
+        </div>
+
         <div class="space-y-2 text-sm">
-          <p class="font-medium text-gray-900">{{ order.shipping_address }}</p>
+          <p class="font-medium text-gray-900 text-lg leading-snug">{{ order.shipping_address }}</p>
           <div class="flex flex-wrap gap-2 mt-2">
-            <span class="px-2 py-1 bg-gray-100 rounded text-gray-600 text-xs font-medium">
+            <span class="px-2 py-1 bg-gray-100 rounded text-gray-600 text-xs font-medium border border-gray-200">
               {{ formatCommune(order.shipping_commune) }}
             </span>
-            <span v-if="order.shipping_state" class="px-2 py-1 bg-gray-100 rounded text-gray-600 text-xs font-medium">
+            <span v-if="order.shipping_state" class="px-2 py-1 bg-gray-100 rounded text-gray-600 text-xs font-medium border border-gray-200">
               {{ order.shipping_state }}
             </span>
           </div>
-          <p v-if="order.notes" class="mt-3 p-2 bg-yellow-50 text-yellow-800 rounded-lg text-xs">
-            <strong>Notas:</strong> {{ order.notes }}
+          <p v-if="order.notes" class="mt-3 p-3 bg-yellow-50 text-yellow-800 rounded-lg text-xs border border-yellow-100 flex gap-2 items-start">
+            <span class="material-icons text-sm mt-0.5">sticky_note_2</span>
+            <span><strong>Notas:</strong> {{ order.notes }}</span>
           </p>
         </div>
       </div>
@@ -115,22 +128,28 @@
       <div class="p-4" v-if="order.proof_of_delivery">
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
           <div class="flex flex-col">
-            <span class="text-xs text-gray-500 uppercase">Recibido por</span>
-            <span class="font-medium text-gray-900">{{ order.proof_of_delivery.recipient_name || 'No especificado' }}</span>
+            <span class="text-xs text-gray-500 uppercase font-bold">Recibido por</span>
+            <span class="font-medium text-gray-900 flex items-center gap-2">
+              <span class="material-icons text-gray-400 text-sm">person</span>
+              {{ order.proof_of_delivery.recipient_name || 'No especificado' }}
+            </span>
           </div>
           <div class="flex flex-col">
-            <span class="text-xs text-gray-500 uppercase">Hora de Entrega</span>
-            <span class="font-medium text-gray-900">{{ formatDate(order.proof_of_delivery.timestamp || order.delivery_date) }}</span>
+            <span class="text-xs text-gray-500 uppercase font-bold">Hora de Entrega</span>
+            <span class="font-medium text-gray-900 flex items-center gap-2">
+              <span class="material-icons text-gray-400 text-sm">schedule</span>
+              {{ formatDate(order.proof_of_delivery.timestamp || order.delivery_date) }}
+            </span>
           </div>
         </div>
 
         <div v-if="order.proof_of_delivery.photo_urls && order.proof_of_delivery.photo_urls.length > 0">
-          <p class="text-xs text-gray-500 uppercase mb-2">Fotografías</p>
+          <p class="text-xs text-gray-500 uppercase font-bold mb-2">Fotografías</p>
           <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
             <div 
               v-for="(photo, index) in order.proof_of_delivery.photo_urls" 
               :key="index"
-              class="relative group aspect-square rounded-lg overflow-hidden border border-gray-200"
+              class="relative group aspect-square rounded-lg overflow-hidden border border-gray-200 bg-gray-50"
             >
               <img 
                 :src="photo" 
@@ -138,14 +157,15 @@
                 @click="openImage(photo)"
                 alt="Prueba de entrega"
               />
+              <div class="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors pointer-events-none"></div>
             </div>
           </div>
         </div>
 
         <div v-if="order.proof_of_delivery.signature_url" class="mt-4">
-          <p class="text-xs text-gray-500 uppercase mb-2">Firma Digital</p>
-          <div class="p-2 bg-gray-50 border border-gray-200 rounded-lg inline-block">
-            <img :src="order.proof_of_delivery.signature_url" class="h-24 w-auto object-contain" alt="Firma" />
+          <p class="text-xs text-gray-500 uppercase font-bold mb-2">Firma Digital</p>
+          <div class="p-2 bg-white border border-gray-200 rounded-lg inline-block">
+            <img :src="order.proof_of_delivery.signature_url" class="h-24 w-auto object-contain opacity-90" alt="Firma" />
           </div>
         </div>
       </div>
@@ -156,11 +176,11 @@
 
     <div class="bg-gray-50 rounded-xl border border-gray-200 p-4 flex justify-between items-center">
       <div>
-        <span class="text-gray-500 text-sm">Monto Total</span>
+        <span class="text-gray-500 text-sm font-medium">Monto Total</span>
         <p class="text-2xl font-bold text-indigo-600">{{ formatCurrency(order.total_amount) }}</p>
       </div>
       <div class="text-right">
-        <span class="text-gray-500 text-sm">Costo Envío</span>
+        <span class="text-gray-500 text-sm font-medium">Costo Envío</span>
         <p class="text-lg font-semibold text-gray-700">{{ formatCurrency(order.shipping_cost) }}</p>
       </div>
     </div>
@@ -168,9 +188,12 @@
 </template>
 
 <script setup>
+// AGREGAMOS 'edit' A LOS EMITS
+const emit = defineEmits(['edit'])
+
 const props = defineProps({
   order: { type: Object, required: true }
-});
+})
 
 function openImage(url) {
   window.open(url, '_blank');
