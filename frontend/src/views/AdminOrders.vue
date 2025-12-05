@@ -322,7 +322,8 @@ const {
   getStatusName,
   getCommuneClass,
   debugOrder,
-  bulkDeleteOrders
+  bulkDeleteOrders,
+  editOrder
 } = useOrdersActions(newOrder, isCreatingOrder, fetchOrders, filters)
 
 
@@ -1481,6 +1482,9 @@ onMounted(async () => {
   } finally {
     isInitialLoad.value = false
   }
+  // Events
+  window.addEventListener('orderUpdated', handleOrderUpdate);
+  emitter.on('open-order-details', handleOpenModalFromGlobalSearch);
 })
 
 // Cleanup
