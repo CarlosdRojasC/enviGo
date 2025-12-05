@@ -189,6 +189,9 @@ const optimizerForm = ref({
     prioritizeTime: true
   }
 })
+const showEditModal = ref(false)
+const editingOrderData = ref({})
+const isSavingEdit = ref(false)
 
 // ==================== COMPOSABLES ====================
 
