@@ -42,183 +42,245 @@
       </div>
     </div>
 
-    <div class="bg-white rounded-xl shadow-sm overflow-hidden">
-      <div class="p-6 border-b border-gray-200 flex justify-between items-center">
-        <h3 class="text-xl font-semibold text-gray-900">Lista de Rutas</h3>
+    <div class="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-100">
+      <div class="p-6 border-b border-gray-100 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+          <h3 class="text-xl font-semibold text-gray-900">Rutas planificadas</h3>
+          <p class="text-gray-600 text-sm">Visualiza el progreso de cada ruta y accede al mapa en un clic.</p>
+        </div>
+        <div class="flex flex-wrap items-center gap-2 text-xs">
+          <span class="px-3 py-1 rounded-full bg-slate-100 text-slate-700 font-semibold">Total {{ routes.length }}</span>
+          <span class="px-3 py-1 rounded-full bg-green-100 text-green-700 font-semibold">Activas {{ statusCounts.in_progress }}</span>
+          <span class="px-3 py-1 rounded-full bg-blue-100 text-blue-700 font-semibold">Asignadas {{ statusCounts.assigned }}</span>
+          <span class="px-3 py-1 rounded-full bg-emerald-100 text-emerald-700 font-semibold">Completas {{ statusCounts.completed }}</span>
+        </div>
       </div>
 
-      <div class="overflow-x-auto">
-        <table class="w-full">
-          <thead class="bg-gray-50">
-            <tr>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Conductor</th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Estado</th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Entregas</th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Distancia</th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Duración</th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Acciones</th>
-            </tr>
-          </thead>
-          <tbody class="bg-white divide-y divide-gray-200">
-            <tr v-if="loading">
-              <td colspan="7" class="px-6 py-12 text-center text-gray-500">
-                <div class="flex items-center justify-center">
-                  <div class="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
-                  <span class="ml-2">Cargando rutas...</span>
-                </div>
-              </td>
-            </tr>
+      <div v-if="loading" class="p-6 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+        <div v-for="i in 3" :key="i" class="border border-slate-100 rounded-xl p-4 animate-pulse bg-slate-50/60">
+          <div class="h-4 bg-slate-200 rounded w-1/3 mb-3"></div>
+          <div class="h-3 bg-slate-200 rounded w-2/3 mb-6"></div>
+          <div class="space-y-2">
+            <div class="h-3 bg-slate-200 rounded"></div>
+            <div class="h-3 bg-slate-200 rounded w-5/6"></div>
+            <div class="h-3 bg-slate-200 rounded w-4/6"></div>
+          </div>
+        </div>
+      </div>
 
-            <tr v-else-if="routes.length === 0">
-              <td colspan="7" class="px-6 py-12 text-center text-gray-500">
-                <div class="text-center">
-                  <div class="text-5xl mb-3">🛣️</div>
-                  <h3 class="text-lg font-medium text-gray-800 mb-1">No hay rutas registradas</h3>
-                  <p class="text-gray-500 mb-4">Crea tu primera ruta optimizada.</p>
-                  <button
-                    @click="showRouteOptimizerModal = true"
-                    class="bg-blue-600 text-white px-5 py-2 rounded-lg font-medium hover:bg-blue-700 transition-colors"
+      <div v-else-if="routes.length === 0" class="p-10 text-center text-gray-500">
+        <div class="inline-flex flex-col items-center gap-2 px-6 py-8 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+          <div class="text-5xl">🛣️</div>
+          <h3 class="text-lg font-semibold text-gray-800">No hay rutas registradas</h3>
+          <p class="text-gray-500 max-w-md">Optimiza tus pedidos y visualiza las entregas aquí. Puedes comenzar creando una nueva ruta.</p>
+          <button
+            @click="showRouteOptimizerModal = true"
+            class="mt-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-6 py-2.5 rounded-lg font-semibold hover:shadow-lg transition-all"
+          >
+            Optimizar Ruta
+          </button>
+        </div>
+      </div>
+
+      <div v-else class="p-6 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+        <article
+          v-for="route in routes"
+          :key="route._id"
+          class="relative group bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden hover:-translate-y-1 hover:shadow-lg transition-all duration-200"
+        >
+          <div class="absolute inset-x-0 top-0 h-1 bg-gradient-to-r" :class="getStatusAccent(route.status)"></div>
+          <div class="p-5 space-y-3">
+            <div class="flex items-start justify-between gap-3">
+              <div>
+                <p class="text-[11px] uppercase tracking-wide text-slate-500 font-semibold">Ruta #{{ route._id.slice(-6).toUpperCase() }}</p>
+                <h4 class="text-lg font-bold text-slate-900 flex items-center gap-2">
+                  {{ getDriverName(route.driver) }}
+                  <span
+                    v-if="route.status === 'in_progress'"
+                    class="inline-flex items-center gap-1 text-[11px] font-semibold text-green-700 bg-green-50 px-2 py-1 rounded-full"
                   >
-                    Optimizar Ruta
-                  </button>
-                </div>
-              </td>
-            </tr>
-
-            <tr v-for="route in routes" :key="route._id" class="hover:bg-gray-50">
-              <td class="px-6 py-4 font-medium text-gray-800">#{{ route._id.slice(-6).toUpperCase() }}</td>
-              <td class="px-6 py-4">
-                <div class="flex flex-col">
-                  <span class="font-medium text-gray-900">{{ getDriverName(route.driver) }}</span>
-                  <span v-if="route.driver?.email" class="text-xs text-gray-500">{{ route.driver.email }}</span>
-                  <span v-if="route.status === 'in_progress'" class="text-[10px] text-green-600 font-bold flex items-center gap-1 mt-1">
-                    <span class="relative flex h-2 w-2">
-                      <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                      <span class="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
-                    </span>
-                    Tracking Activo
+                    <span class="h-2 w-2 rounded-full bg-green-500 animate-ping"></span>
+                    En vivo
                   </span>
+                </h4>
+                <p class="text-xs text-slate-500">Actualizado {{ formatDate(route.updatedAt || route.createdAt) }}</p>
+              </div>
+              <span
+                class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold border"
+                :class="getStatusBadgeClass(route.status) + ' border-current'"
+              >
+                {{ getStatusText(route.status) }}
+              </span>
+            </div>
+
+            <div class="grid grid-cols-3 gap-3 text-sm">
+              <div class="p-3 rounded-lg bg-slate-50 border border-slate-100">
+                <p class="text-[11px] uppercase text-slate-500 font-semibold">Paradas</p>
+                <p class="text-lg font-bold text-slate-900">{{ route.orders?.length || 0 }}</p>
+              </div>
+              <div class="p-3 rounded-lg bg-slate-50 border border-slate-100">
+                <p class="text-[11px] uppercase text-slate-500 font-semibold">Distancia</p>
+                <p class="text-lg font-bold text-slate-900">{{ formatDistance(route.optimization?.totalDistance) }}</p>
+              </div>
+              <div class="p-3 rounded-lg bg-slate-50 border border-slate-100">
+                <p class="text-[11px] uppercase text-slate-500 font-semibold">Duración</p>
+                <p class="text-lg font-bold text-slate-900">{{ formatDuration(route.optimization?.totalDuration) }}</p>
+              </div>
+            </div>
+
+            <div class="flex items-center justify-between pt-2">
+              <div class="flex flex-col gap-1 text-xs text-slate-500">
+                <div class="flex items-center gap-2">
+                  <span class="w-2 h-2 rounded-full" :class="getStatusDot(route.status)"></span>
+                  <span class="font-semibold text-slate-700">Inicio</span>
+                  <span class="text-slate-500 truncate max-w-[170px]">{{ route.startLocation?.formatted_address || 'No definido' }}</span>
                 </div>
-              </td>
-              <td class="px-6 py-4">
-                <span
-                  class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
-                  :class="getStatusBadgeClass(route.status)"
-                >
-                  {{ getStatusText(route.status) }}
-                </span>
-              </td>
-              <td class="px-6 py-4 text-gray-700">{{ route.orders?.length || 0 }}</td>
-              <td class="px-6 py-4 text-gray-700">{{ formatDistance(route.optimization?.totalDistance) }}</td>
-              <td class="px-6 py-4 text-gray-700">{{ formatDuration(route.optimization?.totalDuration) }}</td>
-              <td class="px-6 py-4 whitespace-nowrap">
-                <button
-                  @click="viewRoute(route)"
-                  class="text-blue-600 hover:text-blue-800 font-medium px-2 py-1 rounded hover:bg-blue-50 transition-colors flex items-center gap-1"
-                >
-                  <span v-if="route.status === 'in_progress'">📡 Rastrear</span>
-                  <span v-else>👁️ Ver Ruta</span>
-                </button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+                <div class="flex items-center gap-2">
+                  <span class="w-2 h-2 rounded-full bg-slate-400"></span>
+                  <span class="font-semibold text-slate-700">Fin</span>
+                  <span class="text-slate-500 truncate max-w-[170px]">{{ route.endLocation?.formatted_address || 'No definido' }}</span>
+                </div>
+              </div>
+              <button
+                @click="viewRoute(route)"
+                class="inline-flex items-center gap-2 text-sm font-semibold text-blue-700 bg-blue-50 px-3 py-2 rounded-lg border border-blue-100 hover:bg-blue-100 transition"
+              >
+                <span v-if="route.status === 'in_progress'">📡 Rastrear</span>
+                <span v-else>👁️ Ver Ruta</span>
+              </button>
+            </div>
+          </div>
+        </article>
       </div>
     </div>
 
     <div
       v-if="showRouteMap"
-      class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4 backdrop-blur-sm"
+      class="fixed inset-0 bg-slate-900/70 flex items-center justify-center z-50 p-4 backdrop-blur"
       @click.self="closeRouteMap"
     >
-      <div class="bg-white rounded-xl w-full max-w-7xl shadow-xl overflow-hidden flex flex-col md:flex-row max-h-[90vh]">
-        <div class="flex-1 relative">
+      <div class="bg-white/90 backdrop-blur rounded-2xl w-full max-w-7xl shadow-2xl overflow-hidden flex flex-col md:flex-row max-h-[92vh] border border-slate-200">
+        <div class="flex-1 relative bg-slate-900/80">
           <div id="routeMapContainer" class="w-full h-[70vh] md:h-full"></div>
-          <div v-if="!mapInstance" class="absolute inset-0 flex items-center justify-center text-gray-400 bg-white bg-opacity-70">
+          <div v-if="!mapInstance" class="absolute inset-0 flex items-center justify-center text-gray-200 bg-slate-900/50">
             Inicializando mapa...
           </div>
-          
-          <div class="absolute bottom-4 left-4 bg-white p-3 rounded-lg shadow-lg text-xs space-y-2 z-10 bg-opacity-90">
-             <div class="font-bold text-gray-700 mb-1">Leyenda</div>
+
+          <div class="absolute bottom-4 left-4 bg-white/95 p-4 rounded-xl shadow-lg text-xs space-y-2 z-10 border border-slate-100">
+             <div class="font-bold text-gray-700 mb-1 flex items-center gap-1">⚡ Leyenda</div>
              <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-full bg-green-500"></span> Entregado</div>
              <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-full bg-yellow-500"></span> Pendiente</div>
              <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-full bg-blue-600"></span> Camión (En vivo)</div>
           </div>
         </div>
 
-        <div class="w-full md:w-80 bg-gray-50 border-l p-4 overflow-y-auto">
-          <div class="flex justify-between items-center mb-4">
-            <h3 class="text-lg font-semibold text-gray-900 flex items-center gap-2">
-              <span class="text-xl">🗺️</span> Ruta #{{ activeRoute?._id?.slice(-6).toUpperCase() }}
-            </h3>
-            <button @click="closeRouteMap" class="text-gray-500 hover:text-red-600 transition-colors p-1 rounded-full hover:bg-gray-200">
+        <div class="w-full md:w-[360px] bg-gradient-to-b from-white via-slate-50 to-white border-l border-slate-200 p-5 overflow-y-auto">
+          <div class="flex items-start justify-between gap-3 pb-4 border-b border-slate-200">
+            <div>
+              <p class="text-xs uppercase tracking-wide text-slate-500 font-semibold">Ruta activa</p>
+              <h3 class="text-2xl font-black text-slate-900 flex items-center gap-2">
+                <span class="text-xl">🗺️</span> #{{ activeRoute?._id?.slice(-6).toUpperCase() }}
+              </h3>
+              <p class="text-sm text-slate-600 mt-1">
+                Conductor <span class="font-semibold text-slate-800">{{ getDriverName(activeRoute?.driver) }}</span>
+              </p>
+            </div>
+            <button @click="closeRouteMap" class="text-slate-400 hover:text-red-500 transition-colors p-1 rounded-full hover:bg-red-50">
               ✖
             </button>
           </div>
-          <div class="text-sm text-gray-600 mb-3">
-            Conductor: <span class="font-medium">{{ getDriverName(activeRoute?.driver) }}</span>
-          </div>
 
-          <div class="bg-white rounded-lg border p-3 mb-4 space-y-2">
-            <div>
-              <label class="text-xs font-semibold text-gray-600">Inicio</label>
-              <input
-                ref="startInputEl"
-                v-model="startAddress"
-                type="text"
-                placeholder="Escribe una dirección"
-                class="mt-1 w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
+          <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4 mt-4 space-y-3">
+            <div class="flex items-center justify-between text-xs text-slate-500 uppercase font-semibold">
+              <span>Configurar</span>
+              <span class="flex items-center gap-1 px-2 py-1 rounded-full bg-blue-50 text-blue-700" v-if="reoptLoading">
+                <span class="h-2 w-2 rounded-full bg-blue-500 animate-ping"></span> Recalculando
+              </span>
             </div>
-            <div>
-              <label class="text-xs font-semibold text-gray-600">Fin</label>
-              <input
-                ref="endInputEl"
-                v-model="endAddress"
-                type="text"
-                placeholder="Escribe una dirección"
-                class="mt-1 w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
+            <div class="grid grid-cols-1 gap-3">
+              <div>
+                <label class="text-xs font-semibold text-gray-600">Inicio</label>
+                <input
+                  ref="startInputEl"
+                  v-model="startAddress"
+                  type="text"
+                  placeholder="Escribe una dirección"
+                  class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50"
+                />
+              </div>
+              <div>
+                <label class="text-xs font-semibold text-gray-600">Fin</label>
+                <input
+                  ref="endInputEl"
+                  v-model="endAddress"
+                  type="text"
+                  placeholder="Escribe una dirección"
+                  class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50"
+                />
+              </div>
             </div>
             <div class="flex gap-2 pt-1">
               <button
                 @click="reoptimizeActiveRoute"
                 :disabled="reoptLoading || !activeRoute"
-                class="flex-1 bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-3 py-2 rounded-md text-sm font-semibold hover:shadow transition disabled:opacity-60"
+                class="flex-1 bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-4 py-3 rounded-lg text-sm font-semibold shadow-md hover:shadow-lg transition disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
-                🔁 Reoptimizar
+                <span class="text-lg">🔁</span>
+                <span>{{ reoptLoading ? 'Recalculando...' : 'Reoptimizar' }}</span>
               </button>
             </div>
           </div>
 
-          <h4 class="text-sm font-semibold text-gray-700 mb-2">Paradas:</h4>
-          <ol class="space-y-2">
-            <li
-              v-for="(stop, idx) in activeRoute?.orders"
-              :key="stop._id"
-              class="flex items-start gap-3 bg-white p-2 rounded-md shadow-sm hover:bg-blue-50 transition"
-            >
-              <span
-                class="w-6 h-6 flex items-center justify-center rounded-full text-white font-bold text-sm"
-                :style="{ backgroundColor: getMarkerColor(stop.deliveryStatus) }"
+          <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4 mt-4 space-y-3">
+            <div class="flex items-center justify-between">
+              <h4 class="text-sm font-semibold text-gray-800">Paradas planificadas</h4>
+              <span class="text-xs font-semibold text-slate-500 bg-slate-100 px-2 py-1 rounded-full">{{ activeRoute?.orders?.length || 0 }} paradas</span>
+            </div>
+            <ol class="space-y-3 max-h-[320px] overflow-y-auto pr-1">
+              <li
+                v-for="(stop, idx) in activeRoute?.orders"
+                :key="stop._id"
+                class="flex items-start gap-3 bg-gradient-to-r from-white to-slate-50 p-3 rounded-lg border border-slate-100 shadow-sm"
               >
-                {{ idx + 1 }}
-              </span>
-              <div>
-                <p class="font-medium text-gray-800">
-                  {{ stop.order?.customer_name || 'Cliente' }}
-                </p>
-                <p class="text-xs text-gray-500">
-                  {{ stop.order?.delivery_location?.formatted_address || stop.order?.shipping_address || 'Sin dirección' }}
-                </p>
-              </div>
-            </li>
-          </ol>
+                <span
+                  class="w-8 h-8 flex items-center justify-center rounded-full text-white font-extrabold text-sm shadow"
+                  :style="{ backgroundColor: getMarkerColor(stop.deliveryStatus) }"
+                >
+                  {{ idx + 1 }}
+                </span>
+                <div class="flex-1">
+                  <div class="flex items-center justify-between gap-2">
+                    <p class="font-semibold text-slate-900">
+                      {{ stop.order?.customer_name || 'Cliente' }}
+                    </p>
+                    <span
+                      class="text-[10px] uppercase font-bold px-2 py-1 rounded-full"
+                      :class="{
+                        'bg-green-100 text-green-700': stop.deliveryStatus === 'delivered' || stop.deliveryStatus === 'completed',
+                        'bg-amber-100 text-amber-700': !stop.deliveryStatus || stop.deliveryStatus === 'pending' || stop.deliveryStatus === 'in_progress',
+                        'bg-red-100 text-red-700': stop.deliveryStatus === 'failed'
+                      }"
+                    >
+                      {{ (stop.deliveryStatus || 'pendiente').replace('_', ' ') }}
+                    </span>
+                  </div>
+                  <p class="text-xs text-gray-600 mt-1 leading-relaxed">
+                    {{ stop.order?.delivery_location?.formatted_address || stop.order?.shipping_address || 'Sin dirección' }}
+                  </p>
+                </div>
+              </li>
+            </ol>
 
-          <div class="mt-4 text-sm text-gray-600 border-t pt-3">
-            Distancia total: <b>{{ formatDistance(activeRoute?.optimization?.totalDistance) }}</b><br />
-            Duración estimada: <b>{{ formatDuration(activeRoute?.optimization?.totalDuration) }}</b>
+            <div class="pt-2 text-sm text-gray-700 flex flex-col gap-1 border-t border-dashed border-slate-200 pt-3">
+              <div class="flex items-center justify-between">
+                <span class="text-xs uppercase tracking-wide text-slate-500">Distancia total</span>
+                <span class="font-semibold text-slate-900">{{ formatDistance(activeRoute?.optimization?.totalDistance) }}</span>
+              </div>
+              <div class="flex items-center justify-between">
+                <span class="text-xs uppercase tracking-wide text-slate-500">Duración estimada</span>
+                <span class="font-semibold text-slate-900">{{ formatDuration(activeRoute?.optimization?.totalDuration) }}</span>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -253,6 +315,7 @@ const activeRoute = ref(null);
 const mapInstance = ref(null);
 const showRouteOptimizerModal = ref(false);
 const activeDriverIds = ref(new Set());
+const stopMarkers = [];
 // WebSocket Composable
 const { on, off } = useWebSocket();
 
@@ -269,7 +332,7 @@ let endMarker = null;
 let geocoder = null;
 let currentRoutePolyline = null;
 let driverMarker = null; // 🚛 Marcador del conductor en tiempo real
-let infoWindow = null; 
+let infoWindow = null;
 // Helpers
 const getDriverName = (driver) => driver?.full_name || driver?.name || driver?.email || "Sin asignar";
 const getStatusText = (status) => ({
@@ -286,6 +349,28 @@ const getStatusBadgeClass = (status) => ({
   completed: "bg-green-100 text-green-800",
   cancelled: "bg-red-100 text-red-800",
 }[status] || "bg-gray-100 text-gray-800");
+
+const statusThemes = {
+  draft: { accent: "from-slate-200 to-slate-300", dot: "bg-slate-400" },
+  assigned: { accent: "from-blue-200 via-blue-300 to-blue-400", dot: "bg-blue-500" },
+  in_progress: { accent: "from-amber-200 via-yellow-300 to-orange-400", dot: "bg-amber-500" },
+  completed: { accent: "from-emerald-200 via-green-300 to-emerald-400", dot: "bg-emerald-500" },
+  cancelled: { accent: "from-rose-200 via-red-300 to-red-400", dot: "bg-rose-500" },
+};
+
+const statusCounts = computed(() => routes.value.reduce((acc, r) => {
+  acc[r.status] = (acc[r.status] || 0) + 1;
+  return acc;
+}, { draft: 0, assigned: 0, in_progress: 0, completed: 0, cancelled: 0 }));
+
+const getStatusAccent = (status) => `bg-gradient-to-r ${statusThemes[status]?.accent || "from-slate-200 to-slate-300"}`;
+const getStatusDot = (status) => statusThemes[status]?.dot || "bg-slate-400";
+
+const formatDate = (date) => {
+  if (!date) return "hoy";
+  const d = new Date(date);
+  return d.toLocaleDateString("es-ES", { day: "2-digit", month: "short" });
+};
 
 const getMarkerColor = (status) => {
   switch (status) {
@@ -311,8 +396,12 @@ const carSymbol = {
 const getGoogleMapsApiKey = () => window.env?.VITE_GOOGLE_MAPS_API_KEY || import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "";
 const hasLatLng = (p) => p && typeof p.latitude === "number" && typeof p.longitude === "number";
 
-const formatDistance = (m) => (m < 1000 ? `${m} m` : `${(m / 1000).toFixed(1)} km`);
+const formatDistance = (m) => {
+  if (typeof m !== "number" || Number.isNaN(m)) return "—";
+  return m < 1000 ? `${m} m` : `${(m / 1000).toFixed(1)} km`;
+};
 const formatDuration = (s) => {
+  if (typeof s !== "number" || Number.isNaN(s)) return "—";
   const h = Math.floor(s / 3600);
   const m = Math.floor((s % 3600) / 60);
   return h > 0 ? `${h}h ${m}min` : `${m}min`;
@@ -456,6 +545,109 @@ const updateEndFromLatLng = async (maps, lat, lng) => {
   if (endMarker) endMarker.setPosition({ lat, lng });
 };
 
+const clearStopMarkers = () => {
+  while (stopMarkers.length) {
+    const m = stopMarkers.pop();
+    if (m) m.setMap(null);
+  }
+};
+
+const renderStopMarkers = (maps, map, route) => {
+  clearStopMarkers();
+  const safeMap = toRaw ? toRaw(map) : map;
+  (route.orders || []).forEach((o, idx) => {
+    const lat = o?.order?.location?.latitude ?? o?.order?.delivery_location?.latitude;
+    const lng = o?.order?.location?.longitude ?? o?.order?.delivery_location?.longitude;
+    if (typeof lat === "number" && typeof lng === "number") {
+      const marker = new maps.Marker({
+        map: safeMap,
+        position: { lat, lng },
+        title: `Parada ${idx + 1}`,
+        label: { text: `${idx + 1}`, color: "white", fontSize: "12px", fontWeight: "bold" },
+        icon: {
+          path: maps.SymbolPath.CIRCLE,
+          scale: 12,
+          fillColor: getMarkerColor(o.deliveryStatus),
+          fillOpacity: 1,
+          strokeColor: "white",
+          strokeWeight: 2,
+        },
+      });
+      stopMarkers.push(marker);
+    }
+  });
+};
+
+const renderStartEndMarkers = (maps, map, route) => {
+  const safeMap = toRaw ? toRaw(map) : map;
+  if (hasLatLng(route.startLocation)) {
+    if (!startMarker) {
+      startMarker = new maps.Marker({
+        map: safeMap,
+        position: { lat: route.startLocation.latitude, lng: route.startLocation.longitude },
+        draggable: true,
+        label: "S",
+        title: "Inicio",
+      });
+      startMarker.addListener("dragend", async (e) => {
+        await updateStartFromLatLng(maps, e.latLng.lat(), e.latLng.lng());
+      });
+    } else {
+      startMarker.setMap(safeMap);
+      startMarker.setPosition({ lat: route.startLocation.latitude, lng: route.startLocation.longitude });
+    }
+  } else if (startMarker) {
+    startMarker.setMap(null);
+    startMarker = null;
+  }
+
+  if (hasLatLng(route.endLocation)) {
+    if (!endMarker) {
+      endMarker = new maps.Marker({
+        map: safeMap,
+        position: { lat: route.endLocation.latitude, lng: route.endLocation.longitude },
+        draggable: true,
+        label: "F",
+        title: "Fin",
+      });
+      endMarker.addListener("dragend", async (e) => {
+        await updateEndFromLatLng(maps, e.latLng.lat(), e.latLng.lng());
+      });
+    } else {
+      endMarker.setMap(safeMap);
+      endMarker.setPosition({ lat: route.endLocation.latitude, lng: route.endLocation.longitude });
+    }
+  } else if (endMarker) {
+    endMarker.setMap(null);
+    endMarker = null;
+  }
+};
+
+const syncRouteFields = (route) => {
+  startAddress.value = route.startLocation?.formatted_address || (hasLatLng(route.startLocation) ? `${route.startLocation.latitude}, ${route.startLocation.longitude}` : "");
+  endAddress.value = route.endLocation?.formatted_address || (hasLatLng(route.endLocation) ? `${route.endLocation.latitude}, ${route.endLocation.longitude}` : "");
+};
+
+const persistRouteLocally = (updated) => {
+  const idx = routes.value.findIndex(x => x._id === updated._id);
+  if (idx !== -1) routes.value.splice(idx, 1, updated);
+  else routes.value.unshift(updated);
+};
+
+const applyRouteUpdate = async (updated) => {
+  persistRouteLocally(updated);
+  activeRoute.value = updated;
+  syncRouteFields(updated);
+
+  const maps = await loadGoogleMaps();
+  const map = toRaw ? toRaw(mapInstance.value) : mapInstance.value;
+  if (map) {
+    renderStartEndMarkers(maps, map, updated);
+    renderStopMarkers(maps, map, updated);
+    drawRouteOnMap(maps, map, updated);
+  }
+};
+
 // Dibuja polyline
 const drawRouteOnMap = (maps, map, route) => {
   if (currentRoutePolyline) {
@@ -488,15 +680,35 @@ const closeRouteMap = () => {
         driverMarker.setMap(null);
         driverMarker = null;
     }
+    if (currentRoutePolyline) {
+      currentRoutePolyline.setMap(null);
+      currentRoutePolyline = null;
+    }
+    clearStopMarkers();
+    if (startMarker) {
+      startMarker.setMap(null);
+      startMarker = null;
+    }
+    if (endMarker) {
+      endMarker.setMap(null);
+      endMarker = null;
+    }
 };
 
 // Ver ruta y preparar mapa
 const viewRoute = async (route) => {
   activeRoute.value = route;
+  syncRouteFields(route);
   showRouteMap.value = true;
-  
-  // Resetear marcador de conductor al abrir
+
   driverMarker = null;
+  clearStopMarkers();
+  startMarker = null;
+  endMarker = null;
+  if (currentRoutePolyline) {
+    currentRoutePolyline.setMap(null);
+    currentRoutePolyline = null;
+  }
 
   await nextTick();
 
@@ -504,53 +716,21 @@ const viewRoute = async (route) => {
   if (!mapContainer) return;
 
   try {
-const maps = await loadGoogleMaps();
+    const maps = await loadGoogleMaps();
 
-// Crear InfoWindow para mostrar detalle de entrega
-infoWindow = new maps.InfoWindow();
+    infoWindow = new maps.InfoWindow();
 
-const map = new maps.Map(mapContainer, {
-  center: hasLatLng(route.startLocation)
-    ? { lat: route.startLocation.latitude, lng: route.startLocation.longitude }
-    : { lat: 0, lng: 0 },
-  zoom: 12,
-  mapId: "ENVIGO_MAP_DEFAULT",
-});
+    const map = new maps.Map(mapContainer, {
+      center: hasLatLng(route.startLocation)
+        ? { lat: route.startLocation.latitude, lng: route.startLocation.longitude }
+        : { lat: 0, lng: 0 },
+      zoom: 12,
+      mapId: "ENVIGO_MAP_DEFAULT",
+    });
     mapInstance.value = map;
 
     geocoder = new maps.Geocoder();
-
-    // Marcador Inicio
-    if (hasLatLng(route.startLocation)) {
-      startMarker = new maps.Marker({
-        map,
-        position: { lat: route.startLocation.latitude, lng: route.startLocation.longitude },
-        draggable: true,
-        label: "S",
-        title: "Inicio",
-      });
-      startMarker.addListener("dragend", async (e) => {
-        await updateStartFromLatLng(maps, e.latLng.lat(), e.latLng.lng());
-      });
-    }
-
-    // Marcador Fin
-    if (hasLatLng(route.endLocation)) {
-      endMarker = new maps.Marker({
-        map,
-        position: { lat: route.endLocation.latitude, lng: route.endLocation.longitude },
-        draggable: true,
-        label: "F",
-        title: "Fin",
-      });
-      endMarker.addListener("dragend", async (e) => {
-        await updateEndFromLatLng(maps, e.latLng.lat(), e.latLng.lng());
-      });
-    }
-
-    // Inputs visibles
-    startAddress.value = route.startLocation?.formatted_address || (hasLatLng(route.startLocation) ? `${route.startLocation.latitude}, ${route.startLocation.longitude}` : "");
-    endAddress.value = route.endLocation?.formatted_address || (hasLatLng(route.endLocation) ? `${route.endLocation.latitude}, ${route.endLocation.longitude}` : "");
+    renderStartEndMarkers(maps, map, route);
 
     // Autocomplete
     if (startInputEl.value) {
@@ -574,28 +754,7 @@ const map = new maps.Map(mapContainer, {
       });
     }
 
-    // Paradas
-    (route.orders || []).forEach((o, idx) => {
-      const lat = o?.order?.location?.latitude ?? o?.order?.delivery_location?.latitude;
-      const lng = o?.order?.location?.longitude ?? o?.order?.delivery_location?.longitude;
-      if (typeof lat === "number" && typeof lng === "number") {
-        new maps.Marker({
-          map,
-          position: { lat, lng },
-          title: `Parada ${idx + 1}`,
-          label: { text: `${idx + 1}`, color: "white", fontSize: "12px", fontWeight: "bold" },
-          icon: {
-             path: maps.SymbolPath.CIRCLE,
-             scale: 12,
-             fillColor: getMarkerColor(o.deliveryStatus),
-             fillOpacity: 1,
-             strokeColor: "white",
-             strokeWeight: 2
-          }
-        });
-      }
-    });
-
+    renderStopMarkers(maps, map, route);
     drawRouteOnMap(maps, map, route);
   } catch (err) {
     console.error("💥 Error al dibujar mapa:", err);
@@ -635,12 +794,7 @@ const reoptimizeActiveRoute = async () => {
     const updated = res.data?.data || res.data?.route || res.data;
     if (!updated) throw new Error("Error del servidor");
 
-    const idx = routes.value.findIndex(x => x._id === r._id);
-    if (idx !== -1) routes.value[idx] = updated;
-    activeRoute.value = updated;
-
-    const maps = await loadGoogleMaps();
-    drawRouteOnMap(maps, mapInstance.value, updated);
+    await applyRouteUpdate(updated);
   } catch (e) {
     console.error(e);
     alert("No se pudo reoptimizar la ruta.");
