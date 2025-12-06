@@ -42,88 +42,115 @@
       </div>
     </div>
 
-    <div class="bg-white rounded-xl shadow-sm overflow-hidden">
-      <div class="p-6 border-b border-gray-200 flex justify-between items-center">
-        <h3 class="text-xl font-semibold text-gray-900">Lista de Rutas</h3>
+    <div class="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-100">
+      <div class="p-6 border-b border-gray-100 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+          <h3 class="text-xl font-semibold text-gray-900">Rutas planificadas</h3>
+          <p class="text-gray-600 text-sm">Visualiza el progreso de cada ruta y accede al mapa en un clic.</p>
+        </div>
+        <div class="flex flex-wrap items-center gap-2 text-xs">
+          <span class="px-3 py-1 rounded-full bg-slate-100 text-slate-700 font-semibold">Total {{ routes.length }}</span>
+          <span class="px-3 py-1 rounded-full bg-green-100 text-green-700 font-semibold">Activas {{ statusCounts.in_progress }}</span>
+          <span class="px-3 py-1 rounded-full bg-blue-100 text-blue-700 font-semibold">Asignadas {{ statusCounts.assigned }}</span>
+          <span class="px-3 py-1 rounded-full bg-emerald-100 text-emerald-700 font-semibold">Completas {{ statusCounts.completed }}</span>
+        </div>
       </div>
 
-      <div class="overflow-x-auto">
-        <table class="w-full">
-          <thead class="bg-gray-50">
-            <tr>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Conductor</th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Estado</th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Entregas</th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Distancia</th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Duración</th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Acciones</th>
-            </tr>
-          </thead>
-          <tbody class="bg-white divide-y divide-gray-200">
-            <tr v-if="loading">
-              <td colspan="7" class="px-6 py-12 text-center text-gray-500">
-                <div class="flex items-center justify-center">
-                  <div class="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
-                  <span class="ml-2">Cargando rutas...</span>
-                </div>
-              </td>
-            </tr>
+      <div v-if="loading" class="p-6 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+        <div v-for="i in 3" :key="i" class="border border-slate-100 rounded-xl p-4 animate-pulse bg-slate-50/60">
+          <div class="h-4 bg-slate-200 rounded w-1/3 mb-3"></div>
+          <div class="h-3 bg-slate-200 rounded w-2/3 mb-6"></div>
+          <div class="space-y-2">
+            <div class="h-3 bg-slate-200 rounded"></div>
+            <div class="h-3 bg-slate-200 rounded w-5/6"></div>
+            <div class="h-3 bg-slate-200 rounded w-4/6"></div>
+          </div>
+        </div>
+      </div>
 
-            <tr v-else-if="routes.length === 0">
-              <td colspan="7" class="px-6 py-12 text-center text-gray-500">
-                <div class="text-center">
-                  <div class="text-5xl mb-3">🛣️</div>
-                  <h3 class="text-lg font-medium text-gray-800 mb-1">No hay rutas registradas</h3>
-                  <p class="text-gray-500 mb-4">Crea tu primera ruta optimizada.</p>
-                  <button
-                    @click="showRouteOptimizerModal = true"
-                    class="bg-blue-600 text-white px-5 py-2 rounded-lg font-medium hover:bg-blue-700 transition-colors"
+      <div v-else-if="routes.length === 0" class="p-10 text-center text-gray-500">
+        <div class="inline-flex flex-col items-center gap-2 px-6 py-8 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+          <div class="text-5xl">🛣️</div>
+          <h3 class="text-lg font-semibold text-gray-800">No hay rutas registradas</h3>
+          <p class="text-gray-500 max-w-md">Optimiza tus pedidos y visualiza las entregas aquí. Puedes comenzar creando una nueva ruta.</p>
+          <button
+            @click="showRouteOptimizerModal = true"
+            class="mt-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-6 py-2.5 rounded-lg font-semibold hover:shadow-lg transition-all"
+          >
+            Optimizar Ruta
+          </button>
+        </div>
+      </div>
+
+      <div v-else class="p-6 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+        <article
+          v-for="route in routes"
+          :key="route._id"
+          class="relative group bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden hover:-translate-y-1 hover:shadow-lg transition-all duration-200"
+        >
+          <div class="absolute inset-x-0 top-0 h-1 bg-gradient-to-r" :class="getStatusAccent(route.status)"></div>
+          <div class="p-5 space-y-3">
+            <div class="flex items-start justify-between gap-3">
+              <div>
+                <p class="text-[11px] uppercase tracking-wide text-slate-500 font-semibold">Ruta #{{ route._id.slice(-6).toUpperCase() }}</p>
+                <h4 class="text-lg font-bold text-slate-900 flex items-center gap-2">
+                  {{ getDriverName(route.driver) }}
+                  <span
+                    v-if="route.status === 'in_progress'"
+                    class="inline-flex items-center gap-1 text-[11px] font-semibold text-green-700 bg-green-50 px-2 py-1 rounded-full"
                   >
-                    Optimizar Ruta
-                  </button>
-                </div>
-              </td>
-            </tr>
-
-            <tr v-for="route in routes" :key="route._id" class="hover:bg-gray-50">
-              <td class="px-6 py-4 font-medium text-gray-800">#{{ route._id.slice(-6).toUpperCase() }}</td>
-              <td class="px-6 py-4">
-                <div class="flex flex-col">
-                  <span class="font-medium text-gray-900">{{ getDriverName(route.driver) }}</span>
-                  <span v-if="route.driver?.email" class="text-xs text-gray-500">{{ route.driver.email }}</span>
-                  <span v-if="route.status === 'in_progress'" class="text-[10px] text-green-600 font-bold flex items-center gap-1 mt-1">
-                    <span class="relative flex h-2 w-2">
-                      <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                      <span class="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
-                    </span>
-                    Tracking Activo
+                    <span class="h-2 w-2 rounded-full bg-green-500 animate-ping"></span>
+                    En vivo
                   </span>
+                </h4>
+                <p class="text-xs text-slate-500">Actualizado {{ formatDate(route.updatedAt || route.createdAt) }}</p>
+              </div>
+              <span
+                class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold border"
+                :class="getStatusBadgeClass(route.status) + ' border-current'"
+              >
+                {{ getStatusText(route.status) }}
+              </span>
+            </div>
+
+            <div class="grid grid-cols-3 gap-3 text-sm">
+              <div class="p-3 rounded-lg bg-slate-50 border border-slate-100">
+                <p class="text-[11px] uppercase text-slate-500 font-semibold">Paradas</p>
+                <p class="text-lg font-bold text-slate-900">{{ route.orders?.length || 0 }}</p>
+              </div>
+              <div class="p-3 rounded-lg bg-slate-50 border border-slate-100">
+                <p class="text-[11px] uppercase text-slate-500 font-semibold">Distancia</p>
+                <p class="text-lg font-bold text-slate-900">{{ formatDistance(route.optimization?.totalDistance) }}</p>
+              </div>
+              <div class="p-3 rounded-lg bg-slate-50 border border-slate-100">
+                <p class="text-[11px] uppercase text-slate-500 font-semibold">Duración</p>
+                <p class="text-lg font-bold text-slate-900">{{ formatDuration(route.optimization?.totalDuration) }}</p>
+              </div>
+            </div>
+
+            <div class="flex items-center justify-between pt-2">
+              <div class="flex flex-col gap-1 text-xs text-slate-500">
+                <div class="flex items-center gap-2">
+                  <span class="w-2 h-2 rounded-full" :class="getStatusDot(route.status)"></span>
+                  <span class="font-semibold text-slate-700">Inicio</span>
+                  <span class="text-slate-500 truncate max-w-[170px]">{{ route.startLocation?.formatted_address || 'No definido' }}</span>
                 </div>
-              </td>
-              <td class="px-6 py-4">
-                <span
-                  class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
-                  :class="getStatusBadgeClass(route.status)"
-                >
-                  {{ getStatusText(route.status) }}
-                </span>
-              </td>
-              <td class="px-6 py-4 text-gray-700">{{ route.orders?.length || 0 }}</td>
-              <td class="px-6 py-4 text-gray-700">{{ formatDistance(route.optimization?.totalDistance) }}</td>
-              <td class="px-6 py-4 text-gray-700">{{ formatDuration(route.optimization?.totalDuration) }}</td>
-              <td class="px-6 py-4 whitespace-nowrap">
-                <button
-                  @click="viewRoute(route)"
-                  class="text-blue-600 hover:text-blue-800 font-medium px-2 py-1 rounded hover:bg-blue-50 transition-colors flex items-center gap-1"
-                >
-                  <span v-if="route.status === 'in_progress'">📡 Rastrear</span>
-                  <span v-else>👁️ Ver Ruta</span>
-                </button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+                <div class="flex items-center gap-2">
+                  <span class="w-2 h-2 rounded-full bg-slate-400"></span>
+                  <span class="font-semibold text-slate-700">Fin</span>
+                  <span class="text-slate-500 truncate max-w-[170px]">{{ route.endLocation?.formatted_address || 'No definido' }}</span>
+                </div>
+              </div>
+              <button
+                @click="viewRoute(route)"
+                class="inline-flex items-center gap-2 text-sm font-semibold text-blue-700 bg-blue-50 px-3 py-2 rounded-lg border border-blue-100 hover:bg-blue-100 transition"
+              >
+                <span v-if="route.status === 'in_progress'">📡 Rastrear</span>
+                <span v-else>👁️ Ver Ruta</span>
+              </button>
+            </div>
+          </div>
+        </article>
       </div>
     </div>
 
@@ -323,6 +350,28 @@ const getStatusBadgeClass = (status) => ({
   cancelled: "bg-red-100 text-red-800",
 }[status] || "bg-gray-100 text-gray-800");
 
+const statusThemes = {
+  draft: { accent: "from-slate-200 to-slate-300", dot: "bg-slate-400" },
+  assigned: { accent: "from-blue-200 via-blue-300 to-blue-400", dot: "bg-blue-500" },
+  in_progress: { accent: "from-amber-200 via-yellow-300 to-orange-400", dot: "bg-amber-500" },
+  completed: { accent: "from-emerald-200 via-green-300 to-emerald-400", dot: "bg-emerald-500" },
+  cancelled: { accent: "from-rose-200 via-red-300 to-red-400", dot: "bg-rose-500" },
+};
+
+const statusCounts = computed(() => routes.value.reduce((acc, r) => {
+  acc[r.status] = (acc[r.status] || 0) + 1;
+  return acc;
+}, { draft: 0, assigned: 0, in_progress: 0, completed: 0, cancelled: 0 }));
+
+const getStatusAccent = (status) => `bg-gradient-to-r ${statusThemes[status]?.accent || "from-slate-200 to-slate-300"}`;
+const getStatusDot = (status) => statusThemes[status]?.dot || "bg-slate-400";
+
+const formatDate = (date) => {
+  if (!date) return "hoy";
+  const d = new Date(date);
+  return d.toLocaleDateString("es-ES", { day: "2-digit", month: "short" });
+};
+
 const getMarkerColor = (status) => {
   switch (status) {
     case "completed": return "#16A34A"; // Verde
@@ -347,8 +396,12 @@ const carSymbol = {
 const getGoogleMapsApiKey = () => window.env?.VITE_GOOGLE_MAPS_API_KEY || import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "";
 const hasLatLng = (p) => p && typeof p.latitude === "number" && typeof p.longitude === "number";
 
-const formatDistance = (m) => (m < 1000 ? `${m} m` : `${(m / 1000).toFixed(1)} km`);
+const formatDistance = (m) => {
+  if (typeof m !== "number" || Number.isNaN(m)) return "—";
+  return m < 1000 ? `${m} m` : `${(m / 1000).toFixed(1)} km`;
+};
 const formatDuration = (s) => {
+  if (typeof s !== "number" || Number.isNaN(s)) return "—";
   const h = Math.floor(s / 3600);
   const m = Math.floor((s % 3600) / 60);
   return h > 0 ? `${h}h ${m}min` : `${m}min`;
