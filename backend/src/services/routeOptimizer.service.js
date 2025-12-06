@@ -467,33 +467,41 @@ const startRoute = async (routeId, driverId) => {
 };
 
 /**
- * Obtiene la ruta activa de un conductor específico
+ * Obtiene las rutas activas de un conductor específico (permite múltiples)
  */
 const getActiveRouteForDriver = async (driverId) => {
   try {
-    console.log(`🔍 Buscando ruta activa para conductor: ${driverId}`);
+    console.log(`🔍 Buscando rutas activas para conductor: ${driverId}`);
 
-    const activeRoute = await RoutePlan.findOne({
+    const activeRoutes = await RoutePlan.find({
       driver: driverId,
       status: { $in: ['assigned', 'in_progress'] }
     })
     .populate([
-      'driver', 
-      'company', 
+      'driver',
+      'company',
       {
         path: 'orders.order',
         model: 'Order'
       }
     ])
-    .sort({ assignedAt: -1 });
+    .sort({ assignedAt: -1, createdAt: -1 });
 
-    if (activeRoute) {
-      console.log(`✅ Ruta activa encontrada: ${activeRoute._id} con ${activeRoute.orders.length} pedidos`);
+    if (activeRoutes.length) {
+      console.log(`✅ ${activeRoutes.length} rutas activas encontradas para el conductor ${driverId}`);
     } else {
       console.log(`ℹ️ No hay rutas activas para el conductor ${driverId}`);
     }
 
-    return activeRoute;
+    const prioritizedRoutes = [...activeRoutes].sort((a, b) => {
+      const score = (route) => route.status === 'in_progress' ? 0 : 1;
+      return score(a) - score(b) || new Date(b.assignedAt || b.createdAt || 0) - new Date(a.assignedAt || a.createdAt || 0);
+    });
+
+    return {
+      routes: prioritizedRoutes,
+      currentRoute: prioritizedRoutes[0] || null
+    };
   } catch (error) {
     console.error('❌ Error obteniendo ruta activa:', error);
     throw error;

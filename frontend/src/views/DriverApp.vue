@@ -111,8 +111,63 @@
 
     <!-- Contenido principal -->
     <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 pb-20 md:pb-6">
+      <!-- Selector de rutas cuando hay múltiples -->
+      <div v-if="activeRoutes.length" class="mb-6 space-y-3">
+        <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 flex items-center justify-between">
+          <div>
+            <p class="text-xs uppercase tracking-wide font-semibold text-blue-600">Rutas asignadas</p>
+            <p class="text-sm text-gray-600">Toca para cambiar entre rutas activas</p>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="px-3 py-1 rounded-full bg-blue-50 text-blue-700 text-sm font-semibold">
+              {{ activeRoutes.length }} en total
+            </span>
+            <span v-if="activeRoute" class="px-3 py-1 rounded-full bg-green-50 text-green-700 text-xs font-medium">{{ activeRoute.status === 'in_progress' ? 'En curso' : 'Asignada' }}</span>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+          <button
+            v-for="route in sortedActiveRoutes"
+            :key="route._id"
+            @click="switchRoute(route._id)"
+            class="group text-left bg-white border rounded-xl p-4 shadow-sm hover:shadow-md transition-all"
+            :class="route._id === selectedRouteId ? 'border-blue-500 ring-2 ring-blue-100' : 'border-gray-200'"
+          >
+            <div class="flex items-center justify-between mb-3">
+              <div class="flex items-center gap-2">
+                <div class="w-10 h-10 rounded-lg bg-blue-50 text-blue-700 flex items-center justify-center font-bold">
+                  {{ route._id.slice(-4).toUpperCase() }}
+                </div>
+                <div>
+                  <p class="text-sm font-semibold text-gray-900">{{ route.orders?.length || 0 }} paradas</p>
+                  <p class="text-xs text-gray-500">{{ route.startLocation?.address?.split(',')[0] || 'Inicio' }}</p>
+                </div>
+              </div>
+              <span
+                class="px-2.5 py-1 rounded-full text-xs font-semibold"
+                :class="route.status === 'in_progress' ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'"
+              >
+                {{ route.status === 'in_progress' ? 'En curso' : 'Asignada' }}
+              </span>
+            </div>
+
+            <div class="grid grid-cols-2 gap-2 text-xs text-gray-600">
+              <div class="flex items-center gap-2 px-2 py-1 rounded-lg bg-gray-50">
+                <span class="text-blue-600">📦</span>
+                <span>{{ (route.orders || []).filter(o => o.deliveryStatus === 'delivered').length }} completadas</span>
+              </div>
+              <div class="flex items-center gap-2 px-2 py-1 rounded-lg bg-gray-50">
+                <span class="text-amber-600">⏱️</span>
+                <span>{{ (route.orders || []).filter(o => o.deliveryStatus !== 'delivered').length }} pendientes</span>
+              </div>
+            </div>
+          </button>
+        </div>
+      </div>
+
       <!-- Vista: Ruta Activa -->
-      <ActiveRoute 
+      <ActiveRoute
         v-if="currentView === 'active-route'"
         :active-route="activeRoute"
         :is-loading="isLoading"
@@ -142,10 +197,11 @@
   />
 
       <!-- Vista: Mapa -->
-      <RouteMap 
+      <RouteMap
         v-if="currentView === 'map'"
         :active-route="activeRoute"
         :is-loading="isLoading"
+        @open-delivery="openDeliveryProof"
       />
 
       <!-- Vista: Historial -->
@@ -192,7 +248,8 @@ const router = useRouter()
 
 // Estado principal existente
 const currentView = ref('active-route')
-const activeRoute = ref(null)
+const activeRoutes = ref([])
+const selectedRouteId = ref(null)
 const isLoading = ref(false)
 const connectionStatus = ref('online')
 const showDeliveryProof = ref(false)
@@ -214,6 +271,9 @@ const driverName = ref('Conductor')
 const driverInitials = computed(() => {
   return driverName.value.split(' ').map(n => n[0]).join('').toUpperCase()
 })
+const activeRoute = computed(() => {
+  return activeRoutes.value.find(route => route._id === selectedRouteId.value) || null
+})
 
 // Datos offline
 const offlineUpdates = ref([])
@@ -222,6 +282,27 @@ const offlineUpdates = ref([])
 const sortedOrders = computed(() => {
   if (!activeRoute.value?.orders) return []
   return [...activeRoute.value.orders].sort((a, b) => a.sequenceNumber - b.sequenceNumber)
+})
+
+const sortedActiveRoutes = computed(() => {
+  const priority = {
+    in_progress: 0,
+    assigned: 1,
+    draft: 2,
+    completed: 3,
+    cancelled: 4
+  }
+
+  return [...activeRoutes.value].sort((a, b) => {
+    const scoreA = priority[a.status] ?? 5
+    const scoreB = priority[b.status] ?? 5
+
+    if (scoreA !== scoreB) return scoreA - scoreB
+
+    const dateA = new Date(a.assignedAt || a.createdAt || 0)
+    const dateB = new Date(b.assignedAt || b.createdAt || 0)
+    return dateB - dateA
+  })
 })
 
 const hasOfflineData = computed(() => {
@@ -254,48 +335,69 @@ const refreshData = async () => {
   await loadPickupRoutes()
 }
 
+const setActiveRouteContext = (route) => {
+  if (!route) return
+
+  selectedRouteId.value = route._id
+  driverName.value = route.driver?.full_name || route.driver?.name || 'Conductor'
+  driverId.value = route.driver?._id
+}
+
+const switchRoute = (routeId) => {
+  const targetRoute = activeRoutes.value.find(route => route._id === routeId)
+  if (!targetRoute) return
+
+  setActiveRouteContext(targetRoute)
+  showNotification(`Mostrando ruta ${routeId.slice(-6).toUpperCase()}`, 'info')
+}
+
 const checkForActiveRoute = async (preserveSearchState = false) => {
   isLoading.value = !preserveSearchState
-  
+
   try {
-    console.log('🔍 Verificando ruta activa del conductor...')
-    
+    console.log('🔍 Verificando rutas activas del conductor...')
+
     const savedSearchQuery = preserveSearchState ? searchQuery.value : ''
     const savedStatusFilter = preserveSearchState ? statusFilter.value : ''
-    
+
     const response = await apiService.routes.getActiveRoute()
     console.log('📡 Respuesta del servidor:', response.data)
-    
-    if (response.data.success && response.data.data) {
-      activeRoute.value = response.data.data
-      driverName.value = activeRoute.value.driver?.full_name || activeRoute.value.driver?.name || 'Conductor'
-      driverId.value = activeRoute.value.driver?._id
-      
+
+    const payload = response.data.data
+    const routes = payload?.routes || (Array.isArray(payload) ? payload : payload ? [payload] : [])
+    const previousSelection = routes.find(route => route._id === selectedRouteId.value)
+    activeRoutes.value = routes
+
+    if (routes.length) {
+      const preferredRoute = previousSelection || payload?.currentRoute || routes.find(r => r.status === 'in_progress') || routes[0]
+      setActiveRouteContext(preferredRoute)
+
       if (preserveSearchState) {
         searchQuery.value = savedSearchQuery
         statusFilter.value = savedStatusFilter
       }
-      
-      console.log('✅ Ruta activa encontrada:', {
-        routeId: activeRoute.value._id,
-        status: activeRoute.value.status,
-        ordersCount: activeRoute.value.orders?.length || 0,
-        driverName: driverName.value,
-        preservedState: preserveSearchState
+
+      console.log('✅ Rutas activas encontradas:', {
+        total: routes.length,
+        activeRouteId: preferredRoute?._id,
+        status: preferredRoute?.status,
+        ordersCount: preferredRoute?.orders?.length || 0
       })
     } else {
       console.log('ℹ️ No hay rutas activas asignadas')
-      activeRoute.value = null
+      selectedRouteId.value = null
+      driverName.value = 'Conductor'
+      driverId.value = null
     }
   } catch (error) {
-    console.error('❌ Error obteniendo ruta activa:', error)
-    
+    console.error('❌ Error obteniendo rutas activas:', error)
+
     if (error.response?.status === 401) {
       showNotification('Tu sesión ha expirado. Por favor inicia sesión nuevamente.', 'error')
       logout()
       return
     }
-    
+
     if (connectionStatus.value === 'online') {
       showNotification(`Error al obtener la ruta activa: ${error.message || 'Error desconocido'}`, 'error')
     }
@@ -337,6 +439,7 @@ const handlePackageScanned = async (scanData) => {
 
 // Métodos existentes (sin cambios)
 const startRoute = async () => {
+  if (!activeRoute.value) return
   try {
     console.log('🚀 Iniciando ruta:', activeRoute.value._id)
     
@@ -352,6 +455,7 @@ const startRoute = async () => {
 }
 
 const markInProgress = async (orderItem) => {
+  if (!activeRoute.value) return
   try {
     if (connectionStatus.value === 'online') {
       await apiService.routes.updateOrderStatus(
@@ -383,6 +487,7 @@ const closeDeliveryProof = () => {
 }
 
 const confirmDelivery = async (deliveryData) => {
+  if (!activeRoute.value || !selectedOrder.value) return
   isSubmitting.value = true
   
   try {

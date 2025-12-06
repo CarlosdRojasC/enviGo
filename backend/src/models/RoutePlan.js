@@ -172,10 +172,12 @@ routePlanSchema.methods.updateRouteStatus = function() {
 
 // Método estático para buscar rutas activas de un conductor
 routePlanSchema.statics.findActiveForDriver = function(driverId) {
-  return this.findOne({
+  return this.find({
     driver: driverId,
     status: { $in: ['assigned', 'in_progress'] }
-  }).populate('orders.order');
+  })
+  .sort({ assignedAt: -1, createdAt: -1 })
+  .populate('orders.order');
 };
 
 module.exports = mongoose.model('RoutePlan', routePlanSchema);
