@@ -161,6 +161,20 @@ const optimizeRoute = async (config) => {
   if (!process.env.GOOGLE_MAPS_API_KEY) throw new Error("Falta GOOGLE_MAPS_API_KEY");
   if (!process.env.PYTHON_OPTIMIZER_URL) throw new Error("Falta PYTHON_OPTIMIZER_URL");
 
+  // Si estamos reoptimizando, usar la ruta actual como fuente de verdad para inicio/fin
+  let currentRoute;
+  if (existingRouteId) {
+    currentRoute = await RoutePlan.findById(existingRouteId);
+    if (!currentRoute) throw new Error("Ruta a reoptimizar no encontrada");
+  }
+
+  const effectiveStartLocation = startLocation || currentRoute?.startLocation;
+  const effectiveEndLocation = endLocation || currentRoute?.endLocation;
+
+  if (!effectiveStartLocation || !effectiveEndLocation) {
+    throw new Error("Faltan coordenadas de inicio o fin para optimizar la ruta.");
+  }
+
   const orders = await geoService.validateOrderCoordinates(orderIds);
   if (!orders?.length) throw new Error("No hay pedidos válidos para optimizar.");
   console.log(`✅ ${orders.length} órdenes validadas.`);
@@ -173,8 +187,8 @@ const optimizeRoute = async (config) => {
     type: p?.type || type
   });
 
-  const startPoint = normalizePoint(startLocation, "start");
-  const endPoint = normalizePoint(endLocation, "end");
+  const startPoint = normalizePoint(effectiveStartLocation, "start");
+  const endPoint = normalizePoint(effectiveEndLocation, "end");
 
   console.log("🧭 Normalizando coordenadas:", { start: startPoint, end: endPoint });
 
@@ -276,20 +290,20 @@ const optimizeRoute = async (config) => {
   // === Si se está reoptimizando una ruta existente ===
  if (existingRouteId) {
     // 1. Obtener la ruta actual para preservar su estado
-    const currentRoute = await RoutePlan.findById(existingRouteId);
-    
+    const currentRouteToUse = currentRoute || (await RoutePlan.findById(existingRouteId));
+
     // Mapa de estados actuales de los pedidos (ID -> Estado/Prueba)
     const currentOrdersMap = new Map();
-    if (currentRoute && currentRoute.orders) {
-      currentRoute.orders.forEach(o => {
+    if (currentRouteToUse && currentRouteToUse.orders) {
+      currentRouteToUse.orders.forEach(o => {
         // Guardamos todo el objeto del pedido para no perder nada (status, pruebas, fechas)
         currentOrdersMap.set(o.order.toString(), o);
       });
     }
 
     // Determinar el estado general de la ruta (mantener in_progress si ya estaba iniciada)
-    const statusToKeep = currentRoute && currentRoute.status === 'in_progress' 
-      ? 'in_progress' 
+    const statusToKeep = currentRouteToUse && currentRouteToUse.status === 'in_progress'
+      ? 'in_progress'
       : 'assigned';
 
     // 2. Construir la nueva lista de pedidos preservando el estado de los completados
