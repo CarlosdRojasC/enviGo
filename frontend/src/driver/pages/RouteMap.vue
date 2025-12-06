@@ -88,11 +88,11 @@
       <div class="p-4 border-t border-gray-200 bg-gray-50">
         <h4 class="font-semibold text-gray-900 mb-3">Paradas de la ruta:</h4>
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          <div 
-            v-for="(stop, idx) in activeRoute.orders" 
+          <div
+            v-for="(stop, idx) in activeRoute.orders"
             :key="stop._id"
             class="flex items-center space-x-3 bg-white p-3 rounded-lg shadow-sm hover:shadow-md transition-shadow cursor-pointer"
-            @click="centerOnStop(stop, idx)"
+            @click="openStopDetails(stop, idx)"
           >
             <span 
               class="w-8 h-8 flex items-center justify-center rounded-full text-white font-bold text-sm flex-shrink-0"
@@ -159,6 +159,95 @@
         <p class="text-xs text-gray-500">Tiempo estimado</p>
       </div>
     </div>
+
+    <!-- Detalle de parada seleccionado -->
+    <div v-if="selectedStop" class="fixed inset-0 bg-black/40 flex items-center justify-center z-30 p-4">
+      <div class="bg-white rounded-2xl shadow-2xl max-w-xl w-full max-h-[90vh] overflow-y-auto">
+        <div class="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+          <div class="flex items-center gap-3">
+            <div
+              class="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold"
+              :style="{ backgroundColor: getMarkerColor(selectedStop.deliveryStatus) }"
+            >
+              {{ selectedStop.sequenceNumber || selectedStop.sequenceIndex || 1 }}
+            </div>
+            <div>
+              <p class="text-sm text-gray-500">Entrega</p>
+              <h4 class="text-lg font-semibold text-gray-900">
+                {{ selectedStop.order?.customer_name || 'Cliente' }}
+              </h4>
+            </div>
+          </div>
+          <button @click="closeStopDetails" class="text-gray-500 hover:text-gray-700">
+            ✖️
+          </button>
+        </div>
+
+        <div class="p-6 space-y-4">
+          <div class="flex items-center gap-3">
+            <span
+              class="px-3 py-1 rounded-full text-xs font-semibold"
+              :class="getStatusBadgeClass(selectedStop.deliveryStatus)"
+            >
+              {{ getStatusText(selectedStop.deliveryStatus) }}
+            </span>
+            <span class="text-xs text-gray-500">
+              Pedido #{{ selectedStop.order?.order_number || selectedStop.order?._id?.slice(-6) }}
+            </span>
+          </div>
+
+          <div class="bg-gray-50 rounded-xl p-4 space-y-2">
+            <div class="flex items-start gap-3">
+              <span class="text-blue-600 mt-0.5">📍</span>
+              <div>
+                <p class="text-sm font-semibold text-gray-900">
+                  {{ selectedStop.order?.shipping_address || 'Sin dirección' }}
+                </p>
+                <p class="text-xs text-gray-500">{{ selectedStop.order?.shipping_city }}</p>
+              </div>
+            </div>
+            <div class="flex items-start gap-3" v-if="selectedStop.order?.shipping_phone">
+              <span class="text-green-600 mt-0.5">📞</span>
+              <p class="text-sm text-gray-700">{{ selectedStop.order.shipping_phone }}</p>
+            </div>
+          </div>
+
+          <div class="space-y-3">
+            <div class="flex items-center justify-between">
+              <p class="text-sm font-semibold text-gray-900">Pruebas de entrega</p>
+              <span v-if="selectedStop.deliveryProof?.timestamp" class="text-xs text-gray-500">
+                {{ new Date(selectedStop.deliveryProof.timestamp).toLocaleString() }}
+              </span>
+            </div>
+
+            <div v-if="selectedStop.deliveryProof?.photos?.length" class="grid grid-cols-2 gap-3">
+              <img
+                v-for="(photo, index) in selectedStop.deliveryProof.photos"
+                :key="index"
+                :src="photo"
+                :alt="`Foto de entrega ${index + 1}`"
+                class="w-full h-32 object-cover rounded-lg shadow"
+              />
+            </div>
+            <div v-else class="flex items-center gap-2 text-sm text-gray-600 bg-gray-50 p-3 rounded-lg">
+              <span>📷</span>
+              <span>No hay fotos registradas para esta entrega.</span>
+            </div>
+          </div>
+
+          <div class="flex items-center justify-end gap-3 pt-2">
+            <button @click="closeStopDetails" class="px-4 py-2 text-gray-600 hover:text-gray-900">Cerrar</button>
+            <button
+              v-if="selectedStop.deliveryStatus !== 'delivered'"
+              @click="emitOpenDelivery(selectedStop)"
+              class="px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700"
+            >
+              Abrir detalle completo
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -177,10 +266,13 @@ const props = defineProps({
   }
 })
 
+const emit = defineEmits(['open-delivery'])
+
 // Estado del mapa
 const mapInstance = ref(null)
 const currentLocationMarker = ref(null)
 const routeMarkers = ref([])
+const selectedStop = ref(null)
 
 // Computed properties
 const nextStop = computed(() => {
@@ -336,6 +428,7 @@ const addRouteMarkers = (maps) => {
           anchor: new maps.Point(16, 16)
         }
       })
+      marker.addListener('click', () => openStopDetails(order, idx))
       routeMarkers.value.push(marker)
     }
   })
@@ -417,7 +510,21 @@ const fitBounds = () => {
   }, 100)
 }
 
-const centerOnStop = (stop, index) => {
+const openStopDetails = (stop, index) => {
+  selectedStop.value = { ...stop, sequenceIndex: index + 1 }
+  centerOnStop(stop)
+}
+
+const closeStopDetails = () => {
+  selectedStop.value = null
+}
+
+const emitOpenDelivery = (stop) => {
+  emit('open-delivery', stop)
+  closeStopDetails()
+}
+
+const centerOnStop = (stop) => {
   if (!mapInstance.value || !stop.order?.location) return
   
   mapInstance.value.setCenter({
@@ -626,6 +733,7 @@ const formatDuration = (seconds) => {
 
 // Watchers
 watch(() => props.activeRoute, (newRoute) => {
+  selectedStop.value = null
   if (newRoute) {
     nextTick(() => {
       initializeMap()

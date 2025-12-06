@@ -257,9 +257,9 @@ router.get('/driver/active', [
   authorizeRoles(['driver'])
 ], asyncHandler(async (req, res) => {
   try {
-    const activeRoute = await routeOptimizerService.getActiveRouteForDriver(req.user.id);
+    const { routes, currentRoute } = await routeOptimizerService.getActiveRouteForDriver(req.user.id);
 
-    if (!activeRoute) {
+    if (!routes || routes.length === 0) {
       return res.json({
         success: true,
         data: null,
@@ -269,7 +269,10 @@ router.get('/driver/active', [
 
     res.json({
       success: true,
-      data: activeRoute
+      data: {
+        routes,
+        currentRoute
+      }
     });
 
   } catch (error) {

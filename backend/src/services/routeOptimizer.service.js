@@ -161,6 +161,20 @@ const optimizeRoute = async (config) => {
   if (!process.env.GOOGLE_MAPS_API_KEY) throw new Error("Falta GOOGLE_MAPS_API_KEY");
   if (!process.env.PYTHON_OPTIMIZER_URL) throw new Error("Falta PYTHON_OPTIMIZER_URL");
 
+  // Si estamos reoptimizando, usar la ruta actual como fuente de verdad para inicio/fin
+  let currentRoute;
+  if (existingRouteId) {
+    currentRoute = await RoutePlan.findById(existingRouteId);
+    if (!currentRoute) throw new Error("Ruta a reoptimizar no encontrada");
+  }
+
+  const effectiveStartLocation = startLocation || currentRoute?.startLocation;
+  const effectiveEndLocation = endLocation || currentRoute?.endLocation;
+
+  if (!effectiveStartLocation || !effectiveEndLocation) {
+    throw new Error("Faltan coordenadas de inicio o fin para optimizar la ruta.");
+  }
+
   const orders = await geoService.validateOrderCoordinates(orderIds);
   if (!orders?.length) throw new Error("No hay pedidos válidos para optimizar.");
   console.log(`✅ ${orders.length} órdenes validadas.`);
@@ -173,8 +187,8 @@ const optimizeRoute = async (config) => {
     type: p?.type || type
   });
 
-  const startPoint = normalizePoint(startLocation, "start");
-  const endPoint = normalizePoint(endLocation, "end");
+  const startPoint = normalizePoint(effectiveStartLocation, "start");
+  const endPoint = normalizePoint(effectiveEndLocation, "end");
 
   console.log("🧭 Normalizando coordenadas:", { start: startPoint, end: endPoint });
 
@@ -201,7 +215,26 @@ const optimizeRoute = async (config) => {
   }
 
   const originalStops = [startLocation, ...orders, endLocation];
-  const optimizedStops = optimizedIndices.map((i) => originalStops[i]);
+
+  // 🛑 Aseguramos que el recorrido siempre comience en el punto inicial
+  // y termine en el destino final. El optimizador de Python puede
+  // devolver los índices reordenados, pero debemos fijar el primer y
+  // último punto para calcular bien kms y tiempos.
+  const START_INDEX = 0;
+  const END_INDEX = originalStops.length - 1;
+
+  const visitOrder = optimizedIndices.filter(
+    (i) => i !== START_INDEX && i !== END_INDEX
+  );
+
+  // Reconstruimos la secuencia final: inicio fijo, paradas optimizadas y
+  // destino final fijo.
+  const optimizedStops = [
+    originalStops[START_INDEX],
+    ...visitOrder.map((i) => originalStops[i]),
+    originalStops[END_INDEX]
+  ];
+
   const orderedOrders = optimizedStops.slice(1, -1);
 
   // === Directions API ===
@@ -257,20 +290,20 @@ const optimizeRoute = async (config) => {
   // === Si se está reoptimizando una ruta existente ===
  if (existingRouteId) {
     // 1. Obtener la ruta actual para preservar su estado
-    const currentRoute = await RoutePlan.findById(existingRouteId);
-    
+    const currentRouteToUse = currentRoute || (await RoutePlan.findById(existingRouteId));
+
     // Mapa de estados actuales de los pedidos (ID -> Estado/Prueba)
     const currentOrdersMap = new Map();
-    if (currentRoute && currentRoute.orders) {
-      currentRoute.orders.forEach(o => {
+    if (currentRouteToUse && currentRouteToUse.orders) {
+      currentRouteToUse.orders.forEach(o => {
         // Guardamos todo el objeto del pedido para no perder nada (status, pruebas, fechas)
         currentOrdersMap.set(o.order.toString(), o);
       });
     }
 
     // Determinar el estado general de la ruta (mantener in_progress si ya estaba iniciada)
-    const statusToKeep = currentRoute && currentRoute.status === 'in_progress' 
-      ? 'in_progress' 
+    const statusToKeep = currentRouteToUse && currentRouteToUse.status === 'in_progress'
+      ? 'in_progress'
       : 'assigned';
 
     // 2. Construir la nueva lista de pedidos preservando el estado de los completados
@@ -434,33 +467,41 @@ const startRoute = async (routeId, driverId) => {
 };
 
 /**
- * Obtiene la ruta activa de un conductor específico
+ * Obtiene las rutas activas de un conductor específico (permite múltiples)
  */
 const getActiveRouteForDriver = async (driverId) => {
   try {
-    console.log(`🔍 Buscando ruta activa para conductor: ${driverId}`);
+    console.log(`🔍 Buscando rutas activas para conductor: ${driverId}`);
 
-    const activeRoute = await RoutePlan.findOne({
+    const activeRoutes = await RoutePlan.find({
       driver: driverId,
       status: { $in: ['assigned', 'in_progress'] }
     })
     .populate([
-      'driver', 
-      'company', 
+      'driver',
+      'company',
       {
         path: 'orders.order',
         model: 'Order'
       }
     ])
-    .sort({ assignedAt: -1 });
+    .sort({ assignedAt: -1, createdAt: -1 });
 
-    if (activeRoute) {
-      console.log(`✅ Ruta activa encontrada: ${activeRoute._id} con ${activeRoute.orders.length} pedidos`);
+    if (activeRoutes.length) {
+      console.log(`✅ ${activeRoutes.length} rutas activas encontradas para el conductor ${driverId}`);
     } else {
       console.log(`ℹ️ No hay rutas activas para el conductor ${driverId}`);
     }
 
-    return activeRoute;
+    const prioritizedRoutes = [...activeRoutes].sort((a, b) => {
+      const score = (route) => route.status === 'in_progress' ? 0 : 1;
+      return score(a) - score(b) || new Date(b.assignedAt || b.createdAt || 0) - new Date(a.assignedAt || a.createdAt || 0);
+    });
+
+    return {
+      routes: prioritizedRoutes,
+      currentRoute: prioritizedRoutes[0] || null
+    };
   } catch (error) {
     console.error('❌ Error obteniendo ruta activa:', error);
     throw error;
