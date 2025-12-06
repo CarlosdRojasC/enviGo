@@ -201,7 +201,26 @@ const optimizeRoute = async (config) => {
   }
 
   const originalStops = [startLocation, ...orders, endLocation];
-  const optimizedStops = optimizedIndices.map((i) => originalStops[i]);
+
+  // 🛑 Aseguramos que el recorrido siempre comience en el punto inicial
+  // y termine en el destino final. El optimizador de Python puede
+  // devolver los índices reordenados, pero debemos fijar el primer y
+  // último punto para calcular bien kms y tiempos.
+  const START_INDEX = 0;
+  const END_INDEX = originalStops.length - 1;
+
+  const visitOrder = optimizedIndices.filter(
+    (i) => i !== START_INDEX && i !== END_INDEX
+  );
+
+  // Reconstruimos la secuencia final: inicio fijo, paradas optimizadas y
+  // destino final fijo.
+  const optimizedStops = [
+    originalStops[START_INDEX],
+    ...visitOrder.map((i) => originalStops[i]),
+    originalStops[END_INDEX]
+  ];
+
   const orderedOrders = optimizedStops.slice(1, -1);
 
   // === Directions API ===
